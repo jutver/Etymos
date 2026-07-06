@@ -25,3 +25,6 @@ dist-ssr
 .claude
 .codex
 .impeccable
+.env*
+.vercel
+.npm-cache

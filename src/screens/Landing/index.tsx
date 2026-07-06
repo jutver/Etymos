@@ -1,5 +1,4 @@
 import { motion } from "motion/react";
-import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Brain,
@@ -7,7 +6,6 @@ import {
   Lightbulb,
   LinkSimple,
   MagicWand,
-  MagnifyingGlass,
   Quotes,
   Robot,
   Translate,
