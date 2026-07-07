@@ -32,10 +32,10 @@ export function PublicNav() {
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <Button as="link" to="/upload" variant="ghost" size="sm">
+          <Button as="link" to="/login" variant="ghost" size="sm">
             Log in
           </Button>
-          <Button as="link" to="/upload" size="sm">
+          <Button as="link" to="/signup" size="sm">
             Get Started
           </Button>
         </div>
@@ -64,10 +64,10 @@ export function PublicNav() {
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2">
-            <Button as="link" to="/upload" variant="outline" fullWidth onClick={() => setOpen(false)}>
+            <Button as="link" to="/login" variant="outline" fullWidth onClick={() => setOpen(false)}>
               Log in
             </Button>
-            <Button as="link" to="/upload" fullWidth onClick={() => setOpen(false)}>
+            <Button as="link" to="/signup" fullWidth onClick={() => setOpen(false)}>
               Get Started
             </Button>
           </div>

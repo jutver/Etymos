@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { CaretDown, ClockCounterClockwise, List, SignOut, Tag, UploadSimple, X } from "@phosphor-icons/react";
+import { CaretDown, ClockCounterClockwise, List, SignOut, Trash, UploadSimple, User, X } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { UsageMeter } from "../UsageMeter";
 import { cn } from "../../lib/cn";
 import { planLabel, useAppStore } from "../../lib/store";
+import { useAuth, displayNameFor, initialsFor } from "../../lib/auth";
+import { supabase } from "../../lib/supabase";
 
 const navLinks = [
   { label: "Upload", href: "/upload", icon: UploadSimple },
-  { label: "History", href: "/dashboard", icon: ClockCounterClockwise },
-  { label: "Pricing", href: "/pricing", icon: Tag },
+  { label: "History", href: "/history", icon: ClockCounterClockwise },
+  { label: "My Trash", href: "/trash", icon: Trash },
 ];
 
 export function AppNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -33,7 +36,7 @@ export function AppNav() {
     <header className="sticky top-0 z-40 h-[68px] border-b border-navy-700/60 bg-navy-900">
       <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-6 px-5 sm:px-8">
         <div className="flex items-center gap-8">
-          <Logo variant="light" />
+          <Logo variant="light" to="/upload" />
           <nav className="hidden items-center gap-1 md:flex">
             {navLinks.map((l) => {
               const active = location.pathname === l.href;
@@ -73,7 +76,7 @@ export function AppNav() {
               className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-2.5 text-white transition-colors hover:bg-white/10"
             >
               <span className="flex size-7 items-center justify-center rounded-full bg-brand-400 text-xs font-bold text-white">
-                LA
+                {initialsFor(user) || <User size={14} weight="fill" />}
               </span>
               <CaretDown size={13} className={cn("transition-transform", menuOpen && "rotate-180")} />
             </button>
@@ -81,28 +84,29 @@ export function AppNav() {
             {menuOpen && (
               <div className="absolute right-0 top-[calc(100%+10px)] w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)]">
                 <div className="px-3 py-2.5">
-                  <p className="text-sm font-semibold">Lan Anh Nguyễn</p>
-                  <p className="text-xs text-ink-500">{planLabel(plan)} plan</p>
+                  <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
+                  <p className="truncate text-xs text-ink-500">{user?.email ?? `${planLabel(plan)} plan`}</p>
                 </div>
                 <div className="h-px bg-line" />
                 <Link
-                  to="/pricing"
+                  to="/account/profile"
                   onClick={() => setMenuOpen(false)}
                   className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
-                  Manage plan
+                  My Profile
                 </Link>
                 <Link
-                  to="/dashboard"
+                  to="/account/plan"
                   onClick={() => setMenuOpen(false)}
                   className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
-                  My documents
+                  My Plan
                 </Link>
                 <div className="h-px bg-line" />
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setMenuOpen(false);
+                    await supabase.auth.signOut();
                     navigate("/");
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"

@@ -26,8 +26,10 @@ export default function ReportPage() {
   const pushToast = useAppStore((s) => s.pushToast);
   const isFree = plan === "free";
 
-  const doc = SAMPLE_DOCUMENT;
-  const historyMeta = HISTORY_SEED.find((h) => h.id === id);
+  const checkedDocuments = useAppStore((s) => s.checkedDocuments);
+  const history = useAppStore((s) => s.history);
+  const doc = (id && checkedDocuments[id]) || SAMPLE_DOCUMENT;
+  const historyMeta = history.find((h) => h.id === id) ?? HISTORY_SEED.find((h) => h.id === id);
 
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());

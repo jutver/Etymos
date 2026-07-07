@@ -120,7 +120,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="mt-8 flex flex-wrap items-center gap-3"
           >
-            <Button as="link" to="/upload" size="lg" iconRight={<ArrowRight size={18} weight="bold" />}>
+            <Button as="link" to="/signup" size="lg" iconRight={<ArrowRight size={18} weight="bold" />}>
               Get Started
             </Button>
             <Button as="link" to="/pricing" size="lg" variant="outline">
@@ -385,7 +385,7 @@ export default function LandingPage() {
           <motion.div {...reveal} className="mt-8">
             <Button
               as="link"
-              to="/upload"
+              to="/signup"
               variant="ghost"
               size="lg"
               className="!bg-white !text-brand-600 shadow-[0_12px_28px_-8px_rgba(15,27,61,0.35)] hover:!bg-white/90"

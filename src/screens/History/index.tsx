@@ -7,11 +7,13 @@ import {
   MagnifyingGlass,
   Sparkle,
   Table as TableIcon,
+  Trash,
 } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
+import { ContextMenu } from "../../components/ui/ContextMenu";
 import { cn } from "../../lib/cn";
 import type { DocStatus } from "../../lib/types";
 
@@ -26,13 +28,19 @@ const statusBarColor: Record<DocStatus, string> = {
   high: "bg-severity-high",
 };
 
-export default function DashboardPage() {
+export default function HistoryPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
   const history = useAppStore((s) => s.history);
+  const projects = useAppStore((s) => s.projects);
+  const moveHistoryEntry = useAppStore((s) => s.moveHistoryEntry);
+  const moveToTrash = useAppStore((s) => s.moveToTrash);
+  const pushToast = useAppStore((s) => s.pushToast);
   const [view, setView] = useState<"documents" | "stats">("documents");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
+
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const retentionDays = RETENTION_DAYS[plan];
   const { visible, expiredCount } = useMemo(() => {
@@ -42,14 +50,8 @@ export default function DashboardPage() {
     return { visible, expiredCount: history.length - visible.length };
   }, [history, retentionDays]);
 
-  const projects = useMemo(
-    () => Array.from(new Set(history.map((h) => h.project).filter(Boolean))) as string[],
-    [history],
-  );
-
   const filtered = visible.filter((h) => {
-    const matchesProject =
-      plan !== "professional" || projectFilter === "all" || h.project === projectFilter;
+    const matchesProject = projectFilter === "all" || h.project === projectFilter;
     const matchesQuery = h.title.toLowerCase().includes(query.toLowerCase());
     return matchesProject && matchesQuery;
   });
@@ -64,6 +66,17 @@ export default function DashboardPage() {
     }));
     return { total, avg, aiFlaggedCount, counts };
   }, [history]);
+
+  function openMenu(e: React.MouseEvent, id: string) {
+    e.preventDefault();
+    setMenu({ id, x: e.clientX, y: e.clientY });
+  }
+
+  function closeMenu() {
+    setMenu(null);
+  }
+
+  const menuEntry = menu ? history.find((h) => h.id === menu.id) : null;
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
@@ -125,32 +138,30 @@ export default function DashboardPage() {
               />
             </div>
 
-            {plan === "professional" && (
-              <div className="flex items-center gap-2 overflow-x-auto">
-                <FolderSimple size={15} className="shrink-0 text-ink-400" />
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <FolderSimple size={15} className="shrink-0 text-ink-400" />
+              <button
+                onClick={() => setProjectFilter("all")}
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
+                  projectFilter === "all" ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
+                )}
+              >
+                All projects
+              </button>
+              {projects.map((p) => (
                 <button
-                  onClick={() => setProjectFilter("all")}
+                  key={p}
+                  onClick={() => setProjectFilter(p)}
                   className={cn(
                     "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
-                    projectFilter === "all" ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
+                    projectFilter === p ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
                   )}
                 >
-                  All projects
+                  {p}
                 </button>
-                {projects.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setProjectFilter(p)}
-                    className={cn(
-                      "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
-                      projectFilter === p ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
           </div>
 
           <table className="w-full text-sm">
@@ -160,7 +171,7 @@ export default function DashboardPage() {
                 <th className="px-5 py-3 font-semibold">Date</th>
                 <th className="px-5 py-3 font-semibold">Similarity</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
-                {plan === "professional" && <th className="px-5 py-3 font-semibold">Project</th>}
+                <th className="px-5 py-3 font-semibold">Project</th>
               </tr>
             </thead>
             <tbody>
@@ -168,6 +179,7 @@ export default function DashboardPage() {
                 <tr
                   key={h.id}
                   onClick={() => navigate(`/report/${h.id}`)}
+                  onContextMenu={(e) => openMenu(e, h.id)}
                   className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-tint"
                 >
                   <td className="max-w-xs truncate px-5 py-4 font-medium text-ink-900">
@@ -181,9 +193,7 @@ export default function DashboardPage() {
                   <td className="px-5 py-4">
                     <StatusPill status={h.status} />
                   </td>
-                  {plan === "professional" && (
-                    <td className="px-5 py-4 text-ink-500">{h.project}</td>
-                  )}
+                  <td className="px-5 py-4 text-ink-500">{h.project ?? "—"}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
@@ -195,6 +205,9 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
+          <p className="border-t border-line px-5 py-3 text-xs text-ink-400 sm:hidden">
+            Tip: press and hold a row for more options.
+          </p>
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-5">
@@ -242,6 +255,41 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <ContextMenu open={menu !== null} onClose={closeMenu} position={menu ?? { x: 0, y: 0 }}>
+        <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
+          Move to project
+        </p>
+        {projects
+          .filter((p) => p !== menuEntry?.project)
+          .map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                if (menu) moveHistoryEntry(menu.id, p);
+                closeMenu();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
+            >
+              <FolderSimple size={15} />
+              {p}
+            </button>
+          ))}
+        <div className="my-1 h-px bg-line" />
+        <button
+          onClick={() => {
+            if (menu) {
+              moveToTrash(menu.id);
+              pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+            }
+            closeMenu();
+          }}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-severity-high hover:bg-severity-high-bg"
+        >
+          <Trash size={15} />
+          Delete
+        </button>
+      </ContextMenu>
     </div>
   );
 }

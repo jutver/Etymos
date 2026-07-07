@@ -51,7 +51,7 @@ export function Footer() {
               </Link>
             </li>
             <li>
-              <Link to="/dashboard" className="hover:text-white">
+              <Link to="/history" className="hover:text-white">
                 My history
               </Link>
             </li>

@@ -22,7 +22,7 @@ export default function PaymentSuccessPage() {
     const label = pendingDocLabel ?? undefined;
     clearPendingCheck();
     requestCheck(label);
-    navigate("/analyzing", { state: { docLabel: label } });
+    navigate("/analyzing", { state: { docLabels: label ? [label] : undefined } });
   }
 
   return (
@@ -64,7 +64,7 @@ export default function PaymentSuccessPage() {
             Go to Upload
           </Button>
         )}
-        <Button as="link" to="/dashboard" variant="ghost" fullWidth>
+        <Button as="link" to="/history" variant="ghost" fullWidth>
           View my history
         </Button>
       </div>
