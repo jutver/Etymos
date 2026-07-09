@@ -13,7 +13,7 @@ import type {
 export const PLAN_DOC_LIMITS: Record<PlanTier, number> = {
   free: 2,
   student: 10,
-  professional: 35,
+  professional: 70,
 };
 export const PLAN_PERIOD_DAYS = 30;
 
@@ -57,6 +57,7 @@ interface AppState {
   recordCheckedDocument: (doc: CheckedDocument) => void;
   markFirstCheckComplete: () => void;
   addProject: (name: string) => void;
+  deleteProjects: (names: string[]) => void;
   moveHistoryEntry: (id: string, project: string) => void;
   moveToTrash: (id: string) => void;
   restoreFromTrash: (id: string) => void;
@@ -156,6 +157,20 @@ export const useAppStore = create<AppState>()(
 
       addProject: (name) =>
         set((s) => (s.projects.includes(name) ? s : { projects: [...s.projects, name] })),
+
+      deleteProjects: (names) =>
+        set((s) => {
+          const nameSet = new Set(names);
+          return {
+            projects: s.projects.filter((p) => !nameSet.has(p)),
+            history: s.history.map((h) =>
+              h.project && nameSet.has(h.project) ? { ...h, project: undefined } : h,
+            ),
+            trash: s.trash.map((h) =>
+              h.project && nameSet.has(h.project) ? { ...h, project: undefined } : h,
+            ),
+          };
+        }),
 
       moveHistoryEntry: (id, project) =>
         set((s) => ({

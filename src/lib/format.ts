@@ -14,3 +14,8 @@ export function formatDate(iso: string): string {
 export function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
+
+export function annualSavingsPercent(priceMonthly: number, priceAnnual: number): number {
+  if (priceMonthly <= 0) return 0;
+  return Math.round((1 - priceAnnual / (priceMonthly * 12)) * 100);
+}

@@ -1,13 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ChartBar,
+  Check,
+  CaretDown,
+  CheckCircle,
   FolderSimple,
-  LockSimple,
   MagnifyingGlass,
+  Plus,
   Sparkle,
+  SquaresFour,
   Table as TableIcon,
   Trash,
+  X,
 } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel, planLabel } from "../../lib/store";
 import { formatDate } from "../../lib/format";
@@ -15,19 +19,11 @@ import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { cn } from "../../lib/cn";
-import type { DocStatus } from "../../lib/types";
 
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
 const TODAY = new Date("2026-07-05T23:59:59");
-
-const statusOrder: DocStatus[] = ["clean", "low", "moderate", "high"];
-const statusBarColor: Record<DocStatus, string> = {
-  clean: "bg-success",
-  low: "bg-severity-low",
-  moderate: "bg-severity-moderate",
-  high: "bg-severity-high",
-};
+const UNASSIGNED = "__unassigned__";
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -35,14 +31,33 @@ export default function HistoryPage() {
   const credits = useAppStore((s) => s.credits);
   const history = useAppStore((s) => s.history);
   const projects = useAppStore((s) => s.projects);
+  const addProject = useAppStore((s) => s.addProject);
+  const deleteProjects = useAppStore((s) => s.deleteProjects);
   const moveHistoryEntry = useAppStore((s) => s.moveHistoryEntry);
   const moveToTrash = useAppStore((s) => s.moveToTrash);
   const pushToast = useAppStore((s) => s.pushToast);
-  const [view, setView] = useState<"documents" | "stats">("documents");
+  const [view, setView] = useState<"documents" | "projects">("documents");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
+  const [projectFilterOpen, setProjectFilterOpen] = useState(false);
+  const projectFilterRef = useRef<HTMLDivElement>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [manageMode, setManageMode] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
 
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!projectFilterOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (projectFilterRef.current && !projectFilterRef.current.contains(e.target as Node)) {
+        setProjectFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [projectFilterOpen]);
 
   const retentionDays = credits > 0 ? CREDIT_RETENTION_DAYS : RETENTION_DAYS[plan];
   const { visible, expiredCount } = useMemo(() => {
@@ -53,21 +68,32 @@ export default function HistoryPage() {
   }, [history, retentionDays]);
 
   const filtered = visible.filter((h) => {
-    const matchesProject = projectFilter === "all" || h.project === projectFilter;
+    const matchesProject =
+      projectFilter === "all"
+        ? true
+        : projectFilter === UNASSIGNED
+          ? !h.project
+          : h.project === projectFilter;
     const matchesQuery = h.title.toLowerCase().includes(query.toLowerCase());
     return matchesProject && matchesQuery;
   });
 
-  const stats = useMemo(() => {
-    const total = history.length;
-    const avg = total ? Math.round(history.reduce((s, h) => s + h.similarityScore, 0) / total) : 0;
-    const aiFlaggedCount = history.filter((h) => h.aiFlagged).length;
-    const counts = statusOrder.map((s) => ({
-      status: s,
-      count: history.filter((h) => h.status === s).length,
-    }));
-    return { total, avg, aiFlaggedCount, counts };
-  }, [history]);
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of projects) counts.set(p, 0);
+    let unassigned = 0;
+    for (const h of visible) {
+      if (h.project) {
+        counts.set(h.project, (counts.get(h.project) ?? 0) + 1);
+      } else {
+        unassigned += 1;
+      }
+    }
+    return { counts, unassigned };
+  }, [visible, projects]);
+
+  const projectFilterLabel =
+    projectFilter === "all" ? "All projects" : projectFilter === UNASSIGNED ? "No project" : projectFilter;
 
   function openMenu(e: React.MouseEvent, id: string) {
     e.preventDefault();
@@ -76,6 +102,53 @@ export default function HistoryPage() {
 
   function closeMenu() {
     setMenu(null);
+  }
+
+  function openProject(name: string) {
+    setProjectFilter(name);
+    setView("documents");
+  }
+
+  function confirmCreateProject() {
+    const name = newProjectName.trim();
+    if (!name) return;
+    addProject(name);
+    setNewProjectName("");
+    setCreatingProject(false);
+  }
+
+  function cancelCreateProject() {
+    setNewProjectName("");
+    setCreatingProject(false);
+  }
+
+  function toggleManageMode() {
+    setManageMode((v) => !v);
+    setSelectedProjects(new Set());
+    setCreatingProject(false);
+  }
+
+  function toggleProjectSelected(name: string) {
+    setSelectedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function deleteSelectedProjects() {
+    const names = [...selectedProjects];
+    if (names.length === 0) return;
+    deleteProjects(names);
+    if (names.includes(projectFilter)) setProjectFilter("all");
+    pushToast({
+      kind: "info",
+      title: `${names.length} project${names.length === 1 ? "" : "s"} deleted`,
+      description: "Documents inside were kept and moved to No project.",
+    });
+    setSelectedProjects(new Set());
+    setManageMode(false);
   }
 
   const menuEntry = menu ? history.find((h) => h.id === menu.id) : null;
@@ -94,25 +167,24 @@ export default function HistoryPage() {
           </p>
         </div>
 
-        <div className="flex gap-1 rounded-full bg-surface-muted p-1">
+        <div className="flex gap-1 rounded-full bg-surface-muted p-1.5">
           <button
             onClick={() => setView("documents")}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+              "flex min-w-[8.25rem] items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
               view === "documents" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
             )}
           >
             <TableIcon size={15} /> Documents
           </button>
           <button
-            onClick={() => (plan === "professional" ? setView("stats") : navigate("/paywall"))}
+            onClick={() => setView("projects")}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
-              view === "stats" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
+              "flex min-w-[8.25rem] items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+              view === "projects" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
             )}
           >
-            <ChartBar size={15} /> Statistics
-            {plan !== "professional" && <LockSimple size={12} weight="fill" />}
+            <SquaresFour size={15} /> Projects
           </button>
         </div>
       </div>
@@ -142,29 +214,65 @@ export default function HistoryPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <FolderSimple size={15} className="shrink-0 text-ink-400" />
+            <div className="relative shrink-0" ref={projectFilterRef}>
               <button
-                onClick={() => setProjectFilter("all")}
-                className={cn(
-                  "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
-                  projectFilter === "all" ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
-                )}
+                onClick={() => setProjectFilterOpen((v) => !v)}
+                className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink-700 hover:border-brand-300"
               >
-                All projects
+                <FolderSimple size={15} className="text-ink-400" />
+                {projectFilterLabel}
+                <CaretDown size={13} className={cn("transition-transform", projectFilterOpen && "rotate-180")} />
               </button>
-              {projects.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setProjectFilter(p)}
-                  className={cn(
-                    "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
-                    projectFilter === p ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:bg-surface-tint",
+              {projectFilterOpen && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-20 w-56 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
+                  <button
+                    onClick={() => {
+                      setProjectFilter("all");
+                      setProjectFilterOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
+                      projectFilter === "all" ? "bg-brand-100 text-brand-700" : "text-ink-700 hover:bg-surface-tint",
+                    )}
+                  >
+                    {projectFilter === "all" && <CheckCircle size={14} weight="fill" />}
+                    All projects
+                  </button>
+                  {projects.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setProjectFilter(p);
+                        setProjectFilterOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
+                        projectFilter === p ? "bg-brand-100 text-brand-700" : "text-ink-700 hover:bg-surface-tint",
+                      )}
+                    >
+                      {projectFilter === p && <CheckCircle size={14} weight="fill" />}
+                      {p}
+                    </button>
+                  ))}
+                  {projectCounts.unassigned > 0 && (
+                    <button
+                      onClick={() => {
+                        setProjectFilter(UNASSIGNED);
+                        setProjectFilterOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
+                        projectFilter === UNASSIGNED
+                          ? "bg-brand-100 text-brand-700"
+                          : "text-ink-700 hover:bg-surface-tint",
+                      )}
+                    >
+                      {projectFilter === UNASSIGNED && <CheckCircle size={14} weight="fill" />}
+                      No project
+                    </button>
                   )}
-                >
-                  {p}
-                </button>
-              ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -214,48 +322,149 @@ export default function HistoryPage() {
           </p>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                Total documents
-              </p>
-              <p className="mt-2 text-3xl font-extrabold text-navy-900">{stats.total}</p>
-            </div>
-            <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                Average similarity
-              </p>
-              <p className="mt-2 text-3xl font-extrabold text-navy-900">{stats.avg}%</p>
-            </div>
-            <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                AI-flagged documents
-              </p>
-              <p className="mt-2 text-3xl font-extrabold text-navy-900">{stats.aiFlaggedCount}</p>
-            </div>
+        <div className="mt-6">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+              {manageMode
+                ? `${selectedProjects.size} selected`
+                : `${projects.length} project${projects.length === 1 ? "" : "s"}`}
+            </p>
+            {manageMode ? (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={toggleManageMode}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={selectedProjects.size === 0}
+                  iconLeft={<Trash size={14} />}
+                  onClick={deleteSelectedProjects}
+                >
+                  Delete{selectedProjects.size > 0 ? ` (${selectedProjects.size})` : ""}
+                </Button>
+              </div>
+            ) : (
+              projects.length > 0 && (
+                <Button size="sm" variant="outline" onClick={toggleManageMode}>
+                  Manage projects
+                </Button>
+              )
+            )}
           </div>
 
-          <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
-            <p className="text-sm font-bold text-navy-900">Documents by similarity band</p>
-            <div className="mt-5 flex flex-col gap-3">
-              {stats.counts.map((c) => (
-                <div key={c.status} className="flex items-center gap-3">
-                  <span className="w-28 shrink-0 text-xs font-medium capitalize text-ink-500">
-                    {c.status}
-                  </span>
-                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                    <div
-                      className={cn("h-full rounded-full", statusBarColor[c.status])}
-                      style={{ width: `${stats.total ? (c.count / stats.total) * 100 : 0}%` }}
-                    />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {!manageMode &&
+              (creatingProject ? (
+                <div className="flex aspect-square flex-col items-center justify-center gap-3 rounded-[var(--radius-card-lg)] border-2 border-brand-300 bg-white p-5 text-center">
+                  <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
+                    <FolderSimple size={26} weight="fill" />
                   </div>
-                  <span className="w-6 shrink-0 text-right text-xs font-semibold text-ink-700">
-                    {c.count}
-                  </span>
+                  <input
+                    autoFocus
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirmCreateProject();
+                      if (e.key === "Escape") cancelCreateProject();
+                    }}
+                    placeholder="Project name"
+                    className="w-full rounded-lg border border-line bg-surface-tint px-2 py-1.5 text-center text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={confirmCreateProject}
+                      disabled={!newProjectName.trim()}
+                      aria-label="Create project"
+                      className="flex size-7 items-center justify-center rounded-full bg-brand-500 text-white hover:brightness-105 disabled:opacity-40"
+                    >
+                      <Check size={14} weight="bold" />
+                    </button>
+                    <button
+                      onClick={cancelCreateProject}
+                      aria-label="Cancel"
+                      className="flex size-7 items-center justify-center rounded-full text-ink-400 hover:bg-surface-tint hover:text-ink-700"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <button
+                  onClick={() => setCreatingProject(true)}
+                  className="group flex aspect-square flex-col items-center justify-center gap-3 rounded-[var(--radius-card-lg)] border border-dashed border-line bg-white p-5 text-center transition-colors hover:border-brand-300 hover:bg-surface-tint"
+                >
+                  <div className="flex size-14 items-center justify-center rounded-2xl bg-surface-muted text-brand-600 transition-colors group-hover:bg-brand-100">
+                    <Plus size={26} weight="bold" />
+                  </div>
+                  <p className="text-sm font-bold text-ink-900">New project</p>
+                </button>
               ))}
-            </div>
+
+            {projects.map((p) => {
+              const selected = selectedProjects.has(p);
+              return (
+                <button
+                  key={p}
+                  onClick={() => (manageMode ? toggleProjectSelected(p) : openProject(p))}
+                  className={cn(
+                    "group relative flex aspect-square flex-col items-center justify-center gap-3 rounded-[var(--radius-card-lg)] border p-5 text-center transition-colors",
+                    selected
+                      ? "border-brand-500 bg-brand-100/30"
+                      : "border-line bg-white hover:border-brand-300 hover:bg-surface-tint",
+                  )}
+                >
+                  {manageMode && (
+                    <span
+                      className={cn(
+                        "absolute right-3 top-3 flex size-5 items-center justify-center rounded-full border-2",
+                        selected ? "border-brand-500 bg-brand-500 text-white" : "border-line bg-white",
+                      )}
+                    >
+                      {selected && <Check size={12} weight="bold" />}
+                    </span>
+                  )}
+                  <div
+                    className={cn(
+                      "flex size-14 items-center justify-center rounded-2xl transition-colors",
+                      selected
+                        ? "bg-brand-100 text-brand-600"
+                        : "bg-surface-muted text-brand-600 group-hover:bg-brand-100",
+                    )}
+                  >
+                    <FolderSimple size={26} weight="fill" />
+                  </div>
+                  <div>
+                    <p className="truncate text-sm font-bold text-ink-900">{p}</p>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      {projectCounts.counts.get(p) ?? 0} document
+                      {(projectCounts.counts.get(p) ?? 0) === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+
+            {projectCounts.unassigned > 0 && (
+              <button
+                onClick={() => !manageMode && openProject(UNASSIGNED)}
+                disabled={manageMode}
+                className={cn(
+                  "group flex aspect-square flex-col items-center justify-center gap-3 rounded-[var(--radius-card-lg)] border border-dashed border-line bg-white p-5 text-center transition-colors",
+                  manageMode ? "cursor-not-allowed opacity-50" : "hover:border-brand-300 hover:bg-surface-tint",
+                )}
+              >
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-surface-muted text-ink-400 transition-colors group-hover:bg-brand-100 group-hover:text-brand-600">
+                  <FolderSimple size={26} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-ink-900">No project</p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {projectCounts.unassigned} document{projectCounts.unassigned === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       )}

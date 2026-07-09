@@ -28,7 +28,7 @@ export const PLANS: PlanDefinition[] = [
     name: "Student Premium",
     tagline: "For students, grad and PhD researchers",
     priceMonthly: 69000,
-    priceAnnual: 690000,
+    priceAnnual: 490000,
     audience: "Students, grad & PhD researchers",
     mostPopular: true,
     requiresVerification: true,
@@ -50,13 +50,12 @@ export const PLANS: PlanDefinition[] = [
     name: "Professional",
     tagline: "For lecturers, researchers & agencies",
     priceMonthly: 299000,
-    priceAnnual: 2870000,
+    priceAnnual: 1990000,
     audience: "Lecturers, researchers, content & SEO teams",
     features: [
-      "35 documents / month, unlimited words",
+      "70 documents / month, unlimited words",
       "Everything in Student Premium, no verification needed",
       "Batch checking",
-      "Statistics dashboard",
       "Multi-project management & private comparison corpus",
       "API integration",
       "In-depth advanced report export",
@@ -135,7 +134,7 @@ export const FEATURE_MATRIX: {
   professional: boolean | string;
 }[] = [
   { feature: "Verification required", free: false, credit: false, student: "🎓 Yes", professional: false },
-  { feature: "Documents / month", free: "2", credit: "Pay per check", student: "10", professional: "35" },
+  { feature: "Documents / month", free: "2", credit: "Pay per check", student: "10", professional: "70" },
   { feature: "Words / document", free: "3,000", credit: "Unlimited per check", student: "Unlimited", professional: "Unlimited" },
   { feature: "Traditional plagiarism detection", free: true, credit: true, student: true, professional: true },
   { feature: "Semantic (paraphrase) detection", free: false, credit: true, student: true, professional: true },

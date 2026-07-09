@@ -4,7 +4,7 @@ import { CaretDown, Check, Minus, Sparkle } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
 import { PLANS, CREDIT_PACKS, FEATURE_MATRIX, COMPETITORS } from "../../lib/mockData";
-import { formatVND } from "../../lib/format";
+import { annualSavingsPercent, formatVND } from "../../lib/format";
 import { useAppStore } from "../../lib/store";
 import { cn } from "../../lib/cn";
 import type { BillingCycle } from "../../lib/types";
@@ -37,6 +37,12 @@ export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
+
+  const maxAnnualSavings = Math.max(
+    ...PLANS.filter((p) => p.id !== "free").map((p) =>
+      annualSavingsPercent(p.priceMonthly, p.priceAnnual),
+    ),
+  );
 
   function buyPack(packId: (typeof CREDIT_PACKS)[number]["id"]) {
     selectCheckoutItem({ kind: "pack", packId });
@@ -72,7 +78,7 @@ export default function PricingPage() {
           >
             Annual
             <span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
-              2 months free
+              Save up to {maxAnnualSavings}%
             </span>
           </button>
         </div>

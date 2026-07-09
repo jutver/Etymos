@@ -1,7 +1,7 @@
 import { Check, GraduationCap, Star } from "@phosphor-icons/react";
 import { useNavigate } from "react-router-dom";
 import type { BillingCycle, PlanDefinition } from "../lib/types";
-import { formatVND } from "../lib/format";
+import { annualSavingsPercent, formatVND } from "../lib/format";
 import { useAppStore } from "../lib/store";
 import { Button } from "./ui/Button";
 import { cn } from "../lib/cn";
@@ -43,7 +43,7 @@ export function PlanCard({
       className={cn(
         "relative flex flex-col rounded-[var(--radius-card-lg)] border bg-white p-7",
         plan.mostPopular
-          ? "border-brand-500 shadow-[0_20px_48px_-16px_rgba(30,79,196,0.35)] lg:-translate-y-3"
+          ? "border-brand-500 shadow-[0_20px_48px_-16px_rgba(30,79,196,0.35)]"
           : "border-line shadow-[var(--shadow-card)]",
       )}
     >
@@ -55,7 +55,7 @@ export function PlanCard({
       )}
 
       <h3 className="text-h3 font-bold text-navy-900">{plan.name}</h3>
-      <p className="mt-1.5 text-sm text-ink-500">{plan.tagline}</p>
+      <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{plan.tagline}</p>
 
       <div className="mt-6 flex items-baseline gap-1.5">
         <span className="text-3xl font-extrabold tracking-tight text-navy-900">
@@ -67,16 +67,25 @@ export function PlanCard({
           </span>
         )}
       </div>
-      {plan.id !== "free" && billingCycle === "annual" && (
-        <p className="mt-1 text-xs font-medium text-success">2 months free vs. monthly</p>
-      )}
 
-      {needsVerification && !isCurrent && (
-        <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-ink-600">
-          <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
-          Requires student verification before checkout
-        </p>
-      )}
+      <div className="mt-1 min-h-[3.25rem]">
+        {plan.id !== "free" && billingCycle === "annual" && (
+          <p className="text-xs font-medium text-success">
+            Save {annualSavingsPercent(plan.priceMonthly, plan.priceAnnual)}% vs. monthly
+          </p>
+        )}
+        {needsVerification && !isCurrent && (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-ink-600",
+              plan.id !== "free" && billingCycle === "annual" && "mt-1.5",
+            )}
+          >
+            <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
+            Requires student verification before checkout
+          </p>
+        )}
+      </div>
 
       <Button
         onClick={handleSelect}
