@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GoogleLogo, LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
+import { LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { useAuth, displayNameFor } from "../../lib/auth";
@@ -167,7 +167,7 @@ export default function AccountProfilePage() {
             onChange={toggleGoogleLink}
             label="Google"
             description={linkingGoogle ? "Updating..." : googleLinked ? "Linked (demo mockup)" : "Not linked"}
-            icon={<GoogleLogo size={18} weight="bold" />}
+            icon={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
           />
         </div>
       </section>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Envelope, GoogleLogo, LockKey, WarningCircle } from "@phosphor-icons/react";
+import { Envelope, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase, GOOGLE_MOCK_EMAIL, GOOGLE_MOCK_PASSWORD } from "../../lib/supabase";
 
@@ -146,7 +146,7 @@ export default function SignupPage() {
         fullWidth
         loading={googleLoading}
         onClick={handleGoogleMock}
-        iconLeft={<GoogleLogo size={18} weight="bold" />}
+        iconLeft={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
       >
         Continue with Google (demo)
       </Button>

@@ -23,6 +23,7 @@ export interface PlanDefinition {
   priceAnnual: number;
   audience: string;
   mostPopular?: boolean;
+  requiresVerification?: boolean;
   features: string[];
 }
 

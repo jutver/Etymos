@@ -2,17 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, CircleNotch, Lock, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
-import { PLANS, CREDIT_PACKS } from "../../lib/mockData";
+import { PLANS, CREDIT_PACKS, PAYMENT_METHODS } from "../../lib/mockData";
 import { formatVND } from "../../lib/format";
 import { useAppStore } from "../../lib/store";
 import { cn } from "../../lib/cn";
 import type { PaymentMethod } from "../../lib/types";
-
-const methods: { id: PaymentMethod; label: string; color: string; mark: string }[] = [
-  { id: "vnpay", label: "VNPay", color: "#005BAA", mark: "VN" },
-  { id: "momo", label: "MoMo", color: "#A50064", mark: "M" },
-  { id: "zalopay", label: "ZaloPay", color: "#0068FF", mark: "Z" },
-];
 
 type Status = "idle" | "processing" | "declined";
 
@@ -78,7 +72,7 @@ export default function CheckoutPage() {
       <div className="mt-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment method</p>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {methods.map((m) => (
+          {PAYMENT_METHODS.map((m) => (
             <button
               key={m.id}
               onClick={() => setMethod(m.id)}
@@ -87,11 +81,8 @@ export default function CheckoutPage() {
                 method === m.id ? "border-brand-500 bg-brand-100/30" : "border-line hover:border-brand-300",
               )}
             >
-              <span
-                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white"
-                style={{ backgroundColor: m.color }}
-              >
-                {m.mark}
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-line">
+                <img src={m.logo} alt={m.label} className="size-7 object-contain" />
               </span>
               <span className="text-sm font-semibold text-ink-900">{m.label}</span>
               {method === m.id && <Check size={16} weight="bold" className="ml-auto text-brand-600" />}
@@ -106,7 +97,7 @@ export default function CheckoutPage() {
           <div>
             <p className="font-semibold">Payment declined</p>
             <p className="mt-0.5 text-severity-high/90">
-              {methods.find((m) => m.id === method)?.label} declined this transaction. Try again or
+              {PAYMENT_METHODS.find((m) => m.id === method)?.label} declined this transaction. Try again or
               use a different payment method.
             </p>
           </div>

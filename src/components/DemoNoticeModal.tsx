@@ -26,8 +26,9 @@ export function DemoNoticeModal() {
           You're viewing a demo
         </h2>
         <p className="mt-2.5 text-sm leading-relaxed text-ink-600">
-          Etymos is a prototype, not a finished product yet. Signup, plans, and document checks all
-          work, but some results are simulated for demonstration purposes.
+          This page is an interactive prototype designed to demonstrate the core capabilities and future direction of our product. 
+          Please note that all features, layouts, and functionalities are currently under development and subject to change. 
+          Your feedback is incredibly valuable to us and we highly welcome it.
         </p>
         <Button fullWidth size="lg" className="mt-6" onClick={dismiss}>
           Got it

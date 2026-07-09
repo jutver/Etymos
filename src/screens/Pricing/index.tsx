@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: "What happens to my history if I downgrade to Free?",
-    a: "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore full 12-month history.",
+    a: "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Student Premium, 12 months on Professional).",
   },
   {
     q: "Is paying with VNPay, MoMo, or ZaloPay secure?",
@@ -128,11 +128,12 @@ export default function PricingPage() {
         </h2>
 
         <div className="mt-9 overflow-x-auto rounded-[var(--radius-card-lg)] border border-line">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-tint text-left">
                 <th className="px-5 py-4 font-semibold text-ink-500">Feature</th>
                 <th className="px-5 py-4 text-center font-semibold text-ink-700">Free</th>
+                <th className="px-5 py-4 text-center font-semibold text-ink-700">Credit Pack</th>
                 <th className="px-5 py-4 text-center font-semibold text-brand-600">
                   Student Premium
                 </th>
@@ -145,6 +146,9 @@ export default function PricingPage() {
                   <td className="px-5 py-3.5 font-medium text-ink-800">{row.feature}</td>
                   <td className="px-5 py-3.5 text-center">
                     <Cell value={row.free} />
+                  </td>
+                  <td className="px-5 py-3.5 text-center">
+                    <Cell value={row.credit} />
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     <Cell value={row.student} />

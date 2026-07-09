@@ -30,3 +30,4 @@ dist-ssr
 .npm-cache
 graphify-out/
 .mcp.json
+*.md

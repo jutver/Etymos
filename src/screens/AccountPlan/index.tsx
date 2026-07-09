@@ -1,26 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarBlank, Check, CreditCard, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
+import { CalendarBlank, Check, CreditCard, GraduationCap, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
-import { PLANS, CREDIT_PACKS } from "../../lib/mockData";
+import { PLANS, CREDIT_PACKS, PAYMENT_METHODS } from "../../lib/mockData";
 import { formatVND } from "../../lib/format";
-import { planLabel, useAppStore, FREE_CHECKS_LIMIT } from "../../lib/store";
+import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "../../lib/cn";
 import type { PaymentMethod } from "../../lib/types";
-
-const methods: { id: PaymentMethod; label: string; color: string; mark: string }[] = [
-  { id: "vnpay", label: "VNPay", color: "#005BAA", mark: "VN" },
-  { id: "momo", label: "MoMo", color: "#A50064", mark: "M" },
-  { id: "zalopay", label: "ZaloPay", color: "#0068FF", mark: "Z" },
-];
 
 export default function AccountPlanPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
   const credits = useAppStore((s) => s.credits);
-  const freeChecksUsed = useAppStore((s) => s.freeChecksUsed);
+  const checksUsedThisPeriod = useAppStore((s) => s.checksUsedThisPeriod);
+  const studentVerified = useAppStore((s) => s.studentVerified);
   const planResetInfo = useAppStore((s) => s.planResetInfo);
   const rolloverPlanPeriodIfNeeded = useAppStore((s) => s.rolloverPlanPeriodIfNeeded);
   const pushToast = useAppStore((s) => s.pushToast);
@@ -56,16 +51,22 @@ export default function AccountPlanPage() {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Current plan</p>
-            <p className="mt-1 text-2xl font-extrabold text-navy-900">{planLabel(plan)}</p>
+            <p className="flex items-center gap-2 text-2xl font-extrabold text-navy-900">
+              {planLabel(plan)}
+              {plan === "student" && studentVerified && (
+                <span className="flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-bold text-success">
+                  <GraduationCap size={13} weight="fill" />
+                  Verified
+                </span>
+              )}
+            </p>
           </div>
           <UsageMeter />
         </div>
 
-        {plan === "free" && (
-          <p className="mt-4 text-xs text-ink-500">
-            {freeChecksUsed} of {FREE_CHECKS_LIMIT} free checks used this cycle.
-          </p>
-        )}
+        <p className="mt-4 text-xs text-ink-500">
+          {checksUsedThisPeriod} of {planDocLimit(plan)} checks used this cycle.
+        </p>
 
         <div className="mt-4 flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-surface-tint px-4 py-2.5 text-sm text-ink-700">
           <CalendarBlank size={16} className="text-ink-400" />
@@ -83,7 +84,7 @@ export default function AccountPlanPage() {
           <div>
             <p className="text-sm font-semibold text-ink-900">Payment method</p>
             <p className="text-xs text-ink-500">
-              {methods.find((m) => m.id === method)?.label} on file (demo)
+              {PAYMENT_METHODS.find((m) => m.id === method)?.label} on file (demo)
             </p>
           </div>
           <Button variant="outline" size="sm" iconLeft={<CreditCard size={15} />} onClick={() => setMethodOpen((v) => !v)}>
@@ -93,7 +94,7 @@ export default function AccountPlanPage() {
 
         {methodOpen && (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {methods.map((m) => (
+            {PAYMENT_METHODS.map((m) => (
               <button
                 key={m.id}
                 onClick={() => setMethod(m.id)}
@@ -102,11 +103,8 @@ export default function AccountPlanPage() {
                   method === m.id ? "border-brand-500 bg-brand-100/30" : "border-line hover:border-brand-300",
                 )}
               >
-                <span
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white"
-                  style={{ backgroundColor: m.color }}
-                >
-                  {m.mark}
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-line">
+                  <img src={m.logo} alt={m.label} className="size-6 object-contain" />
                 </span>
                 <span className="text-sm font-semibold text-ink-900">{m.label}</span>
                 {method === m.id && <Check size={15} weight="bold" className="ml-auto text-brand-600" />}

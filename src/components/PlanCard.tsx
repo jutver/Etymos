@@ -1,4 +1,4 @@
-import { Check, Star } from "@phosphor-icons/react";
+import { Check, GraduationCap, Star } from "@phosphor-icons/react";
 import { useNavigate } from "react-router-dom";
 import type { BillingCycle, PlanDefinition } from "../lib/types";
 import { formatVND } from "../lib/format";
@@ -15,9 +15,11 @@ export function PlanCard({
 }) {
   const navigate = useNavigate();
   const currentPlan = useAppStore((s) => s.plan);
+  const studentVerified = useAppStore((s) => s.studentVerified);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const isCurrent = currentPlan === plan.id;
   const price = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
+  const needsVerification = plan.requiresVerification && !studentVerified;
 
   function handleSelect() {
     if (plan.id === "free" || isCurrent) {
@@ -29,6 +31,10 @@ export function PlanCard({
       plan: plan.id as "student" | "professional",
       billingCycle,
     });
+    if (needsVerification) {
+      navigate("/verify-student");
+      return;
+    }
     navigate("/checkout");
   }
 
@@ -65,6 +71,13 @@ export function PlanCard({
         <p className="mt-1 text-xs font-medium text-success">2 months free vs. monthly</p>
       )}
 
+      {needsVerification && !isCurrent && (
+        <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-ink-600">
+          <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
+          Requires student verification before checkout
+        </p>
+      )}
+
       <Button
         onClick={handleSelect}
         variant={plan.mostPopular ? "primary" : isCurrent ? "outline" : "secondary"}
@@ -72,7 +85,13 @@ export function PlanCard({
         className="mt-6"
         disabled={isCurrent}
       >
-        {isCurrent ? "Current plan" : plan.id === "free" ? "Start for free" : `Choose ${plan.name}`}
+        {isCurrent
+          ? "Current plan"
+          : plan.id === "free"
+            ? "Start for free"
+            : needsVerification
+              ? "Verify & choose plan"
+              : `Choose ${plan.name}`}
       </Button>
 
       <ul className="mt-7 flex flex-1 flex-col gap-3">

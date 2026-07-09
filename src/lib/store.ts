@@ -10,10 +10,18 @@ import type {
   Toast,
 } from "./types";
 
-export const FREE_CHECKS_LIMIT = 3;
+export const PLAN_DOC_LIMITS: Record<PlanTier, number> = {
+  free: 2,
+  student: 10,
+  professional: 35,
+};
 export const PLAN_PERIOD_DAYS = 30;
 
-export type BalanceMode = "unlimited" | "credits" | "free-meter";
+export type BalanceMode = "credits" | "plan-meter";
+
+export function planDocLimit(plan: PlanTier): number {
+  return PLAN_DOC_LIMITS[plan];
+}
 
 const DEFAULT_PROJECTS = Array.from(
   new Set(HISTORY_SEED.map((h) => h.project).filter(Boolean)),
@@ -22,7 +30,7 @@ const DEFAULT_PROJECTS = Array.from(
 interface AppState {
   plan: PlanTier;
   billingCycle: BillingCycle;
-  freeChecksUsed: number;
+  checksUsedThisPeriod: number;
   credits: number;
   history: HistoryEntry[];
   trash: HistoryEntry[];
@@ -34,6 +42,7 @@ interface AppState {
   hasPendingCheck: boolean;
   pendingDocLabel: string | null;
   lastCheckoutStatus: "success" | "declined" | null;
+  studentVerified: boolean;
   toasts: Toast[];
 
   balanceMode: () => BalanceMode;
@@ -54,6 +63,7 @@ interface AppState {
   permanentlyDeleteTrash: (id: string) => void;
   planResetInfo: () => { daysLeft: number; resetDate: Date };
   rolloverPlanPeriodIfNeeded: () => void;
+  completeStudentVerification: () => void;
   pushToast: (toast: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
 }
@@ -63,7 +73,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       plan: "free",
       billingCycle: "monthly",
-      freeChecksUsed: 2,
+      checksUsedThisPeriod: 1,
       credits: 0,
       history: HISTORY_SEED,
       trash: [],
@@ -75,26 +85,24 @@ export const useAppStore = create<AppState>()(
       hasPendingCheck: false,
       pendingDocLabel: null,
       lastCheckoutStatus: null,
+      studentVerified: false,
       toasts: [],
 
       balanceMode: () => {
-        const { plan, credits } = get();
-        if (plan !== "free") return "unlimited";
+        const { credits } = get();
         if (credits > 0) return "credits";
-        return "free-meter";
+        return "plan-meter";
       },
 
       remaining: () => {
-        const { plan, credits, freeChecksUsed } = get();
-        if (plan !== "free") return Infinity;
+        const { plan, credits, checksUsedThisPeriod } = get();
         if (credits > 0) return credits;
-        return Math.max(0, FREE_CHECKS_LIMIT - freeChecksUsed);
+        return Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod);
       },
 
       requestCheck: (docLabel, count = 1) => {
-        const { plan, credits, freeChecksUsed } = get();
+        const { plan, credits, checksUsedThisPeriod } = get();
         if (docLabel) set({ pendingDocLabel: docLabel });
-        if (plan !== "free") return true;
         if (credits > 0) {
           if (credits < count) {
             set({ hasPendingCheck: true });
@@ -103,8 +111,8 @@ export const useAppStore = create<AppState>()(
           set({ credits: credits - count });
           return true;
         }
-        if (freeChecksUsed + count <= FREE_CHECKS_LIMIT) {
-          set({ freeChecksUsed: freeChecksUsed + count });
+        if (checksUsedThisPeriod + count <= PLAN_DOC_LIMITS[plan]) {
+          set({ checksUsedThisPeriod: checksUsedThisPeriod + count });
           return true;
         }
         set({ hasPendingCheck: true });
@@ -122,6 +130,8 @@ export const useAppStore = create<AppState>()(
           set({
             plan: pendingCheckoutItem.plan,
             billingCycle: pendingCheckoutItem.billingCycle,
+            checksUsedThisPeriod: 0,
+            planPeriodStart: new Date().toISOString(),
             lastCheckoutStatus: "success",
           });
         } else {
@@ -136,7 +146,8 @@ export const useAppStore = create<AppState>()(
 
       addHistoryEntries: (entries) => set((s) => ({ history: [...entries, ...s.history] })),
 
-      cancelSubscription: () => set({ plan: "free" }),
+      cancelSubscription: () =>
+        set({ plan: "free", checksUsedThisPeriod: 0, planPeriodStart: new Date().toISOString() }),
 
       recordCheckedDocument: (doc) =>
         set((s) => ({ checkedDocuments: { ...s.checkedDocuments, [doc.id]: doc } })),
@@ -192,9 +203,11 @@ export const useAppStore = create<AppState>()(
         const next = new Date(start);
         next.setDate(next.getDate() + PLAN_PERIOD_DAYS);
         if (Date.now() >= next.getTime()) {
-          set({ planPeriodStart: next.toISOString(), freeChecksUsed: 0 });
+          set({ planPeriodStart: next.toISOString(), checksUsedThisPeriod: 0 });
         }
       },
+
+      completeStudentVerification: () => set({ studentVerified: true }),
 
       pushToast: (toast) =>
         set((s) => ({
@@ -208,7 +221,7 @@ export const useAppStore = create<AppState>()(
       partialize: (s) => ({
         plan: s.plan,
         billingCycle: s.billingCycle,
-        freeChecksUsed: s.freeChecksUsed,
+        checksUsedThisPeriod: s.checksUsedThisPeriod,
         credits: s.credits,
         history: s.history,
         trash: s.trash,
@@ -216,6 +229,7 @@ export const useAppStore = create<AppState>()(
         checkedDocuments: s.checkedDocuments,
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,
+        studentVerified: s.studentVerified,
       }),
     },
   ),
@@ -227,6 +241,9 @@ export function planLabel(plan: PlanTier): string {
   return "Professional";
 }
 
-export function historyRetentionLabel(plan: PlanTier): string {
-  return plan === "free" ? "7 days" : "12 months";
+export function historyRetentionLabel(plan: PlanTier, hasCredits = false): string {
+  if (hasCredits) return "30 days per check";
+  if (plan === "free") return "7 days";
+  if (plan === "student") return "9 months";
+  return "12 months";
 }

@@ -19,6 +19,7 @@ import CheckoutPage from "./screens/Checkout";
 import PaymentSuccessPage from "./screens/PaymentSuccess";
 import AccountProfilePage from "./screens/AccountProfile";
 import AccountPlanPage from "./screens/AccountPlan";
+import VerifyStudentPage from "./screens/VerifyStudent";
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -63,6 +64,7 @@ function App() {
             <Route path="/payment-success" element={<PaymentSuccessPage />} />
             <Route path="/account/profile" element={<AccountProfilePage />} />
             <Route path="/account/plan" element={<AccountPlanPage />} />
+            <Route path="/verify-student" element={<VerifyStudentPage />} />
           </Route>
         </Route>
       </Routes>

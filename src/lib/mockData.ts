@@ -2,6 +2,7 @@ import type {
   CheckedDocument,
   CreditPack,
   HistoryEntry,
+  PaymentMethod,
   PlanDefinition,
 } from "./types";
 
@@ -14,7 +15,7 @@ export const PLANS: PlanDefinition[] = [
     priceAnnual: 0,
     audience: "New users, occasional checks",
     features: [
-      "3 documents / month, up to 3,000 words each",
+      "2 documents / month, up to 3,000 words each",
       "Traditional plagiarism detection",
       "Similarity score & matched sources",
       "Basic report",
@@ -26,19 +27,21 @@ export const PLANS: PlanDefinition[] = [
     id: "student",
     name: "Student Premium",
     tagline: "For students, grad and PhD researchers",
-    priceMonthly: 99000,
-    priceAnnual: 950000,
+    priceMonthly: 69000,
+    priceAnnual: 690000,
     audience: "Students, grad & PhD researchers",
     mostPopular: true,
+    requiresVerification: true,
     features: [
-      "Unlimited documents, unlimited words",
+      "🎓 Requires student verification",
+      "10 documents / month, unlimited words",
       "Semantic plagiarism detection",
       "AI-generated content detection",
       "Explainable AI, in plain language",
       "AI Rewrite Assistant",
       "Multi-language checking",
       "PDF report export",
-      "12-month history, no ads",
+      "9-month history, no ads",
       "Priority support",
     ],
   },
@@ -50,12 +53,14 @@ export const PLANS: PlanDefinition[] = [
     priceAnnual: 2870000,
     audience: "Lecturers, researchers, content & SEO teams",
     features: [
-      "Everything in Student Premium",
+      "35 documents / month, unlimited words",
+      "Everything in Student Premium, no verification needed",
       "Batch checking",
       "Statistics dashboard",
-      "Multi-project management",
+      "Multi-project management & private comparison corpus",
       "API integration",
       "In-depth advanced report export",
+      "12-month history",
       "Team roles & permissions",
       "24/7 priority support",
     ],
@@ -68,18 +73,24 @@ export const CREDIT_PACKS: CreditPack[] = [
     id: "pack5",
     label: "5 checks",
     checks: 5,
-    price: 89000,
-    perCheck: 17800,
-    badge: "Save 6%",
+    price: 45000,
+    perCheck: 9000,
+    badge: "Save 53%",
   },
   {
     id: "pack10",
     label: "10 checks",
     checks: 10,
-    price: 169000,
-    perCheck: 16900,
+    price: 59000,
+    perCheck: 5900,
     badge: "Best value",
   },
+];
+
+export const PAYMENT_METHODS: { id: PaymentMethod; label: string; logo: string }[] = [
+  { id: "vnpay", label: "VNPay", logo: "/assets/logo/vnpay.png" },
+  { id: "momo", label: "MoMo", logo: "/assets/logo/momo.jpg" },
+  { id: "zalopay", label: "ZaloPay", logo: "/assets/logo/zalopay.jpg" },
 ];
 
 export const COMPETITORS = [
@@ -119,28 +130,31 @@ export const COMPETITORS = [
 export const FEATURE_MATRIX: {
   feature: string;
   free: boolean | string;
+  credit: boolean | string;
   student: boolean | string;
   professional: boolean | string;
 }[] = [
-  { feature: "Traditional plagiarism detection", free: true, student: true, professional: true },
-  { feature: "Similarity score", free: true, student: true, professional: true },
-  { feature: "Matched-source suggestions", free: true, student: true, professional: true },
-  { feature: "Semantic plagiarism detection", free: false, student: true, professional: true },
-  { feature: "Explainable AI (why it's flagged)", free: false, student: true, professional: true },
-  { feature: "AI Rewrite Assistant", free: false, student: true, professional: true },
-  { feature: "AI-generated content detection", free: false, student: true, professional: true },
-  { feature: "Multi-language checking", free: false, student: true, professional: true },
-  { feature: "PDF export", free: false, student: true, professional: true },
-  { feature: "Ads", free: "Shown", student: "None", professional: "None" },
-  { feature: "Documents / month", free: "3", student: "Unlimited", professional: "Unlimited" },
-  { feature: "Words / document", free: "3,000", student: "Unlimited", professional: "Unlimited" },
-  { feature: "History retention", free: "7 days", student: "12 months", professional: "12 months" },
-  { feature: "Batch checking", free: false, student: false, professional: true },
-  { feature: "Statistics dashboard", free: false, student: false, professional: true },
-  { feature: "Multi-project management", free: false, student: false, professional: true },
-  { feature: "API integration", free: false, student: false, professional: true },
-  { feature: "Team roles & permissions", free: false, student: false, professional: true },
-  { feature: "Support", free: "Basic", student: "Priority", professional: "24/7 priority" },
+  { feature: "Verification required", free: false, credit: false, student: "🎓 Yes", professional: false },
+  { feature: "Documents / month", free: "2", credit: "Pay per check", student: "10", professional: "35" },
+  { feature: "Words / document", free: "3,000", credit: "Unlimited per check", student: "Unlimited", professional: "Unlimited" },
+  { feature: "Traditional plagiarism detection", free: true, credit: true, student: true, professional: true },
+  { feature: "Semantic (paraphrase) detection", free: false, credit: true, student: true, professional: true },
+  { feature: "AI-generated content detection", free: false, credit: true, student: true, professional: true },
+  { feature: "Explainable AI (why it's flagged)", free: false, credit: true, student: true, professional: true },
+  { feature: "PDF report export", free: false, credit: true, student: true, professional: true },
+  {
+    feature: "AI Rewrite Assistant",
+    free: false,
+    credit: "Unlimited (this document only)",
+    student: true,
+    professional: true,
+  },
+  { feature: "History retention", free: "7 days", credit: "30 days per check", student: "9 months", professional: "12 months" },
+  { feature: "Ads", free: "Shown", credit: "None", student: "None", professional: "None" },
+  { feature: "Draft-over-time originality tracking", free: false, credit: false, student: true, professional: true },
+  { feature: "Private comparison corpus (your own docs)", free: false, credit: false, student: false, professional: true },
+  { feature: "Batch checking", free: false, credit: false, student: false, professional: true },
+  { feature: "Support", free: "Basic", credit: "Basic", student: "Priority", professional: "24/7 priority" },
 ];
 
 const title =

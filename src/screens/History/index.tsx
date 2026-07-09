@@ -9,7 +9,7 @@ import {
   Table as TableIcon,
   Trash,
 } from "@phosphor-icons/react";
-import { useAppStore, historyRetentionLabel } from "../../lib/store";
+import { useAppStore, historyRetentionLabel, planLabel } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
@@ -17,7 +17,8 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { cn } from "../../lib/cn";
 import type { DocStatus } from "../../lib/types";
 
-const RETENTION_DAYS = { free: 7, student: 365, professional: 365 };
+const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
+const CREDIT_RETENTION_DAYS = 30;
 const TODAY = new Date("2026-07-05T23:59:59");
 
 const statusOrder: DocStatus[] = ["clean", "low", "moderate", "high"];
@@ -31,6 +32,7 @@ const statusBarColor: Record<DocStatus, string> = {
 export default function HistoryPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
+  const credits = useAppStore((s) => s.credits);
   const history = useAppStore((s) => s.history);
   const projects = useAppStore((s) => s.projects);
   const moveHistoryEntry = useAppStore((s) => s.moveHistoryEntry);
@@ -42,7 +44,7 @@ export default function HistoryPage() {
 
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
-  const retentionDays = RETENTION_DAYS[plan];
+  const retentionDays = credits > 0 ? CREDIT_RETENTION_DAYS : RETENTION_DAYS[plan];
   const { visible, expiredCount } = useMemo(() => {
     const cutoff = new Date(TODAY);
     cutoff.setDate(cutoff.getDate() - retentionDays);
@@ -84,9 +86,11 @@ export default function HistoryPage() {
         <div>
           <h1 className="text-h1 font-bold tracking-tight text-navy-900">History</h1>
           <p className="mt-1.5 text-sm text-ink-500">
-            {plan === "free"
-              ? `Free plan keeps checks for ${historyRetentionLabel(plan)}. Upgrade for 12-month history.`
-              : `Your plan keeps checks for ${historyRetentionLabel(plan)}.`}
+            {credits > 0
+              ? `Credit-pack checks are kept for ${historyRetentionLabel(plan, true)}.`
+              : plan === "free"
+                ? `Free plan keeps checks for ${historyRetentionLabel(plan)}. Upgrade for extended history.`
+                : `Your ${planLabel(plan)} plan keeps checks for ${historyRetentionLabel(plan)}.`}
           </p>
         </div>
 
