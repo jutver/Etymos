@@ -76,7 +76,7 @@ export default function PaywallPage() {
           </div>
 
           <ul className="mt-5 flex flex-col gap-2">
-            {["Unlimited documents & words", "Priority support", "No ads"].map((f) => (
+            {["More documents per month", "Higher word limits", "Priority support"].map((f) => (
               <li key={f} className="flex items-center gap-2 text-xs text-ink-600">
                 <Check size={14} weight="bold" className="text-brand-500" />
                 {f}
@@ -103,7 +103,7 @@ export default function PaywallPage() {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-navy-900">{pack.label}</p>
-                    <p className="text-xs text-ink-500">{formatVND(pack.price)}</p>
+                    <p className="text-xs text-ink-500">{formatVND(pack.price)} · {pack.description}</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => choosePack(pack.id)}>

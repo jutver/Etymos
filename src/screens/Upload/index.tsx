@@ -18,7 +18,7 @@ import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
-import { useAppStore, planLabel } from "../../lib/store";
+import { useAppStore, planLabel, planWordLimit } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { MOCK_DOCUMENTS } from "../../lib/mockData";
@@ -58,8 +58,8 @@ export default function UploadPage() {
   const [projectOpen, setProjectOpen] = useState(false);
 
   const wordCount = pastedText.trim() ? pastedText.trim().split(/\s+/).length : 0;
-  const wordLimit = plan === "free" ? 3000 : null;
-  const overLimit = wordLimit !== null && wordCount > wordLimit;
+  const wordLimit = planWordLimit(plan);
+  const overLimit = wordCount > wordLimit;
 
   const hasContent = tab === "file" ? files.length > 0 : pastedText.trim().length > 0;
   const docLabels = tab === "file" ? files.map((f) => f.name) : [pastedText.trim() ? "Pasted text" : ""].filter(Boolean);
@@ -126,8 +126,7 @@ export default function UploadPage() {
         <div>
           <h1 className="text-h1 font-bold tracking-tight text-navy-900">Check a new document</h1>
           <p className="mt-1.5 text-body text-ink-600">
-            Upload one or more files or paste your text. We'll scan the web, academic papers, and
-            check for AI-generated content.
+            Upload one or more files or paste your text. We'll scan the web and academic papers.
           </p>
         </div>
       </div>
@@ -188,8 +187,7 @@ export default function UploadPage() {
                   </p>
                 </div>
                 <p className="text-[0.6875rem] text-ink-300">
-                  PDF, DOC, DOCX or TXT
-                  {plan === "free" ? " · up to 3,000 words on Free" : " · unlimited words"}
+                  PDF, DOC, DOCX or TXT · up to {wordLimit.toLocaleString()} words on {planLabel(plan)}
                 </p>
                 <input
                   ref={fileInputRef}
@@ -247,13 +245,13 @@ export default function UploadPage() {
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs text-ink-400">Or try a sample below</span>
                 <p className={cn("text-xs", overLimit ? "font-semibold text-severity-high" : "text-ink-400")}>
-                  {wordCount.toLocaleString()} words{wordLimit ? ` / ${wordLimit.toLocaleString()} limit` : ""}
+                  {wordCount.toLocaleString()} words / {wordLimit.toLocaleString()} limit
                 </p>
               </div>
               {overLimit && (
                 <p className="mt-2 rounded-lg bg-severity-high-bg px-3 py-2 text-xs font-medium text-severity-high">
-                  This exceeds the Free plan's 3,000-word limit. Upgrade to Student Premium for
-                  unlimited words.
+                  This exceeds the {planLabel(plan)} plan's {wordLimit.toLocaleString()}-word limit.
+                  {plan !== "professional" && " Upgrade for a higher limit."}
                 </p>
               )}
 
@@ -427,18 +425,6 @@ export default function UploadPage() {
               ))}
             </div>
           </div>
-
-          {plan === "free" && (
-            <div className="rounded-[var(--radius-card-lg)] border border-dashed border-line bg-surface-tint p-5 text-center">
-              <p className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Advertisement</p>
-              <p className="mt-2 text-sm font-semibold text-ink-700">
-                Remove ads and unlock unlimited checks
-              </p>
-              <Button as="link" to="/pricing" size="sm" variant="outline" fullWidth className="mt-3">
-                Go Premium
-              </Button>
-            </div>
-          )}
         </div>
       </div>
     </div>

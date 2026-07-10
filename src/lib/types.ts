@@ -1,7 +1,7 @@
 export type PlanTier = "free" | "student" | "professional";
 export type BillingCycle = "monthly" | "annual";
 export type PaymentMethod = "vnpay" | "momo" | "zalopay";
-export type CreditPackId = "pack1" | "pack5" | "pack10";
+export type CreditPackId = "pack-standard" | "pack-premium";
 export type SourceKind = "web" | "academic";
 export type Severity = "high" | "moderate" | "low";
 export type Language = "vi" | "en" | "fr" | "ja";
@@ -9,9 +9,9 @@ export type Language = "vi" | "en" | "fr" | "ja";
 export interface CreditPack {
   id: CreditPackId;
   label: string;
+  description: string;
   checks: number;
   price: number;
-  perCheck: number;
   badge?: string;
 }
 
@@ -32,7 +32,6 @@ export interface DocPassage {
   text: string;
   severity?: Severity;
   matchId?: string;
-  aiFlag?: boolean;
 }
 
 export interface MatchedSource {
@@ -59,8 +58,6 @@ export interface CheckedDocument {
   uploadedAt: string;
   similarityScore: number;
   similarityScoreFree: number;
-  aiContentScore: number;
-  aiContentExplanation: string;
   webSourcesScanned: number;
   academicSourcesScanned: number;
   passages: DocPassage[];
@@ -75,7 +72,6 @@ export interface HistoryEntry {
   date: string;
   similarityScore: number;
   status: DocStatus;
-  aiFlagged: boolean;
   project?: string;
   wordCount: number;
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowCounterClockwise, Sparkle, Trash } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Trash } from "@phosphor-icons/react";
 import { useAppStore } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
@@ -52,7 +52,6 @@ export default function TrashPage() {
                 <td className="max-w-xs truncate px-5 py-4 font-medium text-ink-900">
                   <button onClick={() => navigate(`/report/${h.id}`)} className="flex items-center gap-2 hover:underline">
                     {h.title}
-                    {h.aiFlagged && <Sparkle size={13} weight="fill" className="shrink-0 text-ai-flag" />}
                   </button>
                 </td>
                 <td className="whitespace-nowrap px-5 py-4 text-ink-500">{formatDate(h.date)}</td>

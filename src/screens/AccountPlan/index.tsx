@@ -151,7 +151,7 @@ export default function AccountPlanPage() {
       <section className="mt-10">
         <h2 className="text-h3 font-bold tracking-tight text-navy-900">Buy credits</h2>
         <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription required.</p>
-        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="mx-auto grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
           {CREDIT_PACKS.map((pack) => (
             <div
               key={pack.id}
@@ -164,7 +164,7 @@ export default function AccountPlanPage() {
               )}
               <p className="text-lg font-bold text-navy-900">{pack.label}</p>
               <p className="mt-3 text-3xl font-extrabold text-navy-900">{formatVND(pack.price)}</p>
-              <p className="mt-1 text-xs text-ink-500">{formatVND(pack.perCheck)} per check</p>
+              <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
               <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
                 Buy credits
               </Button>

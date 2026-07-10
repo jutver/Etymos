@@ -1,5 +1,4 @@
 import type { Severity, DocStatus } from "../lib/types";
-import { Sparkle } from "@phosphor-icons/react";
 import { cn } from "../lib/cn";
 
 export const severityConfig: Record<
@@ -115,21 +114,6 @@ export function SimilarityBadge({ score, size = "md" }: { score: number; size?: 
         <span className="text-caption font-medium text-ink-500">Similarity Score</span>
         <span className={cn("text-sm font-semibold", c.text)}>{c.label}</span>
       </div>
-    </div>
-  );
-}
-
-export function AIContentBadge({ score, size = "md" }: { score: number; size?: "sm" | "md" }) {
-  const likely = score >= 50;
-  return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border border-ai-flag-line bg-ai-flag-bg font-semibold text-ai-flag",
-        size === "sm" ? "px-3 py-1 text-xs" : "px-3.5 py-1.5 text-sm",
-      )}
-    >
-      <Sparkle size={size === "sm" ? 13 : 15} weight="fill" />
-      {likely ? `${score}% likely AI-generated` : `${100 - score}% likely human-written`}
     </div>
   );
 }

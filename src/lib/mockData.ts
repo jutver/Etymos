@@ -20,12 +20,11 @@ export const PLANS: PlanDefinition[] = [
       "Similarity score & matched sources",
       "Basic report",
       "7-day history",
-      "Ad-supported",
     ],
   },
   {
     id: "student",
-    name: "Student Premium",
+    name: "Standard",
     tagline: "For students, grad and PhD researchers",
     priceMonthly: 69000,
     priceAnnual: 490000,
@@ -33,56 +32,49 @@ export const PLANS: PlanDefinition[] = [
     mostPopular: true,
     requiresVerification: true,
     features: [
-      "🎓 Requires student verification",
-      "10 documents / month, unlimited words",
+      "10 documents / month, up to 10,000 words each",
       "Semantic plagiarism detection",
-      "AI-generated content detection",
       "Explainable AI, in plain language",
-      "AI Rewrite Assistant",
       "Multi-language checking",
-      "PDF report export",
-      "9-month history, no ads",
+      "PDF export",
+      "9-month history",
       "Priority support",
     ],
   },
   {
     id: "professional",
-    name: "Professional",
+    name: "Premium",
     tagline: "For lecturers, researchers & agencies",
     priceMonthly: 299000,
     priceAnnual: 1990000,
     audience: "Lecturers, researchers, content & SEO teams",
     features: [
-      "70 documents / month, unlimited words",
-      "Everything in Student Premium, no verification needed",
-      "Batch checking",
-      "Multi-project management & private comparison corpus",
-      "API integration",
+      "70 documents / month, up to 15,000 words each",
+      "Everything in Standard",
+      "AI Rewrite Assistant",
+      "Multi-project management",
       "In-depth advanced report export",
+      "Draft-over-time originality tracking",
       "12-month history",
-      "Team roles & permissions",
       "24/7 priority support",
     ],
   },
 ];
 
 export const CREDIT_PACKS: CreditPack[] = [
-  { id: "pack1", label: "1 check", checks: 1, price: 19000, perCheck: 19000 },
   {
-    id: "pack5",
-    label: "5 checks",
-    checks: 5,
-    price: 45000,
-    perCheck: 9000,
-    badge: "Save 53%",
+    id: "pack-standard",
+    label: "Standard check",
+    description: "Everything in Standard, pay-per-use",
+    checks: 1,
+    price: 19000,
   },
   {
-    id: "pack10",
-    label: "10 checks",
-    checks: 10,
-    price: 59000,
-    perCheck: 5900,
-    badge: "Best value",
+    id: "pack-premium",
+    label: "Premium check",
+    description: "Everything in Premium, pay-per-use",
+    checks: 1,
+    price: 29000,
   },
 ];
 
@@ -94,25 +86,25 @@ export const PAYMENT_METHODS: { id: PaymentMethod; label: string; logo: string }
 
 export const COMPETITORS = [
   {
-    name: "Turnitin",
+    name: "University plagiarism tools",
     audience: "Universities",
     price: "Not sold directly",
     limitation: "Hard for individuals to access",
   },
   {
-    name: "Copyleaks",
+    name: "Generic plagiarism checkers",
     audience: "Individuals",
     price: "~$9.99/mo",
     limitation: "Not optimized for Vietnamese",
   },
   {
-    name: "Grammarly Premium",
+    name: "Writing assistants",
     audience: "Individuals",
     price: "~$30/mo",
     limitation: "English-focused",
   },
   {
-    name: "Quetext Pro",
+    name: "Other checker apps",
     audience: "Individuals",
     price: "~$13.99/mo",
     limitation: "Weak Vietnamese semantic detection",
@@ -120,7 +112,7 @@ export const COMPETITORS = [
   {
     name: "Etymos",
     audience: "Vietnamese users",
-    price: "~99,000 VND/mo (~$3.8)",
+    price: "From 69,000 VND/mo (~$2.7)",
     limitation: "Vietnamese-optimized, Explainable AI, AI Rewrite",
     highlight: true,
   },
@@ -129,31 +121,26 @@ export const COMPETITORS = [
 export const FEATURE_MATRIX: {
   feature: string;
   free: boolean | string;
-  credit: boolean | string;
   student: boolean | string;
   professional: boolean | string;
 }[] = [
-  { feature: "Verification required", free: false, credit: false, student: "🎓 Yes", professional: false },
-  { feature: "Documents / month", free: "2", credit: "Pay per check", student: "10", professional: "70" },
-  { feature: "Words / document", free: "3,000", credit: "Unlimited per check", student: "Unlimited", professional: "Unlimited" },
-  { feature: "Traditional plagiarism detection", free: true, credit: true, student: true, professional: true },
-  { feature: "Semantic (paraphrase) detection", free: false, credit: true, student: true, professional: true },
-  { feature: "AI-generated content detection", free: false, credit: true, student: true, professional: true },
-  { feature: "Explainable AI (why it's flagged)", free: false, credit: true, student: true, professional: true },
-  { feature: "PDF report export", free: false, credit: true, student: true, professional: true },
+  { feature: "Verification required", free: false, student: "🎓 Yes", professional: false },
+  { feature: "Documents / month", free: "2", student: "10", professional: "70" },
+  { feature: "Words / document", free: "3,000", student: "10,000", professional: "15,000" },
+  { feature: "Traditional plagiarism detection", free: true, student: true, professional: true },
+  { feature: "Semantic (paraphrase) detection", free: false, student: true, professional: true },
+  { feature: "Explainable AI (why it's flagged)", free: false, student: true, professional: true },
+  { feature: "PDF report export", free: false, student: true, professional: true },
   {
     feature: "AI Rewrite Assistant",
     free: false,
-    credit: "Unlimited (this document only)",
-    student: true,
+    student: false,
     professional: true,
   },
-  { feature: "History retention", free: "7 days", credit: "30 days per check", student: "9 months", professional: "12 months" },
-  { feature: "Ads", free: "Shown", credit: "None", student: "None", professional: "None" },
-  { feature: "Draft-over-time originality tracking", free: false, credit: false, student: true, professional: true },
-  { feature: "Private comparison corpus (your own docs)", free: false, credit: false, student: false, professional: true },
-  { feature: "Batch checking", free: false, credit: false, student: false, professional: true },
-  { feature: "Support", free: "Basic", credit: "Basic", student: "Priority", professional: "24/7 priority" },
+  { feature: "Draft-over-time originality tracking", free: false, student: false, professional: true },
+  // { feature: "Multi-project management", free: false, student: false, professional: true },
+  { feature: "History retention", free: "7 days", student: "9 months", professional: "12 months" },
+  { feature: "Support", free: "Basic", student: "Priority", professional: "24/7 priority" },
 ];
 
 const title =
@@ -168,9 +155,6 @@ export const SAMPLE_DOCUMENT: CheckedDocument = {
   uploadedAt: "2026-07-05",
   similarityScore: 34,
   similarityScoreFree: 22,
-  aiContentScore: 62,
-  aiContentExplanation:
-    "Đoạn văn có khả năng do AI tạo ra dựa trên các dấu hiệu: câu văn trau chuốt và đồng đều bất thường, dùng nhiều cụm từ trừu tượng mang tính khái quát ('kiến tạo tương lai', 'hệ sinh thái bền vững'), và thiếu số liệu cụ thể thường thấy trong văn phong học thuật của người viết.",
   webSourcesScanned: 48200000,
   academicSourcesScanned: 186400,
   passages: [
@@ -207,7 +191,6 @@ export const SAMPLE_DOCUMENT: CheckedDocument = {
     {
       id: "p7",
       text: "Việc ứng dụng công nghệ số trong nông nghiệp thông minh không chỉ tối ưu hóa quy trình canh tác mà còn tạo ra một hệ sinh thái bền vững, nơi dữ liệu và tự động hóa hòa quyện với tri thức bản địa để kiến tạo tương lai nông nghiệp xanh cho toàn vùng.",
-      aiFlag: true,
     },
     {
       id: "p8",
@@ -349,15 +332,12 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-06-30",
     similarityScore: 21,
     similarityScoreFree: 14,
-    aiContentScore: 38,
-    aiContentExplanation:
-      "Một số đoạn có cấu trúc câu đồng đều và thiếu ví dụ cụ thể, gợi ý khả năng hỗ trợ từ công cụ AI trong giai đoạn viết nháp.",
     webSourcesScanned: 31500000,
     academicSourcesScanned: 92100,
     passages: [
       { id: "p1", text: "Trí tuệ nhân tạo (AI) đang dần trở thành công cụ hỗ trợ đắc lực trong giáo dục, từ cá nhân hóa lộ trình học tập đến tự động chấm điểm bài luận." },
       { id: "p2", text: "Các nền tảng học tập thích ứng sử dụng thuật toán học máy để phân tích tốc độ tiếp thu của từng học sinh và điều chỉnh độ khó bài tập theo thời gian thực.", severity: "moderate", matchId: "m1" },
-      { id: "p3", text: "Việc tích hợp trợ lý ảo trong lớp học giúp giáo viên tiết kiệm thời gian soạn giáo án, đồng thời tạo ra một hệ sinh thái học tập thông minh, kết nối liền mạch giữa dữ liệu và trải nghiệm cá nhân hóa.", aiFlag: true },
+      { id: "p3", text: "Việc tích hợp trợ lý ảo trong lớp học giúp giáo viên tiết kiệm thời gian soạn giáo án, đồng thời tạo ra một hệ sinh thái học tập thông minh, kết nối liền mạch giữa dữ liệu và trải nghiệm cá nhân hóa." },
       { id: "p4", text: "Tuy nhiên, việc phụ thuộc quá mức vào AI cũng đặt ra thách thức về tính công bằng trong tiếp cận công nghệ giữa các vùng miền.", severity: "low", matchId: "m2" },
     ],
     matches: [
@@ -390,8 +370,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-06-22",
     similarityScore: 45,
     similarityScoreFree: 30,
-    aiContentScore: 12,
-    aiContentExplanation: "Văn phong tự nhiên, có số liệu và ví dụ cụ thể, ít dấu hiệu do AI tạo ra.",
     webSourcesScanned: 40200000,
     academicSourcesScanned: 74300,
     passages: [
@@ -430,8 +408,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-06-18",
     similarityScore: 8,
     similarityScoreFree: 5,
-    aiContentScore: 6,
-    aiContentExplanation: "Không phát hiện dấu hiệu rõ ràng của nội dung do AI tạo ra.",
     webSourcesScanned: 27800000,
     academicSourcesScanned: 61200,
     passages: [
@@ -461,15 +437,12 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-06-10",
     similarityScore: 52,
     similarityScoreFree: 37,
-    aiContentScore: 71,
-    aiContentExplanation:
-      "Đoạn văn có xu hướng liệt kê khái quát, thiếu trích dẫn nghiên cứu cụ thể và dùng nhiều cụm từ mang tính tổng hợp, đặc trưng của văn bản do AI hỗ trợ soạn thảo.",
     webSourcesScanned: 55600000,
     academicSourcesScanned: 118400,
     passages: [
       { id: "p1", text: "Mạng xã hội đã trở thành một phần không thể thiếu trong đời sống của thanh thiếu niên, nhưng đi kèm với đó là những lo ngại ngày càng tăng về sức khỏe tâm thần." },
       { id: "p2", text: "Việc so sánh bản thân với hình ảnh được chỉnh sửa hoàn hảo trên mạng xã hội có liên quan mật thiết đến gia tăng tỷ lệ lo âu và trầm cảm ở tuổi vị thành niên.", severity: "high", matchId: "m1" },
-      { id: "p3", text: "Song song đó, việc xây dựng một hệ sinh thái số lành mạnh, kết hợp giáo dục kỹ năng số và sự đồng hành của gia đình, được xem là chìa khóa kiến tạo tương lai bền vững cho thế hệ trẻ.", aiFlag: true },
+      { id: "p3", text: "Song song đó, việc xây dựng một hệ sinh thái số lành mạnh, kết hợp giáo dục kỹ năng số và sự đồng hành của gia đình, được xem là chìa khóa kiến tạo tương lai bền vững cho thế hệ trẻ." },
       { id: "p4", text: "Nhiều chuyên gia khuyến nghị giới hạn thời gian sử dụng thiết bị và khuyến khích các hoạt động ngoài trời.", severity: "low", matchId: "m2" },
     ],
     matches: [
@@ -502,8 +475,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-06-05",
     similarityScore: 17,
     similarityScoreFree: 11,
-    aiContentScore: 9,
-    aiContentExplanation: "Văn bản có ví dụ thực tế và số liệu chi tiết, ít khả năng do AI tạo ra.",
     webSourcesScanned: 33100000,
     academicSourcesScanned: 68900,
     passages: [
@@ -533,8 +504,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-05-28",
     similarityScore: 39,
     similarityScoreFree: 26,
-    aiContentScore: 15,
-    aiContentExplanation: "Cấu trúc lập luận tự nhiên với số liệu cụ thể, ít dấu hiệu AI.",
     webSourcesScanned: 46700000,
     academicSourcesScanned: 103200,
     passages: [
@@ -573,8 +542,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-05-20",
     similarityScore: 6,
     similarityScoreFree: 4,
-    aiContentScore: 5,
-    aiContentExplanation: "Không phát hiện dấu hiệu rõ ràng của nội dung do AI tạo ra.",
     webSourcesScanned: 29400000,
     academicSourcesScanned: 55700,
     passages: [
@@ -604,15 +571,12 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-05-14",
     similarityScore: 28,
     similarityScoreFree: 19,
-    aiContentScore: 44,
-    aiContentExplanation:
-      "Một số đoạn dùng cụm từ khái quát và liệt kê lợi ích chung chung, có khả năng được hỗ trợ soạn thảo bởi AI.",
     webSourcesScanned: 38900000,
     academicSourcesScanned: 71600,
     passages: [
       { id: "p1", text: "Thương mại điện tử xuyên biên giới đang mở ra cơ hội lớn cho doanh nghiệp Việt Nam tiếp cận thị trường quốc tế mà không cần đầu tư hạ tầng phân phối vật lý." },
       { id: "p2", text: "Theo thống kê, doanh thu thương mại điện tử xuyên biên giới của Việt Nam đã tăng trưởng trung bình 20% mỗi năm trong giai đoạn 2020-2023.", severity: "moderate", matchId: "m1" },
-      { id: "p3", text: "Việc xây dựng thương hiệu số mạnh mẽ, kết hợp tối ưu hóa trải nghiệm khách hàng đa kênh, được xem là chìa khóa kiến tạo lợi thế cạnh tranh bền vững trên thị trường toàn cầu.", aiFlag: true },
+      { id: "p3", text: "Việc xây dựng thương hiệu số mạnh mẽ, kết hợp tối ưu hóa trải nghiệm khách hàng đa kênh, được xem là chìa khóa kiến tạo lợi thế cạnh tranh bền vững trên thị trường toàn cầu." },
       { id: "p4", text: "Rào cản về logistics quốc tế và thủ tục hải quan vẫn là thách thức lớn đối với nhiều doanh nghiệp vừa và nhỏ." },
     ],
     matches: [
@@ -636,8 +600,6 @@ export const MOCK_DOCUMENTS: CheckedDocument[] = [
     uploadedAt: "2026-05-08",
     similarityScore: 61,
     similarityScoreFree: 43,
-    aiContentScore: 19,
-    aiContentExplanation: "Văn phong kỹ thuật cụ thể, ít dấu hiệu do AI tạo ra.",
     webSourcesScanned: 42300000,
     academicSourcesScanned: 89500,
     passages: [
@@ -676,7 +638,6 @@ export const HISTORY_SEED: HistoryEntry[] = [
     date: "2026-07-05",
     similarityScore: 34,
     status: "moderate",
-    aiFlagged: true,
     project: "Luận văn tốt nghiệp",
     wordCount: 1842,
   },
@@ -686,7 +647,6 @@ export const HISTORY_SEED: HistoryEntry[] = [
     date: "2026-06-28",
     similarityScore: 18,
     status: "low",
-    aiFlagged: false,
     project: "Nghiên cứu khoa học",
     wordCount: 2310,
   },
@@ -696,7 +656,6 @@ export const HISTORY_SEED: HistoryEntry[] = [
     date: "2026-06-20",
     similarityScore: 52,
     status: "high",
-    aiFlagged: true,
     project: "Báo cáo môn học",
     wordCount: 1590,
   },
@@ -706,7 +665,6 @@ export const HISTORY_SEED: HistoryEntry[] = [
     date: "2026-05-30",
     similarityScore: 8,
     status: "clean",
-    aiFlagged: false,
     project: "Nghiên cứu khoa học",
     wordCount: 3120,
   },
@@ -716,7 +674,6 @@ export const HISTORY_SEED: HistoryEntry[] = [
     date: "2026-05-12",
     similarityScore: 12,
     status: "low",
-    aiFlagged: false,
     project: "Báo cáo môn học",
     wordCount: 2075,
   },

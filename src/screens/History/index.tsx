@@ -7,7 +7,6 @@ import {
   FolderSimple,
   MagnifyingGlass,
   Plus,
-  Sparkle,
   SquaresFour,
   Table as TableIcon,
   Trash,
@@ -297,7 +296,6 @@ export default function HistoryPage() {
                   <td className="max-w-xs truncate px-5 py-4 font-medium text-ink-900">
                     <span className="flex items-center gap-2">
                       {h.title}
-                      {h.aiFlagged && <Sparkle size={13} weight="fill" className="shrink-0 text-ai-flag" />}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-ink-500">{formatDate(h.date)}</td>

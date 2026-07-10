@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CaretDown, Check, Minus, Sparkle } from "@phosphor-icons/react";
+import { CaretDown, Check, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
-import { PLANS, CREDIT_PACKS, FEATURE_MATRIX, COMPETITORS } from "../../lib/mockData";
+import { PLANS, CREDIT_PACKS, FEATURE_MATRIX } from "../../lib/mockData";
 import { annualSavingsPercent, formatVND } from "../../lib/format";
 import { useAppStore } from "../../lib/store";
 import { cn } from "../../lib/cn";
@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: "What happens to my history if I downgrade to Free?",
-    a: "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Student Premium, 12 months on Professional).",
+    a: "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Standard, 12 months on Premium).",
   },
   {
     q: "Is paying with VNPay, MoMo, or ZaloPay secure?",
@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     q: "Do you support languages other than Vietnamese?",
-    a: "Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Student Premium and Professional.",
+    a: "Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Standard and Premium.",
   },
 ];
 
@@ -104,7 +104,7 @@ export default function PricingPage() {
             </p>
           </div>
 
-          <div className="mt-9 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
             {CREDIT_PACKS.map((pack) => (
               <div
                 key={pack.id}
@@ -117,7 +117,7 @@ export default function PricingPage() {
                 )}
                 <p className="text-lg font-bold text-navy-900">{pack.label}</p>
                 <p className="mt-3 text-3xl font-extrabold text-navy-900">{formatVND(pack.price)}</p>
-                <p className="mt-1 text-xs text-ink-500">{formatVND(pack.perCheck)} per check</p>
+                <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
                 <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
                   Buy credits
                 </Button>
@@ -139,11 +139,10 @@ export default function PricingPage() {
               <tr className="border-b border-line bg-surface-tint text-left">
                 <th className="px-5 py-4 font-semibold text-ink-500">Feature</th>
                 <th className="px-5 py-4 text-center font-semibold text-ink-700">Free</th>
-                <th className="px-5 py-4 text-center font-semibold text-ink-700">Credit Pack</th>
                 <th className="px-5 py-4 text-center font-semibold text-brand-600">
-                  Student Premium
+                  Standard
                 </th>
-                <th className="px-5 py-4 text-center font-semibold text-ink-700">Professional</th>
+                <th className="px-5 py-4 text-center font-semibold text-ink-700">Premium</th>
               </tr>
             </thead>
             <tbody>
@@ -152,9 +151,6 @@ export default function PricingPage() {
                   <td className="px-5 py-3.5 font-medium text-ink-800">{row.feature}</td>
                   <td className="px-5 py-3.5 text-center">
                     <Cell value={row.free} />
-                  </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <Cell value={row.credit} />
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     <Cell value={row.student} />
@@ -166,29 +162,6 @@ export default function PricingPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      {/* Competitor strip */}
-      <section className="bg-navy-900 py-14">
-        <div className="mx-auto max-w-6xl px-5 sm:px-8">
-          <p className="text-center text-sm font-semibold text-white/60">
-            How Etymos compares
-          </p>
-          <div className="mt-6 grid grid-cols-1 divide-y divide-white/10 rounded-[var(--radius-card-lg)] border border-white/10 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-            {COMPETITORS.map((c) => (
-              <div
-                key={c.name}
-                className={cn("p-5 text-center", c.highlight && "bg-white/[0.06]")}
-              >
-                <p className="flex items-center justify-center gap-1.5 text-sm font-bold text-white">
-                  {c.name}
-                  {c.highlight && <Sparkle size={13} weight="fill" className="text-brand-300" />}
-                </p>
-                <p className="mt-1.5 text-xs font-semibold text-brand-300">{c.price}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 

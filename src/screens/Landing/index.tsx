@@ -7,7 +7,6 @@ import {
   LinkSimple,
   MagicWand,
   Quotes,
-  Robot,
   Translate,
   UploadSimple,
   Sparkle,
@@ -31,6 +30,7 @@ const features = [
     body: "Know exactly why a passage is flagged, in plain language, not just a percentage.",
     large: true,
     tint: "brand" as const,
+    image: "/assets/image/CoreUI.png",
   },
   {
     icon: Brain,
@@ -41,12 +41,6 @@ const features = [
     icon: MagicWand,
     title: "AI Rewrite Assistant",
     body: "Turn a flagged passage into an original one, academic tone, one click.",
-  },
-  {
-    icon: Robot,
-    title: "AI-content detection",
-    body: "Flags text likely written by ChatGPT, Gemini, and similar models.",
-    tint: "violet" as const,
   },
   {
     icon: LinkSimple,
@@ -62,7 +56,7 @@ const steps = [
   },
   {
     title: "We scan everything",
-    body: "Web pages, academic papers, and semantic rewrites, checked in parallel with AI-content signals.",
+    body: "Web pages, academic papers, and semantic rewrites, checked in parallel.",
   },
   {
     title: "Review, understand, rewrite",
@@ -74,20 +68,20 @@ const testimonials = [
   {
     quote:
       "Explainable AI told me exactly which sentences to rewrite, not just a red percentage. I fixed my thesis chapter in one afternoon.",
-    name: "Đặng Minh Thư",
-    role: "Thạc sĩ Kinh tế, Đại học Kinh tế TP.HCM",
+    name: "User A",
+    role: "Instiution A",
     featured: true,
   },
   {
     quote: "First tool I've used that catches paraphrased Vietnamese, not just copy-paste.",
-    name: "Trần Gia Bảo",
-    role: "Sinh viên năm 4, Đại học Bách Khoa Hà Nội",
+    name: "User B",
+    role: "Instiution B",
   },
   {
     quote:
       "My students submit through Etymos before Turnitin ever sees it. A tenth of the cost, and it catches more.",
-    name: "TS. Lê Hoài Nam",
-    role: "Giảng viên, Đại học Cần Thơ",
+    name: "User C",
+    role: "Instiution C",
   },
 ];
 
@@ -172,53 +166,68 @@ export default function LandingPage() {
               {...reveal}
               transition={{ ...reveal.transition, delay: i * 0.05 }}
               className={cn(
-                "flex flex-col justify-between rounded-[var(--radius-card-lg)] border p-6",
+                "relative flex flex-col justify-between overflow-hidden rounded-[var(--radius-card-lg)] border p-6",
                 f.large && "lg:col-span-2 lg:row-span-2",
-                f.tint === "brand" && "border-brand-300/50 bg-gradient-to-br from-brand-100 to-white",
-                f.tint === "violet" && "border-ai-flag-line bg-ai-flag-bg/60",
+                f.tint === "brand" && !f.image && "border-brand-300/50 bg-gradient-to-br from-brand-100 to-white",
+                f.image && "border-brand-300/50",
                 !f.tint && "border-line bg-white",
               )}
             >
+              {f.image && (
+                <>
+                  <img
+                    src={f.image}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover object-top"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-navy-900/90 via-navy-900/30 to-navy-900/10" />
+                </>
+              )}
               <div
                 className={cn(
-                  "flex size-11 items-center justify-center rounded-xl",
-                  f.tint === "brand" ? "brand-gradient text-white" : "bg-surface-muted text-brand-600",
-                  f.tint === "violet" && "bg-white text-ai-flag",
+                  "relative z-10 flex size-11 items-center justify-center rounded-xl",
+                  f.image
+                    ? "bg-white/15 text-white backdrop-blur-sm"
+                    : f.tint === "brand"
+                      ? "brand-gradient text-white"
+                      : "bg-surface-muted text-brand-600",
                 )}
               >
                 <f.icon size={22} weight="bold" />
               </div>
-              <div className="mt-6">
-                <h3 className="text-lg font-bold text-navy-900">{f.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-600">{f.body}</p>
+              <div className="relative z-10 mt-6">
+                <h3 className={cn("text-lg font-bold", f.image ? "text-white" : "text-navy-900")}>
+                  {f.title}
+                </h3>
+                <p className={cn("mt-2 text-sm leading-relaxed", f.image ? "text-white/85" : "text-ink-600")}>
+                  {f.body}
+                </p>
               </div>
             </motion.div>
           ))}
 
           <motion.div
             {...reveal}
-            className="flex flex-col items-start justify-between gap-5 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 sm:flex-row sm:items-center lg:col-span-2"
+            className="flex flex-col justify-between rounded-[var(--radius-card-lg)] border border-line bg-white p-6"
           >
-            <div className="flex items-center gap-4">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-brand-600">
-                <Translate size={22} weight="bold" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-navy-900">Multi-language checking</h3>
-                <p className="mt-1 text-sm leading-relaxed text-ink-600">
-                  Vietnamese-first, with English, French, and Japanese support.
-                </p>
-              </div>
+            <div className="flex size-11 items-center justify-center rounded-xl bg-surface-muted text-brand-600">
+              <Translate size={22} weight="bold" />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {["Tiếng Việt", "English", "Français", "日本語"].map((lang) => (
-                <span
-                  key={lang}
-                  className="rounded-full border border-line bg-surface-tint px-3 py-1.5 text-xs font-semibold text-ink-700"
-                >
-                  {lang}
-                </span>
-              ))}
+            <div className="mt-6">
+              <h3 className="text-lg font-bold text-navy-900">Vietnamese & English checking</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-600">
+                Deep, accurate detection in Vietnamese and English, not a shallow multi-language add-on.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["Tiếng Việt", "English"].map((lang) => (
+                  <span
+                    key={lang}
+                    className="rounded-full border border-line bg-surface-tint px-3 py-1.5 text-xs font-semibold text-ink-700"
+                  >
+                    {lang}
+                  </span>
+                ))}
+              </div>
             </div>
           </motion.div>
         </div>
@@ -294,34 +303,39 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Competitor comparison — horizontal scroll-snap */}
+      {/* Competitor comparison — responsive grid */}
       <section className="bg-navy-900 py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <motion.h2 {...reveal} className="max-w-lg text-h1 font-bold tracking-tight text-white">
-            Built for a market Turnitin ignores
+            Built for a market the big players ignore
           </motion.h2>
           <motion.p {...reveal} className="mt-3 max-w-md text-body-lg text-white/60">
             Individual-friendly pricing, without cutting Vietnamese-language accuracy.
           </motion.p>
 
-          <div className="mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 scrollbar-thin">
+          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {COMPETITORS.map((c) => (
               <div
                 key={c.name}
                 className={cn(
-                  "w-72 shrink-0 snap-start rounded-[var(--radius-card-lg)] border p-6",
+                  "rounded-[var(--radius-card-lg)] border p-6",
                   c.highlight
                     ? "border-brand-400 bg-white shadow-[0_16px_40px_-12px_rgba(30,79,196,0.5)]"
                     : "border-white/10 bg-white/[0.04]",
                 )}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex min-h-14 items-start gap-2">
                   <p className={cn("text-lg font-bold", c.highlight ? "text-navy-900" : "text-white")}>
                     {c.name}
                   </p>
-                  {c.highlight && <Sparkle size={16} weight="fill" className="text-brand-500" />}
+                  {c.highlight && <Sparkle size={16} weight="fill" className="mt-1 shrink-0 text-brand-500" />}
                 </div>
-                <p className={cn("mt-1 text-sm font-semibold", c.highlight ? "text-brand-600" : "text-white/70")}>
+                <p
+                  className={cn(
+                    "mt-1 min-h-10 text-sm font-semibold",
+                    c.highlight ? "text-brand-600" : "text-white/70",
+                  )}
+                >
                   {c.price}
                 </p>
                 <p className={cn("mt-3 text-xs", c.highlight ? "text-ink-500" : "text-white/40")}>

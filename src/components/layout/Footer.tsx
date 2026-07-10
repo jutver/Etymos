@@ -9,8 +9,8 @@ export function Footer() {
         <div>
           <Logo variant="light" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
-            Vietnamese-first plagiarism and AI-content detection, built to be affordable for every
-            student and researcher.
+            Vietnamese-first plagiarism detection, built to be affordable for every student and
+            researcher.
           </p>
           <a
             href="mailto:hello@etymos.vn"

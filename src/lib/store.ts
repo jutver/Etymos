@@ -15,12 +15,21 @@ export const PLAN_DOC_LIMITS: Record<PlanTier, number> = {
   student: 10,
   professional: 70,
 };
+export const PLAN_WORD_LIMITS: Record<PlanTier, number> = {
+  free: 3000,
+  student: 10000,
+  professional: 15000,
+};
 export const PLAN_PERIOD_DAYS = 30;
 
 export type BalanceMode = "credits" | "plan-meter";
 
 export function planDocLimit(plan: PlanTier): number {
   return PLAN_DOC_LIMITS[plan];
+}
+
+export function planWordLimit(plan: PlanTier): number {
+  return PLAN_WORD_LIMITS[plan];
 }
 
 const DEFAULT_PROJECTS = Array.from(
@@ -252,8 +261,8 @@ export const useAppStore = create<AppState>()(
 
 export function planLabel(plan: PlanTier): string {
   if (plan === "free") return "Free";
-  if (plan === "student") return "Student Premium";
-  return "Professional";
+  if (plan === "student") return "Standard";
+  return "Premium";
 }
 
 export function historyRetentionLabel(plan: PlanTier, hasCredits = false): string {

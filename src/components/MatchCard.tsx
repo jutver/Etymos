@@ -8,6 +8,7 @@ interface MatchCardProps {
   match: MatchedSource;
   index: number;
   locked?: boolean;
+  rewriteLocked?: boolean;
   highlighted?: boolean;
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
@@ -17,6 +18,7 @@ export function MatchCard({
   match,
   index,
   locked = false,
+  rewriteLocked = locked,
   highlighted = false,
   onViewComparison,
   onRewrite,
@@ -84,9 +86,9 @@ export function MatchCard({
         </Button>
         <Button
           size="sm"
-          variant={locked ? "outline" : "secondary"}
+          variant={rewriteLocked ? "outline" : "secondary"}
           onClick={() => onRewrite(match)}
-          iconLeft={locked ? <LockSimple size={13} weight="fill" /> : <MagicWand size={15} />}
+          iconLeft={rewriteLocked ? <LockSimple size={13} weight="fill" /> : <MagicWand size={15} />}
         >
           Rewrite with AI
         </Button>

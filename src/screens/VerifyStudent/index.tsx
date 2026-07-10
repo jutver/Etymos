@@ -46,7 +46,7 @@ export default function VerifyStudentPage() {
       </div>
       <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">Verify your student status</h1>
       <p className="mt-1.5 text-sm text-ink-500">
-        Student Premium requires a quick one-time verification. Upload a photo of your student ID or
+        Standard requires a quick one-time verification. Upload a photo of your student ID or
         an enrollment document to continue.
       </p>
 

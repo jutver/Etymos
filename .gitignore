@@ -29,5 +29,6 @@ dist-ssr
 .vercel
 .npm-cache
 graphify-out/
+diagrams/
 .mcp.json
 *.md

@@ -34,7 +34,7 @@ export default function AnalyzingPage() {
       { id: "extract", label: docLabels.length > 1 ? "Extracting text from all documents" : "Extracting text" },
       { id: "web", label: "Scanning web sources", skip: state.webSources === false },
       { id: "academic", label: "Comparing academic papers", skip: state.academicSources === false },
-      { id: "semantic", label: "Running semantic & AI-content detection" },
+      { id: "semantic", label: "Running semantic detection" },
       { id: "explain", label: "Generating explanations" },
     ];
     return all.filter((s) => !s.skip);
@@ -67,7 +67,6 @@ export default function AnalyzingPage() {
           date: today,
           similarityScore: template.similarityScore,
           status: statusFromScore(template.similarityScore),
-          aiFlagged: template.aiContentScore >= 50,
           project: state.project || undefined,
           wordCount: template.wordCount,
         });
