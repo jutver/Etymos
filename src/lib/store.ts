@@ -13,12 +13,12 @@ import type {
 export const PLAN_DOC_LIMITS: Record<PlanTier, number> = {
   free: 2,
   student: 10,
-  professional: 70,
+  professional: 50,
 };
 export const PLAN_WORD_LIMITS: Record<PlanTier, number> = {
   free: 3000,
   student: 10000,
-  professional: 15000,
+  professional: 25000,
 };
 export const PLAN_PERIOD_DAYS = 30;
 

@@ -187,7 +187,7 @@ export default function LandingPage() {
                 className={cn(
                   "relative z-10 flex size-11 items-center justify-center rounded-xl",
                   f.image
-                    ? "bg-white/15 text-white backdrop-blur-sm"
+                    ? "brand-gradient text-white"
                     : f.tint === "brand"
                       ? "brand-gradient text-white"
                       : "bg-surface-muted text-brand-600",

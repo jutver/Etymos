@@ -5,10 +5,10 @@ import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
 import { PLANS, CREDIT_PACKS, PAYMENT_METHODS } from "../../lib/mockData";
-import { formatVND } from "../../lib/format";
+import { annualSavingsPercent, formatVND } from "../../lib/format";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "../../lib/cn";
-import type { PaymentMethod } from "../../lib/types";
+import type { BillingCycle, PaymentMethod } from "../../lib/types";
 
 export default function AccountPlanPage() {
   const navigate = useNavigate();
@@ -30,6 +30,13 @@ export default function AccountPlanPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("vnpay");
   const [methodOpen, setMethodOpen] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+
+  const maxAnnualSavings = Math.max(
+    ...PLANS.filter((p) => p.id !== "free").map((p) =>
+      annualSavingsPercent(p.priceMonthly, p.priceAnnual),
+    ),
+  );
 
   function cancelSubscription() {
     cancelSubscriptionAction();
@@ -140,10 +147,35 @@ export default function AccountPlanPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-h3 font-bold tracking-tight text-navy-900">Change plan</h2>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-h3 font-bold tracking-tight text-navy-900">Change plan</h2>
+          <div className="inline-flex items-center gap-1 self-start rounded-full bg-surface-muted p-1">
+            <button
+              onClick={() => setBillingCycle("monthly")}
+              className={cn(
+                "rounded-full px-5 py-2 text-sm font-semibold transition-colors",
+                billingCycle === "monthly" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
+              )}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingCycle("annual")}
+              className={cn(
+                "flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors",
+                billingCycle === "annual" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
+              )}
+            >
+              Annual
+              <span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
+                Save up to {maxAnnualSavings}%
+              </span>
+            </button>
+          </div>
+        </div>
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
           {PLANS.map((p) => (
-            <PlanCard key={p.id} plan={p} billingCycle="monthly" />
+            <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
           ))}
         </div>
       </section>
@@ -151,7 +183,7 @@ export default function AccountPlanPage() {
       <section className="mt-10">
         <h2 className="text-h3 font-bold tracking-tight text-navy-900">Buy credits</h2>
         <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription required.</p>
-        <div className="mx-auto grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="mx-auto mt-6 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
           {CREDIT_PACKS.map((pack) => (
             <div
               key={pack.id}

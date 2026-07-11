@@ -45,11 +45,11 @@ export const PLANS: PlanDefinition[] = [
     id: "professional",
     name: "Premium",
     tagline: "For lecturers, researchers & agencies",
-    priceMonthly: 299000,
-    priceAnnual: 1990000,
+    priceMonthly: 199000,
+    priceAnnual: 1790000,
     audience: "Lecturers, researchers, content & SEO teams",
     features: [
-      "70 documents / month, up to 15,000 words each",
+      "50 documents / month, up to 25,000 words each",
       "Everything in Standard",
       "AI Rewrite Assistant",
       "Multi-project management",
@@ -125,8 +125,8 @@ export const FEATURE_MATRIX: {
   professional: boolean | string;
 }[] = [
   { feature: "Verification required", free: false, student: "🎓 Yes", professional: false },
-  { feature: "Documents / month", free: "2", student: "10", professional: "70" },
-  { feature: "Words / document", free: "3,000", student: "10,000", professional: "15,000" },
+  { feature: "Documents / month", free: "2", student: "10", professional: "50" },
+  { feature: "Words / document", free: "3,000", student: "10,000", professional: "25,000" },
   { feature: "Traditional plagiarism detection", free: true, student: true, professional: true },
   { feature: "Semantic (paraphrase) detection", free: false, student: true, professional: true },
   { feature: "Explainable AI (why it's flagged)", free: false, student: true, professional: true },
