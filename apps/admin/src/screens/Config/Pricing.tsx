@@ -6,6 +6,7 @@ import {
   updateCreditPack,
 } from "../../lib/configQueries";
 import type { AdminCreditPack, AdminPlanDefinition } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 function NumberField({
   label,
@@ -43,7 +44,7 @@ export default function PricingConfigPage() {
         setPlans(plans);
         setPacks(packs);
       })
-      .catch((err: Error) => setError(err.message))
+      .catch((err: unknown) => setError(friendlyError(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,7 +59,7 @@ export default function PricingConfigPage() {
         word_limit: plan.word_limit,
       });
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setSavingId(null);
     }
@@ -70,7 +71,7 @@ export default function PricingConfigPage() {
     try {
       await updateCreditPack(pack.id, { price: pack.price, checks: pack.checks });
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setSavingId(null);
     }
@@ -121,7 +122,7 @@ export default function PricingConfigPage() {
                   type="button"
                   disabled={savingId === plan.id}
                   onClick={() => savePlan(plan)}
-                  className="mt-4 cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-4 cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {savingId === plan.id ? "Saving…" : "Save"}
                 </button>
@@ -154,7 +155,7 @@ export default function PricingConfigPage() {
                   type="button"
                   disabled={savingId === pack.id}
                   onClick={() => savePack(pack)}
-                  className="mt-4 cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-4 cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {savingId === pack.id ? "Saving…" : "Save"}
                 </button>

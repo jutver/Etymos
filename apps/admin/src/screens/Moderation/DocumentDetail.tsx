@@ -5,6 +5,7 @@ import { StatusBadge, moderationTone, docStatusTone } from "../../components/Sta
 import { getDocument, setModerationStatus } from "../../lib/moderationQueries";
 import { useAdminAuth } from "../../lib/auth";
 import type { AdminDocument } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 export default function DocumentDetailPage() {
   const { documentId } = useParams<{ documentId: string }>();
@@ -27,7 +28,7 @@ export default function DocumentDetailPage() {
         setDoc(d);
         setNotes(d.moderation_notes ?? "");
       })
-      .catch((err: Error) => !cancelled && setError(err.message))
+      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -44,7 +45,7 @@ export default function DocumentDetailPage() {
       const refreshed = await getDocument(documentId);
       setDoc(refreshed);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setSaving(false);
     }
@@ -102,7 +103,7 @@ export default function DocumentDetailPage() {
               type="button"
               disabled={saving}
               onClick={() => applyStatus("flagged")}
-              className="flex cursor-pointer items-center gap-1.5 rounded-control border border-warning/40 bg-warning-bg px-3.5 py-2 text-body font-medium text-warning transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex cursor-pointer items-center gap-1.5 rounded-control border border-warning/40 bg-warning-bg px-3.5 py-2 text-body font-medium text-warning transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Flag size={16} weight="bold" />
               Flag
@@ -126,7 +127,7 @@ export default function DocumentDetailPage() {
               type="button"
               disabled={saving}
               onClick={() => setConfirmingRemove(true)}
-              className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-2 text-body font-medium text-destructive transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-2 text-body font-medium text-destructive transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash size={16} weight="bold" />
               Remove

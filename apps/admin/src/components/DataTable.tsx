@@ -96,7 +96,7 @@ export function DataTable<T>({
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
-              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <CaretLeft size={14} weight="bold" />
             </button>
@@ -104,7 +104,7 @@ export function DataTable<T>({
               type="button"
               disabled={page >= pageCount - 1}
               onClick={() => onPageChange(page + 1)}
-              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <CaretRight size={14} weight="bold" />
             </button>

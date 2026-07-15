@@ -5,6 +5,7 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
 import { listProfiles, PAGE_SIZE } from "../../lib/supabaseQueries";
 import type { Profile } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 export default function UsersPage() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ export default function UsersPage() {
         setCount(count);
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(friendlyError(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -17,6 +17,7 @@ import {
 import { StatCard } from "../../components/StatCard";
 import { ChartCard, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, CHART_COLORS } from "../../components/ChartCard";
 import { fetchDashboardMetrics, type DashboardMetrics } from "../../lib/dashboardQueries";
+import { friendlyError } from "../../lib/errors";
 
 function formatVND(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(Math.round(amount)) + " đ";
@@ -31,7 +32,7 @@ export default function DashboardPage() {
     let cancelled = false;
     fetchDashboardMetrics()
       .then((m) => !cancelled && setMetrics(m))
-      .catch((err: Error) => !cancelled && setError(err.message))
+      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
