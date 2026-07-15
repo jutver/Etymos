@@ -3,31 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
-    "@supabase/supabase-js": "^2.110.0",
-    "@tailwindcss/vite": "^4.3.2",
-    "clsx": "^2.1.1",
-    "motion": "^12.42.2",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1",
-    "tailwindcss": "^4.3.2",
-    "zustand": "^5.0.14"
+    "dev:web": "npm run dev -w @etymos/web",
+    "dev:admin": "npm run dev -w @etymos/admin",
+    "build:web": "npm run build -w @etymos/web",
+    "build:admin": "npm run build -w @etymos/admin",
+    "lint": "oxlint apps/*/src packages/*/src"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "typescript": "~6.0.2"
   }
 }
