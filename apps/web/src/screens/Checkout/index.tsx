@@ -30,7 +30,7 @@ export default function CheckoutPage() {
       ? plan.priceAnnual
       : plan.priceMonthly
     : (pack?.price ?? 0);
-    const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method);
+  const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method);
 
   function confirmPay(shouldDecline: boolean) {
     setStatus("processing");
@@ -112,7 +112,6 @@ export default function CheckoutPage() {
             </div>
           </div>
         )}
-
       </div>
 
       {status === "declined" && (
