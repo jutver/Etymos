@@ -4,7 +4,7 @@ import type {
   HistoryEntry,
   PaymentMethod,
   PlanDefinition,
-} from "./types";
+} from "@etymos/shared";
 
 export const PLANS: PlanDefinition[] = [
   {
@@ -78,9 +78,13 @@ export const CREDIT_PACKS: CreditPack[] = [
   },
 ];
 
-export const PAYMENT_METHODS: { id: PaymentMethod; label: string; logo: string; comingSoon?: boolean }[] = [
-  { id: "vnpay", label: "VietQR", logo: "/assets/logo/vnpay.png" },
-];
+export const PAYMENT_METHODS: {
+  id: PaymentMethod;
+  label: string;
+  logo: string;
+  comingSoon?: boolean;
+  hasQr?: boolean;
+}[] = [{ id: "vnpay", label: "VietQR", logo: "/assets/logo/vnpay.png", hasQr: true }];
 
 export const COMPETITORS = [
   {
