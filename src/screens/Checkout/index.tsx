@@ -30,6 +30,7 @@ export default function CheckoutPage() {
       ? plan.priceAnnual
       : plan.priceMonthly
     : (pack?.price ?? 0);
+  const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method);
 
   function confirmPay(shouldDecline: boolean) {
     setStatus("processing");
@@ -89,6 +90,28 @@ export default function CheckoutPage() {
             </button>
           ))}
         </div>
+
+        {selectedMethod?.hasQr && (
+          <div className="mt-4 rounded-[var(--radius-card)] border border-line bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-navy-900">Demo VietQR</p>
+                <p className="text-xs text-ink-500">Scan this preview to continue the mock payment flow.</p>
+              </div>
+              <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                Scan to pay
+              </span>
+            </div>
+
+            <div className="mt-3 flex justify-center rounded-2xl border border-dashed border-line bg-white p-4">
+              <img
+                src={`https://api.vietqr.io/image/970423-00004634438-ajMAt1a.jpg?accountName=NGUYEN%20BA%20TUNG%20DUONG&amount=${price}`}
+                alt="VietQR code"
+                className="h-[220px] w-[220px] rounded-xl object-contain"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {status === "declined" && (

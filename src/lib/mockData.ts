@@ -78,11 +78,13 @@ export const CREDIT_PACKS: CreditPack[] = [
   },
 ];
 
-export const PAYMENT_METHODS: { id: PaymentMethod; label: string; logo: string }[] = [
-  { id: "vnpay", label: "VNPay", logo: "/assets/logo/vnpay.png" },
-  { id: "momo", label: "MoMo", logo: "/assets/logo/momo.jpg" },
-  { id: "zalopay", label: "ZaloPay", logo: "/assets/logo/zalopay.jpg" },
-];
+export const PAYMENT_METHODS: {
+  id: PaymentMethod;
+  label: string;
+  logo: string;
+  comingSoon?: boolean;
+  hasQr?: boolean;
+}[] = [{ id: "vnpay", label: "VietQR", logo: "/assets/logo/vnpay.png", hasQr: true }];
 
 export const COMPETITORS = [
   {
