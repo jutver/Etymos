@@ -1,0 +1,586 @@
+[
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "abstract",
+    "chunk_id": "arxiv_1709_09885_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "In order to maximize the applicability of sentiment analysis results, it is necessary to not only classify the overall sentiment (posi- tive/negative) of a given document but also to identify the main words that contribute to the classiﬁcation. However, most datasets for sentiment analysis only have the sentiment label for each document or sentence. In other words, there is no information about which words play an important role in sentiment classiﬁcation. In this paper, we propose a method for identifying key words discriminat- ing positive and negative sentences by using a weakly supervised learning method based on a convolutional neural network (CNN). In our model, each word is represented as a continuous-valued vector and each sentence is represented as a matrix whose rows cor- respond to the word vector used in the sen- tence. Then, the CNN model is trained us- ing these sentence ma"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "abstract",
+    "chunk_id": "arxiv_1709_09885_abstract_1",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "is represented as a matrix whose rows cor- respond to the word vector used in the sen- tence. Then, the CNN model is trained us- ing these sentence matrices as inputs and the sentiment labels as the output. Once the CNN model is trained, we implement the word attention mechanism that identiﬁes high-contributing words to classiﬁcation re- sults with a class activation map, using the weights from the fully connected layer at the end of the learned CNN model. In order to verify the proposed methodology, we evalu- ated the classiﬁcation accuracy and inclusion rate of polarity words using two movie review datasets. Experimental result show that the proposed model can not only correctly clas- sify the sentence polarity but also success- fully identify the corresponding words with high polarity scores. Keywords: Weakly Supervised Learning, 1 School of Industrial Management Engineering, Korea Un"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "abstract",
+    "chunk_id": "arxiv_1709_09885_abstract_2",
+    "start_char": 1500,
+    "end_char": 1814,
+    "text": "ntify the corresponding words with high polarity scores. Keywords: Weakly Supervised Learning, 1 School of Industrial Management Engineering, Korea University, Seoul, South Korea. Correspondence to: Pil- sung Kang <pilsung_kang@korea.ac.kr>. Word Attention, Convolutional Neural Net- work, Class Activation Mapping"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_3",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Sentiment analysis and opinion mining is a ﬁeld of study that analyzes people’s opinions, sentiments, evaluations, attitudes, and emotions from written lan- guage. It is one of the most active research areas in natural language processing (NLP) and has also been widely studied in data mining, Web mining, and text mining (Medhat et al., 2014; Liu, 2012; Pang et al., 2008; Ravi & Ravi, 2015) Application domains for sen- timent analysis include analyses of customer response to new products or services, analyses of public opin- ion towards the government’s new policies or politi- cal issues under debate, etc. (Jo, 2012). In response to increasing needs in diverse domains, various sen- timent analysis techniques have been developed (Gui et al., 2017; Cho et al., 2014; Poria et al., 2016; Xi- anghua et al., 2013; Socher et al., 2013; Kalchbrenner et al., 2014; Tai et al., 2015). However, many"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_4",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "2017; Cho et al., 2014; Poria et al., 2016; Xi- anghua et al., 2013; Socher et al., 2013; Kalchbrenner et al., 2014; Tai et al., 2015). However, many of the current sentiment analysis techniques suﬀer from the over-abstraction problem (Nasukawa & Yi, 2003); the only information obtained from these techniques is the polarity of the document, i.e., whether the nuance of the document is positive or negative. It is diﬃcult to receive more in-depth sentiment analysis results, such as identifying the main words contributing to the po- larity classiﬁcation or ﬁnding opposite words or phrase to the overall sentiment of the document, i.e., nega- tive words/phrases in a positive document or positive words/phrases in a negative document. Recently, attention models have been highlighted in the ﬁeld of computer vision because of its ability to focus on semantically signiﬁcant areas in a given im- age"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_5",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "ention models have been highlighted in the ﬁeld of computer vision because of its ability to focus on semantically signiﬁcant areas in a given im- age to solve the task of object classiﬁcation, local- ization, and detection (Ba et al., 2014; Russakovsky et al., 2015; Mnih et al., 2014). They have also been widely adopted in the ﬁeld of NLP, as attention mod- els can provide more fruitful interpretations for text analysis tasks (Luong et al., 2015; Shen & Huang, arXiv:1709.09885v2 [cs.CL] 29 Sep 2017 Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning 2016; Rush et al., 2015). Attention models help the NLP model focus on salient words/phrases and trans- fer these attentions to other machine learning models to solve more complicated tasks such as image cap- tioning or text to image generation (Xu et al., 2015). In addition, as one of the basic building blocks of"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_6",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "e more complicated tasks such as image cap- tioning or text to image generation (Xu et al., 2015). In addition, as one of the basic building blocks of artiﬁcial intelligence (AI) is to understand a human speaker’s intention, global technology leaders have re- leased their own AI speakers, such as Amazon’s “Eco,” Google’s “Google Home,” and Apple’s “Homepod,” to collect real-word conversational data in order to up- grade their AI engines. As these AI speakers process the human speaker’s query at a sentence level, it be- comes more critical to correctly identify the main in- tentions (words/phrases) of the speaker, which is the ultimate goal of attention models. It is not that easy to implement an attention model in NLP tasks. This is mainly because most text datasets have document-level labels, i.e., whether the overall nuance of the document is positive or nega- tive, but phrase- or word"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_7",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "because most text datasets have document-level labels, i.e., whether the overall nuance of the document is positive or nega- tive, but phrase- or word-level sentiment labels are rarely available. It implies that there is a restric- tion that the model should learn attention scores for words or phrases without actual labels. To overcome this problem, previous studies modiﬁed the structure of a recurrent neural network (RNN) such that the added weights play an attention role inside the model. Applications of RNN-based attention models include document classiﬁcation (Yang et al., 2016), parsing (Vinyals et al., 2015), machine translation (Bahdanau et al., 2014; Luong et al., 2015), and image captioning (Xu et al., 2015). In this paper, we propose a sentiment classiﬁcation with a word attention model based on weakly su- pervised leaning with a convolutional neural network (CNN), named CAM 2"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_8",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "ose a sentiment classiﬁcation with a word attention model based on weakly su- pervised leaning with a convolutional neural network (CNN), named CAM 2 : Classiﬁcation and Attention Model with a Class Activation Map. The main ad- vantage of the proposed model is its ability to identify crucial words or phrases in a sentence for the senti- ment classiﬁcation perspective without explicit word- or phrase-level sentiment polarity information. It iden- tiﬁes the words by weak labels only, i.e., the sentence- level polarity that is more abstracted but easily avail- able. In the proposed model, words are embedded in a ﬁxed-size of continuous vector space using Word2Vec (Mikolov et al., 2013), GloVe (Pennington et al., 2014), and FastText (Bojanowski et al., 2016). Sentences are represented in a matrix form, whose rows correspond to word vectors, and they are used as the input of a CNN model. The"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_9",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "et al., 2016). Sentences are represented in a matrix form, whose rows correspond to word vectors, and they are used as the input of a CNN model. The CNN model is trained by considering the sentence-level sentiment polarity as the target, and it produces both the sentence-level polarity score and word-level polarity scores for all words in the sentence, which helps us understand the result of sentence-level sentiment classiﬁcation. Unlike the existing attention models based on RNN, there is no need to separately learn the weights for the attention. Considering that the same word is used in diﬀerent contexts for diﬀerent domains, it is relatively easy to build a dictionary that reﬂects the characteristics of each domain by using the proposed model. The rest of this paper is organized as follows. In Section 2, we brieﬂy review and discuss some related works. In Section 3, we demonstrate th"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "introduction",
+    "chunk_id": "arxiv_1709_09885_introduction_10",
+    "start_char": 5250,
+    "end_char": 5604,
+    "text": "model. The rest of this paper is organized as follows. In Section 2, we brieﬂy review and discuss some related works. In Section 3, we demonstrate the architecture of the proposed model. Detailed experimental settings are demonstrated in Section 4 followed by the analysis and discussion of the results. Finally, in Section 5 we present our conclusions."
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "related_work",
+    "chunk_id": "arxiv_1709_09885_related_work_11",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "In this section, we brieﬂy review the representa- tive studies on for CNN-based document classiﬁca- tion (Kim, 2014), weakly supervised learning for CNN- based object detection (Oquab et al., 2015; Zhou et al., 2016), and the RNN-based document attention model named the hierarchical attention network (Yang et al., 2016). 2.1. Convolutional Neural Networks for Document Classiﬁcation Kim (2014) showed CNN, which is the most success- ful neural network structure for image processing, can also work well for text data, especially for document classiﬁcation. The architecture of Kim (2014) is shown in Figure 1, and it has the following three main ideas: (1) A large number of ﬁlters are used, but the network is not as deep as popular CNN architectures for image processing. (2) The size of the CNN ﬁlter is matched with the vector size of input words. (3) Multi-channels consisting of static and no"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "related_work",
+    "chunk_id": "arxiv_1709_09885_related_work_12",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "res for image processing. (2) The size of the CNN ﬁlter is matched with the vector size of input words. (3) Multi-channels consisting of static and non-static input vectors are combined. Experimental results show that the CNN-based docu- ment classiﬁcation model achieved higher classiﬁcation accuracies than the conventional machine learning- based models, such as the support vector machine or conditional random ﬁeld, and other deep neural net- work structures, such as the deep feedforward neural network or recursive neural network. In addition, the word vector could also be customized for a given cor- pus, and it sometimes yielded better classiﬁcation per- formance than pre-trained word vectors. Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Figure 1. Model architecture with two channels for an example sentence (Kim, 2014). Figure 2. Class activation mapp"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "related_work",
+    "chunk_id": "arxiv_1709_09885_related_work_13",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "ased on Weakly Supervised Learning Figure 1. Model architecture with two channels for an example sentence (Kim, 2014). Figure 2. Class activation mapping (Zhou et al., 2016). 2.2. Class Activation Mapping Oquab et al. (2015) proposed a weakly supervised learning method for object detection without bound- ing box information. In this study, a standard CNN architecture with max pooling between the ﬁnal con- volution and the output layer was utilized. Zhou et al. (2016) proved the average pooling is more appropriate for the object detection task than the max pooling. The CNN structure and an example of the attention mechanism are shown in Figure 2. In this model, the CNN is trained to correctly classify the object in the input image. In Figure 2, the target of the given im- age is “Australian terrier,” but no information on the dog’s position in the input image is available during the train"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "related_work",
+    "chunk_id": "arxiv_1709_09885_related_work_14",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "2, the target of the given im- age is “Australian terrier,” but no information on the dog’s position in the input image is available during the training. When the training is complete, the weights in the fully connected layers are used to combine the feature map to emphasize the attention area of the original input image. They called this process class ac- tivation mapping (CAM), and by utilizing it, not only can the CNN model determine that the “Australian terror” is in the image, but also this classiﬁcation is mainly inferred by seeing the bottom right part of the image (red area in the ﬁnal CAM in Figure 2). 2.3. Hierarchical Attention Network Yang et al. (2016) proposed a hierarchical RNN ar- chitecture, inspired by the fact that the document consists of sentences and the sentences are composed of words. In the study, the authors added attention weights to reﬂect the importance of e"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "related_work",
+    "chunk_id": "arxiv_1709_09885_related_work_15",
+    "start_char": 3000,
+    "end_char": 3795,
+    "text": "ocument consists of sentences and the sentences are composed of words. In the study, the authors added attention weights to reﬂect the importance of each sentence and word. As can be seen in Figure 3, the result of their model is the most similar to what we attempted to do in this study. However, the main diﬀerences between their work and this work is that Yang et al. (2016) employed an RNN as the base model and the atten- tion weights were separately learned from the corpus. However, a CNN is employed as the base model for sentiment classiﬁcation in this study, and we do not explicitly train the model to learn the word-level at- tention scores. Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Figure 3. Hierarchical Attention Network (Yang et al., 2016)."
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_16",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "based on Class Activation Map: CAM 2 3.1. Overall Framework Figure 4 shows the overall framework of the proposed method. After collecting the sentences, low-level em- bedding is performed by the Word2Vec, GloVe, and FastText methods, and the word vectors in the sen- tence are concatenated to form the initial input ma- trix for the CNN. Once the CNN model training is completed, the polarity of a given test sentence is pre- dicted. Then, the weights of the fully connected layer are used to combine the feature maps to produce the attention score for every single word in the sentence. 3.2. Network Architecture The architecture of the CNN used in this paper is ba- sically rooted in the CNN architecture used in Kim (2014). However, since the CNN used in Kim (2014) was originally designed for document classiﬁcation, we made some modiﬁcations to it to facilitate the extrac- tion of essential wor"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_17",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "used in Kim (2014) was originally designed for document classiﬁcation, we made some modiﬁcations to it to facilitate the extrac- tion of essential words or phrases. First, the zero- padding is added before the ﬁrst word and after the last word in the sentence to make that the number of times that each word is included in the receptive ﬁeld during convolution the same, irrespective of the word’s position in the sentence. Second, we applied average- pooling instead of max-pooling. According to Zhou et al. (2016), average-pooling and max-pooling are es- sentially similar, but using average-pooling is advan- tageous in identifying the overall scope of the target. Third, we increased the number of ﬁlters compared to the CAMs used in Oquab et al. (2015) and Zhou et al. (2016). As these CAMs are specialized for image pro- cessing, the receptive ﬁeld of convolution is a square (ex: 3 × 3). Howev"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_18",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "(2015) and Zhou et al. (2016). As these CAMs are specialized for image pro- cessing, the receptive ﬁeld of convolution is a square (ex: 3 × 3). However, the receptive ﬁeld of the pro- posed CAM 2 is a rectangular (ex: 3 × word embedding dimension), which integrates a larger amount of infor- mation in one scalar value compared to the convolu- tional ﬁlter in image processing. To prevent a possible loss of information due to a larger receptive ﬁeld, we used a much larger number of convolution ﬁlters than was used in (Kim, 2014). Finally, we used more various word embedding techniques to form an input matrix of a sentence. Kim (2014) only used the Word2Vec for word embedding, but we consider two recently de- veloped word embedding techniques: GloVe and Fast- Text. 3.3. Classiﬁcation and Attention Model based on Class Activation Map The input of CNN, x 1: l is created by concatenating the w"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_19",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "GloVe and Fast- Text. 3.3. Classiﬁcation and Attention Model based on Class Activation Map The input of CNN, x 1: l is created by concatenating the word vectors in a sentence and zero-paddings. We used four type of inputs CNN-rand, CNN-static, CNN- non-static, and CNN-Multichannel . The CNN-rand uses a randomly initialized word vector while CNN- static and CNN-non-static use the word vectors pre- trained by the Word2Vec. CNN-Multichannel uses the word vectors pre-trained by the Word2Vec, GloVe, and FastText. Let k , d , and h denote the dimension of the word embedding vector, number of maximum words in a sentence, and the height of the receptive Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Figure 4. Framework of proposed method. ﬁeld of convolution, respectively, then the input ma- trix X ∈ R ([ d +2( h − 1)] k ) is constructed as follows. The zero-pad"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_20",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "work of proposed method. ﬁeld of convolution, respectively, then the input ma- trix X ∈ R ([ d +2( h − 1)] k ) is constructed as follows. The zero-padding is ﬁrst performed before and after x 1: d so that the number of times that each word is included in the receptive ﬁeld during convolution is the same ( h times). X = x 1: l = 0 ⊕ . . . ⊕ 0 | {z } h − 1 ⊕ x 1 ⊕ x 2 ⊕ . . . ⊕ x d | {z } d ⊕ 0 ⊕ . . . ⊕ 0 | {z } h − 1 . (1) When the window size of the CNN ﬁlter, i.e., the height of ﬁlter is h , the i -th feature map f i is con- structed as follows. As the size of CNN ﬁlter w is h × d and zero-padding is performed in the previous step, f i becomes a I -dimensional vector, where I is ( d + h − 1) . f i = [ f 1 i , f 2 i , . . . , f li ] T , (2) f ji = ReLu ( W conv ⊙ x j : j + h − 1 + b ) , (3) W conv ∈ R h × k , b ∈ R. (4) Let ˆ f l be the scalar value computed by applying the average pool"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_21",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": ") f ji = ReLu ( W conv ⊙ x j : j + h − 1 + b ) , (3) W conv ∈ R h × k , b ∈ R. (4) Let ˆ f l be the scalar value computed by applying the average pooling to the feature map f i . The ﬁnal fea- ture vector z passed to the fully connected layer is con- structed as follows. Considering that n feature maps are computed for a given sentence, z becomes an n - dimensional vector. z = [ ˆ f 1 , ˆ f 2 , . . . , ˆ f n ] T , (5) where n is n ftypes (the number of ﬁlter type) × n filters (the number of ﬁlters for each type). The output of the fully connected layer for the i -th sentence is y , Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Figure 5. An example of computing a score vector. computed as follows: y = W fc · z + b fc , (6) W fc ∈ R c × n , (7) b fc ∈ R c , (8) c : the number of classes . Once the CNN model is trained, the sentiment impor- tance score of e"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_22",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "z + b fc , (6) W fc ∈ R c × n , (7) b fc ∈ R c , (8) c : the number of classes . Once the CNN model is trained, the sentiment impor- tance score of each word is computed as follows. An illustrated example of the following process is provided in Figure 5. Let F l be the feature maps corresponding to the l -th ﬁlter type and w lc i be the row vector of W fc for the l -th ﬁlter type and the c i -th class. Then, the score vector v is computed as v = F l · w T lc i , (9) F l ∈ R I × n filter , (10) w T lc i ∈ R nfilter . (11) The p -th element in the score vector s lc i corresponding to the l -th ﬁlter type and the c i -th class is computed by averaging h elements with the step size of 1, which makes the s lc i a d -dimensional vector, regardless of the height of ﬁlters: s lc i = 1 h p + h − 1 X q = p V q . (12) The ﬁnal sentiment score of the words in the sentence to c i -th class, CAM 2 c"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_23",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "ss of the height of ﬁlters: s lc i = 1 h p + h − 1 X q = p V q . (12) The ﬁnal sentiment score of the words in the sentence to c i -th class, CAM 2 c i is computed by CAM 2 c i = n ftype X l =1 s lc i . (13) 3.4. Word Embedding We employed four diﬀerent word embedding meth- ods to construct the input matrix X: random vectors, Word2Vec, GloVe, and FastText. With the random vectors, the elements of the word vectors were ran- domly initialized, and they were updated during the CNN training. For the latter three methods, word em- bedding vectors were separately trained using the same corpus for sentiment classiﬁcation. We also compared the static word embedding and non-static word em- bedding methods for CAM 2 according to whether the word embedding vectors are updated during the CNN training (non-static) or not (static). In addition, two multi-channel input matrices were also considered. In"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_24",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "dding vectors are updated during the CNN training (non-static) or not (static). In addition, two multi-channel input matrices were also considered. In summary, we tested the following ﬁve input matrices for CAM 2 . (1) CNN-Rand : word vectors are randomly initialized and they are updated during the CNN training. (2) CNN-Static : word vectors are trained by Word2Vec. They are not updated during the CNN training. (3) CNN-Non-Static : word vectors are trained by Word2Vec ﬁrst, and they are updated during the CNN training. (4) CNN-2ch : CNN-Static and CNN-Non-Static are combined. The input of CNN becomes a 3- dimensional (I × k × 2) tensor. (5) CNN-4ch : Three matrices with word vectors trained by Word2Vec, GloVe, and FastText are used. They are updated during the CNN train- ing. The CNN-Non-Static method is used as the Sentiment Classiﬁcation with Word Attention based on Weakly Supervised L"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_25",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "e updated during the CNN train- ing. The CNN-Non-Static method is used as the Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 1. Rating distributions of the IMDB dataset Score 1 2 3 4 7 8 9 10 Reviews 10,122 4,586 4,961 5,531 4,803 5,859 4,607 9,731 Class Negative Positive Table 2. Rating distributions of the WATCHA dataset score 0.5 1 1.5 2 2.5 3 3.5 4 4.5 5 Reviews 50,660 66,184 62,094 163,272 173,650 411,757 424,378 652,250 297,327 416,096 Class Negative Not used Positive Table 3. The number of tokens IMDB WATCHA 115,205 424,027 Table 4. The hyper-parameters of the CNN Filter type (window size) 3 (tri-gram) 4 (quad-gram) 5 (5-gram) N. ﬁlters 128 each Doc. length 100 words Dropout rate 0.5 L 2 regularization ( λ ) 0.1 Batch size 64 fourth matrix. The input of CNN becomes a 3- dimensional (I × k × 4) tensor. 4. Experimental Settings 4.1. Data Sets &"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_26",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "ization ( λ ) 0.1 Batch size 64 fourth matrix. The input of CNN becomes a 3- dimensional (I × k × 4) tensor. 4. Experimental Settings 4.1. Data Sets & Target Labeling To verify the proposed CAM 2 , we used two sets of movie reviews, one written in English and the other written in Korean. Not only do movie reviews have explicit sentiment labels (ratings or stars), but they generally also have more subjective expressions com- pared to other formal texts such as news articles. For the English movie review dataset, we used the publicly available IMDB dataset (Maas et al., 2011), while Ko- rean movie reviews were collected directly from the WATCHA website (https://watcha.net), which is the largest movie recommendation service in Korea. Each dataset consists of review sentences and ratings. The distributions of ratings for the IMDB and WATCHA are shown in Table 1 and 2. As shown in Table 2, th"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_27",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "set consists of review sentences and ratings. The distributions of ratings for the IMDB and WATCHA are shown in Table 1 and 2. As shown in Table 2, the ratings are well-balanced in the IMDB dataset. Hence, we used the reviews with Table 5. The test accuracy between methodology Test IMDB WATCHA CNN-Rand 0.8435 0.7793 CNN-Static 0.7750 0.7150 CNN-Non-Static 0.8257 0.7538 CNN-2channel 0.8300 0.7602 CNN-4channel 0.8729 0.7533 Table 6. CAM example Word Score this 0.0145 ﬁlm 0.0291 is 0.1324 actually 0.2183 quite 0.2561 entertaining 0.3496 ratings smaller than or equal to 4 as negative exam- ples, whereas the reviews with ratings greater than or equal to 7 were used as positive examples. Unlike for the IMBD dataset, the ratings of the WATCH dataset are highly skewed toward the positive scores. There- fore, we used the reviews with ratings smaller than or equal to 2 as negative examples whereas"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_28",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "et are highly skewed toward the positive scores. There- fore, we used the reviews with ratings smaller than or equal to 2 as negative examples whereas only the reviews with 5-point-ratings were used as positive ex- amples. In both datasets, 70% of the reviews were used as training data, and the remaining 30% were used as test data. 4.2. Word Embedding, CNN Parameters, and Performance Measure Each sentence was split into tokens using the space. The punctuations and numbers were removed. All to- kens were used to learn the word embedding vectors. We ﬁxed the dimension of word embedding to 100 and set the window size of Word2Vec and FastText to 3. Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 7. Frequently appeared words in the positive/negative sentences in in the IMDB test dataset (semantically positive or negative words are colored in blue and red,"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_29",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "ly appeared words in the positive/negative sentences in in the IMDB test dataset (semantically positive or negative words are colored in blue and red, respectively) Positive Negative CNN- Rand CNN- Static CNN-Non- Static CNN- 2channel CNN- 4channel CNN- Rand CNN- Static CNN-Non- Static CNN- 2channel CNN- 4channel the and and and and the the the the the and great is is is a is and and and a is the the a and was worst worst of of a a a the of and of of a is very of of of to bad a a worst to the s s s is a is is is I well excellent excellent it I this the was was in ﬁlm it great excellent in of awful awful I this of great it to this plot boring to to it it to in I that just was I awful that I in to great was acting to boring this was as an I it it movie I movie movie as excellent I an in movie I bad this boring movie wonderful was perfect perfect for awful poor poor bad with movie perfect w"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_30",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "t it movie I movie movie as excellent I an in movie I bad this boring movie wonderful was perfect perfect for awful poor poor bad with movie perfect with very with script this bad s for story as as was as boring movie waste in ﬁlm in best very fun have to waste terrible waste but favorite very best by on that terrible in poor on beautiful enjoyed enjoyed enjoyed ﬁlm so in s terrible an my with wonderful an but t s with for have good wonderful fun as not terrible horrible are with are comedy fun by with be it are as as one loved by movie best are stupid with by are his also amazing amazing wonderful you horrible for acting it you most movie loved loved an in by for that not s most that amazing at are ﬁlm horrible ﬁlm be best loved superb most his ﬁlm as ﬁlm by who enjoyed superb ﬁlm are one no it that horrible by love that most for from worst poorly it so For Word2Vec and FastText, we use"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_31",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "t his ﬁlm as ﬁlm by who enjoyed superb ﬁlm are one no it that horrible by love that most for from worst poorly it so For Word2Vec and FastText, we used the skip-gram structure, while unigram was used to create the co- occurrence matrix for GloVe. The total number of tokens for each dataset is shown in Table 3. The hyper-parameters for training CNN are summa- rized in Table 4. We used three diﬀerent window sizes (how many words are considered in one receptive ﬁeld), while the number of ﬁlters was ﬁxed to 128. The docu- ment length, i.e., the maximum number of words, was set to 100. For sentences shorter than 100 words, zero- paddings were added after the last word, whereas the last words were trimmed if sentences were longer than 100 words. We also used two regularization methods. The dropout is an implicit regularization that ignores some weights in each step (dropout rate = 0.5 in this"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "method",
+    "chunk_id": "arxiv_1709_09885_method_32",
+    "start_char": 12000,
+    "end_char": 12286,
+    "text": "We also used two regularization methods. The dropout is an implicit regularization that ignores some weights in each step (dropout rate = 0.5 in this study), whereas the L 2 regularization is an explicit reg- ularization that adds the L 2 -norm of the total weight in the loss function."
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_33",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "5.1. Classiﬁcation Performance Table 5 shows the classiﬁcation accuracies for the ﬁve CNN models. It is worth noting that the CNN-Static Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 8. Frequently appearing words in the positive/negative sentences in in the WATCHA test dataset (semantically positive or negative words are in blue and red fonts, respectively) Positive Negative CNN- Rand CNN- Static CNN-Non- Static CNN- 2channel CNN- 4channel CNN- Rand CNN- Static CNN-Non- Static CNN- 2channel CNN- 4channel ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅥᄆ ᅮ ᄉ ᅮ ᄎ ᅬ ᄀ ᅩ ᄋ ᅴ (best) ᄎ ᅬ ᄀ ᅩ ᄋ ᅴ (best) ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄋ ᅵ ᄎ ᅬ ᄀ ᅩ ᄋ ᅴ (best) ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄎ ᅬ ᄀ ᅩ ᄋ ᅴ (best) ᄋ ᅵ ᄋ ᅫ ᄋ ᅵ ᄀ ᅳ ᄂ ᅣ ᆼ ᄀ ᅳ ᄂ ᅣ ᆼ ᄉ ᅮ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄉ ᅮ ᄀ ᅳᄅ ᅵᄀ ᅩ ᄉ ᅮ ᄃ ᅥ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄀ ᅳ ᄂ ᅣ ᆼ ᄋ ᅫ ᄋ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_34",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ᅩ ᄋ ᅴ (best) ᄂ ᅥᄆ ᅮ ᄂ ᅥᄆ ᅮ ᄎ ᅬ ᄀ ᅩ ᄋ ᅴ (best) ᄋ ᅵ ᄋ ᅫ ᄋ ᅵ ᄀ ᅳ ᄂ ᅣ ᆼ ᄀ ᅳ ᄂ ᅣ ᆼ ᄉ ᅮ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄉ ᅮ ᄀ ᅳᄅ ᅵᄀ ᅩ ᄉ ᅮ ᄃ ᅥ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄀ ᅳ ᄂ ᅣ ᆼ ᄋ ᅫ ᄋ ᅫ ᄋ ᅫ ᄃ ᅡᄉ ᅵ ᄀ ᅳᄅ ᅵᄀ ᅩ ᄀ ᅳ ᄀ ᅳ ᄋ ᅫ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄋ ᅫ ᄋ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄌ ᅡ ᆯ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄉ ᅮ ᄀ ᅳᄅ ᅵᄀ ᅩ ᄉ ᅮ ᄀ ᅳ ᄂ ᅣ ᆼ ᄃ ᅥ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄋ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄀ ᅳ ᄀ ᅳ ᄀ ᅡ ᄌ ᅡ ᆼ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄋ ᅵ ᄀ ᅳ ᄀ ᅳ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄀ ᅳ ᄂ ᅣ ᆼ ᄀ ᅳᄅ ᅵᄀ ᅩ ᄀ ᅡ ᄌ ᅡ ᆼ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄃ ᅥ ᄀ ᅳ ᄂ ᅣ ᆼ ᄌ ᅩ ᆷ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄃ ᅡ ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄄ ᅩ ᄃ ᅥ ᄃ ᅥ ᄀ ᅡ ᄌ ᅡ ᆼ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄃ ᅥ ᄀ ᅳᄂ ᅡᄆ ᅡ ᄃ ᅥ ᄌ ᅵ ᆫ ᄍ ᅡ ᄎ ᅬ ᄀ ᅩ (best) ᄋ ᅵ ᄋ ᅵ ᄀ ᅳ ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄃ ᅡ ᄀ ᅳ ᄃ ᅡ ᄂ ᅥᄆ ᅮ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄎ ᅬ ᄀ ᅩ (best) ᄌ ᅡ ᆯ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ (none) ᄋ ᅵ ᄅ ᅥ ᆫ ᄉ ᅮ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄃ ᅥ ᄋ ᅵ ᄅ ᅥ ᆫ ᄀ ᅡ ᄌ ᅡ ᆼ ᄌ ᅵ ᆫ ᄍ ᅡ ᄌ ᅵ ᆫ ᄍ ᅡ ᄃ ᅡᄉ ᅵ ᄃ ᅡ ᄂ ᅳ ᄁ ᅵ ᆷ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_35",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "ᄂ ᅳ ᆫ (none) ᄋ ᅵ ᄅ ᅥ ᆫ ᄉ ᅮ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄃ ᅥ ᄋ ᅵ ᄅ ᅥ ᆫ ᄀ ᅡ ᄌ ᅡ ᆼ ᄌ ᅵ ᆫ ᄍ ᅡ ᄌ ᅵ ᆫ ᄍ ᅡ ᄃ ᅡᄉ ᅵ ᄃ ᅡ ᄂ ᅳ ᄁ ᅵ ᆷ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄀ ᅥ ᆺ ᄂ ᅢ ᄌ ᅡ ᆯ ᄃ ᅡᄉ ᅵ ᄎ ᅬ ᄀ ᅩ (best) ᄀ ᅥ ᆺ ᄈ ᅥ ᆫ ᄒ ᅡ ᆫ (obvious) ᄌ ᅩ ᆷ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄀ ᅳ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄀ ᅥ ᆺ ᄌ ᅡ ᆯ ᄌ ᅵ ᆫ ᄍ ᅡ ᄂ ᅢᄀ ᅡ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄃ ᅡ ᄀ ᅳᄂ ᅡᄆ ᅡ ᄌ ᅩ ᆷ ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄌ ᅩ ᇂ ᄃ ᅡ (good) ᄋ ᅵ ᄀ ᅥ ᆺ ᄀ ᅥ ᆺ ᄋ ᅵ ᄅ ᅥ ᆫ ᄇ ᅩ ᄂ ᅳ ᆫ ᄒ ᅡ ᆫ ᄌ ᅩ ᆷ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄋ ᅡ ᄅ ᅳ ᆷ ᄃ ᅡ ᄋ ᅮ ᆫ (beautiful) ᄆ ᅩ ᄃ ᅳ ᆫ ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄇ ᅩᄀ ᅩ ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄋ ᅡ ᆫ (not) ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄌ ᅵ ᆫ ᄍ ᅡ ᄒ ᅡ ᆷ ᄁ ᅦ ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄇ ᅩᄀ ᅩ ᄌ ᅩ ᇂ ᄃ ᅡ (good) ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄂ ᅢ ᄋ ᅥ ᆹ ᄃ ᅡ (none) ᄂ ᅢ ᄋ ᅵ ᄅ ᅥ ᆫ ᄇ ᅩ ᆫ ᄃ ᅥ ᄇ ᅩᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄇ ᅪ ᄃ ᅩ ᄋ ᅧ ᆼ ᄒ ᅪ ᄂ ᅳ ᆫ ᄀ ᅳ ᄀ ᅳᄂ ᅡᄆ ᅡ ᄉ ᅮ ᄉ ᅮ ᄌ ᅩ ᆷ ᄋ ᅵ ᄂ ᅢ ᄂ ᅢᄀ ᅡ ᄂ ᅢ ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄆ ᅮ ᄉ ᅳ ᆫ ᄇ ᅩ ᄂ ᅳ ᆫ ᄋ ᅵ ᄅ ᅥ ᆫ ᄇ ᅧ ᆯ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄎ ᅬ ᄀ ᅩ (best) ᄃ ᅡᄉ ᅵ ᄆ ᅡᄌ ᅵ ᄆ ᅡ ᆨ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄌ ᅩ ᆷ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_36",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ᅡ ᄉ ᅮ ᄉ ᅮ ᄌ ᅩ ᆷ ᄋ ᅵ ᄂ ᅢ ᄂ ᅢᄀ ᅡ ᄂ ᅢ ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄆ ᅮ ᄉ ᅳ ᆫ ᄇ ᅩ ᄂ ᅳ ᆫ ᄋ ᅵ ᄅ ᅥ ᆫ ᄇ ᅧ ᆯ ᄌ ᅥ ᆼ ᄆ ᅡ ᆯ ᄎ ᅬ ᄀ ᅩ (best) ᄃ ᅡᄉ ᅵ ᄆ ᅡᄌ ᅵ ᄆ ᅡ ᆨ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄌ ᅩ ᆷ ᄀ ᅥ ᆫ ᄋ ᅵ ᄅ ᅥ ᆫ ᄃ ᅢ ᄒ ᅡ ᆫ ᄇ ᅧ ᆯ ᄅ ᅩ (not much of) ᄂ ᅢ ᄌ ᅡ ᆨ ᄑ ᅮ ᆷ ᄂ ᅢᄀ ᅡ ᄂ ᅢ ᄇ ᅩ ᆫ ᄇ ᅩ ᄂ ᅳ ᆫ ᄀ ᅥ ᆺ ᄃ ᅩ ᄂ ᅢ ᄇ ᅩ ᄂ ᅳ ᆫ ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄌ ᅡ ᆯ ᄆ ᅩ ᄃ ᅳ ᆫ ᄇ ᅪ ᄃ ᅩ ᄆ ᅩ ᄃ ᅳ ᆫ ᄆ ᅩ ᄃ ᅳ ᆫ ᄇ ᅩ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄀ ᅥ ᆫ ᄎ ᅡᄅ ᅡᄅ ᅵ (rather) ᄂ ᅢ ᄂ ᅢᄀ ᅡ ᄂ ᅢᄀ ᅡ ᄇ ᅩ ᆫ ᄒ ᅡ ᆫ ᄋ ᅪ ᆫ ᄇ ᅧ ᆨ ᄒ ᅡ ᆫ (perfect) ᄌ ᅵ ᆫ ᄍ ᅡ ᄆ ᅡ ᆭ ᄋ ᅵ ᄃ ᅢ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄎ ᅡᄅ ᅡᄅ ᅵ (rather) ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄇ ᅩ ᆫ ᄂ ᅢᄂ ᅢ ᄌ ᅩ ᇂ ᄃ ᅡ (good) ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅡ ᆯ ᄎ ᅡᄅ ᅡᄅ ᅵ (rather) ᄎ ᅡᄅ ᅡᄅ ᅵ (rather) ᄇ ᅧ ᆯ ᄋ ᅡ ᆫ ᄒ ᅡ ᆫ ᄇ ᅪ ᄃ ᅩ ᄄ ᅩ ᄋ ᅪ ᆫ ᄇ ᅧ ᆨ ᄒ ᅡ ᆫ (perfect) ᄂ ᅢᄀ ᅡ ᄋ ᅥ ᆹ ᄀ ᅩ (none) ᄀ ᅥ ᆺ ᄌ ᅡ ᆯ ᄀ ᅥ ᆫ ᄋ ᅡ ᄁ ᅡ ᆸ ᄃ ᅡ (wasted) ᄇ ᅩ ᄂ ᅳ ᆫ ᄌ ᅮ ᆼ ᄌ ᅩ ᇂ ᄃ ᅡ (good) ᄇ ᅪ ᄃ ᅩ ᄒ ᅡ ᄂ ᅳ ᆫ ᄒ ᅡ ᆫ ᄋ ᅡ ᄂ ᅵ ᆫ (not) ᄇ ᅧ ᆯ ᄌ ᅡ ᆯ ᄂ ᅳ ᄁ ᅵ ᆷ ᄋ ᅵ ᄀ ᅥ ᆫ ᄋ ᅵ ᆻ ᄋ ᅳ ᆯ ᄁ ᅡ ᄆ ᅡᄌ ᅵ ᄆ ᅡ ᆨ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄃ ᅡ ᄂ ᅢ ᄃ ᅳ ᆺ ᄋ ᅡ ᆫ ᄈ ᅥ ᆫ ᄒ ᅡ ᆫ (obvious) ᄃ ᅢ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_37",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "ᅳ ᆫ ᄒ ᅡ ᆫ ᄋ ᅡ ᄂ ᅵ ᆫ (not) ᄇ ᅧ ᆯ ᄌ ᅡ ᆯ ᄂ ᅳ ᄁ ᅵ ᆷ ᄋ ᅵ ᄀ ᅥ ᆫ ᄋ ᅵ ᆻ ᄋ ᅳ ᆯ ᄁ ᅡ ᄆ ᅡᄌ ᅵ ᄆ ᅡ ᆨ ᄋ ᅧ ᆼ ᄒ ᅪ ᄅ ᅳ ᆯ ᄃ ᅡ ᄂ ᅢ ᄃ ᅳ ᆺ ᄋ ᅡ ᆫ ᄈ ᅥ ᆫ ᄒ ᅡ ᆫ (obvious) ᄃ ᅢ ᄒ ᅡ ᆫ ᄌ ᅩ ᇂᄋ ᅳ ᆫ (good) ᄁ ᅩ ᆨ ᄃ ᅢ ᄒ ᅡ ᆫ ᄃ ᅡ ᄄ ᅩ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄆ ᅯ ᆯ ᄂ ᅢᄀ ᅡ ᄇ ᅪ ᆻ ᄂ ᅳ ᆫ ᄃ ᅦ ᄎ ᅬᄋ ᅡ ᆨᄋ ᅴ (worst) ᄇ ᅩᄀ ᅩ ᄆ ᅩᄃ ᅮ ᄋ ᅪ ᆫ ᄇ ᅧ ᆨ ᄒ ᅡ ᆫ (perfect) ᄇ ᅩ ᆫ ᄒ ᅡ ᆫ ᄋ ᅵ ᄀ ᅥ ᆫ ᄆ ᅩ ᆺ ᄒ ᅡ ᆫ (not) ᄋ ᅧ ᆼ ᄒ ᅪ ᄀ ᅡ ᄎ ᅬᄋ ᅡ ᆨᄋ ᅴ (worst) ᄀ ᅥ ᆺ Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 9. Example of word attention for a positively classiﬁed sentence in the IMDB dataset Methodology Sentence Raw text I’m normally not a Drama/Feel good movie kind of guy but once I saw the trailer for Radio I couldn’t resist. Not only is this a great ﬁlm but it also has great acting. Cuba Gooding Jr. did an excellent job portraying James Robert Kennedy a.k.a. RAdio. Ed Harris also did a fantastic job as Coach Jones. I was pleasantly"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_38",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "ba Gooding Jr. did an excellent job portraying James Robert Kennedy a.k.a. RAdio. Ed Harris also did a fantastic job as Coach Jones. I was pleasantly surprised to see some comedy in it as well. So for a great story great acting and a little comedy I give Radio a 10 out of 10! (10 / 10 points) CNN-Rand I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic job as Coach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Positive CNN-Static I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_39",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "tatic I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic job as Coach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Positive CNN-Non-Static I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic job as Coach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Posi"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_40",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "ach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Positive CNN-2channel I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic job as Coach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Positive CNN-4channel I m normally not a Drama Feel good movie kind of guy but once I saw the trailer for Radio I couldn t resist Not only is this a great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_41",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "great ﬁlm but it also has great acting Cuba Gooding Jr did an excellent job portraying James Robert Kennedy a k a RAdio Ed Harris also did a fantastic job as Coach Jones I was pleasantly surprised to see some comedy in it as well So for a great story great acting and a little comedy I give Radio a out of Positive resulted in the lowest classiﬁcation accuracy for both IMDB and WATCHA datasets. Since the CNN-Static is the only model which does not update the word em- bedding vectors during the CNN training, updating the word embedding vectors for a given corpus dur- ing the model training, whether or not the word vec- tors are independently trained before, is encouraged to achieve better classiﬁcation performance. Table 6 shows an example of CAM 2 for a test sentence. The overall sentiment of this sentence is classiﬁed as positive. For each word, the higher the score, the CNN model conside"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_42",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "CAM 2 for a test sentence. The overall sentiment of this sentence is classiﬁed as positive. For each word, the higher the score, the CNN model considers it as a signiﬁcantly contributing word to the overall sentiment. Thus, the word ’entertaining’ had the greatest impact on the classiﬁcation of this review as being positive. 5.2. Finding Sentimental Words Table 7 provides the frequent words listed in the IMDB test dataset by selecting the top ﬁve highly scored words in the sentences classiﬁed as positive (left ﬁve columns) and negative (right ﬁve columns). It is worth noting that although the CNN-Rand yielded a relatively good classiﬁcation performance compared to other techniques, it identiﬁed the least emotional words among the ﬁve CNN models. Although the clas- siﬁcation performance of CNN-Static was the worst, its attention mechanism seemed to work well, in that many emotional words"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_43",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "dels. Although the clas- siﬁcation performance of CNN-Static was the worst, its attention mechanism seemed to work well, in that many emotional words were highly ranked. In terms of classiﬁcation performance, it is important whether or not the input vector is updated in the training process. However, for the sake of word attention in sentiment Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 10. Example of word attention for a negatively classiﬁed sentence in the IMDB dataset Methodology Sentence Raw text This is one of the most boring ﬁlms I’ve ever seen. The three main cast members just didn’t seem to click well. Giovanni Ribisi’s character was quite annoying. For some reason he seems to like repeating what he says. If he was the Rain Man it would’ve been ﬁne but he’s not. (3/10 points) CNN-Rand This is one of the most boring ﬁlms I’ve ever seen The"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_44",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "what he says. If he was the Rain Man it would’ve been ﬁne but he’s not. (3/10 points) CNN-Rand This is one of the most boring ﬁlms I’ve ever seen The three main cast members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he was the Rain Man it would ve been ﬁne but he s not Negative CNN-Static This is one of the most boring ﬁlms I ve ever seen The three main cast members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he was the Rain Man it would ve been ﬁne but he’s not Negative CNN-Non-Static This is one of the most boring ﬁlms I’ve ever seen The three main cast members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he w"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_45",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he was the Rain Man it would ve been ﬁne but he’s not Negative CNN-2channel This is one of the most boring ﬁlms I ve ever seen The three main cast members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he was the Rain Man it would ve been ﬁne but he s not Negative CNN-4channel This is one of the most boring ﬁlms I ve ever seen The three main cast members just didn t seem to click well Giovanni Ribisi s character was quite annoying For some reason he seems to like repeating what he says If he was the Rain Man it would ve been ﬁne but he s not Negative classiﬁcation, it becomes more important whether the general grammatical relationship between the words are"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_46",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "it would ve been ﬁne but he s not Negative classiﬁcation, it becomes more important whether the general grammatical relationship between the words are well-preserved in the word embedding vector (not updated for classiﬁcation task). Table 8 provides the frequent words listed in the WATCHA test dataset by selecting the top ﬁve highly scored words in the sentences classiﬁed as positive (left ﬁve columns) and negative (right ﬁve columns). In this case, the emotional word in the upper word list is somewhat overlapped with other methods com- pared to the IMDB dataset. This is because Korean is an agglutinative language, which tends to have a high rate of aﬃxes per word. For example, “ ᄋ ᅥ ᆹ ᄃ ᅡ , ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ , ᄋ ᅥ ᆹ ᄀ ᅩ . . . (none),” “ ᄋ ᅡ ᆫ , ᄋ ᅡ ᄂ ᅵ ᆫ , ᄆ ᅩ ᆺ . . . (not),” and “ ᄎ ᅡ ᄅ ᅡᄅ ᅵ (rather)” are usually used in Korean for negative expressions. Experimental results conﬁrm that these"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_47",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "ᄋ ᅡ ᄂ ᅵ ᆫ , ᄆ ᅩ ᆺ . . . (not),” and “ ᄎ ᅡ ᄅ ᅡᄅ ᅵ (rather)” are usually used in Korean for negative expressions. Experimental results conﬁrm that these words are more frequently used in the negative reviews than in the positive reviews (except CNN-Rand). 5.3. Word Attention: IMDB Table 9 shows an example of word attention of a pos- itively classiﬁed sentence in the IMDB dataset. The words highlighted in blue are the top 10% highly scored words in the sentence. The four models except the CNN-Rand can successfully capture semantically pos- itive words or phrases (ex. excellent, fantastic, and was pleasantly surprised). In particular, the CNN-Static is especially good at paying attention to longer sentimen- tal phrases such as “a great story great acting.” Table 10 shows an example of word attention of a negatively classiﬁed sentence in the IMDB dataset. The words highlighted in red are the"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_48",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "eat acting.” Table 10 shows an example of word attention of a negatively classiﬁed sentence in the IMDB dataset. The words highlighted in red are the top 10% highly scored words in the sentence. If one reads the re- view, he/she can easily recognize multiple negative expressions within the review, which results in dif- ferent attention words or phrases according to diﬀer- ent models. For example, the CNN-Non-Static, CNN- 2channel, and CNN-4channel pay attention to “bor- ing” and “annoying,” both of which are clearly negative expressions when used in a movie review. However, there is another explicit negative expression, namely, “it would (have) been ﬁne,” which receives an attention by the CNN-Rand . Table 11 shows an example of attention results for a sentence whose predicted class is diﬀerent according to the CNN models because of mixed emotional expres- sions within the sentence. In t"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_49",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "esults for a sentence whose predicted class is diﬀerent according to the CNN models because of mixed emotional expres- sions within the sentence. In this case, the words in the top 10% highest scores are highlighted in blue and those in the bottom 10% lowest scores are highlighted in red if the sentence is classiﬁed as positive. The highlighting scheme is reversed if the sentence is classi- ﬁed as negative. Likewise, the CNN-Static, CNN-Non- Static, CNN-2channel, and CNN-4channel have rela- tively better attention performances than the CNN- Rand. Again, the CNN-Static has a relatively good performance in capturing longer emotional phrases such as “is also very interesting and touching.” Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 11. Example of word attention for a sentence in the IMDB dataset whose predicted class is diﬀerent according to CNN mo"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_50",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "eakly Supervised Learning Table 11. Example of word attention for a sentence in the IMDB dataset whose predicted class is diﬀerent according to CNN models Methodology Sentence Raw text This movie has a lot to recommend it. The paintings the music and David Hewlett’s naked butt are all gorgeous! The plot a story of redemption forgiveness and courage in the face of adversity is also very interesting and touching – and it’s not predictable which is saying quite a lot about a movie in this day and age. But the acting is mediocre the direction is confusing and the script is just odd. It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody *of*. (9 / 10 points) CNN-Rand This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of a"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_51",
+    "start_char": 13500,
+    "end_char": 14400,
+    "text": "end it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of adve- rsity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the script is just odd It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody of Negative CNN-Static This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of adversity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the sc- ript is just odd It often f"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_52",
+    "start_char": 14250,
+    "end_char": 15150,
+    "text": "is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the sc- ript is just odd It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody of Negative CNN-Non-Static This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of adversity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the script is just odd It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody of Positive CNN-2channel This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeou"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_53",
+    "start_char": 15000,
+    "end_char": 15900,
+    "text": "ying to be parody of Positive CNN-2channel This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of adversity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the sc- ript is just odd It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody of Positive CNN-4channel This movie has a lot to recommend it The paintings the music and David Hewlett s naked butt are all gorgeous The plot a story of redemption forgiveness and courage in the face of adversity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_54",
+    "start_char": 15750,
+    "end_char": 16650,
+    "text": "ersity is also very interesting and touching and it s not predictable which is saying quite a lot about a movie in this day and age But the acting is mediocre the direction is confusing and the script is just odd It often felt like it was trying to be a parody but I never ﬁgured out what it was trying to be parody of Positive 5.4. Word Attention: WATCHA Table 12 shows an example of word attention of a positively classiﬁed sentence in the WATCHA dataset. The words highlighted in blue are the top 10% highly scored words in the sentence. In this sentence, there are two obvious positive expressions, i.e., ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ (impressing) and ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ (admirable); the former was successfully detected by CNN-Static, CNN-Non- Static, CNN-2channel, and CNN-4channel while the latter was detected by CNN-Rand . Table 13 shows an example of word attention of a neg- atively clas"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_55",
+    "start_char": 16500,
+    "end_char": 17400,
+    "text": "Static, CNN-2channel, and CNN-4channel while the latter was detected by CNN-Rand . Table 13 shows an example of word attention of a neg- atively classiﬁed sentence in the WATCHA dataset. The words highlighted in blue are the top 10% highly scored words in the sentence. This sentence also has two semantically explicit negative expressions: “ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ (unnecessary and meaningless ﬂaunt)” and “ ᄒ ᅡ ᆫ ᄆ ᅡᄃ ᅵᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅦ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ (a total crisis in a word).” The CNN-Rand focused on the former ex- pression, whereas the rest of the four models focused on the latter expression. Similar to the example of the positive sentence in Table 12, it seems that the atten- Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 12. Example of word attention for a positively classiﬁed sentence in the WATCHA dataset Methodology"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_56",
+    "start_char": 17250,
+    "end_char": 18150,
+    "text": "tention based on Weakly Supervised Learning Table 12. Example of word attention for a positively classiﬁed sentence in the WATCHA dataset Methodology Sentence Raw text ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ . ᄋ ᅨᄉ ᅮ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫᄇ ᅡ ᆲ ᄀ ᅩᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ . (5 / 5 points) (Saladin’s Chivalry spirit is truly amazing. I’m very impressed by the scene of setting up the Jesus prize and passing without stepping on the ﬂoor of the cross.) CNN-Rand ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡᄋ ᅨᄉ ᅮ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫ ᄇ ᅡ ᆲ ᄇ ᅡ ᆲ ᄇ ᅡ ᆲ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄌ ᅩ ᆫ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄀ ᅧ ᆼ ᄀ ᅧ ᆼ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡ Positive CNN-Static ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_57",
+    "start_char": 18000,
+    "end_char": 18900,
+    "text": "ᄀ ᅩ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄌ ᅩ ᆫ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄀ ᅧ ᆼ ᄀ ᅧ ᆼ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡ Positive CNN-Static ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄋ ᅨ ᄋ ᅨ ᄋ ᅨᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫᄇ ᅡ ᆲ ᄀ ᅩᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ Positive CNN-Non-Static ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄋ ᅨ ᄋ ᅨ ᄋ ᅨᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫᄇ ᅡ ᆲ ᄀ ᅩᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ Positive CNN-2channel ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_58",
+    "start_char": 18750,
+    "end_char": 19650,
+    "text": "ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ Positive CNN-2channel ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄋ ᅨ ᄋ ᅨ ᄋ ᅨᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫᄇ ᅡ ᆲ ᄀ ᅩᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ Positive CNN-4channel ᄉ ᅡ ᆯ ᄅ ᅡ ᄃ ᅵ ᆫ ᄋ ᅴ ᄀ ᅵᄉ ᅡᄃ ᅩ ᄌ ᅥ ᆼ ᄉ ᅵ ᆫ ᄋ ᅵ ᄌ ᅵ ᆫ ᄍ ᅡ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄐ ᅡ ᆫ ᄉ ᅳ ᄉ ᅳ ᄉ ᅳ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄅ ᅥ ᆸ ᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄋ ᅨ ᄋ ᅨ ᄋ ᅨᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄉ ᅡ ᆼ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄋ ᅳ ᆯ ᄃ ᅡᄉ ᅵᄉ ᅦᄋ ᅮᄀ ᅩ ᄉ ᅵ ᆸ ᄌ ᅡᄀ ᅡᄇ ᅡ ᄃ ᅡ ᆨ ᄋ ᅳ ᆯ ᄋ ᅡ ᆫᄇ ᅡ ᆲ ᄀ ᅩᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄌ ᅡ ᆼ ᄆ ᅧ ᆫ ᄋ ᅵ ᄌ ᅩ ᆫ ᄀ ᅧ ᆼ ᄉ ᅳ ᄅ ᅥ ᆸ ᄃ ᅡ Positive Table 13. Example of word attention for a negatively classiﬁed sentence in the WATCHA dataset Methodology Sentence Raw text ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_59",
+    "start_char": 19500,
+    "end_char": 20400,
+    "text": "d sentence in the WATCHA dataset Methodology Sentence Raw text ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ! ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄆ ᅡᄃ ᅵᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅦ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ . (2 / 5 points) (An ironic movie in which the most unnecessary and meaningless ﬂaunt woman in the whole movie is being cheered! Soundtracks are acceptable but storytelling makes the audience run down. A total impa- sse in a word.) CNN-Rand ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄇ ᅮ ᆯ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄑ ᅵ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭ ᄋ ᅭ ᄋ ᅭᄒ ᅡ ᄒ ᅡ ᄒ ᅡᄀ ᅩ ᄀ ᅩ ᄀ ᅩ ᄋ ᅴ ᄋ ᅴ ᄋ ᅴ ᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄂ ᅳ ᆫ ᄂ ᅳ ᆫ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_60",
+    "start_char": 20250,
+    "end_char": 21150,
+    "text": "ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄇ ᅮ ᆯ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄑ ᅵ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭ ᄋ ᅭ ᄋ ᅭᄒ ᅡ ᄒ ᅡ ᄒ ᅡᄀ ᅩ ᄀ ᅩ ᄀ ᅩ ᄋ ᅴ ᄋ ᅴ ᄋ ᅴ ᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄂ ᅳ ᆫ ᄂ ᅳ ᆫ ᄀ ᅡ ᄀ ᅡ ᄀ ᅡᄋ ᅩ ᄋ ᅩ ᄋ ᅩ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫ ᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄆ ᅡᄃ ᅵᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅦ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ Negative CNN-Static ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_61",
+    "start_char": 21000,
+    "end_char": 21900,
+    "text": "ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅡ ᄆ ᅡ ᄆ ᅡᄃ ᅵ ᄃ ᅵ ᄃ ᅵᄅ ᅩ ᄅ ᅩ ᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅦ ᄎ ᅦ ᄎ ᅦ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ Negative CNN-Non-Static ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅡ ᄆ ᅡ ᄆ ᅡᄃ ᅵ ᄃ ᅵ ᄃ ᅵᄅ ᅩ ᄅ ᅩ ᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅦ ᄎ ᅦ ᄎ ᅦ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ Negative CNN-2channel ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_62",
+    "start_char": 21750,
+    "end_char": 22650,
+    "text": "ᅦ ᄎ ᅦ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ Negative CNN-2channel ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅡ ᄆ ᅡ ᄆ ᅡᄃ ᅵ ᄃ ᅵ ᄃ ᅵᄅ ᅩ ᄅ ᅩ ᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅦ ᄎ ᅦ ᄎ ᅦ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ Negative CNN-4channel ᄋ ᅧ ᆼ ᄒ ᅪ ᄌ ᅥ ᆫ ᄎ ᅦ ᄅ ᅳ ᆯᄐ ᅩ ᆼᄐ ᅳ ᆯ ᄋ ᅥᄀ ᅡ ᄌ ᅡ ᆼ ᄇ ᅮ ᆯ ᄑ ᅵ ᆯ ᄋ ᅭᄒ ᅡᄀ ᅩ ᄋ ᅴ ᄆ ᅵ ᄋ ᅥ ᆹ ᄂ ᅳ ᆫ ᄀ ᅡᄋ ᅩ ᄅ ᅳ ᆯ ᄌ ᅡ ᆸ ᄂ ᅳ ᆫ ᄋ ᅧᄌ ᅡᄀ ᅡ ᄒ ᅪ ᆫ ᄒ ᅩ ᄅ ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_63",
+    "start_char": 22500,
+    "end_char": 23400,
+    "text": "ᅳ ᆯ ᄇ ᅡ ᆮ ᄀ ᅩ ᄋ ᅵ ᆻ ᄂ ᅳ ᆫ ᄋ ᅡᄋ ᅵᄅ ᅥᄂ ᅵ ᄒ ᅡ ᆫᄋ ᅧ ᆼ ᄒ ᅪ ᄉ ᅡ ᄋ ᅮ ᆫ ᄃ ᅳᄐ ᅳ ᄅ ᅢ ᆨ ᄋ ᅳ ᆫ ᄋ ᅵ ᆫᄌ ᅥ ᆼ ᄒ ᅡᄃ ᅥᄅ ᅡᄃ ᅩ ᄀ ᅪ ᆫ ᄀ ᅢ ᆨ ᄋ ᅳ ᆯ ᄌ ᅵᄂ ᅡᄀ ᅡ ᄂ ᅳ ᆫ ᄆ ᅦᄐ ᅳᄅ ᅩ ᄑ ᅩ ᆯ ᄅ ᅵᄉ ᅳ ᄒ ᅢ ᆼ ᄋ ᅵ ᆫ ᄆ ᅡ ᆫ ᄃ ᅩ ᄆ ᅩ ᆺ ᄒ ᅡᄀ ᅦᄃ ᅡᄅ ᅮ ᄂ ᅳ ᆫ ᄉ ᅳᄐ ᅩᄅ ᅵ ᄐ ᅦ ᆯ ᄅ ᅵ ᆼ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅡ ᄆ ᅡ ᄆ ᅡᄃ ᅵ ᄃ ᅵ ᄃ ᅵᄅ ᅩ ᄅ ᅩ ᄅ ᅩ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅩ ᆼ ᄎ ᅦ ᄎ ᅦ ᄎ ᅦ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄌ ᅥ ᆨ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄂ ᅡ ᆫ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ ᄀ ᅮ ᆨ Negative tion mechanism of CNN-Rand is somewhat diﬀerent from those of the other models. This is mainly because the word embedding vectors are not updated to reﬂect the user’s rating information. Hence, more general Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning Table 14. Example of word attention for a sentence in the IMDB dataset whose predicted class is diﬀerent according to CNN models Methodology Sentence Raw text ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦᄌ ᅢᄆ ᅵ ᄋ ᅥ ᆹ ᄀ ᅩᄀ ᅳᄅ ᅢ ᄑ ᅵ ᆨ ᄃ ᅩᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_64",
+    "start_char": 23250,
+    "end_char": 24150,
+    "text": "d class is diﬀerent according to CNN models Methodology Sentence Raw text ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦᄌ ᅢᄆ ᅵ ᄋ ᅥ ᆹ ᄀ ᅩᄀ ᅳᄅ ᅢ ᄑ ᅵ ᆨ ᄃ ᅩᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦᄃ ᅡᄉ ᅵᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ . . . ( 1 / 5 points) (I would like to pay tribute to Bryan Singer, who just reconstituted this boring and messy X-Men as a story of the past, and Matthew Vaughn, who neatly rearranged it again.) CNN-Rand ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦᄌ ᅢᄆ ᅵ ᄋ ᅥ ᆹ ᄀ ᅩᄀ ᅳᄅ ᅢ ᄑ ᅵ ᆨ ᄃ ᅩᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵ ᄋ ᅵ ᄋ ᅵᄋ ᅣ ᄋ ᅣ ᄋ ᅣᄀ ᅵ ᄀ ᅵ ᄀ ᅵᄅ ᅩ ᄅ ᅩ ᄅ ᅩ ᄉ ᅢᄅ ᅩ ᄉ ᅵ ᄉ ᅵ ᄉ ᅵ ᄌ ᅡ ᆨ ᄌ ᅡ ᆨ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦᄃ ᅡᄉ ᅵᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄉ ᅵ ᆼ ᄉ ᅵ ᆼ ᄋ ᅥ ᄋ ᅥ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_65",
+    "start_char": 24000,
+    "end_char": 24900,
+    "text": "ᅡ ᆫ ᄒ ᅡ ᆫ ᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦᄃ ᅡᄉ ᅵᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄉ ᅵ ᆼ ᄉ ᅵ ᆼ ᄋ ᅥ ᄋ ᅥ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄇ ᅡ ᆨ ᄇ ᅡ ᆨ ᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ Negative CNN-Static ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅢ ᄌ ᅢ ᄌ ᅢᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩᄀ ᅳ ᄀ ᅳ ᄀ ᅳᄅ ᅢ ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄃ ᅩ ᄃ ᅩ ᄃ ᅩ ᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦᄃ ᅡᄉ ᅵᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄋ ᅥ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄃ ᅩ ᆨ ᄃ ᅩ ᆨ ᄋ ᅦ ᄋ ᅦ ᄋ ᅦᄀ ᅦ ᄀ ᅦ ᄀ ᅦ ᄇ ᅡ ᆨ ᄇ ᅡ ᆨ ᄇ ᅡ ᆨ ᄉ ᅮ ᄉ ᅮ ᄉ ᅮ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ ᄅ ᅳ ᆯ Positive CNN-Non-Static ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅢ ᄌ ᅢ ᄌ ᅢᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩᄀ ᅳ ᄀ ᅳ ᄀ ᅳᄅ ᅢ ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄃ ᅩ ᄃ ᅩ ᄃ ᅩ ᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_66",
+    "start_char": 24750,
+    "end_char": 25650,
+    "text": "ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄃ ᅩ ᄃ ᅩ ᄃ ᅩ ᄁ ᅮᄌ ᅵᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄒ ᅡ ᄒ ᅡ ᄒ ᅡᄀ ᅦ ᄀ ᅦ ᄀ ᅦᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄉ ᅵ ᄉ ᅵ ᄉ ᅵ ᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ Negative CNN-2channel ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅢ ᄌ ᅢ ᄌ ᅢᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩᄀ ᅳ ᄀ ᅳ ᄀ ᅳᄅ ᅢ ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄃ ᅩ ᄃ ᅩ ᄃ ᅩᄁ ᅮ ᄁ ᅮ ᄁ ᅮᄌ ᅵ ᄌ ᅵ ᄌ ᅵᄀ ᅩ ᄀ ᅩ ᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄒ ᅡ ᄒ ᅡ ᄒ ᅡᄀ ᅦ ᄀ ᅦ ᄀ ᅦᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄉ ᅵ ᄉ ᅵ ᄉ ᅵ ᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ Negative CNN-4channel ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅢ ᄌ ᅢ ᄌ ᅢᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩᄀ ᅳ ᄀ ᅳ ᄀ ᅳᄅ ᅢ ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_67",
+    "start_char": 25500,
+    "end_char": 26400,
+    "text": "ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ Negative CNN-4channel ᄋ ᅵ ᄅ ᅥ ᇂ ᄀ ᅦ ᄌ ᅢ ᄌ ᅢ ᄌ ᅢᄆ ᅵ ᄆ ᅵ ᄆ ᅵ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄋ ᅥ ᆹ ᄀ ᅩ ᄀ ᅩ ᄀ ᅩᄀ ᅳ ᄀ ᅳ ᄀ ᅳᄅ ᅢ ᄅ ᅢ ᄅ ᅢ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄑ ᅵ ᆨ ᄃ ᅩ ᄃ ᅩ ᄃ ᅩᄁ ᅮ ᄁ ᅮ ᄁ ᅮᄌ ᅵ ᄌ ᅵ ᄌ ᅵᄀ ᅩ ᄀ ᅩ ᄀ ᅩ ᄂ ᅡ ᆫᄌ ᅡ ᆼᄑ ᅡ ᆫ ᄋ ᅵ ᆫ ᄋ ᅦ ᆨ ᄉ ᅳ ᄆ ᅢ ᆫ ᄋ ᅳ ᆯ ᄀ ᅪ ᄀ ᅥ ᄋ ᅴ ᄋ ᅵᄋ ᅣᄀ ᅵᄅ ᅩᄉ ᅢᄅ ᅩᄉ ᅵ ᄌ ᅡ ᆨᄒ ᅡ ᆫ ᄆ ᅦᄐ ᅲ ᄇ ᅩ ᆫ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄀ ᅪ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄁ ᅳ ᆷ ᄒ ᅡ ᄒ ᅡ ᄒ ᅡᄀ ᅦ ᄀ ᅦ ᄀ ᅦᄃ ᅡ ᄃ ᅡ ᄃ ᅡᄉ ᅵ ᄉ ᅵ ᄉ ᅵ ᄌ ᅢ ᄌ ᅥ ᆼ ᄅ ᅵ ᄒ ᅡ ᆫ ᄇ ᅳᄅ ᅡᄋ ᅵ ᄋ ᅥ ᆫ ᄉ ᅵ ᆼ ᄋ ᅥ ᄀ ᅡ ᆷ ᄃ ᅩ ᆨ ᄋ ᅦᄀ ᅦ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ Negative emotional expressions, rather than movie-review spe- ciﬁc expressions, receive higher attention by the CNN- Rand . Table 14 shows an examples in the same manner as the example illustrated in Table 11. The three models ex- cept CNN-Rand and CNN-Static focus on the negative phrase “ ᄌ ᅢᄆ ᅵ ᄋ ᅥ ᆹ ᄀ ᅩ (boring)” and the positive phrase “ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦ (neatly)”. Qualitatively, the former is a stronger"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "experiment",
+    "chunk_id": "arxiv_1709_09885_experiment_68",
+    "start_char": 26250,
+    "end_char": 26728,
+    "text": "s on the negative phrase “ ᄌ ᅢᄆ ᅵ ᄋ ᅥ ᆹ ᄀ ᅩ (boring)” and the positive phrase “ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦ (neatly)”. Qualitatively, the former is a stronger emotional expression than the latter, which results in the entire sentence being predicted as neg- ative. However, the CNN-Static ﬁnds a stronger pos- itive expression, i.e., “ ᄇ ᅡ ᆨ ᄉ ᅮ ᄅ ᅳ ᆯ (pay tribute to)” rather than “ ᄁ ᅡ ᆯ ᄁ ᅳ ᆷ ᄒ ᅡᄀ ᅦ (neatly)”, which results in the CNN model predicting the whole sentence as positive."
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "conclusion",
+    "chunk_id": "arxiv_1709_09885_conclusion_69",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "In this paper, we propose CAM 2 , a classiﬁcation and attention model with class activation map, which is a sentiment classiﬁcation model with word attention based on weakly supervised CNN learning. Although the proposed model is trained based on class labels only, it can not only predict the overall sentiment of a given sentence but also ﬁnd important emotional words signiﬁcantly contributing the predicted class. Compared to the previous CNN-based text classiﬁ- cation model, CAM 2 utilizes zero-paddings to help the CNN consider every word equally regardless of its position in the sentence. Moreover, it uses average pooling and a large number of ﬁlters to preserve the information as much as possible. In addition, various word embedding techniques are employed and integrated. Experimental results on two movie review datasets, IMDB, which is in English, and WATCHA, which is in Korean, show"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "conclusion",
+    "chunk_id": "arxiv_1709_09885_conclusion_70",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "niques are employed and integrated. Experimental results on two movie review datasets, IMDB, which is in English, and WATCHA, which is in Korean, show that the proposed CAM 2 yielded classiﬁcation accuracies higher than 87% for the IMDB and 78% for the WATCHA dataset. The CNN models that update the word embedding vectors during the sentiment classiﬁcation learning ( CNN-Rand, CNN-Non-Static, CNN-2channel, and CNN-4channel ) achieved higher classiﬁcation perfor- mance than that did not update the word embedding vectors ( CNN-Static ). It is also worth noting that the integration of multiple word embedding techniques improved the classiﬁcation performance for the IMDB dataset. However, all models showed the ability to ﬁnd important emotional words in the sentence, although the internal mechanism might be diﬀerent. For the WATCHA dataset, in particular, the CNN- Static , which does not upda"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "conclusion",
+    "chunk_id": "arxiv_1709_09885_conclusion_71",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "words in the sentence, although the internal mechanism might be diﬀerent. For the WATCHA dataset, in particular, the CNN- Static , which does not update the word embedding vector during the training, focused more on generally accepted emotional expressions, whereas the other models, which adapt to the language usage pattern in the movie review domain, seemed to focus more on the domain-dependent emotional expressions. We expect that the proposed methodology can be a useful application in domains where it is important to understand what the input sentences are intended to convey, such as visual question and answering system or chat bots. Although the experimental results were favorable, the current study has some limitations, which lead us to the future research directions. First, Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning the proposed method used a si"
+  },
+  {
+    "paper_id": "arxiv_1709_09885",
+    "section": "conclusion",
+    "chunk_id": "arxiv_1709_09885_conclusion_72",
+    "start_char": 2250,
+    "end_char": 2978,
+    "text": "o the future research directions. First, Sentiment Classiﬁcation with Word Attention based on Weakly Supervised Learning the proposed method used a simple space-based token for training word embedding vectors. If more sophisticated preprocessing techniques, such as lemmatization, are performed, the classiﬁcation and attention performance can be improved. Secondly, quantitative evaluation of word attention, i.e., how good or appropriate the identiﬁed words are in the context of sentiment classiﬁcation, is diﬃcult, which is why we qualitatively interpreted the word attention results in Section 4. Developing a systematic and quantitative evaluation method for word attention can be another meaningful future research topic."
+  }
+]

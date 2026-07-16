@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_c38125b1b71353e59be569f52a339aa67fa4268a",
+    "section": "abstract",
+    "chunk_id": "title_c38125b1b71353e59be569f52a339aa67fa4268a_abstract_0",
+    "start_char": 0,
+    "end_char": 292,
+    "text": "AI-Powered Paper Summarization about the arXiv paper 1408.5882v2\nThe paper discusses experiments with convolutional neural networks (CNN) for sentence classification tasks. A simple CNN with minimal hyperparameter tuning and static vectors achieves outstanding results on multiple benchmarks."
+  }
+]

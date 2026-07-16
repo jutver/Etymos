@@ -3,6 +3,7 @@ import { Switch } from "../../components/Switch";
 import { useAdminAuth } from "../../lib/auth";
 import { listFeatureFlags, setFeatureFlagEnabled } from "../../lib/configQueries";
 import type { FeatureFlag } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 export default function FeatureFlagsPage() {
   const { user } = useAdminAuth();
@@ -13,7 +14,7 @@ export default function FeatureFlagsPage() {
   useEffect(() => {
     listFeatureFlags()
       .then(setFlags)
-      .catch((err: Error) => setError(err.message))
+      .catch((err: unknown) => setError(friendlyError(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -23,7 +24,7 @@ export default function FeatureFlagsPage() {
     try {
       await setFeatureFlagEnabled(flag.key, enabled, user.id);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
       setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: !enabled } : f)));
     }
   }

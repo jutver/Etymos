@@ -62,6 +62,7 @@ export interface CheckedDocument {
   academicSourcesScanned: number;
   passages: DocPassage[];
   matches: MatchedSource[];
+  pdfUrl?: string;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

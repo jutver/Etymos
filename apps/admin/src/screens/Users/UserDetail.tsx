@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "@phosphor-icons/react";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
+import { Switch } from "../../components/Switch";
 import { getProfile, updateProfile } from "../../lib/supabaseQueries";
 import type { BillingCycle, PlanTier, Profile } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 const PLAN_OPTIONS: PlanTier[] = ["free", "student", "professional"];
 const BILLING_OPTIONS: BillingCycle[] = ["monthly", "annual"];
@@ -34,7 +36,7 @@ export default function UserDetailPage() {
         setCredits(p.credits);
         setStudentVerified(p.student_verified);
       })
-      .catch((err: Error) => !cancelled && setError(err.message))
+      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -55,7 +57,7 @@ export default function UserDetailPage() {
       const refreshed = await getProfile(id);
       setProfile(refreshed);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setSaving(false);
     }
@@ -134,15 +136,10 @@ export default function UserDetailPage() {
           </div>
 
           <div className="flex items-end">
-            <label className="flex cursor-pointer items-center gap-2 text-body text-fg">
-              <input
-                type="checkbox"
-                checked={studentVerified}
-                onChange={(e) => setStudentVerified(e.target.checked)}
-                className="size-4 accent-accent"
-              />
-              Student verified
-            </label>
+            <div className="flex items-center gap-2.5">
+              <Switch checked={studentVerified} onChange={setStudentVerified} />
+              <span className="text-body text-fg">Student verified</span>
+            </div>
           </div>
         </div>
 
@@ -152,7 +149,7 @@ export default function UserDetailPage() {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? "Saving…" : "Save changes"}
         </button>

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_a64248687fa323bc7b2198057371e94696b9e2e5",
+    "section": "abstract",
+    "chunk_id": "doi_a64248687fa323bc7b2198057371e94696b9e2e5_abstract_0",
+    "start_char": 0,
+    "end_char": 616,
+    "text": "CNN-Trans-Enc: A CNN-Enhanced Transformer-Encoder On Top Of Static BERT representations for Document Classification\nBERT achieves remarkable results in text classification tasks, it is yet not fully exploited, since only the last layer is used as a representation output for downstream classifiers. The most recent studies on the nature of linguistic features learned by BERT, suggest that different layers focus on different kinds of linguistic features. We propose a CNN-Enhanced Transformer-Encoder model which is trained on top of fixed BERT $[CLS]$ representations from all layers, employing Convolutional Neura"
+  }
+]

@@ -4,6 +4,7 @@ import { Switch } from "../../components/Switch";
 import { useAdminAuth } from "../../lib/auth";
 import { listAnnouncements, createAnnouncement, setAnnouncementActive } from "../../lib/configQueries";
 import type { Announcement, AnnouncementSeverity } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 const SEVERITIES: AnnouncementSeverity[] = ["info", "success", "warning", "error"];
 
@@ -26,7 +27,7 @@ export default function AnnouncementsPage() {
   function refresh() {
     return listAnnouncements()
       .then(setAnnouncements)
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) => setError(friendlyError(err)));
   }
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function AnnouncementsPage() {
       setMessage("");
       await refresh();
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setCreating(false);
     }
@@ -53,7 +54,7 @@ export default function AnnouncementsPage() {
     try {
       await setAnnouncementActive(a.id, isActive);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
       setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_active: !isActive } : x)));
     }
   }
@@ -86,7 +87,7 @@ export default function AnnouncementsPage() {
               type="button"
               disabled={creating || !message.trim()}
               onClick={handleCreate}
-              className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {creating ? "Publishing…" : "Publish"}
             </button>

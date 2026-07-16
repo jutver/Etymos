@@ -1,0 +1,18 @@
+[
+  {
+    "paper_id": "title_6a2e7e2182ab9e1f7ab894181db308a165e62a04",
+    "section": "abstract",
+    "chunk_id": "title_6a2e7e2182ab9e1f7ab894181db308a165e62a04_abstract_0",
+    "start_char": 0,
+    "end_char": 790,
+    "text": "Convolutional Neural Networks for Sentence ClassificationConvolutional Neural Networks for Sentence ClassificationCNNs for Sentence Classification: Research Paper - studylib.netCNNs for Sentence Classification - Emergent MindSentimental Short Sentences Classification by Using CNN Deep ...\nAug 25, 2014 · We report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vectors for sentence-level classification tasks. Mar 15, 2024 · We report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vectors for sentence-level classification tasks. We show that a simple CNN with little hyperparameter tuning and static vectors achieves excellent results on multiple benchmarks. Research on Conv"
+  },
+  {
+    "paper_id": "title_6a2e7e2182ab9e1f7ab894181db308a165e62a04",
+    "section": "abstract",
+    "chunk_id": "title_6a2e7e2182ab9e1f7ab894181db308a165e62a04_abstract_1",
+    "start_char": 750,
+    "end_char": 790,
+    "text": "on multiple benchmarks. Research on Conv"
+  }
+]

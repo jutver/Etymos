@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_004160d657d7638d9c6fbb7acd5abf51ff1a2790",
+    "section": "abstract",
+    "chunk_id": "doi_004160d657d7638d9c6fbb7acd5abf51ff1a2790_abstract_0",
+    "start_char": 0,
+    "end_char": 612,
+    "text": "TROVE: A Challenge for Fine-Grained Text Provenance via Source Sentence Tracing and Relationship Classification\nLLMs have achieved remarkable fluency and coherence in text generation, yet their widespread adoption has raised concerns about content reliability and accountability. In high-stakes domains, it is crucial to understand where and how the content is created. To address this, we introduce the Text pROVEnance (TROVE) challenge, designed to trace each sentence of a target text back to specific source sentences within potentially lengthy or multi-document inputs. Beyond identifying sources, TROVE ann"
+  }
+]

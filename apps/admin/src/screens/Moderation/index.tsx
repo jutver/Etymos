@@ -6,6 +6,7 @@ import { StatusBadge, moderationTone, docStatusTone } from "../../components/Sta
 import { listDocuments } from "../../lib/moderationQueries";
 import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import type { AdminDocument } from "../../lib/types";
+import { friendlyError } from "../../lib/errors";
 
 export default function ModerationPage() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ export default function ModerationPage() {
         setRows(rows);
         setCount(count);
       })
-      .catch((err: Error) => !cancelled && setError(err.message))
+      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false));
 
     return () => {

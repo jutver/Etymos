@@ -15,14 +15,14 @@ export function Switch({ checked, onChange, disabled }: SwitchProps) {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-6 w-10 shrink-0 cursor-pointer rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "bg-accent" : "bg-surface-raised",
+        "relative h-6 w-10 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        checked ? "border-accent bg-accent" : "border-border-strong bg-surface-raised",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-fg transition-transform",
-          checked ? "translate-x-[18px]" : "translate-x-0.5",
+          "absolute left-0.5 top-0.5 size-5 rounded-full bg-fg transition-transform",
+          checked ? "translate-x-4" : "translate-x-0",
         )}
       />
     </button>

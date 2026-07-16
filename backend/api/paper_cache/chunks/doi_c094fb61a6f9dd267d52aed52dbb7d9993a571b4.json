@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c094fb61a6f9dd267d52aed52dbb7d9993a571b4",
+    "section": "abstract",
+    "chunk_id": "doi_c094fb61a6f9dd267d52aed52dbb7d9993a571b4_abstract_0",
+    "start_char": 0,
+    "end_char": 608,
+    "text": "GEODENSECONVNET: A BREGMAN DIVERGENCE-INSPIRED FRAMEWORK FOR ADAPTIVE FEATURE FUSION IN TEXT CLASSIFICATION\nEffective text classification requires models to synthesize both local syntactic patterns and global semantic dependencies. While Convolutional Neural Networks (CNNs) excel at ex- tracting hierarchical local features and Attention mechanisms are proficient at modeling long- range context, the optimal method for integrating these complementary paradigms remains an open research question. Most hybrid architectures rely on static fusion strategies, such as concatenation, or simple arithmetic combin"
+  }
+]

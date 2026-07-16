@@ -70,7 +70,7 @@ export default function SystemHealthPage() {
           type="button"
           onClick={refresh}
           disabled={loading}
-          className="cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-medium text-fg-muted transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
+          className="cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Checking…" : "Recheck"}
         </button>

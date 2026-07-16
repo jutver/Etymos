@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_de9310295d47c9291bad529687810e208933d395",
+    "section": "abstract",
+    "chunk_id": "title_de9310295d47c9291bad529687810e208933d395_abstract_0",
+    "start_char": 0,
+    "end_char": 266,
+    "text": "GitHub - cmtri2005/BigData-Thesis\nThis repository contains a reproducible research pipeline for Vietnamese clickbait headline detection on ViClickbait-2025. The project focuses on robust and explainable benchmarking rather than reporting only one random-split score."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_ce27c6fa4fa5d2fed9400cce4d8002715cc3e35e",
+    "section": "abstract",
+    "chunk_id": "doi_ce27c6fa4fa5d2fed9400cce4d8002715cc3e35e_abstract_0",
+    "start_char": 0,
+    "end_char": 632,
+    "text": "Multi-view text classification through integrated RNN autoencoder learning of word, sentence, emotion and paragraph representations\nText classification performance can be constrained by single-view approaches that process documents through a single representational lens and struggle to capture the multi-dimensional nature of textual information. We propose FMV-RNN-AE (Feature integration Multi-View RNN Autoencoder), an end-to-end framework that systematically integrates four complementary textual views—word-level embeddings, sentence-level representations, emotion-based features, and paragraph-level semantics. FMV-RNN-AE emp"
+  }
+]
