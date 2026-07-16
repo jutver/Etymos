@@ -1,18 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Envelope, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
-import { GOOGLE_MOCK_EMAIL, GOOGLE_MOCK_PASSWORD } from "../../lib/mockAuth";
-
-interface LocationState {
-  from?: { pathname: string };
-}
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const from = (location.state as LocationState)?.from?.pathname ?? "/upload";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,55 +26,32 @@ export default function SignupPage() {
       return;
     }
 
-    if (!data.session) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        setError(
-          "Account created, but this Supabase project requires email confirmation, so we can't sign you in automatically. Disable \"Confirm email\" under Authentication settings in the Supabase dashboard for the demo to work end-to-end.",
-        );
-        setLoading(false);
-        return;
-      }
-    }
-
     setLoading(false);
-    navigate(from, { replace: true });
+
+    if (data.session) {
+      // Email confirmation disabled — user is signed in immediately
+      navigate("/upload", { replace: true });
+    } else {
+      // Email confirmation required — redirect to verification page
+      navigate("/verify-email", { replace: true, state: { email } });
+    }
   }
 
-  async function handleGoogleMock() {
+  async function handleGoogleOAuth() {
     setError(null);
     setGoogleLoading(true);
 
-    let { error: signInError } = await supabase.auth.signInWithPassword({
-      email: GOOGLE_MOCK_EMAIL,
-      password: GOOGLE_MOCK_PASSWORD,
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
-    if (signInError) {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: GOOGLE_MOCK_EMAIL,
-        password: GOOGLE_MOCK_PASSWORD,
-        options: { data: { display_name: "Demo Google User", provider: "google-mock" } },
-      });
-      if (signUpError) {
-        setError(signUpError.message);
-        setGoogleLoading(false);
-        return;
-      }
-      ({ error: signInError } = await supabase.auth.signInWithPassword({
-        email: GOOGLE_MOCK_EMAIL,
-        password: GOOGLE_MOCK_PASSWORD,
-      }));
-    }
-
     setGoogleLoading(false);
-    if (signInError) {
-      setError(
-        "Google mock sign-in needs email confirmation disabled on this Supabase project (Authentication settings).",
-      );
-      return;
+    if (oauthError) {
+      setError(oauthError.message);
     }
-    navigate(from, { replace: true });
   }
 
   return (
@@ -146,14 +116,11 @@ export default function SignupPage() {
         size="lg"
         fullWidth
         loading={googleLoading}
-        onClick={handleGoogleMock}
+        onClick={handleGoogleOAuth}
         iconLeft={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
       >
-        Continue with Google (demo)
+        Continue with Google
       </Button>
-      <p className="mt-2 text-center text-[0.6875rem] text-ink-400">
-        Demo mockup — no real Google account is used.
-      </p>
 
       <p className="mt-6 text-center text-sm text-ink-600">
         Already have an account?{" "}
@@ -164,3 +131,4 @@ export default function SignupPage() {
     </div>
   );
 }
+
