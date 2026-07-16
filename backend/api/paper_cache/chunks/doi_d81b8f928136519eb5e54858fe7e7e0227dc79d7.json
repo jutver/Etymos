@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_d81b8f928136519eb5e54858fe7e7e0227dc79d7",
+    "section": "abstract",
+    "chunk_id": "doi_d81b8f928136519eb5e54858fe7e7e0227dc79d7_abstract_0",
+    "start_char": 0,
+    "end_char": 621,
+    "text": "CNN-OLSTM: Convolutional Neural Network with Optimized Long Short-Term Memory Model for Twitter based Sentiment Analysis\nSocial Networking continues the growth of web users, with people sharing their ideas and opinions daily in the form of texts, pictures, videos, and speech. Text classification is still an important issue because these large texts were derived from diverse sources and different thinking people. The shared concept must be incomplete, random, noisy, and in the form of different languages. To solve this issue, in this paper, Convolutional Neural Network with Optimized Long Short Term Memory Model (C"
+  }
+]

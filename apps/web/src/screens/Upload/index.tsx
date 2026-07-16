@@ -21,9 +21,10 @@ import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit } from "../../lib/store";
-import { formatDate, cn } from "@etymos/shared";
+import { formatDate } from "../../lib/format";
+import { cn } from "../../lib/cn";
 import { MOCK_DOCUMENTS } from "../../lib/mockData";
-import type { Language } from "@etymos/shared";
+import type { Language } from "../../lib/types";
 
 const languages: { id: Language; label: string }[] = [
   { id: "vi", label: "Tiếng Việt" },

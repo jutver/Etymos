@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c0000c4baec9e2b277bfa9bb1f0d76fe0853b95b",
+    "section": "abstract",
+    "chunk_id": "doi_c0000c4baec9e2b277bfa9bb1f0d76fe0853b95b_abstract_0",
+    "start_char": 0,
+    "end_char": 609,
+    "text": "Convolutional Neural Network Model for Multi-Class Sentiment Analysis on Twitter with Deep Learning Approach\nSocial media, especially Twitter, has become an important space for people to express opinions, emotions, and views on various issues. Sentiment analysis on Twitter text is a relevant approach to understanding people's emotional tendencies. However, most previous studies still focus on binary classification, making it less able to describe expressions. This study aims to implement a Convolutional Neural Network (CNN) model in multi-class sentiment analysis on Twitter data using a deep learning a"
+  }
+]

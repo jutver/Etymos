@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle, CircleNotch, ClockCounterClockwise, FileMagnifyingGlass } from "@phosphor-icons/react";
-import { cn } from "@etymos/shared";
+import { cn } from "../../lib/cn";
 import { useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { pollJob, getReport } from "../../lib/api";
-import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "@etymos/shared";
+import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 
 interface LocationState {
   docLabels?: string[];

@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_46b6e7bf5421296148f6b57a95861cfbf5c60b28_abstract_0",
     "start_char": 0,
-    "end_char": 364,
-    "text": "Convolutional Neural Networks for Sentence Classification\nMar 15, 2024 · We report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vectors for sentence-level classification tasks. We show that a simple CNN with little hyperparameter tuning and static vectors achieves excellent results on multiple benchmarks."
+    "end_char": 446,
+    "text": "Convolutional Neural Networks for Sentence Classification\nWe report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vec- tors for sentence-level classication tasks. We show that a simple CNN with lit- tle hyperparameter tuning and static vec- tors achieves excellent results on multi- ple benchmarks. Learning task-specic vectors through ne-tuning offers further gains in performance. We ..."
   }
 ]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_32d316740b5cf46a8be7d1c09954be5343636109",
+    "section": "abstract",
+    "chunk_id": "doi_32d316740b5cf46a8be7d1c09954be5343636109_abstract_0",
+    "start_char": 0,
+    "end_char": 602,
+    "text": "Attention-Based CNN and Bi-LSTM Model Based on TF-IDF and GloVe Word Embedding for Sentiment Analysis\nSentiment analysis (SA) detects people’s opinions from text engaging natural language processing (NLP) techniques. Recent research has shown that deep learning models, i.e., Convolutional Neural Network (CNN), Recurrent Neural Network (RNN), and Transformer-based provide promising results for recognizing sentiment. Nonetheless, CNN has the advantage of extracting high-level features by using convolutional and max-pooling layers; it cannot efficiently learn a sequence of correlations. At the same"
+  }
+]

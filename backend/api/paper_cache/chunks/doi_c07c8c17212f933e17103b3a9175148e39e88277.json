@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c07c8c17212f933e17103b3a9175148e39e88277",
+    "section": "abstract",
+    "chunk_id": "doi_c07c8c17212f933e17103b3a9175148e39e88277_abstract_0",
+    "start_char": 0,
+    "end_char": 583,
+    "text": "Sentiment Analysis using a CNN-BiLSTM Deep Model Based on Attention Classification\nWith the rapid development of the Internet, the number of social media and e-commerce platforms increased dramatically. Users from all over world share their comments and sentiments on the Internet become a new tradition. Applying natural language processing technology to analyze the text on the Internet for mining the emotional tendencies has become the main way in the social public opinion monitoring and the after-sale feedback of manufactory. Thus, the study on text sentiment analysis has sho"
+  }
+]
