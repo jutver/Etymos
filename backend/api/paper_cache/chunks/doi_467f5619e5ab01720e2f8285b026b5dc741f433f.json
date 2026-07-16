@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_467f5619e5ab01720e2f8285b026b5dc741f433f",
+    "section": "abstract",
+    "chunk_id": "doi_467f5619e5ab01720e2f8285b026b5dc741f433f_abstract_0",
+    "start_char": 0,
+    "end_char": 579,
+    "text": "Research on Building Massive Text Classification Models Based on Deep Learning\nFor large-scale text classification tasks, we propose a deep learning model based on a multi-layer Transformer. By integrating residual connections, dynamic context embedding, and multi-scale pooling mechanisms, the model enhances feature representation and classification performance on high-dimensional sparse corpora. Built upon static word vectors and traditional shallow networks, the model strengthens semantic modeling capabilities and end-to-end training efficiency. Experimental results demo"
+  }
+]

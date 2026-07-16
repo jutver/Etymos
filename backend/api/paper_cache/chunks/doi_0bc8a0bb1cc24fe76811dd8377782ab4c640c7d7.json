@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_0bc8a0bb1cc24fe76811dd8377782ab4c640c7d7",
+    "section": "abstract",
+    "chunk_id": "doi_0bc8a0bb1cc24fe76811dd8377782ab4c640c7d7_abstract_0",
+    "start_char": 0,
+    "end_char": 557,
+    "text": "Convolutional Neural Networks for Sentence Classification\nWe report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vectors for sentence-level classification tasks. We show that a simple CNN with little hyperparameter tuning and static vectors achieves excellent results on multiple benchmarks. Learning task-specific vectors through fine-tuning offers further gains in performance. We additionally propose a simple modification to the architecture to allow for the use of both task-specific and static"
+  }
+]

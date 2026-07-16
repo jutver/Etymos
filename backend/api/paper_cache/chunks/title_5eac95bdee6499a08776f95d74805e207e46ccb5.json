@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_5eac95bdee6499a08776f95d74805e207e46ccb5",
+    "section": "abstract",
+    "chunk_id": "title_5eac95bdee6499a08776f95d74805e207e46ccb5_abstract_0",
+    "start_char": 0,
+    "end_char": 242,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With...\nWe provide all experimental materials, including the VOZ-HSD dataset, pre-trained checkpoints, the unified HSD-multitask VIHATET5 model, and source code, for public research use."
+  }
+]

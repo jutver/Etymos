@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { submitTextCheck, submitPdfCheck } from "../../lib/api";
 import {
   CaretDown,
   CheckCircle,
@@ -18,9 +19,9 @@ import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
+import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit } from "../../lib/store";
-import { formatDate } from "@etymos/shared";
-import { cn } from "@etymos/shared";
+import { formatDate, cn } from "@etymos/shared";
 import { MOCK_DOCUMENTS } from "../../lib/mockData";
 import type { Language } from "@etymos/shared";
 
@@ -46,7 +47,7 @@ export default function UploadPage() {
 
   const [tab, setTab] = useState<"file" | "paste">("file");
   const [dragActive, setDragActive] = useState(false);
-  const [files, setFiles] = useState<{ name: string; size: number }[]>([]);
+  const [files, setFiles] = useState<{ name: string; size: number; file: File }[]>([]);
   const [pastedText, setPastedText] = useState("");
   const [webSources, setWebSources] = useState(true);
   const [academicSources, setAcademicSources] = useState(true);
@@ -56,6 +57,8 @@ export default function UploadPage() {
   const [project, setProject] = useState<string>(projects[0] ?? "");
   const [projectQuery, setProjectQuery] = useState("");
   const [projectOpen, setProjectOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const wordCount = pastedText.trim() ? pastedText.trim().split(/\s+/).length : 0;
   const wordLimit = planWordLimit(plan);
@@ -79,7 +82,7 @@ export default function UploadPage() {
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
-    const added = Array.from(fileList).map((f) => ({ name: f.name, size: f.size }));
+    const added = Array.from(fileList).map((f) => ({ name: f.name, size: f.size, file: f }));
     setFiles((prev) => [...prev, ...added]);
   }
 
@@ -107,16 +110,77 @@ export default function UploadPage() {
     chooseProject(name);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!hasContent || overLimit) return;
+
     const summaryLabel = docLabels.length > 1 ? `${docLabels.length} documents` : docLabels[0];
     const allowed = requestCheck(summaryLabel || "Untitled document", docLabels.length);
-    if (allowed) {
-      navigate("/analyzing", {
-        state: { docLabels, project, webSources, academicSources, language },
-      });
-    } else {
+    if (!allowed) {
       navigate("/paywall");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      if (tab === "paste") {
+        const job = await submitTextCheck(pastedText.trim());
+        navigate("/analyzing", {
+          state: {
+            docLabels,
+            project,
+            webSources,
+            academicSources,
+            language,
+            jobId: job.job_id,
+            reportMode: "backend",
+          },
+        });
+        return;
+      }
+
+      if (files.length > 0) {
+        const file = files[0]?.file;
+
+        if (!file) {
+          throw new Error("Please choose a PDF file to upload.");
+        }
+
+        // Đọc file thành base64 data URL để lưu được vào localStorage
+        // (blob URL sẽ chết sau khi refresh trang, data URL thì không)
+        const pdfDataUrl = await new Promise<string | null>((resolve) => {
+          if (file.type !== "application/pdf") {
+            resolve(null); // không phải PDF thì không preview được, bỏ qua
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+
+        const job = await submitPdfCheck(file);
+        navigate("/analyzing", {
+          state: {
+            docLabels,
+            project,
+            webSources,
+            academicSources,
+            language,
+            jobId: job.job_id,
+            reportMode: "backend",
+            pdfDataUrl,
+          },
+        });
+        return;
+      }
+
+      throw new Error("Please add content before checking.");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to start analysis.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -203,7 +267,7 @@ export default function UploadPage() {
               </div>
 
               {files.length > 0 && (
-                <div className="mt-4 flex flex-col gap-2">
+                <div className="mt-6 flex flex-col gap-2">
                   {files.map((f, i) => (
                     <div
                       key={`${f.name}-${i}`}
@@ -230,6 +294,13 @@ export default function UploadPage() {
                   <p className="text-xs font-medium text-ink-400">
                     {files.length} file{files.length === 1 ? "" : "s"} ready to check
                   </p>
+                </div>
+              )}
+
+              {files.length > 0 && (
+                <div className="mt-8 border-t border-line pt-6">
+                  <h3 className="mb-4 text-sm font-semibold text-navy-900">Preview tài liệu:</h3>
+                  <PlagiarismPdfViewer pdfUrl={files[0].file} matches={[]} />
                 </div>
               )}
             </div>
@@ -278,6 +349,12 @@ export default function UploadPage() {
                 )}
               </div>
             </div>
+          )}
+
+          {submitError && (
+            <p className="mt-4 rounded-lg border border-severity-high-line bg-severity-high-bg px-3 py-2 text-sm text-severity-high">
+              {submitError}
+            </p>
           )}
 
           <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -375,7 +452,8 @@ export default function UploadPage() {
 
             <Button
               size="lg"
-              disabled={!hasContent || overLimit}
+              disabled={!hasContent || overLimit || submitting}
+              loading={submitting}
               onClick={handleSubmit}
               iconLeft={<Sparkle size={18} weight="fill" />}
               className="w-full sm:ml-auto sm:w-auto"

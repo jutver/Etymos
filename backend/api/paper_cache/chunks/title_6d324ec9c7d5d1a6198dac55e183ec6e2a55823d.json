@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_6d324ec9c7d5d1a6198dac55e183ec6e2a55823d",
+    "section": "abstract",
+    "chunk_id": "title_6d324ec9c7d5d1a6198dac55e183ec6e2a55823d_abstract_0",
+    "start_char": 0,
+    "end_char": 371,
+    "text": "ViClickbait-2025: A Comprehensive Dataset for Vietnamese Clickbait ...\nViClickbait-2025 is a Vietnamese-language dataset of 3,414 news headlines annotated for clickbait detection. The data were collected via automated web scraping from eight major Vietnamese news platforms and include nine fields such as title, lead paragraph, category, publish time, and binary labels."
+  }
+]

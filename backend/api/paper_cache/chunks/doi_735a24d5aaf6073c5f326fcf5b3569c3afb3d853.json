@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_735a24d5aaf6073c5f326fcf5b3569c3afb3d853",
+    "section": "abstract",
+    "chunk_id": "doi_735a24d5aaf6073c5f326fcf5b3569c3afb3d853_abstract_0",
+    "start_char": 0,
+    "end_char": 596,
+    "text": "A BERT-Based Hybrid Short Text Classification Model Incorporating CNN and Attention-Based BiGRU\nShort text classification is a research focus for natural language processing (NLP), which is widely used in news classification, sentiment analysis, mail filtering and other fields. In recent years, deep learning techniques are applied to text classification and has made some progress. Different from ordinary text classification, short text has the problem of less vocabulary and feature sparsity, which raise higher request for text semantic feature representation. To address this issue, this pa"
+  }
+]

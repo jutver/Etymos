@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_f3fb5d0baba3c198a0f982fc81491d6b988ab547",
+    "section": "abstract",
+    "chunk_id": "doi_f3fb5d0baba3c198a0f982fc81491d6b988ab547_abstract_0",
+    "start_char": 0,
+    "end_char": 593,
+    "text": "Sequential sentence classification in research papers using cross-domain multi-task learning\nThe automatic semantic structuring of scientific text allows for more efficient reading of research articles and is an important indexing step for academic search engines. Sequential sentence classification is an essential structuring task and targets the categorisation of sentences based on their content and context. However, the potential of transfer learning for sentence classification across different scientific domains and text types, such as full papers and abstracts, has not yet been expl"
+  }
+]

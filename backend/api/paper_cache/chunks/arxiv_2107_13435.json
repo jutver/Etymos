@@ -1,0 +1,418 @@
+[
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "abstract",
+    "chunk_id": "arxiv_2107_13435_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Math word problem (MWP) solving faces a dilemma in number representation learning. In order to avoid the number representation issue and reduce the search space of feasible solu- tions, existing works striving for MWP solving usually replace real numbers with symbolic placeholders to focus on logic reasoning. How- ever, different from common symbolic reason- ing tasks like program synthesis and knowl- edge graph reasoning, MWP solving has ex- tra requirements in numerical reasoning. In other words, instead of the number value it- self, it is the reusable numerical property that matters more in numerical reasoning. There- fore, we argue that injecting numerical proper- ties into symbolic placeholders with contextu- alized representation learning schema can pro- vide a way out of the dilemma in the number representation issue here. In this work, we in- troduce this idea to the popular pre-"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "abstract",
+    "chunk_id": "arxiv_2107_13435_abstract_1",
+    "start_char": 750,
+    "end_char": 1161,
+    "text": "ning schema can pro- vide a way out of the dilemma in the number representation issue here. In this work, we in- troduce this idea to the popular pre-training language model (PLM) techniques and build MWP-BERT, an effective contextual number representation PLM. We demonstrate the effec- tiveness of our MWP-BERT on MWP solving and several MWP-speciﬁc understanding tasks on both English and Chinese benchmarks."
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_2",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Introduction Recent works in math word problem (MWP) solv- ing ( Wang et al. , 2018 , 2019 ; Liu et al. , 2019a ; Li et al. , 2019 ; Xie and Sun , 2019 ; Zhang et al. , 2020b ; Wu et al. , 2020 ; Qin et al. , 2021 ; Huang et al. , 2021 ; Wu et al. , 2021a ; Yu et al. , 2021 ; Shen et al. , 2021 ) arrange the pipeline into a sequence- to-sequence framework. In brief, they use deep representation and gradient optimization as well as symbolic constraints to discover discrete symbolic combinations of operators and variants. Funda- mentally, MWP solving system aims to perform symbolic reasoning by searching through a combi- natorial solution space given the text description Text: Some workers are producing 660 clothes. It has been 5 days and 75 clothes are produced per day. But they have to finish all clothes in 3 more days. How many clothes should be processed per day from now? Equation: (66"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_3",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "clothes are produced per day. But they have to finish all clothes in 3 more days. How many clothes should be processed per day from now? Equation: (660 −75×5) ÷ 3 Reasoning Logic: Text: Some workers are producing 660 clothes. It has been 5 days and 10% of the total clothes are produced per day. But they have to finish all clothes in 3 more days. How many clothes should be processed per day from now? Equation: 660× 1 −10%×5 ÷ 3 Reasoning Logic: ÷ − 660 × 75 5 3 ÷ − 1 × 10% 5 3 × 660 Figure 1: The second question is obtained from the ﬁrst one by minor modiﬁcations. However, their solution equation and corresponding equation tree structure are different from each other. This demonstrates the impor- tance of considering numerical value information and reasoning logic (equation tree) in contextual modeling. evidences. Thus, these neurosymbolic methods mainly focus on getting more effective se"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_4",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "ion and reasoning logic (equation tree) in contextual modeling. evidences. Thus, these neurosymbolic methods mainly focus on getting more effective semantic representations ( Li et al. , 2019 ; Zhang et al. , 2020b ; Wu et al. , 2020 , 2021a ; Yu et al. , 2021 ), injecting symbolic constraints ( Wang et al. , 2018 , 2019 ; Liu et al. , 2019a ; Xie and Sun , 2019 ) and how to align semantic space (text descriptions) and huge combi- natorial symbolic space (symbolic solutions) ( Qin et al. , 2021 ; Shen et al. , 2021 ; Huang et al. , 2021 ). This line of methods has achieved great success and is still holding the lead in various MWP solving benchmarks ( Wang et al. , 2017 ; Zhao et al. , 2020 ; Koncel-Kedziorski et al. , 2016 ). Despite the great performance achieved by the previous methods, there still exists fundamental challenges in number representation for MWP solv- ing. More exactly,"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_5",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "reat performance achieved by the previous methods, there still exists fundamental challenges in number representation for MWP solv- ing. More exactly, number values are required to be considered as vital evidence in solution exploration arXiv:2107.13435v2 [cs.AI] 11 May 2022 but existing works are known to be inefﬁcient in capturing numeracy information ( Wallace et al. , 2019 ). Intuitively, we could simply treat explicit numbers in the same way with words, i.e., assign position for all numbers in the vocabulary. How- ever, there would be an inﬁnite number of candi- dates during prediction and it would be impossible to learn their deep representations. In other words, the solution space will be extremely large and the complexity is unacceptable. Therefore, almost all existing works follow the number mapping tech- nique Wang et al. ( 2017 ) to replace all numbers with symbolic placeholde"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_6",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "table. Therefore, almost all existing works follow the number mapping tech- nique Wang et al. ( 2017 ) to replace all numbers with symbolic placeholders (e.g., “x1”, “x2”). The core idea here is to get a reasonable solution space by restricting neural networks to leave out numer- ical characteristics and focus on logic reasoning. However, most of the current MWP solvers do not consider the background knowledge in the context and are usually inefﬁcient in capturing numeracy properties. An example is shown in Fig. 1 . Small perturbations in the problem description actually bring large variations in reasoning logic and equa- tion. If the model simply regards “75” and “10%” as the same placeholder “x3”, and does not notice the small variation in the context, a wrong solution will be generated. To this end, we incorporate several numeracy grounded pre-training objectives to inject inductive b"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_7",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "n the context, a wrong solution will be generated. To this end, we incorporate several numeracy grounded pre-training objectives to inject inductive bias about numerical constraints into dynamic rep- resentations. Compared with word candidate sets, useful points in number candidate space are scat- tered sparsely. However, we identify that during prediction, what matters is the reusable numerical properties of number values. What’s more, these properties do not suffer from the sparsity issues of speciﬁc values in MWPs. Therefore, compared with assigning a prototype vector for each single number value like ( Wu et al. , 2021b ), it is more rea- sonable to inject the reusable numerical properties in deep representations, e.g., magnitude and num- ber type. In this work, we propose to design numer- acy grounded pre-training objectives to implement soft constraints between symbolic placeholder"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_8",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "m- ber type. In this work, we propose to design numer- acy grounded pre-training objectives to implement soft constraints between symbolic placeholders and numbers in deep representation. Contributions. We present a suite of numeracy- augmented pre-training tasks with consideration of reasoning logic and numerical properties. More exactly, we introduce several novel pre-training tasks with access to different levels of supervision signals to make use of more available MWP data. • One basic group of pre-training tasks is de- signed for the self-supervised setting. Ex- cept for masked language modeling (MLM), we give extra consideration to number-related context information by designing related ob- jectives. • Another set of pre-training objectives is for the weakly-supervised setting that has only answer annotations but no equation solutions. With access to the answer value, we introduce"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_9",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "ctives is for the weakly-supervised setting that has only answer annotations but no equation solutions. With access to the answer value, we introduce several tasks to determine the type and the value of the answer. • The ﬁnal set is for the fully-supervised setting, where both solution equation and answer are available for the MWPs. Besides, a group of numeracy grounded pre- training objectives is designed to leverage the cor- pus of MWP and encourage the contextual repre- sentation to capture numerical information. Ex- periments conducted on both Chinese and English benchmarks show the signiﬁcant improvement of our proposed approach over all competitors. To our knowledge, this is the ﬁrst approach that surpasses human performance ( Wang et al. , 2019 ) in terms of MWP solving. 2 Related Works Math Word Problems Solving. There exist two major types of MWP, equation set MWP ( Wang et al."
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_10",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "al. , 2019 ) in terms of MWP solving. 2 Related Works Math Word Problems Solving. There exist two major types of MWP, equation set MWP ( Wang et al. , 2017 ; Zhao et al. , 2020 ) and arithmetic MWP ( Qin et al. , 2020 ; Huang et al. , 2016 ). This work focuses on arithmetic MWP, which is usually paired with one unknown variable. Along the path of the MWP solver’s development, the pioneer stud- ies use traditional rule-based methods, machine learning methods and statistical methods ( Yuhui et al. , 2010 ; Kushman et al. , 2014 ; Shi et al. , 2015 ; Koncel-Kedziorski et al. , 2015 ). Afterwards, in- spired by the development of sequence-to-sequence (Seq2Seq) models, MWP solving has been for- mulated as a neurosymbolic reasoning pipeline of translating language descriptions to mathematical equations with encoder-decoder framework ( Wang et al. , 2018 , 2019 ; Li et al. , 2019 ; Zhang et al"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_11",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "ranslating language descriptions to mathematical equations with encoder-decoder framework ( Wang et al. , 2018 , 2019 ; Li et al. , 2019 ; Zhang et al. , 2020b ; Yu et al. , 2021 ; Wu et al. , 2021a ). By fusing hard constraints into decoder ( Chiang and Chen , 2018 ; Liu et al. , 2019a ; Xie and Sun , 2019 ; Shen and Jin , 2020 ; Zhang et al. , 2020a ), MWP solvers achieve much better performance then. Sev- eral works propose to utilize multi-stage frame- works ( Wang et al. , 2019 ; Huang et al. , 2021 ; Shen et al. , 2021 ; Liang and Zhang , 2021 ) to make more robust solvers. Also, several new works made at- tempts to improve MWP solver beyond supervised settings ( Hong et al. , 2021a , b ). Among all these previous studies, the most rele- vant ones to our work can be categorized into two groups. First, it has been noted that number val- ues and mathematical constraints play a signiﬁ"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_12",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "le- vant ones to our work can be categorized into two groups. First, it has been noted that number val- ues and mathematical constraints play a signiﬁcant role in supporting numerical reasoning. Wu et al. ( 2021b ) proposed several number value features to enhance encoder and Qin et al. ( 2021 ) designed new auxiliary tasks to enhance neural MWP solvers. Compared with their work, we ﬁrst introduce pre- training language model (PLM) and concentrate on representation learning to resolve numerical un- derstanding challenges. Second, regarding the us- age of pre-training techniques for MWP solving, Shen et al. ( 2021 ) introduced BART-based ( Lewis et al. , 2020 ) MWP solver and incorporated special- ized multi-task training for obtaining more effec- tive pre-training Seq2Seq models for MWP. Com- pared with them, our work focuses on the number representation learning issue of MWP and achieve"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_13",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "effec- tive pre-training Seq2Seq models for MWP. Com- pared with them, our work focuses on the number representation learning issue of MWP and achieves a more ﬂexible pre-training representation module for MWP solving, which can be applied in various MWP related tasks other than solution generation. Numeracy-aware Pre-training Models. Num- ber representation has been recognized as one of the main issues in word representation learning. Existing methods make use of value, exponent, sub- word and character methods ( Thawani et al. , 2021 ) to obtain number representations for explicit num- ber values. These methods are known to be less effective in extrapolation cases like testing with numbers not appearing in the training corpus. Previous related works ( Andor et al. , 2019 ; Wal- lace et al. , 2019 ; Geva et al. , 2020 ) mainly focus on shallow numerical reasoning tasks shown in DROP dat"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_14",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "lated works ( Andor et al. , 2019 ; Wal- lace et al. , 2019 ; Geva et al. , 2020 ) mainly focus on shallow numerical reasoning tasks shown in DROP dataset ( Dua et al. , 2019 ), which usually serves as a benchmark for evaluating numerical machine reading comprehension (Num-MRC) performance. Compared with MWP solving, Num-MRC’s main focus is laid on extracting answer spans from a paragraph, which are more fault-tolerant with no needs to predict number tokens. Besides, their so- lution generation tasks only contain simple compu- tations like addition/subtraction and there are only integers in DROP. More exactly, several research efforts have been made to deal with this kind of math-related reading comprehension task by syn- thesizing new training examples ( Geva et al. , 2020 ), Some workers are producing x1 clothes ... x2 days and x3 clothes … x4 more … BERT/ RoBERTa Number Representation"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_15",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "ning examples ( Geva et al. , 2020 ), Some workers are producing x1 clothes ... x2 days and x3 clothes … x4 more … BERT/ RoBERTa Number Representations 𝑍 1 𝑍 2 𝑍 3 𝑍 4 Self-Supervised Weak-Supervised Fully-Supervised x1 x2 x3 x4 ҧ𝑍 Mean Pooling 660 75 5 3 ҧ𝑍 FFN FFN Feedforward Networks C Vector Concatenation Labels: Integer/Non-integer (I/N), Same/Different with answer (S/D) 4 𝑍 1 FFN I ҧ𝑍 FFN I 𝑍 1 FFN S 𝑍 1 FFN < 𝑍 2 𝑍 3 FFN FFN × C 𝑍 2 𝑍 3 FFN FFN 0 C Problem Figure 2: The overall architecture of our BERT-based MWP solver. Our method enables the solver to learn from unlabeled, incompletely labeled and fully labeled MWPs by different pre-training tasks. incorporating special modules considering the nu- merical operation ( Andor et al. , 2019 ) and design- ing speciﬁc tokenization strategies ( Zhang et al. , 2020c ). Since MWP solving requires further con- sideration of the complex com"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "introduction",
+    "chunk_id": "arxiv_2107_13435_introduction_16",
+    "start_char": 10500,
+    "end_char": 10935,
+    "text": "2019 ) and design- ing speciﬁc tokenization strategies ( Zhang et al. , 2020c ). Since MWP solving requires further con- sideration of the complex composition of reasoning logics in MWP text, the symbolic placeholder is more effective in MWP solving. Thus, instead of dealing with explicit number values, our work fo- cuses on improving representation for symbolic placeholders by injecting numerical properties in a probabilistic way."
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_17",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Methodology 3.1 Problem Statement The input to an MWP solver is a textual descrip- tion, we denote it as W with length m , thus W = { w 1 , w 2 , ..., w m } . We also deﬁne a subset W q of W which contains all the quantities appeared in W . The output is an equation showing how to get the ﬁnal answer. We denote it as A with length n , where A = { a 1 , a 2 , ..., a n } . The vocabulary of A contains three parts, namely V op , V num and V cons . V op is the vocabulary for all operators, i.e. + , − , × , ÷ and ∧ . The vocabulary of quantities V num is constructed by number mapping ( Wang et al. , 2017 ), which transforms quantities in dif- ferent MWPs into a uniﬁed representation. More speciﬁcally, V num does not contain the actual value of quantities appeared in W , and those quantities are denoted as { n 1 , n 2 , ..., n k } , where n i means the i -th number from W and k is the maximum"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_18",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "uantities appeared in W , and those quantities are denoted as { n 1 , n 2 , ..., n k } , where n i means the i -th number from W and k is the maximum number of quantities in V num in order to ﬁx the size of it. V cons contains necessary constant values e.g., π . 3.2 PLM Encoder Our PLM encoder maps the problem description W into a representation matrix Z ∈ R m ∗ h where h is the dimension of the hidden feature. Z = encoder ( W ) . (1) The representation vector corresponding to each word in Z will be used in the decoding process for generating the solution. An overview of pre-training objectives and our model architecture is shown in Figure 2 . In gen- eral, pre-training objectives are designed to inject contextual priori and numerical properties as soft constraints for representation learning. They are categorized into three types given provided training signals, i.e., self-supervised, w"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_19",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "rties as soft constraints for representation learning. They are categorized into three types given provided training signals, i.e., self-supervised, weakly-supervised, and fully-supervised. 3.3 Self-supervised Objectives In this part, we only consider input text descrip- tions for each example. Also, these objectives can alleviate the costs of collecting MWP corpus by constructing supervision signals without solution answers and equations. Masked Language Modeling. We follow De- vlin et al. ( 2019 ) and introduce masked language modeling (MLM) for basic contextual representa- tion modeling. Specially, we apply masks on 10% of tokens, randomly replace 10% of tokens with other tokens and keep 80% of tokens unchanged. Later, the manipulated sentence is utilized to recon- struct the original sentence. Number Counting. Another pre-training objec- tive is to predict the amount of numbers that"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_20",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ntence is utilized to recon- struct the original sentence. Number Counting. Another pre-training objec- tive is to predict the amount of numbers that ap- peared in MWP description. The amount of a num- ber corresponds with the cardinality of variable sets. This also reﬂects the basic understanding about the difﬁculty of an MWP and can act as a key contex- tual MWP number understanding feature. Here, we introduce a regression objective with the following formulated loss function: L NumCount = MSE ( FFN ( ¯ Z ) , | W q | ) , (2) where MSE stands for mean-squared-error and FFN stands for the feed-forward network which is made up of two fully-connected (FC) layers and one ReLU activation. We build a two-FC-layer block for each pre-training task (except MLM) and discard them during ﬁne-tuning. ¯ Z ∈ R h is the mean vector of Z and represents the encoder’s over- all understanding of a single M"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_21",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "(except MLM) and discard them during ﬁne-tuning. ¯ Z ∈ R h is the mean vector of Z and represents the encoder’s over- all understanding of a single MWP text description. | W q | is the number of quantities shown in the prob- lem description W . Number Type Grounding. This objective aims at linking contextual number representations with corresponding number types to tell the difference between discrete and continuous concepts/entities. For numerical reasoning in MWP solving, we only need to handle whole numbers as well as non- integer numbers (decimal, fraction and percent- age). Ideas here are that whole numbers usually associate with discrete entities (for example, desks, chairs and seats) while non-integer numbers often connect with continuous concepts (for example, proportions, rate, velocity). Besides, comparisons among whole numbers got different issues com- pared with rational num"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_22",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "inuous concepts (for example, proportions, rate, velocity). Besides, comparisons among whole numbers got different issues com- pared with rational numbers. Therefore, we pro- pose a classiﬁcation objective to predict if a number is a whole number or non-integer number: L NTGround = X i : W i ∈ W q CE ( FFN ( Z i ) , y i ) , (3) where W q contains all the numbers that appeared in W , and CE is the cross-entropy loss for binary classiﬁcation. Here, i is the index when W i is a quantity, Z i is the corresponding representation vector, and y i is a binary label indicating if W i is a whole number or non-integer number. 3.4 Weakly-supervised Objectives Given both text descriptions of MWPs and cor- responding answers, we can model dependencies among answer number and numbers in text descrip- tions so that contextual representation perceive the existence of the target variable number that does"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_23",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "ong answer number and numbers in text descrip- tions so that contextual representation perceive the existence of the target variable number that does not appear in the text descriptions. In detail, we design 3 novel pre-training objectives specializing in value-annotated MWPs to improve number rep- resentation in our MWP-BERT. Answer Type Prediction. Determining the type of answer number can provide us discrete/continu- ous nature of target entity/concept. Thus, we want to predict type (whole/non-integer) of the answer value given global representations of an MWP (em- bedded in Z ): L ATPred = CE ( FFN ( ¯ Z ) , y s ) , (4) where y s is the ground truth label indicating the type of answer number. Context-Answer Type Comparison. Besides the global context feature, an MWP-BERT also needs to associate context numbers and answer number (the target number does not explicitly ap- pear in the t"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_24",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "global context feature, an MWP-BERT also needs to associate context numbers and answer number (the target number does not explicitly ap- pear in the text). Thus, another objective is pro- posed to predict if the quantities appeared in the MWP text fall into the same category as the answer (i.e. they are all whole or non-integer): L CATComp = X i : W i ∈ W q CE ( FFN ( Z i ) , y i ⊕ y s ) , (5) where ⊕ stands for the exclusive-or operator be- tween two binary labels to check if they are the same, the label of a quantity y i and the label of the solution value y s . Number Magnitude Comparison. Beyond type, the magnitude of a number serves as the foundation of numerical reasoning. By associating magnitudes evaluation with contextual representa- tion, the model can get a better perception about variance over key reasoning cues like time, size, intensity and speed. Let ˙ y i indicate if the"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_25",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "a- tion, the model can get a better perception about variance over key reasoning cues like time, size, intensity and speed. Let ˙ y i indicate if the current quantity W i is greater than the solution value or not. Moreover, the loss function is formulated as: L NumMComp = X i : W i ∈ W q CE ( FFN ( Z i ) , ˙ y i ) . (6) 3.5 Fully-supervised Objectives Given both equations and answers for MWPs, we can design fully-supervised training tasks to asso- ciate number representation with reasoning ﬂows (solution equation). Mathematical equations are known to be binary tree structures with operators on root nodes and numbers on leaf nodes. The mo- tivation is to encourage models to learn structure- aware number representations that encode the infor- mation on how to make combinations over atomic operators and numbers. We incorporate two pre- training objectives based on the solution equation tree"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_26",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "mation on how to make combinations over atomic operators and numbers. We incorporate two pre- training objectives based on the solution equation tree. Operation Prediction. The ﬁrst one is a quantity-pair relation prediction task that focuses on the local feature of the equation tree. The goal is to predict the operator between two quantity nodes in the solution tree. This is in fact a classiﬁcation task with 5 potential targets, i.e., + , − , × , ÷ and ∧ . The loss function of this task is: L OP red = X i,j CE ( FFN ([ Z i ; Z j ]) , op ( W i , W j )) , (7) where i, j are two indexes that satisfy W i , W j ∈ W q and [ Z i ; Z j ] ∈ R 2 h is the concatenation of Z i and Z j for the quantity W i and W j . op ( W i , W j ) returns the operator between W i and W j . Tree Distance Prediction. Another pre-training objective is to incorporate the global structure of the equation tree in a qua"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_27",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "or between W i and W j . Tree Distance Prediction. Another pre-training objective is to incorporate the global structure of the equation tree in a quantitative way. Inspired by Hewitt and Manning ( 2019 ), we consider the depth of each number and operator on the corresponding binary equation tree to be the key structure priori. Thus, we design another fully-supervised objective to utilize this information. More exactly, given the representation of two number nodes in an equation tree, this is a regression problem that predicts the distance (difference of their depth) between them. The loss is formulated as: L T P red = X i,j MSE ( FFN ([ Z i ; Z j ]) , d ( W i , W j )) , (8) where d ( W i , W j ) is the distance between quantity W i and W j in the solution tree. The ﬁnal pre-training objective is the summation of Equation 2~8 and the masked language model. 3.6 Fine-Tuning To investigate"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "method",
+    "chunk_id": "arxiv_2107_13435_method_28",
+    "start_char": 8250,
+    "end_char": 8695,
+    "text": "in the solution tree. The ﬁnal pre-training objective is the summation of Equation 2~8 and the masked language model. 3.6 Fine-Tuning To investigate the mathematical understanding abil- ity of our pre-training MWP-BERT, we evaluate our model of MWP solving, quantity tagging and 7 probing tasks. Moreover, we not only use BERT but also RoBERTa ( Liu et al. , 2019b ) as the back- bone of our encoder to show the adaptiveness of proposed method."
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_29",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Experiments We present several empirical results with octopus evaluation settings ( Bender and Koller , 2020 ) to prove the superiority of MWP-BERT and MWP- RoBERTa solver. In section 4.1 , we illustrate the application of both solvers in the generation sce- nario, MWP solving, by ﬁne-tuning them with a speciﬁc decoder ( Xie and Sun , 2019 ). Next, we present MWP probing tasks in section 4.3 to evaluate the capability of MWP-BERT and MWP- RoBERTa on “understanding” or “capturing the meanings” of MWPs. Finally, results and analysis about ablation study are illustrated in section 4.4 . Implementation Details. We pre-train our model on 4 NVIDIA TESLA V100 graphic cards and ﬁne-tune on 1 card. The model was pre-trained for 50 epochs (2 days) and ﬁne-tuned for 80 epochs (1 day) with a batch size of 32. Adam optimizer ( Kingma and Ba , 2014 ) is applied with an initial learning rate of 5e-5, w"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_30",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "d ﬁne-tuned for 80 epochs (1 day) with a batch size of 32. Adam optimizer ( Kingma and Ba , 2014 ) is applied with an initial learning rate of 5e-5, which would be halved every 30 epochs. Dropout rate of 0.5 is set during training to prevent over-ﬁtting. During testing, we use 5-beam search to get reasonable solutions. The hyper-parameters setting of our BERT and RoBERTa is 12 layers of depth, 12 heads of attention and 768 dimensions of hidden features. For the Chinese pre-training model, we use an upgrade patch of Chinese BERT and RoBERTa which are pre-trained with the whole word masking (WWM) 1 ( Cui et al. , 2020 ). For the English pre-training models, we use the ofﬁcial source on this website 2 . Our code and data have been open-sourced on Github 3 . 4.1 MWP Solving Experiment Settings and Datasets. Given a tex- tual description of a mathematical problem, which contains several known"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_31",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "on Github 3 . 4.1 MWP Solving Experiment Settings and Datasets. Given a tex- tual description of a mathematical problem, which contains several known variables, MWP solving targets at getting the correct answer for the corre- sponding question. A solver is expected to be able to predict an equation that can exactly reach the answer value. We conduct experiment based on these benchmarks, Math23k ( Wang et al. , 2017 ), MathQA ( Amini et al. , 2019 ) and Ape-210k ( Zhao et al. , 2020 ). Since there exist many noisy examples in Ape-210k, e.g., examples without equation anno- tations or answer values, we re-organize Ape-210k to Ape-clean and Ape-unsolvable, where the train- ing set of Ape-clean and the whole Ape-unsolvable are used for pre-training. For the English MWP, we use the training set of MathQA ( Amini et al. , 2019 ) to perform pre-training. For the implementation of our solver, M"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_32",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ining. For the English MWP, we use the training set of MathQA ( Amini et al. , 2019 ) to perform pre-training. For the implementation of our solver, MWP-BERT is adapted as an encoder to generate intermediate MWP representation for the tree-based decoder in Xie and Sun ( 2019 ). 4.2 The Ape-clean Dataset Ape210k is a recently released large MWPs dataset, including 210,488 problems. The problems in Ape210k are more diverse and difﬁcult than those in Math23k as shown in 1 . Not only the stronger requirement of common-sense knowledge for get- ting solutions, but also the missing of ground-truth solution equations or answers, will take extra ob- stacles for MWP solving. Among all these cases, 1 https://github.com/ymcui/Chinese-BERT-wwm 2 https://huggingface.co/bert-base-uncased and https:// huggingface.co/roberta-base 3 https://github.com/LZhenwen/MWP-BERT Unsolvable problem 1: The price of a"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_33",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "/huggingface.co/bert-base-uncased and https:// huggingface.co/roberta-base 3 https://github.com/LZhenwen/MWP-BERT Unsolvable problem 1: The price of a ball is 6 yuan, and the price of a basketball is less than 13 times of the ball’s price. How much might the price of the basketball be? Answer: ? Unsolvable problem 2: x is a single digit and the quotient of x72/47 is also a single digit, what is x at most? Answer: 3 Unsolvable problem 3: In the yard there were 25 chick- ens and rabbits. Together they had 80 legs. How many rabbits were in the yard? Answer: (80-25)*2/(4-2) = 15 Table 1: This table shows three kinds of discarded MWPs in Ape210k. The ﬁrst one does not have a cer- tain answer, and the solution of the second one cannot be represented by equations. Solving the third problem requires external constants. Thus we ﬁlter those prob- lems out in our Ape-clean dataset. the problems wit"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_34",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "ted by equations. Solving the third problem requires external constants. Thus we ﬁlter those prob- lems out in our Ape-clean dataset. the problems without answers can not be used for fully-supervised setting. Besides, the problems without annotated equations but only answer val- ues can be used in the weakly-supervised learning setting. Therefore, we follow the rules below to se- lect the usable problems from Ape210k to construct an Ape-clean dataset, which can be used for the fully-supervised learning setting. (i). We remove all MWPs that have no answer values nor equa- tions. (ii). We remove all MWPs that only have answer values without equations. (iii). We remove all MWPs with a problem length m > 100 or an an- swer equation length n > 20 , as they will bring ob- stacles for training. (iv). We remove all MWPs re- quiring external constants except 1 and π . (v). We remove all duplicate"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_35",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "0 , as they will bring ob- stacles for training. (iv). We remove all MWPs re- quiring external constants except 1 and π . (v). We remove all duplicated problems with the MWPs in Math23k, because almost all problems in Math23k can be found in Ape-210k. After data ﬁltering, the Ape-clean dataset contains 81,225 MWPs, in- cluding 79,388 training problems and 1,837 testing problems. The remaining 129,263 problems in Ape210k are regarded as Ape-unsolvable , which can be used in the pre-training tasks in the settings of self-supervised and weakly-supervised learning. Model Comparison. We ﬁrst compare our ap- proach with the most recent representative base- lines on the benchmark Math23k dataset. The ﬁrst baseline is DNS which is the pioneering work us- Math23kMath23k ∗ MathQA DNS − 58 . 1 − Math-EN 66 . 7 − − GTS 75 . 6 74 . 3 71 . 3 NS-Solver 75 . 7 − − Graph2Tree 77 . 4 75 . 5 72 . 0 TSN-MD"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_36",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "rk us- Math23kMath23k ∗ MathQA DNS − 58 . 1 − Math-EN 66 . 7 − − GTS 75 . 6 74 . 3 71 . 3 NS-Solver 75 . 7 − − Graph2Tree 77 . 4 75 . 5 72 . 0 TSN-MD 77 . 4 75 . 1 − KA-S2T 76 . 3 − − NumS2T 78 . 1 − − EEH-G2T 78 . 5 − − RPKHS 83 . 9 82 . 2 − Encoder pre-train RoBERTa 83 . 5 81 . 7 75 . 3 BERT 83 . 8 82 . 0 75 . 1 MWP-RoBERTa 84 . 5 82 . 0 76 . 6 MWP-BERT 84 . 7 82 . 4 76 . 2 Seq2Seq pre-train REAL 82 . 3 80 . 0 − BERT-CL 83 . 2 − 76 . 3 Gen&Rank 85 . 4 84 . 3 − Table 2: Comparison of answer accuracy (%) among our proposed models and different baselines. Math23k column shows the results on the public test set and Math23k ∗ is 5-fold cross validation on Math23k dataset. MathQA is adapated from Li et al. ( 2021 ); Tan et al. ( 2021 ). “RoBERTa” and “BERT” repre- sent results without pre-training. “MWP-RoBERTa” and “MWP-BERT” represent ﬁrst pre-training with proposed tasks and then ﬁne-tuni"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_37",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "a” and “BERT” repre- sent results without pre-training. “MWP-RoBERTa” and “MWP-BERT” represent ﬁrst pre-training with proposed tasks and then ﬁne-tuning. ing the Seq2Seq model to solve MWPs. Math- EN ( Wang et al. , 2018 ) proposes an equation- normalization method and uses vanilla Seq2Seq model to get solutions. GTS ( Xie and Sun , 2019 ) proposes a goal-driven tree-based decoder and achieves great results. Graph2Tree ( Zhang et al. , 2020b ) constructs two graphs during data pre- processing to extract extra relationships from text descriptions. KA-S2T ( Wu et al. , 2020 ) proposes a novel knowledge-aware model that can incor- porate background knowledge. NS-Solver ( Qin et al. , 2021 ) designs several auxiliary tasks to help training. NumS2T ( Wu et al. , 2021b ) uses explicit numerical values instead of symbol placeholder to encode quantities. RPKHS ( Yu et al. , 2021 ) builds hierarc"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_38",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "S2T ( Wu et al. , 2021b ) uses explicit numerical values instead of symbol placeholder to encode quantities. RPKHS ( Yu et al. , 2021 ) builds hierarchical reasoning encoder in parallel with PLM encoder. REAL ( Huang et al. , 2021 ) pro- poses a human-like analogical auxiliary learning strategy. EEH-G2T ( Wu et al. , 2021a ) injects edge label information and the long-range word relation- ship into graph network. Gen&Rank ( Shen et al. , 2021 ) designs a multi-task learning framework for adapting BART in MWP solving. BERT-CL ( Li et al. , 2021 ) incorporates contrastive learning strat- egy with PLM. To avoid the implementation error that may cause unreproducible results of baseline models, we reported the results of these baselines from the papers where they were published, as many previous papers ( Zhang et al. , 2020b ; Shen and Jin , 2020 ) did. As shown in Table 2 , our MWP-BERT achi"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_39",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "papers where they were published, as many previous papers ( Zhang et al. , 2020b ; Shen and Jin , 2020 ) did. As shown in Table 2 , our MWP-BERT achieves competitive results. It is worth noting that we per- form strict pre-training paradigm in MWP solving, i.e., our results come from pre-training on the differ- ent annotated MWP examples that will be applied in further ﬁne-tuning. Here, our pre-training only uses Ape-clean and Ape-unsolvable and ﬁne-tuning only uses Math23k/MathQA. RPKHS , REAL and BERT-CL all incorporate BERT in their model architecture, which are orthog- onal to our work. Our MWP-BERT can be utilized as an MWP-speciﬁc checkpoint for their encoder part to improve their performance. Besides, REAL , BERT-CL and Gen & Rank are all trying to make Seq2Seq pre-training ( Lewis et al. , 2020 ), which adapt both pre-training encoder as well as pre- training decoder for MWP sol"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_40",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "re all trying to make Seq2Seq pre-training ( Lewis et al. , 2020 ), which adapt both pre-training encoder as well as pre- training decoder for MWP solving. Compared with them, our model focuses on encoder pre-training and aims at obtaining better MWP representation that can be widely applied across various MWP related tasks (like quantity tagging, MWP question generation). Another interesting observation is that BERT- based models perform better on Chinese MWP datasets while RoBERTa-based models are good at English MWP datasets. Because the Chinese RoBERTa used in this paper is actually a BERT model that uses BERT tokenization but is trained like RoBERTa (drops the Next Sentence Prediction task). Similar behaviors can be observed in Cui et al. ( 2020 ). For English setting, RoBERTa per- forms better than BERT, which is consistent with conclusions raised in Liu et al. ( 2019b ). Evaluatio"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_41",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "al. ( 2020 ). For English setting, RoBERTa per- forms better than BERT, which is consistent with conclusions raised in Liu et al. ( 2019b ). Evaluation on Ape-clean and Math23k when being trained by a Joint MWP Set. Moreover, we combine the training set of Math23k and Ape- clean to train MWP-BERT, and then measure the accuracy on the testing set of Math23k and Ape- clean separately. Results shown in Table 2 con- Model Math23k Ape-clean Equ Ans Equ Ans DNS 50 . 2 50 . 3 66 . 2 66 . 2 GTS 70.1 81 . 4 60 . 4 73 . 2 RoBERTa 75 . 8 88 . 8 66 . 7 80 . 2 BERT 76 . 7 89 . 4 67 . 0 80 . 4 MWP-RoBERTa 77 . 1 90 . 2 67 . 1 80 . 8 MWP-BERT 77 . 5 91 . 2 67 . 5 81 . 3 Table 3: Comparison of answer accuracy (%) between our proposed models and baselines when they are all trained by the combination of the training set from Ape- clean and Math23k dataset. vey interesting evaluation observations. Surpris-"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_42",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "hen they are all trained by the combination of the training set from Ape- clean and Math23k dataset. vey interesting evaluation observations. Surpris- ingly, the accuracy of our models on Math23k reaches above 90%, which is marvelously high (previous state-of-the-art methods can hardly reach 80% ( Shen and Jin , 2020 )). Compared to the results in Table 2 , even GTS has a higher accuracy when trained with the big joint MWP set of Ape-clean and Math23k. By comparing the performance of correspond- ing groups between Table 2 and Table 3 , we can learn that our proposed MWP-BERT pre-training paradigm can achieve more signiﬁcant boosting with more training examples, which proves the ef- fectiveness of our proposed representation learning techniques. 4.3 Other MWP Understanding Tasks Standard MWP solving is an equation generation task. To make a sufﬁcient validation of the effec- tiveness of o"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_43",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "ues. 4.3 Other MWP Understanding Tasks Standard MWP solving is an equation generation task. To make a sufﬁcient validation of the effec- tiveness of our model on number representations learning, MWP-speciﬁc understanding tasks are further considered. Following Hewitt and Man- ning ( 2019 ); Wallace et al. ( 2019 ), we design sev- eral number probing tasks and incorporate quantity tagging ( Zou and Lu , 2019b ) to enlarge the MWP understanding evaluation task. Following the motivation mentioned in sec- tion 3.2 , we re-run all the pre-training tasks as prob- ing tasks to evaluate our modeling’s understanding ability and test MWP-BERT in a zero-shot sce- nario, i.e. without ﬁne-tuning the parameters of MWP-BERT and MWP-RoBERTa for the sake of fair comparison. We perform the probing evalua- tion on both Ape-clean and Ape-unsolvable, except that “OPred” and “TPred” are only evaluated on Ape-"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_44",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "fair comparison. We perform the probing evalua- tion on both Ape-clean and Ape-unsolvable, except that “OPred” and “TPred” are only evaluated on Ape-clean because they require equation solutions as the ground truth. Model Accuracy QT(S) 87 . 3 QT(R) 88 . 7 QT(ﬁx) 87 . 7 QT 90 . 8 BERT 84 . 5 RoBERTa 84 . 6 MWP-BERT 91 . 0 MWP-RoBERTa 91 . 5 Table 5: Comparison of tagging accuracy (%) between our proposed models and baselines. Table 4 shows the performances of 4 different PLMs on the above mentioned MWP-speciﬁc un- derstanding tasks. Signiﬁcant improvements can be observed in all the tasks, and demonstrate the ef- fectiveness of our proposed pre-training techniques in improving number representation of PLMs. Besides, we borrow an MWP-speciﬁc sequence labeling task, quantity tagging ( Zou and Lu , 2019b ) (“QT”), to further compose MWP understanding evaluation settings. Quantity tagging ("
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_45",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "c sequence labeling task, quantity tagging ( Zou and Lu , 2019b ) (“QT”), to further compose MWP understanding evaluation settings. Quantity tagging ( Zou and Lu , 2019a ) is ﬁrstly proposed to solve MWP examples with only addition and subtraction operators in their solutions. Brieﬂy speaking, this task requires the model to assign “+”, “-” or “None” for every quan- tity in the problem description and can serve as an MWP understanding evaluation tool to examine the model’s understanding of each variable’s logic role in the reasoning ﬂow. More exactly, this is also a classiﬁcation task with 3 possible targets. We extract the corresponding vectors of all quantities according to their positions in encoded problem Z from Equation 1 . Next, a 2-layer feed-forward block is connected to output the ﬁnal prediction. Following the setting in baseline method QT ( Zou and Lu , 2019a ), we perform 3-"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_46",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "layer feed-forward block is connected to output the ﬁnal prediction. Following the setting in baseline method QT ( Zou and Lu , 2019a ), we perform 3-fold cross- validation and the results are given in Table 5 , which shows that PLMs beneﬁts from the pro- posed mathematical pre-training and outperforms the baselines. 4.4 Ablation Study We run ablation study over the proposed training objectives to investigate the necessity for each of them. As Table 6 shows, all the proposed objectives can achieve improvements individually. Moreover, only using MLM results in weaker MWP solvers on Math23k (1.4% less) and Ape-clean (1.2% less), NumCount NTGround ATPred CATComp NumMComp OPred TPred QT Metric MSE ↓ Acc ↑ Acc ↑ Acc ↑ Acc ↑ Acc ↑ MSE ↓ Acc ↑ BERT 3.08 0.87 0.75 0.77 0.77 0.50 0.97 84.5 RoBERTa 3.20 0.86 0.76 0.78 0.77 0.51 0.99 84.6 MWP-RoBERTa 0.69 0.92 0.86 0.87 0.86 0.86 0.44 91.0 MWP-BERT"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_47",
+    "start_char": 13500,
+    "end_char": 14400,
+    "text": "T 3.08 0.87 0.75 0.77 0.77 0.50 0.97 84.5 RoBERTa 3.20 0.86 0.76 0.78 0.77 0.51 0.99 84.6 MWP-RoBERTa 0.69 0.92 0.86 0.87 0.86 0.86 0.44 91.0 MWP-BERT 0.67 0.92 0.85 0.87 0.86 0.87 0.45 91.5 Table 4: The evaluation results on MWP-speciﬁc understanding tasks. All tasks correspond to the tasks mentioned in section 4 . Note that the metric for 2 tasks is mean-squared-error, while others use classiﬁcation accuracy. “QT” stands for quantity tagging. Math23k Ape-clean Only MLM 89 . 8 80 . 1 Only self-supervised 90 . 4 80 . 9 w/o MLM 90 . 1 80 . 6 w/o NumCount 89 . 9 80 . 5 w/o NTGround 90 . 1 80 . 4 Only weakly-supervised 90 . 1 80 . 8 w/o ATPred 89 . 7 80 . 2 w/o CATComp 89 . 7 80 . 4 w/o NumMComp 89 . 6 80 . 5 Only fully-supervised 91 . 0 80 . 5 w/o OPred 90 . 5 80 . 3 w/o TPred 90 . 6 80 . 5 MWP-BERT 91 . 2 81 . 3 Table 6: The experimental results show the effective- ness of every pre-train"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_48",
+    "start_char": 14250,
+    "end_char": 15150,
+    "text": "5 w/o OPred 90 . 5 80 . 3 w/o TPred 90 . 6 80 . 5 MWP-BERT 91 . 2 81 . 3 Table 6: The experimental results show the effective- ness of every pre-trained task. “Only self-supervised” means we only apply 3 tasks of self-supervised pre- training on the BERT encoder. We also investigate the inﬂuence of each task. For example, “w/o MLM” means only performing self-supervised pre-training and discarding the MLM pre-training task. which again proves the effectiveness of our pro- posed pre-training tasks. Since the difﬁculty level of MWPs is usually in proportion to their solu- tion length, we can easily identify that a set of MWPs exhibit a long-tail distribution over solution length, as well as the difﬁculty level, as shown in. Fig 3 of the Appendix. Thus, the 87% accuracy of human-level performance in Math23k ( Wang et al. , 2019 ) indicates that 13% of the MWPs are difﬁcult to solve. Any solv"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_49",
+    "start_char": 15000,
+    "end_char": 15900,
+    "text": "ix. Thus, the 87% accuracy of human-level performance in Math23k ( Wang et al. , 2019 ) indicates that 13% of the MWPs are difﬁcult to solve. Any solvers that can improve the accuracy above 87% are making signiﬁcant con- tribution on solving the extremely difﬁcult cases, such as MWPs whose solutions contain ≥ 4 vari- ables or single variable being used multiple times. As neural models are known to be limited at dealing with these combinational and symbolic reasoning cases ( Lee et al. , 2020 ), we exam our model on these specially difﬁcult cases. Due to the space limit, we attach several examples of these difﬁcult cases, statistics about solution length distribution and performance for increasing length of solution equations in the Appendix. Besides, it is worth not- ing that even without MLM objective, our model is able to promote the PLM competitor. Besides, we can observe that linking"
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "experiment",
+    "chunk_id": "arxiv_2107_13435_experiment_50",
+    "start_char": 15750,
+    "end_char": 15991,
+    "text": ". Besides, it is worth not- ing that even without MLM objective, our model is able to promote the PLM competitor. Besides, we can observe that linking equation structure and number during pre-training is certainly beneﬁcial for solving MWPs."
+  },
+  {
+    "paper_id": "arxiv_2107_13435",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2107_13435_conclusion_51",
+    "start_char": 0,
+    "end_char": 779,
+    "text": "Conclusion We propose MWP-BERT, an MWP-speciﬁc PLM model with 8 pre-training objectives to solve the number representation issue in MWP. Also, a new dataset Ape-clean is curated by ﬁltering out un- solvable problems from Ape210k, and the ﬁltered MWPs are useful for self- and weakly-supervised pre-training. Experimental results show the superi- ority of our proposed MWP-BERT across various downstream tasks on generation and understanding. In terms of the most representative task MWP solv- ing, our approach achieves the highest accuracy, and ﬁrstly beats human performance. Better numer- ical understanding ability is also demonstrated in the probing evaluation. We believe that our study can serve as a useful pre-trained pipeline and a strong baseline in the MWP community."
+  }
+]

@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle, CircleNotch, ClockCounterClockwise, FileMagnifyingGlass } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
-import { MOCK_DOCUMENTS } from "../../lib/mockData";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
-import type { CheckedDocument, HistoryEntry } from "@etymos/shared";
+import { pollJob, getReport } from "../../lib/api";
+import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "@etymos/shared";
 
 interface LocationState {
   docLabels?: string[];
@@ -15,9 +15,29 @@ interface LocationState {
   webSources?: boolean;
   academicSources?: boolean;
   language?: string;
+  jobId?: string;
+  reportMode?: string;
+  pdfDataUrl?: string | null;
 }
 
 const TOTAL_DURATION = 10000;
+
+function splitDocumentIntoPassages(text: string) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length > 1) return paragraphs;
+
+  return normalized
+    .split(/(?<=[.!?])\s+/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
 
 export default function AnalyzingPage() {
   const navigate = useNavigate();
@@ -28,6 +48,9 @@ export default function AnalyzingPage() {
   const addHistoryEntries = useAppStore((s) => s.addHistoryEntries);
   const recordCheckedDocument = useAppStore((s) => s.recordCheckedDocument);
   const markFirstCheckComplete = useAppStore((s) => s.markFirstCheckComplete);
+  const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [jobMessage, setJobMessage] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<number | null>(null);
 
   const steps = useMemo(() => {
     const all = [
@@ -47,6 +70,111 @@ export default function AnalyzingPage() {
   const completedRef = useRef(false);
 
   useEffect(() => {
+    if (state.reportMode === "backend" && state.jobId) {
+      let cancelled = false;
+
+      async function runBackendAnalysis() {
+        try {
+          const job = await pollJob(state.jobId!, (next) => {
+            if (cancelled) return;
+            setJobStatus(next.status);
+            setJobMessage(next.message ?? next.current_step ?? null);
+            setJobProgress(next.progress ?? null);
+          });
+
+          if (cancelled) return;
+
+          if (job.status === "failed") {
+            setJobStatus("failed");
+            setJobMessage(job.error ?? "Analysis failed.");
+            return;
+          }
+
+          const report = await getReport(job.report_id!);
+          const today = new Date().toISOString().slice(0, 10);
+          const entries: HistoryEntry[] = [];
+          const ids: string[] = [];
+
+          const docId = `check-${Date.now()}`;
+          const cleanTitle = docLabels[0] && docLabels[0] !== "Pasted text"
+            ? docLabels[0].replace(/\.(pdf|docx?|txt)$/i, "")
+            : "Backend analysis";
+
+          const matches: MatchedSource[] = (report.matches ?? []).map((match: any, index: number) => ({
+            id: `${docId}-match-${index}`,
+            severity: (match.label === "likely_plagiarism" ? "high" : match.label === "suspicious" ? "moderate" : "low") as Severity,
+            detectionType: "traditional",
+            matchPercent: Math.round(Math.max(0, Math.min(100, match.semantic_similarity * 100))),
+            sourceTitle: match.source_title ?? match.source_paper_id,
+            sourceAuthor: "",
+            sourceKind: "academic",
+            citation: match.source_paper_id,
+            userSnippet: match.input_sentence,
+            sourceSnippet: match.source_sentence,
+            explanation: `Matched ${match.label.replace(/_/g, " ")}.`,
+            rewriteSuggestions: [],
+          }));
+
+          const passages = splitDocumentIntoPassages(report.input_text ?? "").map((text, index) => {
+            const matchingMatch = matches.find((match) => {
+              const userSnippet = match.userSnippet?.trim() ?? "";
+              return Boolean(userSnippet) && (text.trim() === userSnippet || text.includes(userSnippet));
+            });
+
+            return {
+              id: `${docId}-passage-${index}`,
+              text,
+              severity: matchingMatch?.severity,
+              matchId: matchingMatch?.id,
+            };
+          });
+
+          const doc: CheckedDocument = {
+            id: docId,
+            title: cleanTitle,
+            fileName: docLabels[0] ?? "analysis",
+            language: (state.language as "vi" | "en" | "fr" | "ja") ?? "vi",
+            wordCount: Math.max(1, Math.round((report.total_input_chunks || 1) * 900)),
+            uploadedAt: today,
+            similarityScore: report.overall_score,
+            similarityScoreFree: report.overall_score,
+            webSourcesScanned: report.coverage?.total_candidate_papers as number ?? 0,
+            academicSourcesScanned: report.coverage?.checked_papers as number ?? 0,
+            passages: passages.length > 0 ? passages : report.matches.slice(0, 5).map((match: any, index: number) => ({
+              id: `${docId}-passage-${index}`,
+              text: match.input_sentence,
+              severity: match.label === "likely_plagiarism" ? "high" : match.label === "suspicious" ? "moderate" : "low",
+              matchId: `${docId}-match-${index}`,
+            })),
+            matches,
+            pdfUrl: state.pdfDataUrl ?? undefined, // ← thêm dòng này
+          };
+
+          recordCheckedDocument(doc);
+          entries.push({
+            id: docId,
+            title: cleanTitle,
+            date: today,
+            similarityScore: report.overall_score,
+            status: statusFromScore(report.overall_score),
+            project: state.project || undefined,
+            wordCount: doc.wordCount,
+          });
+          ids.push(docId);
+
+          addHistoryEntries(entries);
+          markFirstCheckComplete();
+          setResultIds(ids);
+        } catch (error) {
+          setJobStatus("failed");
+          setJobMessage(error instanceof Error ? error.message : "Analysis failed.");
+        }
+      }
+
+      runBackendAnalysis();
+      return;
+    }
+
     if (stepIndex >= steps.length) {
       if (completedRef.current) return;
       completedRef.current = true;
@@ -56,9 +184,22 @@ export default function AnalyzingPage() {
       const ids: string[] = [];
 
       docLabels.forEach((label, i) => {
-        const template = MOCK_DOCUMENTS[Math.floor(Math.random() * MOCK_DOCUMENTS.length)]!;
+        const template = {
+          id: `mock-${Date.now()}-${i}`,
+          title: label,
+          fileName: label,
+          language: (state.language as "vi" | "en" | "fr" | "ja") ?? "vi",
+          wordCount: 1200,
+          uploadedAt: today,
+          similarityScore: 83,
+          similarityScoreFree: 63,
+          webSourcesScanned: 0,
+          academicSourcesScanned: 0,
+          passages: [],
+          matches: [],
+        };
         const id = `check-${Date.now()}-${i}`;
-        const cleanTitle = label && label !== "Pasted text" ? label.replace(/\.(pdf|docx?|txt)$/i, "") : template.title;
+        const cleanTitle = label && label !== "Pasted text" ? label.replace(/\.(pdf|docx?|txt)$/i, "") : "Sample document";
         const doc: CheckedDocument = { ...template, id, fileName: label, title: cleanTitle, uploadedAt: today };
         recordCheckedDocument(doc);
         entries.push({
@@ -104,6 +245,12 @@ export default function AnalyzingPage() {
         {resultIds ? "Analysis complete" : "Analyzing your document"}
       </h1>
       <p className="mt-2 max-w-sm text-sm text-ink-500">{docLabel}</p>
+      {state.reportMode === "backend" && !resultIds && (
+        <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm text-ink-600">
+          <p className="font-semibold text-ink-900">{jobStatus === "completed" ? "Finishing up" : jobMessage ?? "Waiting for backend"}</p>
+          {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">Progress: {jobProgress}%</p>}
+        </div>
+      )}
 
       {!resultIds && (
         <div className="mt-8 w-full max-w-sm">

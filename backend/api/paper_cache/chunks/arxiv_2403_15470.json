@@ -1,0 +1,194 @@
+[
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "introduction",
+    "chunk_id": "arxiv_2403_15470_introduction_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Introduction The field of natural language processing (NLP) has witnessed a paradigm shift with the advent of Large Language Models (LLMs), which have shown tremendous potential in understanding and generating human language. LLMs like ChatGPT and GPT-4 have paved the way for innovations that edge closer to achieving Artificial General Intelligence (AGI). However, the progress in this domain has predominantly centered around English, leading to a substantial disparity in the development and performance of LLMs for other languages. This disparity not only limits the global applicability of such models but also underscores a crucial gap in the research and development of language models that cater to the diverse linguistic landscape of our world. In particular, the Vietnamese language, with its unique syntactic and semantic complexities, has not been adequately represented in the current w"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "introduction",
+    "chunk_id": "arxiv_2403_15470_introduction_1",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "rld. In particular, the Vietnamese language, with its unique syntactic and semantic complexities, has not been adequately represented in the current wave of LLM advancements. This oversight hinders the ability of Vietnamese NLP applications to achieve the same level of sophistication and effectiveness as their English counterparts, thereby creating a significant bottleneck in the development of Vietnamese language technology. To bridge this gap, our paper introduces vi-mistral-x, an LLM specifically designed to address the challenges associated with processing and generating the Vietnamese language. Building on the foundation laid by the innovative Mistral ∗ http://agilesoda.ai arXiv:2403.15470v1 [cs.CL] 20 Mar 2024 vi-mistral-x T ECHNICAL R EPORT architecture, vi-mistral-x incorporates advanced techniques such as grouped-query attention (GQA) and sliding window attention (SWA) Jiang et"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "introduction",
+    "chunk_id": "arxiv_2403_15470_introduction_2",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "R EPORT architecture, vi-mistral-x incorporates advanced techniques such as grouped-query attention (GQA) and sliding window attention (SWA) Jiang et al. [2023]. These features are part of a unique approach to continual pre-training that is tailored to the Vietnamese language, enabling the model to capture its linguistic nuances more accurately. The development of vi-mistral-x is inspired by recent efforts in the field to extend the capabilities of existing models to additional languages. This includes the adaptation of LLaMA for the Chinese language Cui et al. and the Korean language L. Junbum [2023]. By employing a similar methodology of extending vocabulary and incorporating language- specific pre-training and fine-tuning phases, we aim to achieve a leap in the quality of text understanding and generation in Vietnamese. This approach is underscored by the success of the Mistral 7B mod"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "introduction",
+    "chunk_id": "arxiv_2403_15470_introduction_3",
+    "start_char": 2250,
+    "end_char": 3149,
+    "text": "to achieve a leap in the quality of text understanding and generation in Vietnamese. This approach is underscored by the success of the Mistral 7B model, which has demonstrated the effectiveness of GQA and SWA in improving performance and efficiency across various NLP tasks. Our work on vi-mistral-x represents a critical step toward closing the research gap for the Vietnamese language within the NLP community. By detailing our approach and sharing our findings, we hope to not only enhance the capabilities of language models for Vietnamese but also to encourage further research and development efforts focused on other underrepresented languages. This endeavor aligns with our broader goal of promoting inclusivity and diversity in the advancement of natural language processing technologies, ensuring that the benefits of these innovations are accessible to a wider audience around the globe."
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "introduction",
+    "chunk_id": "arxiv_2403_15470_introduction_4",
+    "start_char": 3000,
+    "end_char": 3149,
+    "text": "ent of natural language processing technologies, ensuring that the benefits of these innovations are accessible to a wider audience around the globe."
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_5",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Proposed Method This section details the methodology employed in developing vi-Mistral-X, focusing on the adaptation of the Mistral architecture for the Vietnamese language. The process encompasses five main stages: corpus preparation, tokenizer training, model initialization, model training, and model alignment. 2.1 Effective Corpus Preparation The stage involves refining a Vietnamese text corpus extracted from CulturaX, a comprehensive multilingual dataset designed to support the development of Large Language Models (LLMs) across 167 languages, including Viet- namese Nguyen et al. [2023a]. The primary goal was to reduce the original corpus to a more manageable size while enhancing its quality, which is critical for the effective training of language models. We employed a multi-step preprocessing pipeline with the following components: Random Selection As an initial step, we used a rand"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_6",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "of language models. We employed a multi-step preprocessing pipeline with the following components: Random Selection As an initial step, we used a random selection technique to significantly reduce the corpus’s size. This method allowed us to manage computational resources better by focusing on a smaller, yet representative, subset of the original dataset. N-gram-based Filtering for Deduplication We applied an n-gram-based filtering method to ensure the dataset’s uniqueness. This technique analyzes the frequency of contiguous sequences of n-gram in the text to identify and remove duplicate or nearly identical content. Such deduplication is crucial to reduce the risk of overfitting the model on repetitive data. BERT-based Binary Classifier for Toxicity Filtering To further enhance the corpus quality, we used a high-precision BERT-based binary classifier to filter out toxic content. Deployi"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_7",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "r Toxicity Filtering To further enhance the corpus quality, we used a high-precision BERT-based binary classifier to filter out toxic content. Deploying this classifier helped exclude data that could propagate undesirable biases or harmful expressions within the trained model. Perplexity-based Filtering The final preprocessing step was perplexity-based filtering. Perplexity, a measure of a probability model’s predictive accuracy, was used to assess and filter documents based on their coherence and quality. This criterion is vital for developing language models, as it ensures that only high-quality and coherent documents contribute to the training process. This comprehensive preprocessing pipeline was designed to enhance the quality of the Vietnamese corpus from CulturaX. Table 1 presents a detailed comparison between the original CulturaX corpus and the refined corpus used for training t"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_8",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ietnamese corpus from CulturaX. Table 1 presents a detailed comparison between the original CulturaX corpus and the refined corpus used for training the vi-mistral-x model. Although a formal evaluation employing quantitative measures to ascertain the processed data’s specific impact on model training compared to the original data has not yet been conducted, there is reason to believe that selecting and refining data to improve the consistency and quality of each data sample can lead to enhanced computational efficiency. Specifically, reducing the size of the data by removing noisy and non-uniform samples can decrease computing costs due to lower resource requirements and may also improve the training quality of the model by concentrating on high-quality data, thereby optimizing the learning process. 2 vi-mistral-x T ECHNICAL R EPORT CulturaX/vi Selected corpus No. of documents 54,988,654"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_9",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "high-quality data, thereby optimizing the learning process. 2 vi-mistral-x T ECHNICAL R EPORT CulturaX/vi Selected corpus No. of documents 54,988,654 7,331,840 Size in GB (parquet) 150.91 20.656 No. of tokens NA 8,323,137,536 Table 1: Detailed comparison of the original CulturaX/vi and the refined corpus for vi-mistral-x model training 2.2 Effective Tokenizer Training The second phase in the adaptation of the pretrained Mistral model for Vietnamese language processing involves the development of a tokenizer capable of efficiently handling Vietnamese text. Initially, we utilized Google SentencePiece 2 to train a new SentencePiece model (SPM). Subsequently, we performed rule-based token filtering on the trained SPM, with a focus on Vietnamese character recognition. The enhanced SPM was then integrated with the original Mistral’s SPM model. This hybrid tokenizer maintains the ability to pr"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_10",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "e character recognition. The enhanced SPM was then integrated with the original Mistral’s SPM model. This hybrid tokenizer maintains the ability to process English and other languages previously supported by Mistral-7B, while also effectively managing Vietnamese text. This capability is pivotal for facilitating bilingual or multilingual continual training in the future. SPM Model Training The new SPM model was developed by employing Google SentencePiece to train a new model on our refined corpus, which was obtained in the initial stages. The corpus was significantly reduced to a manageable size (20GB) without necessitating extra sampling, limiting maximum sentence length, or filtering character coverage. The vocabulary size was determined by balancing the trade-off between input complexity and model complexity. A larger vocabulary tends to decrease the number of tokens passed to the mode"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_11",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "y balancing the trade-off between input complexity and model complexity. A larger vocabulary tends to decrease the number of tokens passed to the model, thereby reducing input complexity, but it increases model complexity due to the expansion of the embedding and language model head dimensions. As illustrated in Figure 1, a vocabulary size of 8,096 is optimal for our dataset and the Mistral model, based on our observations. SPM Model Refining This phase involved the removal of abnormal characters from the trained SPM model to achieve a high-quality and coherent tokenizer. The refinement rules were established based on manual definitions and prioritized tokens with the highest frequency. Model Combination The refined SPM was integrated with the original Mistral’s SPM model to create the final tokenizer. This integration process involved several rounds of tokenizer training and analysis, e"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_12",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "the original Mistral’s SPM model to create the final tokenizer. This integration process involved several rounds of tokenizer training and analysis, ensuring the new tokenizer model includes a comprehensive and relevant vocabulary for our project. This meticulous approach to tokenizer training and refinement underscores the importance of adapting language processing tools to efficiently manage specific linguistic characteristics, thereby enhancing bilingual or multilingual training capabilities. mistral.spm 32000 vi.spm 8096 intersection 1438 union 38658 Figure 1: Visualization of the Mistral SPM model and customized Vietnamese SPM 2 https://github.com/google/sentencepiece 3 vi-mistral-x T ECHNICAL R EPORT Vocab Size Relative Input Complexity Relative Model Embedding Complexity 1000 0.841395049 1.01640625 2000 0.630757254 1.04403125 3000 0.584167181 1.073125 4000 0.557951001 1.1025 5000"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_13",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "ty Relative Model Embedding Complexity 1000 0.841395049 1.01640625 2000 0.630757254 1.04403125 3000 0.584167181 1.073125 4000 0.557951001 1.1025 5000 0.539983642 1.13171875 6000 0.526697283 1.16078125 7000 0.516199365 1.18978125 8000 0.50747301 1.21909375 9000 0.500297369 1.2479375 10000 0.494061494 1.27684375 11000 0.488440053 1.30575 12000 0.483667799 1.33428125 13000 0.479315439 1.36334375 14000 0.475368937 1.39240625 15000 0.471816595 1.42109375 16000 0.468521178 1.4500625 17000 0.465535533 1.4789375 18000 0.462752376 1.50753125 19000 0.460176296 1.5363125 20000 0.45770208 1.5655625 30000 0.439826305 1.85509375 40000 0.422321581 2.14471875 80000 0.403156539 3.31371875 120000 0.395356195 4.49840625 Table 2: Input Complexity and Model Embedding Complexity by Vocab Size 2.3 Effective Model Initialization For model initialization, we adapted the Mistral architecture to accommodate the ne"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_14",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "edding Complexity by Vocab Size 2.3 Effective Model Initialization For model initialization, we adapted the Mistral architecture to accommodate the newly-generated Vietnamese token embeddings produced by the novel tokenizer. This adaptation necessitated the expansion of both the model’s embedding layer and language model head to include the Vietnamese-specific tokens, whilst preserving the integrity of the original model’s architecture. Figure 2 illustrates the architectural comparison between the original Mistral framework and our modified version tailored to accommodate Vietnamese-specific tokens. Initilization Let V = { 1 , . . . , n } be the model’s vocabulary, where n = 32000 . Let w 1: T be a sequence of words. Let p θ ( w i | w 1: i − 1 ) be the LM parameterized by θ , defined by: P ( w i | w i − n +1: i − 1 ) = exp( h T i − 1 e w i ) P m j =1 exp( h T i − 1 e j ) where h i − 1 ="
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_15",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "− 1 ) be the LM parameterized by θ , defined by: P ( w i | w i − n +1: i − 1 ) = exp( h T i − 1 e w i ) P m j =1 exp( h T i − 1 e j ) where h i − 1 = ϕ θ ( w 1: i − 1 ) ∈ R d is the representation of the prefix, and e i ∈ R d is the embedding for word i ∈ V . The e i are contained in θ . When a new word, input_ids ∈ [32000 , 38658] , n + 1 / ∈ V is added to the vocab of the pretrained LM, the new word n + 1 / ∈ V ’s embedding needs to be initialized as e n +1 . Let p θ ′ ( w i | w 1: i − 1 ) be the new LM, which has parameters θ ′ = θ ∪{ e n +1 } , defined by: p θ ′ ( w i | w 1: i − 1 ) = exp( h T i − 1 e w i ) P m j =1 exp( h T i − 1 e j ) + exp( h T i − 1 e n +1 ) p θ ( w i | w 1: i − 1 ) = p θ ( w i | w 1: i − 1 ) × 1 1 + exp( h T i − 1 e n +1 ) / P m j =1 exp( h T i − 1 e j ) 4 vi-mistral-x T ECHNICAL R EPORT Figure 2: Relative Input Complexity and Relative Model Embedding Complexity"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_16",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "e n +1 ) / P m j =1 exp( h T i − 1 e j ) 4 vi-mistral-x T ECHNICAL R EPORT Figure 2: Relative Input Complexity and Relative Model Embedding Complexity by Vocab Size. EMBEDDING h v TRANSFORMER BLOCKS LM HEAD h v EMBEDDING h v TRANSFORMER BLOCKS LM HEAD h v EXPANDED EMBEDDING EXPANDED LM HEAD v' v Mistral Our Mistral Figure 3: Model Architecture of the Mistral Model and Our Expanded Model The updated probability of a particular word is the original probability of that word scaled by a multiplicative element that is less than one, denoted as 1 1+exp( h T i − 1 e n +1 ) / P m j =1 exp( h T i − 1 e j ) . This leads the model to incorrectly assign a probability of 1 to newly added words and 0 to the original words. Therefore, the new embedding is adjusted as follows: 5 vi-mistral-x T ECHNICAL R EPORT exp( h T i e n +1 ) = exp   h T i 1 n n X j =1 e j   Finally, the model’s embedding and la"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_17",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "adjusted as follows: 5 vi-mistral-x T ECHNICAL R EPORT exp( h T i e n +1 ) = exp   h T i 1 n n X j =1 e j   Finally, the model’s embedding and language model (LM) head are resized to V ′ × H and H × V ′ , respectively, where V ′ = 38659 . 2.4 Effective Model training Memory and Computational Efficiency in Training The core of vi-mistral-x’s development involved continual pre-training on a Vietnamese corpus. In this stage, our research is driven by the need to leverage the most effective resources in computational linguistics and machine learning. We focus on addressing two main challenges in Large Language Models (LLMs): memory capacity limitations, which lead to Out Of Memory (OOM) errors, and the requirement for significant computational power, causing long training times. Our work seeks to overcome these issues by optimizing the model architecture and training processes. In our p"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_18",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "onal power, causing long training times. Our work seeks to overcome these issues by optimizing the model architecture and training processes. In our pursuit, we have concentrated on a curated selection of model architectures, including Llama2, Mistral, and Gemma. These were chosen based on their potential for high efficiency and compatibility with our objectives. Additionally, our strategy encompasses the integration of advanced parallelism techniques, such as Fully Sharded Data Parallelism (FSDP), DeepSpeed ZeRO-3 (DSZERO3), Pipeline Parallelism (PP), and Tensor Parallelism (TP). These methods are instrumental in distributing the computational load and memory usage across multiple devices, thereby alleviating the aforementioned constraints. Our optimizations have significantly increased training speed, making our library about twice as fast as similar open- source options. Specifically,"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_19",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": ". Our optimizations have significantly increased training speed, making our library about twice as fast as similar open- source options. Specifically, it’s 1.6 times faster than both Dao [2023] and the PyTorch version of Scaled Dot Product Attention (SDPA) (2024). Our findings highlight the possibility of greatly improving the efficiency of training transformer-based models, advancing artificial intelligence research. Optimization Let W / ∈ R m × n be a weight matrix. Let G t = −∇ W ϕ t ( W t ) ∈ R m × n be the gradient matrix at step t . The updated weight matrix is computed by: W T = W 0 + η T − 1 X t =0 G t where η is the learning rate and ϕ t is a stateful gradient regularizer, which is memory-intensive. For instance, [AdamW](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) takes 4 × m × n memory for gradient, variance, momentum, and parameters. To enhance memory and"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_20",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "torch.org/docs/stable/generated/torch.optim.AdamW.html) takes 4 × m × n memory for gradient, variance, momentum, and parameters. To enhance memory and computational efficiency during training, LoRA and its derivatives, which perform a low-rank projection in the weight space as W T = W 0 + B T A T , were not selected due to their inherent low-rank limitations. Our goal is to achieve a full-rank update that is both memory- and computation-efficient. Therefore, ‘Tokenizer‘, ‘Model‘, ‘Trainer‘, and ‘Optimizer‘ are imported from our XLLM library Vo [2023], which has the same interface as those in the [Transformers](https://github.com/huggingface/transformers.git) library. Techniques such as learning rate warm-up and learning rate scheduling, which adjust the learning rate appropriately across layers, are also applied to optimize the training process. Training The model underwent training on a"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_21",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "ch adjust the learning rate appropriately across layers, are also applied to optimize the training process. Training The model underwent training on a computational framework consisting of eight Nvidia H100 80GB SXM5 GPUs. Due to the intentional interruption of the training process for purposes of advanced evaluation and optimization, an exact duration of training was not documented. However, a rough estimate suggests that, under conditions of uninterrupted training, the process would span approximately 104 hours. Financially, this duration translates to an approximate expenditure of 3902 . 08 , giventheoperationalcostof 37.52 per hour per node. 2.5 Model alignment Following the pre-training phase, vi-mistral-x underwent a series of fine-tuning processes aimed at aligning the model with specific NLP tasks. This alignment involved training the model on task-specific Vietnamese datasets, s"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_22",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "ning processes aimed at aligning the model with specific NLP tasks. This alignment involved training the model on task-specific Vietnamese datasets, such as text 6 vi-mistral-x T ECHNICAL R EPORT classification, question answering, and text generation. Each task-focused fine-tuning phase allowed vi-mistral-x to adjust its parameters to optimize performance on that task, thereby ensuring its applicability and effectiveness across a wide range of NLP applications. This step was crucial for benchmarking vi-mistral-x against existing Vietnamese LLMs and demonstrating its superior performance across several key areas. Through these methodological steps, vi-mistral-x represents a significant advancement in the development of LLMs for the Vietnamese language, offering enhanced understanding and generation capabilities that set a new benchmark for performance in Vietnamese NLP tasks. 3 Experimen"
+  },
+  {
+    "paper_id": "arxiv_2403_15470",
+    "section": "method",
+    "chunk_id": "arxiv_2403_15470_method_23",
+    "start_char": 13500,
+    "end_char": 13706,
+    "text": "se language, offering enhanced understanding and generation capabilities that set a new benchmark for performance in Vietnamese NLP tasks. 3 Experimental Results 3.1 Pretrained Model 3.1.1 Loss and Accuracy"
+  }
+]

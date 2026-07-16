@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_e99b3cbb6bc2d565e0e0f05ad3981c1c72c293a2",
+    "section": "abstract",
+    "chunk_id": "doi_e99b3cbb6bc2d565e0e0f05ad3981c1c72c293a2_abstract_0",
+    "start_char": 0,
+    "end_char": 571,
+    "text": "A text classification method based on LSTM and graph attention network\nText classification is a popular research topic in the natural language processing. Recently solving text classification problems with graph neural network (GNN) has received increasing attention. However, current graph-based studies ignore the hidden information in text syntax and sequence structure, and it is difficult to use the model directly for processing new documents because the text graph is built based on the whole corpus including the test set. To address the above problems, we propos"
+  }
+]

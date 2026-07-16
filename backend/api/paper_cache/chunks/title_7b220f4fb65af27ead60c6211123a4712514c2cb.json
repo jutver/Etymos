@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_7b220f4fb65af27ead60c6211123a4712514c2cb",
+    "section": "abstract",
+    "chunk_id": "title_7b220f4fb65af27ead60c6211123a4712514c2cb_abstract_0",
+    "start_char": 0,
+    "end_char": 262,
+    "text": "Paper page - ViHateT5: Enhancing Hate Speech Detection in...\nWe provide our experimental materials for research purposes, including the VOZ-HSD dataset, pre-trained checkpoint, the unified HSD-multitask ViHateT5 model, and related source code on GitHub publicly."
+  }
+]

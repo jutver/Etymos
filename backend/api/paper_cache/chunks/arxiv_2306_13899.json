@@ -1,0 +1,450 @@
+[
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "abstract",
+    "chunk_id": "arxiv_2306_13899_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "The art of mathematical reasoning stands as a fundamental pillar of intellectual progress and is a central catalyst in cultivating human in- genuity. Researchers have recently published a plethora of works centered around the task of solving Math Word Problems (MWP) a crucial stride towards general AI. These exist- ing models are susceptible to dependency on shallow heuristics and spurious correlations to derive the solution expressions. In order to ameliorate this issue, in this paper, we propose a framework for MWP solvers based on the generation of linguistic variants of the prob- lem text. The approach involves solving each of the variant problems and electing the pre- dicted expression with the majority of the votes. We use DeBERTa (Decoding-enhanced BERT with disentangled attention) as the encoder to leverage its rich textual representations and en- hanced mask decoder to construct"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "abstract",
+    "chunk_id": "arxiv_2306_13899_abstract_1",
+    "start_char": 750,
+    "end_char": 1452,
+    "text": "coding-enhanced BERT with disentangled attention) as the encoder to leverage its rich textual representations and en- hanced mask decoder to construct the solution expressions. Furthermore, we introduce a chal- lenging dataset, P ARA MAWPS, consisting of paraphrased, adversarial, and inverse variants of selectively sampled MWPs from the bench- mark M AWPS dataset. We extensively exper- iment on this dataset along with other bench- mark datasets using some baseline MWP solver models. We show that training on linguistic variants of problem statements and voting on candidate predictions improve the mathemati- cal reasoning and robustness of the model. We make our code and data publicly available."
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_2",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Introduction Math word problem solving is a long-standing re- search problem in Artificial General Intelligence (AGI) and a lot of studies about this topic, from both industry and academia, have been published recently. A typical Math Word Problem (MWP) takes the form of a written narrative that articulates a problem scenario and poses a question regard- ing one or more unknown quantities. A language model capable of solving such problems has to Problem: 69 handbags are sold for $13 each. There are a total of 420 handbags in a boutique and the remaining ha- ndbags are sold for $7 each. How much did the boutique earn after selling all the handbags? Expression: x = 69 × 13 + (420 − 69) × 7 Solution: 3354 Table 1: An example of a Math Word Problem. translate the human-readable problem statement to a valid mathematical expression that can be evalu- ated to obtain the numeric answer. An examp"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_3",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "blem. translate the human-readable problem statement to a valid mathematical expression that can be evalu- ated to obtain the numeric answer. An example of a classic MWP is portrayed in Table 1 , where the reader is asked to infer the revenue of a boutique shop. Such problems are generally found in math textbooks of 1 st to 8 th grade students and are eas- ily solvable by humans with decent mathematical aptitude. A lot of challenges manifest while designing an automated system for solving these problems ( Zhang et al. , 2019 ; Sundaram et al. , 2022 ). The primary challenge is to understand the quantities in the problem and capture their complex mathemati- cal interconnections from a linear textual sequence written in natural language. There exists a diverse range of MWPs with differing difficulty levels, i.e. , varying numbers of unknown values, and depth of the relationships between qu"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_4",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "e exists a diverse range of MWPs with differing difficulty levels, i.e. , varying numbers of unknown values, and depth of the relationships between quantities, which re- quire good mathematical reasoning ability to solve. Furthermore, the absence of crucial information and the presence of irrelevant information in the problem statements proves to be quite a challenge for the solver models ( Patel et al. , 2021 ). Other challenges include learning to tackle the chrono- logical and temporal ambiguities of the events hap- pening in the problem statements and dealing with MWPs that significantly differ from the training set in terms of semantic and syntactic structure. To address the problem outlined in Table 1 , a competent MWP solver model would need to pos- sess the ability to associate the quantity, i.e. , 69 handbags, with its price attribute of $13 , and under- stand the relative arith"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_5",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "uld need to pos- sess the ability to associate the quantity, i.e. , 69 handbags, with its price attribute of $13 , and under- stand the relative arithmetic order by deriving 351 arXiv:2306.13899v1 [cs.CL] 24 Jun 2023 remaining handbags, i.e. , 420 − 69 , before associat- ing the price attribute of $7 . A lot of psychological studies have been done on how human beings learn to solve mathematical problems and improve their aptitude ( Piaget , 2013 ; Peterson et al. , 2003 ; Kings- dorf and Krawec , 2016 ). The frontier of research involving MWP solving is considered a momen- tous step towards the apogee of AGI ( Bubeck et al. , 2023 ) and so researchers have dedicated their ef- forts to replicating these complex cognitive patterns exhibited by human beings within the frameworks of AI models. The existing methods that are con- sidered strong baselines for MWP solving can be demonstrably sho"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_6",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "y human beings within the frameworks of AI models. The existing methods that are con- sidered strong baselines for MWP solving can be demonstrably shown to use shallow heuristics to solve many of the MWPs in the benchmark datasets ( Patel et al. , 2021 ) creating a faux impression of their mathematical reasoning capability. To ac- count for this limitation, in this paper • We propose a framework for solving sim- ple math word problems by generating para- phrased linguistic variants of the input prob- lem statement using OpenAI’s latest Genera- tive Pre-trained Transformer (GPT-3) ( Brown et al. , 2020 ) models, namely text-davinci-003 and gpt-3.5-turbo . The problem statement variants along with the original problem text then undergo the appropriate pre-processing steps and are fed to an MWP solver model with a DeBERTa-based encoder and Enhanced Mask decoder. • We also generate a large,"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_7",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "propriate pre-processing steps and are fed to an MWP solver model with a DeBERTa-based encoder and Enhanced Mask decoder. • We also generate a large, augmented ver- sion of the M AWPS ( Koncel-Kedziorski et al. , 2016 ) dataset, namely P ARA MAWPS ( Para phrased MA th W ord P roblem S olving Repository), as a challenging dataset by the introduction of paraphrased structural varia- tions of almost all categories of problems, but emphasizing more on the categories that the strong baseline models find difficult to solve. DeBERTa (Decoding-enhanced BERT with dis- entangled attention) ( He et al. , 2020 ) is currently one of the most popular pretrained language models due to its effectiveness in achieving state- of-the-art results on a variety of natural language processing tasks, including language translation, text classification, and question answering. In our work, we find that the DeBERT"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_8",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "f natural language processing tasks, including language translation, text classification, and question answering. In our work, we find that the DeBERTa model achieves value accuracies of 63 . 5% and 91 . 0% on the S VAMP dataset ( Patel et al. , 2021 ) and the M AWPS dataset ( Koncel-Kedziorski et al. , 2016 ) respectively. It falls behind the current SOTA accuracy of R O BERT A -D EDUCT R EASONER ( Jie et al. , 2022 ) by a slight margin of 1 ± 0 . 20% on the M AWPS dataset, but exceeds its accu- racy of 47 . 3 ± 0 . 20% on the S VAMP dataset. Our code and data are publicly available at https://github.com/Starscream-11813/ Variational-Mathematical-Reasoning 2 Problem Formulation A Math Word Problem S is a sequence of word tokens and numeric values, where the V S = { v 1 , . . . , v m } denotes the word tokens in S and the set n S = { n 1 , . . . , n l } denotes the set of nu- meric quant"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "introduction",
+    "chunk_id": "arxiv_2306_13899_introduction_9",
+    "start_char": 5250,
+    "end_char": 5887,
+    "text": "values, where the V S = { v 1 , . . . , v m } denotes the word tokens in S and the set n S = { n 1 , . . . , n l } denotes the set of nu- meric quantities in S . The set of word tokens V S consists of entities such as names of people, ob- jects, units, and rates while the set of quantities n S consists of the numerical amount relevant to those entities. The goal of an MWP solver model is to map S to a valid mathematical expression E , consisting of the quantities in ( n S ∪ C ) , where C is a set of constants, and the fundamental mathematical oper- ators O = { + , − , × , ÷} , which can be evaluated to obtain the correct answer."
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_10",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Literature Review 3.1 Math Word Problem Solving 3.1.1 Preliminary Works The dawn of research on MWP solving was in the mid-1960s ( Feigenbaum et al. , 1963 ; Bobrow , 1964 ). Rule-based methods ( Fletcher , 1985 ; Bak- man , 2007 ; Yuhui et al. , 2010 ) are chronologically some of the earliest approaches to solving MWPs. They use a set of manually hard-coded rules about the language they are analyzing to find out reg- ularities in the data. Statistical methods ( Kush- man et al. , 2014 ; Hosseini et al. , 2014 ; Roy et al. , 2015 ; Zhou et al. , 2015 ; Mitra and Baral , 2016 ; Liang et al. , 2016a , b ) use generic ML classifiers to extract the entities, quantities, and operators from the problem statement and infer the numeric answer with simple logic. Tree-based methods ( Koncel-Kedziorski et al. , 2015 ; Roy and Roth , 2016 ; Roy et al. , 2016 ; Roy and Roth , 2017 ) uti- lize the inh"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_11",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "simple logic. Tree-based methods ( Koncel-Kedziorski et al. , 2015 ; Roy and Roth , 2016 ; Roy et al. , 2016 ; Roy and Roth , 2017 ) uti- lize the inherent binary tree-like structure of ex- pressions/equations. Other primitive categories of approaches that have now been rendered some- what obsolete are Parsing-based methods ( Shi et al. , 2015 ; Zou and Lu , 2019 ), Similarity-based methods ( Huang et al. , 2016 ), and Template-based methods ( Kushman et al. , 2014 ; Zhou et al. , 2015 ; Roy et al. , 2016 ; Upadhyay et al. , 2016 ; Huang et al. , 2017 ). 3.1.2 Deep Learning-based Methods Currently, the landscape of Deep learning mod- els for the MWP solving task is primarily com- prised of five distinct paradigms, S EQ 2S EQ -based, S EQ 2T REE -based, G RAPH 2T REE -based, complex relation extraction-based , and Large Language Model (LLM) prompt-based approaches, each of which has demon"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_12",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "REE -based, G RAPH 2T REE -based, complex relation extraction-based , and Large Language Model (LLM) prompt-based approaches, each of which has demonstrated remarkable levels of per- formance and efficacy. Wang et al. ( 2017 ) were the pioneers of introduc- ing deep learning to solve MWPs with their pro- posed S EQ 2S EQ model. To improve the S EQ 2S EQ model, researchers resorted to alternative strategies, such as reinforcement learning techniques ( Wang et al. , 2018b ; Huang et al. , 2018 ), using dense prob- lem representation ( Mishra et al. , 2018 ), adopting template-based methodologies ( Wang et al. , 2019 ), and incorporating group attention mechanisms ( Li et al. , 2019 ). Xie and Sun ( 2019 ) were the pro- genitors of the novel Goal-driven Tree-Structured (G TS ) model, designed to generate expression trees using the tree-based decoder in order to imitate the goal-driven prob"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_13",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "Goal-driven Tree-Structured (G TS ) model, designed to generate expression trees using the tree-based decoder in order to imitate the goal-driven problem-solving approach of hu- mans. The use of this tree decoder along with pre- trained language models, such as BERT ( Devlin et al. , 2018 ), BART ( Lewis et al. , 2019 ), RoBERTa ( Liu et al. , 2019b ), as the encoder in some of the S EQ 2T REE approaches ( Liu et al. , 2019a ; Shen and Jin , 2020 ; Wu et al. , 2020 ; Lin et al. , 2021 ; Shen et al. , 2021 ; Liang et al. , 2021 ; Liang et al. ; Li et al. , 2021 ; Xiong et al. , 2022 ) brought about substan- tial performance improvements over the previous S EQ 2S EQ methods. Cao et al. ( 2021 ) devised a directed acyclic graph (S EQ 2DAG) model of the equations for the purpose of extracting the expres- sion. Zhang et al. ( 2020a ) incorporated the idea of Knowledge Distillation (KD) ( Hint"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_14",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "el of the equations for the purpose of extracting the expres- sion. Zhang et al. ( 2020a ) incorporated the idea of Knowledge Distillation (KD) ( Hinton et al. , 2015 ) in their proposed model where the teacher network is pre-trained to guide the learning behaviors of the student networks . Yu et al. ( 2021 ) introduced 2 types of encoders in their model. Hong et al. ( 2021 ) modified the work of Xie and Sun ( 2019 ) by incor- porating a symbolic reasoning based Learning-by- fixing (L BF ) framework. Qin et al. ( 2021 ) proposed a model that performs 4 auxiliary tasks, Num- ber Prediction, Commonsense Constant Prediction, Program Consistency Checking, and Duality Ex- ploitation, to integrate different levels of symbolic constraints. Huang et al. ( 2021 ) attempted to em- ulate human-like analogical learning in their pro- posed memory-augmented model. G RAPH 2T REE - based approaches ( Zh"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_15",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "t al. ( 2021 ) attempted to em- ulate human-like analogical learning in their pro- posed memory-augmented model. G RAPH 2T REE - based approaches ( Zhang et al. , 2020b ; Li et al. , 2020 ) fused the merits of Graph-based Transformer ( Yun et al. , 2019 ; Cai and Lam , 2020 ) encoders with multiple Graph Convolutional Network (multi- GCN) modules ( Kipf and Welling , 2016 ), and tree- based decoders to solve MWPs. Chatterjee et al. ( 2021 ) introduced a weakly supervised approach for MWP solving. Li et al. ( 2021 ) introduced a con- trastive learning approach with pattern divergence to solve MWPs. Jie et al. ( 2022 ) formulated the MWP solving task as a complex relation extraction problem and leveraged explainable deductive rea- soning techniques to iteratively construct the target equations. With the advent of LLMs, many innovative prompt-based methods ( Shao et al. , 2022 ; Li et al. ,"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_16",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "niques to iteratively construct the target equations. With the advent of LLMs, many innovative prompt-based methods ( Shao et al. , 2022 ; Li et al. , 2022 ; Wang et al. , 2022 ; Pi et al. , 2022 ; Chen et al. , 2022 ; Liang et al. , 2023 ) of solving MWPs that cap- italize on the models’ exceptional few-shot learn- ing capability came into the limelight and demon- strated good performance across numerous bench- mark datasets. Cobbe et al. ( 2021 ) used verifiers with their GPT-3 ( Brown et al. , 2020 ) model. Al- though LLMs excel at natural language understand- ing and have serendipitous emergent reasoning abil- ities ( Yang et al. , 2023 ), they are still lackluster in complex reasoning tasks ( Huang and Chang , 2022 ). Numerous studies on complex reasoning tasks have empirically demonstrated that the approach of fine- tuning smaller models is superior ( Ho et al. , 2022 ) to adopting"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_17",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "on complex reasoning tasks have empirically demonstrated that the approach of fine- tuning smaller models is superior ( Ho et al. , 2022 ) to adopting LLM prompting techniques like Chain of Thought (CoT) prompting ( Wei et al. , 2022 ). 3.2 Paraphrasing Paraphrase generation has garnered significant at- tention from various NLP approaches, encompass- ing rule-based methods ( McKeown , 1980 ; Meteer and Shaked , 1988 ), data-driven techniques ( Mad- nani and Dorr , 2010 ), linguistic translation methods ( Bannard and Callison-Burch , 2005 ; Barzilay and McKeown , 2001 ; Prakash et al. , 2016 ) that lever- age bilingual corpora for iterative refinement by alternating back and forth between the languages ( Madnani and Dorr , 2010 ; Prakash et al. , 2016 ; Mallinson et al. , 2017 ). Witteveen and Andrews ( 2019 ) demonstrated the superiority of LLMs like GPT-3 over the preceding methods in t"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "related_work",
+    "chunk_id": "arxiv_2306_13899_related_work_18",
+    "start_char": 6000,
+    "end_char": 6458,
+    "text": "al. , 2016 ; Mallinson et al. , 2017 ). Witteveen and Andrews ( 2019 ) demonstrated the superiority of LLMs like GPT-3 over the preceding methods in the paraphras- ing task. Accordingly, our work attempts to leverage the strengths of GPT-3 to generate a more linguistically diverse pool of problem statements to fine-tune a relatively smaller DeBERTa solver model on the downstream task of MWP solving which falls under the rubric of complex reasoning tasks."
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_19",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Methodology Figure- 1 in Appendix- A shows an overview of our proposed architecture. Given a problem statement S , we prompt the paraphraser model to generate k linguistic variants of S which are, S 1 , S 2 , . . . , S k . These k variant problems along with the seed prob- lem S consists of quantities that are tagged appro- priately using quantity tags. Each of the k + 1 text sequences is then tokenized and the content em- beddings H and positional embeddings P of the tokens are fed to the DeBERTa model. The dis- entangled self-attention mechanism of DeBERTa’s encoder utilizes H and P to generate the output H output , which is a contextual representation of the content of each problem statement. H output , along with the relative positional embeddings P and absolute positional embeddings I of each of the problem statements are used by the Transformer layers of Enhanced Mask Decoder (EMD)"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_20",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "embeddings P and absolute positional embeddings I of each of the problem statements are used by the Transformer layers of Enhanced Mask Decoder (EMD) of De- BERTa to generate the k + 1 predicted equations E 1 , E 2 , . . . , E k +1 . These equations are then sim- plified and the equation that is predicted the most number of times is elected as the final prediction of the model. This majority voting module is used only during the validation/testing phase and for in- ference. During the training phase, the k + 1 prob- lem statements are deemed as stand-alone training samples and the Negative Log-Likelihood loss (NL- LLoss) is calculated using the predicted equations and the ground-truth equation. Consequently, if the training set of the dataset used to train the model consists of n samples, it is as if the model is trained with ( k +1) × n = kn + n samples. The knowledge points gathered a"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_21",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "set used to train the model consists of n samples, it is as if the model is trained with ( k +1) × n = kn + n samples. The knowledge points gathered after being trained on an extra kn samples contributes to the robustness of the model. 4.1 Paraphrasing Model The task of correctly reformulating a Math Word Problem statement requires a good level of lan- guage understanding which is not present in its entirety in rule-based and data-driven methods of paraphrasing rendering them unsuitable in this case. These methods frequently yield incorrect, incoher- ent, and grammatically inaccurate linguistic varia- tions; sometimes even leaving out crucial numer- ical information. Accordingly, we choose text- davinci-003 and gpt-3.5-turbo , two GPT-3 models from OpenAI, as the paraphrasing models. GPT- 3 (Generative Pre-trained Transformer 3) ( Brown et al. , 2020 ) is a large language model with 175"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_22",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "els from OpenAI, as the paraphrasing models. GPT- 3 (Generative Pre-trained Transformer 3) ( Brown et al. , 2020 ) is a large language model with 175 billion parameters, that is capable of performing a wide range of natural language processing tasks, including paraphrasing a given sentence. Upon being prompted, it restates a given problem state- ment in different words while still maintaining the original meaning. To select the most appropriate paraphrase, GPT-3 uses a scoring mechanism that evaluates the semantic similarity between the origi- nal sentence and each of the generated paraphrases. The model assigns a higher score to paraphrases that are more similar in meaning to the input sen- tence, based on its understanding of the context and the relationships between the words. It also allows users to customize the level of complexity and the style of writing in the paraphrased version"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_23",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "and the relationships between the words. It also allows users to customize the level of complexity and the style of writing in the paraphrased version. We generate k variants of the original problem text by prompting the model. 4.1.1 Prompts and System Task Description The prompts that we use for accomplishing our linguistic variant generation task are, • system role Task Description You are a Math Word Problem rephraser that generates variations of math word problem statements. • user role Prompts – Generate k 1 paraphrased variations of the problem by changing the sentence structure. – Generate k 2 paraphrased variations of the problem by changing the named entities and objects. – Generate k 3 paraphrased variations of the problem with irrelevant numerical information. Here, the total number of linguistic variants of a problem, k = k 1 + k 2 + k 3 and 5 ≤ k ≤ 15 . A detailed discussion"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_24",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "relevant numerical information. Here, the total number of linguistic variants of a problem, k = k 1 + k 2 + k 3 and 5 ≤ k ≤ 15 . A detailed discussion on the types of problem variations is delineated in Section- 5 . 4.2 Quantity Tagging All the quantities (written either numerically or in words) in every single variant of the problem along with the original problem itself, are tagged with unique quantity tags using RegEx and a Python script which is provided in our GitHub repository (see Section- 1 ). This quantity tagging step ensures that the same quantity is present in both the input as well as in the output. The quantity-tagged tokens have their own content and positional embeddings. For example, if the problem statement is, “Melanie picked 4 plums, Dan picked 9 plums, and Sally picked 3 plums from the plum tree. How many plums were picked in total?\" then the quantity-tagged version"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_25",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "cked 4 plums, Dan picked 9 plums, and Sally picked 3 plums from the plum tree. How many plums were picked in total?\" then the quantity-tagged version of the problem statement is, “Melanie picked [Q1] plums, Dan picked [Q2] plums, and Sally picked [Q3] plums from the plum tree. How many plums were picked in total?\" We use this quantity tagging for the ground truth equation’s quantities as well. 4.3 Encoder We use the pre-trained language model DeBERTa ( D ecoding e nhanced BERT with disentangled a ttention). DeBERTa is a newly developed neural language model by He et al. ( 2020 ) that is based on the Transformer architecture. It boasts a significant advancement over previous state-of-the-art (SOTA) pre-trained language models (PLMs) due to the incorporation of two novel techniques. The first technique is a disentangled attention mechanism and the second technique is an enhanced mask de- c"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_26",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "he incorporation of two novel techniques. The first technique is a disentangled attention mechanism and the second technique is an enhanced mask de- coder. Together, these techniques make DeBERTa a highly effective PLM that outperforms its prede- cessors on a wide range of NLP downstream tasks. 4.3.1 Disentangled Attention Contrary to BERT, which utilizes a vector represen- tation for each word in the input layer by summing its content and position embeddings, in DeBERTa, every word is represented by two separate vectors that encode its content and position individually. The attention scores between words are computed using separate matrices that are disentangled based on the content and relative position of each word. This design choice is based on the observation that the attention weight between a pair of tokens is in- fluenced by both their content and in tandem their relative positi"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_27",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "based on the observation that the attention weight between a pair of tokens is in- fluenced by both their content and in tandem their relative positions. This especially holds paramount importance for the task of MWP solving as the rel- ative positions of certain keywords in the problem statements dictate the solution. To represent a token x i located at a specific po- sition i within a given sequence, it employs two distinct vectors, H i and P i | j , which are respectively the content and relative positional representation vectors of x i with respect to a token x j at position j . The inter-token attention weights between x i and x j can be broken down into four constituent components, A ij = ⟨ H i , P i | j ⟩× ⟨ H j , P j | i ⟩ ⊤ = H i H ⊤ j | {z } C 2 C + H i P ⊤ j | i | {z } C 2 P + P i | j H ⊤ j | {z } P 2 C + P i | j P ⊤ j | i | {z } P 2 P ( omitted ) (1) where, the four disentan"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_28",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "H ⊤ j | {z } C 2 C + H i P ⊤ j | i | {z } C 2 P + P i | j H ⊤ j | {z } P 2 C + P i | j P ⊤ j | i | {z } P 2 P ( omitted ) (1) where, the four disentangled matrix attention scores represent their contents and positions as content-to- content (C2C) , content-to-position (C2P) , position- to-content (P2C) , and position-to-position (P2P) . The P2P portion of ( 1 ) is somewhat rendered ob- solete since DeBERTa uses relative positional em- bedding which is why no useful information can be extracted from it. The self-attention mechanism described by Vaswani et al. ( 2017 ) has 3 parameters, Q (Query), K (Key), and V (Value). The non-contextual em- bedding that is being contextualized at any point re- quests for information from its surrounding tokens within the context window and that is represented by the query token, and the tokens that the model pays attention to are the key tokens. Q c = H"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_29",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "kens within the context window and that is represented by the query token, and the tokens that the model pays attention to are the key tokens. Q c = HW c Q , K c = HW c K , V c = HW c V Q r = PW r Q , K r = PW r K (2) where, W c Q ∈ R d × d , W c K ∈ R d × d , W c V ∈ R d × d are the projection weight matrices for the projected content vectors Q c , K c , V c respectively. Similarly, W r Q ∈ R d × d and W r K ∈ R d × d play the role of projection matrices for the projected relative posi- tion vectors Q r and K r . The metric to calculate the relative distance between tokens x i and x j is, δ ( i, j ) =      0 , if i − j ≤− k 2 k − 1 , if i − j ≥ k i − j + k, otherwise (3) which implies, δ ( i, j ) ∈ [0 , 2 k ) . Each element ¯ A ij of the attention matrix ¯ A denotes the attention score from token x i to the token x j and is computed using the vectors defined in ( 2 ) in the followi"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_30",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "the attention matrix ¯ A denotes the attention score from token x i to the token x j and is computed using the vectors defined in ( 2 ) in the following manner, ¯ A ij = Q c i K c ⊤ j | {z } C 2 C + Q c i K r ⊤ δ ( i,j ) | {z } C 2 P + K c j Q r ⊤ δ ( j,i ) | {z } P 2 C (4) The attention score is yielded using the dot-product of the query and key in the formula to let the model have an idea of how similar the key is to the query. The output of the self-attention mechanism, which is denoted by H output ∈ R N × d is, H output = softmax \u0012 ¯ A √ 3 d \u0013 V c (5) The result of the dot-product is normalized by di- viding with √ 3 d to avoid very hard softmax with small gradients, which is especially required for training stability in the case of large-scale PLMs ( Vaswani et al. , 2017 ; He et al. , 2020 ). 4.4 Decoder He et al. ( 2020 ) postulates that the premature inte- gration of absolute pos"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_31",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "ge-scale PLMs ( Vaswani et al. , 2017 ; He et al. , 2020 ). 4.4 Decoder He et al. ( 2020 ) postulates that the premature inte- gration of absolute positions, which is employed by BERT ( Devlin et al. , 2018 ) in its decoding phase, could potentially impede the model’s ability to acquire adequate knowledge of relative positions. With this as the justification, DeBERTa, being a model that was pre-trained using MLM (Masked Language Modeling), uses the absolute positions of the tokens in the penultimate layer, right before the softmax layer during the masked token predic- tion in its decoding phase. This enables all the Transformer layers in the decoder to work with the relative positional information without the suscep- tibility of hampering the learning process of the model. Since the absolute positions of the tokens in a sentence highly influence the nuanced under- standing of the sentenc"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_32",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "he learning process of the model. Since the absolute positions of the tokens in a sentence highly influence the nuanced under- standing of the sentence’s semantic and syntactic structure, and extracting information from only the relative positions isn’t sufficient, the absolute posi- tions are incorporated in the tail-end of the pipeline in the case of DeBERTa. This is why DeBERTa’s decoding module is dubbed an Enhanced Mask De- coder (EMD) and it demonstrably outperforms the decoder counterparts of its predecessor PLMs ( He et al. , 2020 ). 4.5 Majority Voting Since there can be multiple valid equations for a single MWP, each of the k + 1 predictions from the decoder, E 1 , E 2 . . . , E k +1 , is simplified to a reduced normal form using the python pack- age sympy 1 . These k + 1 simplified predictions, E ′ 1 , E ′ 2 . . . , E ′ k +1 , are then counted and the predic- tion that is the"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "method",
+    "chunk_id": "arxiv_2306_13899_method_33",
+    "start_char": 10500,
+    "end_char": 10985,
+    "text": "the python pack- age sympy 1 . These k + 1 simplified predictions, E ′ 1 , E ′ 2 . . . , E ′ k +1 , are then counted and the predic- tion that is the most frequent or that is yielded the most number of times is elected as the final an- swer of the whole solver model. It is to be noted 1 https://www.sympy.org/en/index.html that this voting mechanism is used only during the testing/validation phases or during inference. E ∗ ← argmax E ′ Votes ( E ′ i ); i = 1 , 2 , . . . , k + 1 (6)"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_34",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Experiment 5.1 Data Acquisition We introduce a new large-scale dataset, namely P ARA MAWPS ( Para phrased MA th W ord P roblem S olving Repository), consisting of 16,278 single equation MWPs. It is gener- ated as a by-product of using one of the most commonly-used English MWP datasets, M AWPS ( Koncel-Kedziorski et al. , 2016 ) which consists of a total of 2,373 problems, and the paraphraser model. We save the generated paraphrased variants of selectively sampled problems of M AWPS and also manually include inverse versions of the prob- lems to create our dataset. The dataset contains all the problems from the original M AWPS dataset as well as paraphrased versions of some of the more challenging problems within M AWPS , hence the name, P ARA M AWPS . The samples are manually checked for correctness by 3 undergraduate students. By generating variations of some of the more difficult probl"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_35",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "RA M AWPS . The samples are manually checked for correctness by 3 undergraduate students. By generating variations of some of the more difficult problems, we intend to increase familiarity of challenging concepts found within those problems to any model trained over this data, as well as more thoroughly challenge existing models trained on datasets that do not provide said complexity at an equal or higher density. We generate k problems from each seed problem in the dataset, adding up to a total of k + 1 problems, where 5 ≤ k ≤ 16 . Each of the k generated problems will be a variation on the original that will feature several changes to the problem text. We generate 4 types of variations of each seed problem (see Table- 7 in Appendix- A ). • Changed phrase order Variations with the order of the phrases being changed facilitate a break from the standard problem statement template where qu"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_36",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "• Changed phrase order Variations with the order of the phrases being changed facilitate a break from the standard problem statement template where quantities are generally given before the question formulation. Having a changed ordering of phrases makes apriori question formulations more common. • Changed object and entity names Object and entity names are altered with interchange- able alternatives (names, synonyms) in prob- lem variations to prevent fixation on elements of the problem mostly agnostic to the process of solving the problem. It also serves to pre- vent an increase in density for similar terms that originate from the seed problem yielding good problem samples for language models ( Lee et al. , 2021 ). • Added unrelated information Some vari- ations contain an extra phrase or quantity, or similar additions that are in excess of the in- formation required to solve a problem"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_37",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "mation Some vari- ations contain an extra phrase or quantity, or similar additions that are in excess of the in- formation required to solve a problem and do not affect the original problem formulation in any meaningful way. These adversarial vari- ations serve to obfuscate and familiarize the models with only the necessary information, enhancing deductive abilities ( Kumar et al. , 2021 ). • Inverted question Some variations will take a previously known quantity and turn it into an unknown quantity while revealing the previous unknown quantity of the problem. This, in many cases, alters the question dras- tically, changing the needed calculations and equations, while keeping a roughly similar question body to the seed problem. Liu et al. ( 2021 ) used such problem samples in their work. 5.1.1 Seed Problems Many of the seed problems used to generate vari- ations from M AWPS pose sufficie"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_38",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "2021 ) used such problem samples in their work. 5.1.1 Seed Problems Many of the seed problems used to generate vari- ations from M AWPS pose sufficient difficulty to even SOTA MWP solvers and often contain nu- meric information embedded within the statement itself. An example is the following problem, \" Mary, Sam, Keith, and Alyssa each have 6 marbles. How many marbles do they have in all? \" This problem yields the equation \" x = 4 × 6 \", de- spite the quantity 4 not being mentioned anywhere in the statement. This quantity had to be inferred from the other parts of the statement itself, namely, the 4 entities referred to in the statement; Mary, Sam, Keith, and Alyssa. Another such problem is, \" When the price of diesel rose by 10%, a user reduced his diesel consumption by the same amount. How much would his diesel bill change in terms of percent- age? \" which yields the complex equation"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_39",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "reduced his diesel consumption by the same amount. How much would his diesel bill change in terms of percent- age? \" which yields the complex equation of \" x = (1 . 0 − ((1 . 0+(10 . 0 × 0 . 01)) × (1 . 0 − (10 . 0 × 0 . 01)))) × 100 . 0 \". This problem, although seemingly simple on the surface in terms of quantities described, has several calculations dictated through the problem statement, some of which require additional real- world anecdotal knowledge, such as the conversion of percentages. Another problem with similar in- ferences of a more complex nature is, \" Lauren wants to mix 5 liters of 7% milk with skim-milk (0% fat) to produce a mix- ture of 2.9787% milk. How much skim- milk should Lauren add? \" yielding the equation \" x = (7 . 0 × 0 . 01) × 5 . 0 / (2 . 9787 × 0 . 01) − 5 . 0 \", containing similar conversions of percentages, as well as additional knowledge of types of mixtu"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_40",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "0 × 0 . 01) × 5 . 0 / (2 . 9787 × 0 . 01) − 5 . 0 \", containing similar conversions of percentages, as well as additional knowledge of types of mixtures. Here, 7% milk is mixed with pure milk, or 100% milk. Yet the only indication that the milk is of 100% purity is nowhere to be seen in a direct capacity in the prob- lem, but rather in a roundabout way - by referring to the amount of fat (0%) rather than the purity of the milk. Models have to infer a vast amount of real-world contextual knowledge to be able to solve such problems. Problems with second-degree un- known quantities are also present as seed problems. For example, the problem \" The Hudson River flows at a rate of 3 miles per hour. A patrol boat travels 60 miles upriver and returns in a total time of 9 hours. What is the speed of the boat in still water? \" that yields the equation \" (60 . 0 / ( x − 3 . 0)) + (60 . 0 / (3 . 0+"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_41",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "rns in a total time of 9 hours. What is the speed of the boat in still water? \" that yields the equation \" (60 . 0 / ( x − 3 . 0)) + (60 . 0 / (3 . 0+ x )) = 9 . 0 \", which is a quadratic equa- tion. The problem itself deals with calculations of speed, which requires knowledge of how speed is calculated given certain quantities, as well as the effect of certain elements in the problem scenario on speed. We resort to this data generation approach due to the lack of large-scale, diverse, single-equation En- glish MWP datasets. Other commonly-used bench- mark datasets, M ATH 23K ( Wang et al. , 2017 ) and A PE 210K ( Liang et al. , 2021 ) consist of math prob- lems written in Chinese Mandarin. We also aim to diversify the samples in M AWPS to enable bet- ter training for MWP solvers ( Schick and Schütze , 2021 ; Kumar et al. , 2022 ). S VAMP , created by Pa- tel et al. ( 2021 ) consists of"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_42",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "enable bet- ter training for MWP solvers ( Schick and Schütze , 2021 ; Kumar et al. , 2022 ). S VAMP , created by Pa- tel et al. ( 2021 ) consists of challenging versions of problems and is considered a challenge set for testing the robustness of MWP solvers. We use the original version of M AWPS and S VAMP along with our dataset P ARA MAWPS for conducting our experiments. A comparative summary of the statis- tics of the datasets used is shown in Table- 2 and their operator count distributions are portrayed in Figure- 2 . Properties S VAMP M AWPS P ARA MAWPS # of problems 1,000 2,373 16,278 # of unique templates 27 159 215 Avg. # of operators 1.236 1.606 1.68 Avg. # of quantities per prob. 2.81 2.57 2.54 Avg. # of quantities per equ. 2.23 2.59 2.67 # of problems with constants 0 185 3313 Table 2: Comparison of the datasets used. 5.2 Model Implementation Details and Training 5.2.1 Baselin"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_43",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": ".59 2.67 # of problems with constants 0 185 3313 Table 2: Comparison of the datasets used. 5.2 Model Implementation Details and Training 5.2.1 Baseline Models We implement the DeBERTa model using Mi- crosoft’s deberta-base that is publicly available in Hugging Face 2 . The other baseline MWP solver models are implementations already available in the open-source MWPToolkit 3 developed by Lan et al. ( 2022 ). We use an extensive set of base- line models, Transformer ( Vaswani et al. , 2017 ), DNS ( Wang et al. , 2017 ), MathEN ( Wang et al. , 2018a ), GroupATT ( Li et al. , 2019 ), RNNEncDec ( Sutskever et al. , 2014 ), RNNVAE ( Su et al. , 2018 ), BERT ( Devlin et al. , 2018 ), RoBERTa ( Liu et al. , 2019b ), and compare them with the performance of the DeBERTa model. See Appendix- A for more training process details. 5.3 Result Analysis Methods M AWPS † (%) S VAMP (%) P ARA - M AWPS † (%"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_44",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "mance of the DeBERTa model. See Appendix- A for more training process details. 5.3 Result Analysis Methods M AWPS † (%) S VAMP (%) P ARA - M AWPS † (%) DNS 59.5 22.1 71.2 Math-EN 69.2 21.8 71.6 GROUP-ATT 76.1 19.2 70.8 RNNEncDec 79.4 25.4 73.6 RNNVAE 79.8 25.9 72.8 Transformer 85.6 20.7 64.6 BERT 86.9 24.8 72.1 RoBERTa 88.4 30.3 72.5 DeBERTa 90.7 63.5 74.1 DeBERTa PM + VM 91.0 - - DeBERTa VM - - 79.1 Table 3: Value accuracy of the DeBERTa model and var- ious baseline models. † denotes 5-fold cross validation. PM stands for Paraphrasing Model and VM stands for Voting Mechanism. Table- 3 shows the performance comparison of the DeBERTa model and the baseline models men- tioned in Section- 5.2.1 . The DeBERTa model cou- pled with the Paraphrasing model and the Voting 2 https://huggingface.co/microsoft/deberta-base 3 https://github.com/LYH-YF/MWPToolkit Mechanism outperforms all the baseline"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_45",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "ng model and the Voting 2 https://huggingface.co/microsoft/deberta-base 3 https://github.com/LYH-YF/MWPToolkit Mechanism outperforms all the baseline models in the M AWPS ( Koncel-Kedziorski et al. , 2016 ) dataset with an accuracy of 91 . 0% . The Paraphras- ing Model and the Voting Mechanism contributed to a 0 . 3% increase in accuracy. The vanilla De- BERTa model also outperforms the baseline models in our P ARA MAWPS dataset by boasting an accu- racy of 74 . 1% . With the voting mechanism at the tail-end of the pipeline, we are able to yield an im- provement of the accuracy by 5 . 04% making the ac- curacy 79 . 1% . We test the robustness of the vanilla DeBERTa model on the S VAMP ( Patel et al. , 2021 ) challenge dataset and get an accuracy of 63 . 5% which is quite higher than that of the other baseline models. The model still lags a mere 1 ± 0 . 20% behind the current SOTA model o"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_46",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "uracy of 63 . 5% which is quite higher than that of the other baseline models. The model still lags a mere 1 ± 0 . 20% behind the current SOTA model on M AWPS , which is the R O BERT A -D EDUCT R EASONER model by Jie et al. ( 2022 ) ( 92 . 0 ± 0 . 20% ) but supersedes its accuracy of 47 . 3 ± 0 . 20% on the S VAMP dataset. The superiority of the model’s accuracy in P ARA - MAWPS over S VAMP , despite the demonstrably greater difficulty of the MWP samples in P ARA - MAWPS, indicates that training a language model on a more diverse set of linguistically varied prob- lem statements leads to a better quality mathemati- cal reasoning ability after the training phase. 5.4 Ablation Study To gain insights into the individual contributions of the Paraphrasing Model and Voting Mechanism in conjunction with the DeBERTa model, we perform ablation studies. # of variants M AWPS † (%) w/ k = 0 90.7 w/"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_47",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "raphrasing Model and Voting Mechanism in conjunction with the DeBERTa model, we perform ablation studies. # of variants M AWPS † (%) w/ k = 0 90.7 w/ k = 5 90.4 w/ k = 10 90.8 w/ k = 15 91.0 Table 4: Value accuracy with different numbers of lin- guistic variants of the problem samples. † denotes 5-fold cross validation. Voting Mechanism P ARA M AWPS † (%) w/o VM 72.9, 74.1, 76.5, 72.1, 74.6 w/ VM 78.5, 77.8, 82.4, 77.2, 79.5 Table 5: Effect of Majority Voting on Value accuracy across all 5 folds. † denotes 5-fold cross validation. Table- 4 shows the effect of increasing the number of generated problem variants to infer the solution expressions of the problem samples in the M AWPS dataset’s test set. Although there is a slight de- crease in the accuracy for k = 5 , we see a minus- cule increase in accuracy for k = 10 and k = 15 . In Table- 5 we see the impact of the Voting Mech- anism whi"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_48",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "the accuracy for k = 5 , we see a minus- cule increase in accuracy for k = 10 and k = 15 . In Table- 5 we see the impact of the Voting Mech- anism which contributed to a 5 . 4% increase on average in the accuracy of the DeBERTa model on the P ARA MAWPS dataset. 5.5 MWP Task Performance Analysis of Large Language Models To test out the assertion made in other studies ( Huang and Chang , 2022 ; Ho et al. , 2022 ) about the incompetence of LLMs in complex reasoning tasks compared to fine-tuned smaller models, we use the GPT-J model and some of the presently used GPT- 3 models by OpenAI to perform the task of MWP solving. We use the original version of M AWPS ( Koncel-Kedziorski et al. , 2016 ) along with our dataset P ARA MAWPS for testing the mathemati- cal reasoning of these models. Models M AWPS † (%) P ARA - M AWPS † (%) GPT-J (6B) 9.9 5.9 text-babbage-001 (6.7B) 2.76 3.21 text-curie-00"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_49",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "mathemati- cal reasoning of these models. Models M AWPS † (%) P ARA - M AWPS † (%) GPT-J (6B) 9.9 5.9 text-babbage-001 (6.7B) 2.76 3.21 text-curie-001 (13B) 4.09 4.20 gpt-3.5-turbo (175B) 80.3 73.0 Table 6: Value accuracy of the LLMs in a zero-shot setup testing. † denotes evaluation on the whole dataset. One of the most capable models in the GPT-3.5 se- ries of models is text-davinci-003 , with 175 billion parameters and the ability to follow instructions consistently and produce lengthy outputs. However, the most capable and up-to-date model according to OpenAI is gpt-3.5-turbo , with 175 billion param- eters, which is primarily optimized for chat com- pletions but can be tweaked to follow more specific instructions similar to text-davinci-003 . While all models used are instructed to output in a specific format ‘Answer: [ANS]’ with just the numeri- cal value in the place of ‘[ANS]’ ,"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_50",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "ci-003 . While all models used are instructed to output in a specific format ‘Answer: [ANS]’ with just the numeri- cal value in the place of ‘[ANS]’ , the ability to do so consistently deteriorated with the models with relatively fewer parameters. Out of the base GPT-3 models, the 13 billion parameters text-curie-001 can yield outputs in the given format relatively con- sistently and text-babbage-001 , with 6.7 billion pa- rameters can occasionally produce the output in the correct format, but tries to generate full sentences more often than not, whereas the 350 million pa- rameters text-ada-001 can barely generate a single output in the correct format, choosing to generate full sentences almost all of the time. Models tend to try to ‘work through’ the problem in text form rather than just generating the output, although with gpt-3.5-turbo this can be mostly mitigated by using very speci"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "experiment",
+    "chunk_id": "arxiv_2306_13899_experiment_51",
+    "start_char": 12750,
+    "end_char": 13280,
+    "text": "through’ the problem in text form rather than just generating the output, although with gpt-3.5-turbo this can be mostly mitigated by using very specific instructions for the prompt. The results in Table- 6 and Table- 3 support the current weakness of LLMs in mathematical reasoning tasks and the suitability of fine-tuning smaller models. It indicates the improvement in performance for a well-reasoning, but comparatively small model when it has the option to democratically choose from a substantial number of solution guesses."
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2306_13899_conclusion_52",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Conclusion and Future Work In this paper, we propose the idea of an MWP solving framework that utilizes the paraphrased linguistic variations of problem texts to train a De- BERTa model that generates candidate solution expressions and finalizes the predicted math ex- pression by employing majority voting on a set of simplified candidate expressions. Our findings demonstrate that incorporating linguistic variants of problem statements during training and utiliz- ing a voting mechanism for candidate predictions enhance the model’s mathematical reasoning and overall robustness. We also introduce a large-scale, diverse, and challenging single-equation MWP dataset, P ARA - M AWPS , consisting of paraphrased, inverse, and adversarial variants of selectively sampled data- points from M AWPS , as a formidable evaluation test-bed and a proper benchmark for training MWP solver models. We wish to"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2306_13899_conclusion_53",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "selectively sampled data- points from M AWPS , as a formidable evaluation test-bed and a proper benchmark for training MWP solver models. We wish to experiment further with harder prob- lem text variations ( e.g. grammatical errors) and conduct a thorough error analysis of the models for identifying their lapses in mathematical reason- ing and discovering more scopes of improvement. We also aim to expand our research to encompass the intricate realms of multi-equation, multi-step deduction, and domain-knowledge problems. We hope our approach and findings will pave the way to more scholarly works on the vistas of AGI and in tandem be deemed a noteworthy and meaningful contribution to this domain of research. 7 Limitations There are still some avenues of improvement in our work. The temporal overhead due to the prob- lem variant generation by the paraphraser model may make our proposed ar"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2306_13899_conclusion_54",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "me avenues of improvement in our work. The temporal overhead due to the prob- lem variant generation by the paraphraser model may make our proposed architecture unsuitable for real-world applications even though it takes merely 10 to 12 seconds to generate k = 5 variants for a single sample. Another limitation of our work is the absence of a proper tie-breaking strategy in our Majority Voting module. Furthermore, we need to introduce a system of weighted votes ( e.g. se- mantic similarity scores as weights) so that the votes of wrongly predicted equations don’t trump that of correctly generated predictions. We also plan to incorporate and experiment with the Tree- based decoder ( Xie and Sun , 2019 ) in our proposed pipeline. Acknowledgements We convey our heartfelt gratitude to the anonymous reviewers and the mentors of the pre-submission mentorship program for their constructive criti-"
+  },
+  {
+    "paper_id": "arxiv_2306_13899",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2306_13899_conclusion_55",
+    "start_char": 2250,
+    "end_char": 2829,
+    "text": "ts We convey our heartfelt gratitude to the anonymous reviewers and the mentors of the pre-submission mentorship program for their constructive criti- cisms and insightful feedback which were con- ducive to the improvement of the research work outlined in this paper. We also appreciate the Sys- tems and Software Lab (SSL) of the Islamic Uni- versity of Technology (IUT) for the generous pro- vision of computing resources during the course of this project. Syed Rifat Raiyan, in particular, wants to thank his parents, Syed Sirajul Islam and Kazi Shahana Begum, for everything."
+  }
+]

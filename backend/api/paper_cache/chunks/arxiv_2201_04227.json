@@ -1,0 +1,178 @@
+[
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "The detection of hate speech online has become an important task, as offensive language such as hurtful, obscene and insulting content can harm marginalized people or groups. This paper presents TU Berlin team experiments and results on the task 1A and 1B of the shared task on hate speech and offensive content identification in Indo-European languages 2021. The success of different Natural Language Processing models is evaluated for the respective subtasks throughout the competition. We tested different models based on recurrent neural networks in word and character levels and transfer learning approaches based on Bert on the provided dataset by the competition. Among the tested models that have been used for the experiments, the transfer learning-based models achieved the best results in both subtasks. Keywords Hate speech detection, Offensive Content Identification, Bert, LSTM, English"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_1",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "earning-based models achieved the best results in both subtasks. Keywords Hate speech detection, Offensive Content Identification, Bert, LSTM, English 1. Introduction Using abusive language and hate speech in social media platforms can have devastating effects on internet users by promoting racism, hatred and violence [ 1 ]. Offensive language has even the potential to shape political campaigns [ 2 ]. Due to the openness, anonymity and informal structure, social medial platforms are particularly vulnerable to ill-intentioned activities [ 3 ]. The availability of large annotated corpora from social medial platforms and the development of powerful Natural Language Processing (NLP) has the potential to remedy the challenge of detecting hate speech online [ 4 ]. Most of the research in this domain is dedicated to English datasets only. Therefore, the Hate Speech and Offensive Content Identif"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_2",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "eech online [ 4 ]. Most of the research in this domain is dedicated to English datasets only. Therefore, the Hate Speech and Offensive Content Identification (HASOC) track aims to provide a platform to develop and optimize algorithms for the hate speech detection task in different languages, such as Hindi, German and English [ 5 ]. This year HASOC provides a data challenge for multilingual research on the identification of offensive speech online at the Forum for Information Retrieval Evaluation (FIRE) 2021. HASOC has defined two subtasks, whereas the first subtask contains the identification and discrimination of hate, profane and offensive posts from Twitter in English, FIRE’21: Forum for Information Retrieval Evaluation, December 13–17, 2021, India \" salar.mohtaj@tu-berlin.de (S. Mohtaj); vera.schmitt@tu-berlin.de (V. Schmitt); sebastian.moeller@tu-berlin.de (S. Möller) ~ https://sala"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_3",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "2021, India \" salar.mohtaj@tu-berlin.de (S. Mohtaj); vera.schmitt@tu-berlin.de (V. Schmitt); sebastian.moeller@tu-berlin.de (S. Möller) ~ https://salarmohtaj.github.io/ (S. Mohtaj); https://vera-schmitt.netlify.app/ (V. Schmitt); https://www.qu.tu-berlin.de/menue/team/professur/ (S. Möller) © 2021 Copyright for this paper by its authors. Use permitted under Creative Commons License Attribution 4.0 International (CC BY 4.0). CEUR Workshop Proceedings http://ceur-ws.org ISSN 1613-0073 CEUR Workshop Proceedings ( CEUR-WS.org ) arXiv:2201.04227v1 [cs.CL] 11 Jan 2022 Hindi and Marathi. The second subtask focuses on the identification of conversational hate- speech in Code-Mixed Languages. The TU Berlin team focuses on the subtasks 1A and 1B. Subtask 1A is a coarse-grained binary classification task where tweets should be classified into two classes: • (NOT) Non Hate-Offensive: These posts do"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_4",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "task 1A is a coarse-grained binary classification task where tweets should be classified into two classes: • (NOT) Non Hate-Offensive: These posts do not contain any hate speech, profane or offensive content • (HOF) Hate and Offensive: These posts contain hate, offensive and profane content Subtask 1B is is a three-class classification task offered for English and Hindi, where hate- speech, profane and offensive posts from subtask 1A are further classified into the following categories: • (HATE Hate speech: this class contains posts which hate-speech content • (OFFN Offensive: posts in this class contain offensive content • (PRFN Profane: posts in this class contain profane content In this paper the proposed models for classifying tweets into one of the classes for the respective subtask are presented. For this purpose, the state-of-the-art NLP methods are applied to classify the posts a"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_5",
+    "start_char": 3750,
+    "end_char": 4599,
+    "text": "to one of the classes for the respective subtask are presented. For this purpose, the state-of-the-art NLP methods are applied to classify the posts and categorize them into the classes. Hereby the team of TU Berlin focuses on the English dataset. We used transfer learning models based on the BERT language model [ 6 ], and also Recurrent Neural Networks (RNNs), either in word and character levels to categorize tweets into the relevant classes. The following section 2 describes some of the state-of-the-art models for the task of hate speech detection in English. Section 3 describes the provided train and test dataset, whereas section 4 contains details about data processing and the experiments and models applied. Furthermore, in section 5 the achieved results are analyzed, and section 6 summarizes and concludes the approaches and results."
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "abstract",
+    "chunk_id": "arxiv_2201_04227_abstract_6",
+    "start_char": 4500,
+    "end_char": 4599,
+    "text": "e achieved results are analyzed, and section 6 summarizes and concludes the approaches and results."
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "related_work",
+    "chunk_id": "arxiv_2201_04227_related_work_7",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "In this section, we overview some of the recent approaches for automatic hate speech detection from English text. Although the automated approaches for hate speech detection could be categorized into keyword-based, source metadata and machine learning based approaches [ 7 ], in this section we focus on some of the state-of-the-art machine learning based models. Among the proposed models for the HASOC shared task on 2020, Mishra et al. has been used a Long Short-Term Memory (LSTM) based model using Glove vectors [ 9 ] for the embedding [ 8 ]. They fed the outputs of the embedding layer to a single layer LSTM network and put a fully connected layer on top. In this year’s competition we tried to use a similar architecture as one of our experiments. On the other side, the YNU_OXZ team [ 10 ] in the HASOC 2020 competition proposed a model based on XLM-RoBERTa [ 11 ] and LSTMs. In their model,"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "related_work",
+    "chunk_id": "arxiv_2201_04227_related_work_8",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ents. On the other side, the YNU_OXZ team [ 10 ] in the HASOC 2020 competition proposed a model based on XLM-RoBERTa [ 11 ] and LSTMs. In their model, they concatenated the output of the last layer hidden state of XLM-RoBERTa and the hidden state of the last four layers of XLM-RoBERTa that is fed into an Ordered Neurons LSTM (ON-LSTM) [ 12 ]. Finally, they input these vectors into a fully connected network for the final classification. Badjatiya et al. did different experiments based on three different neural network architecture to detect hate speech tweets in Twitter [ 13 ]. They used convolutional Neural Networks (CNNs), LSTM, and FastText [ 14 ], with either random embeddings or GloVe embeddings.The proposed models categorize tweets as racist, sexist or neither. Their experiments show that the model based on LSTM, random embedding and Gradient Boosted Decision Trees outperforms the o"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "related_work",
+    "chunk_id": "arxiv_2201_04227_related_work_9",
+    "start_char": 1500,
+    "end_char": 1706,
+    "text": "racist, sexist or neither. Their experiments show that the model based on LSTM, random embedding and Gradient Boosted Decision Trees outperforms the other models in terms of precision, recall, and F1 score."
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "method",
+    "chunk_id": "arxiv_2201_04227_method_10",
+    "start_char": 0,
+    "end_char": 586,
+    "text": "The English dataset of HASOC 2021 for the subtasks 1A and 1B, contains the text content of tweets in English, IDs, and the labels for subtask 1A and 1B, respectively. the statistics of the training dataset is presented in Table 1 . Moreover, the test dataset contains 1281 tweets which should be categorized into one of the classes based on the subtask. The content would contains hashtags, emojis, links and usernames that refer to a user on Twitter. A sample of the dataset in different categories is presented in Table 2 . More details about the datasets are provided in [ 15 , 16 ]."
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_11",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "This section contains a short description on the used pre-processing steps and also the developed models and experiments for the task of hate speech detection. 4.1. Data Processing For pre-processing of the raw data, we followed the same procedure as the experiments on the last year’s competition [ 17 ]. The data pre-processing mainly includes the replacement of mentions with the phrase ’username’ , replacement of emojis with short textual descriptions, links are also replaced with the phrase ’link’ , and the replacement of multiple white spaces with a single white space. These steps are applied to both, the train and test datasets in order to facilitate the training process. 4.2. Models The best performance of the last year HASOC competition for the English dataset have been achieved by [ 18 ] with a LSTM using GloVe embeddings [ 9 ] as input. Furthermore, transformer based language mod"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_12",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "on for the English dataset have been achieved by [ 18 ] with a LSTM using GloVe embeddings [ 9 ] as input. Furthermore, transformer based language models such as BERT [ 6 ], DistilBERT and RoBERTa [ 19 ], and also ELMO [ 20 ] Language Total # of Instances Subtask 1A Subtask 1B HOF NOT HATE OFFN PRFN NONE English 3843 2501 1342 683 622 1196 1342 Table 1 Statistics of the HASOC2021 training dataset for subtasks 1A and 1B Sample Tweets Classes Sub-task 1A Sub-task 1B This is enough of yours Modi This is not skill India it is kill India @narendramodi #ExitModi #Resign_PM_Modi https://t.co/m9FZyU4Lfg HOF OFFN Please, abdicate! You failed us. You failed everyone. Everyone is suffering. EVERYONE! #ModiKaVaccineJumla HOF HATE @Feisty_Waters Ok. What did you do to piss off the universe? HOF PRFN @ndtv Nothing gonna help you please #Resign_PM_Modi NOT NONE Table 2 Samples of tweets from the Englis"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_13",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "t did you do to piss off the universe? HOF PRFN @ndtv Nothing gonna help you please #Resign_PM_Modi NOT NONE Table 2 Samples of tweets from the English train dataset in different classes showed also promising results for similar task. Therefore, the TU Berlin team focuses on BERT based transfer learning approaches for the proposed subtasks. We also did some experiments on character level LSTM models which achieved our best results on the last year’s competition [ 17 ]. 4.3. LSTM based models We developed two different models based on LSTM networks. We developed a smaller, character based architecture, Char_LSTM hereinafter, and a deeper and more complex network based on words, Word_LSTM hereinafter. Since people sometimes do minor changes on the words (e.g., by repeating some characters) when they express hate speech, a word based model may not signal those terms properly. As a result, w"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_14",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "n the words (e.g., by repeating some characters) when they express hate speech, a word based model may not signal those terms properly. As a result, we also developed a character based model to compare the outcomes of the models. For the Char_LSTM, we tried out different hyper-parameters that includes: • Embedding dimension [50, 100, 200] • Hidden dimension [16, 32, 64, 128] • Dropout [0.25, 0.5, 0.75] The range of the above mentioned hyper-parameters for the Word_LSTM model are as follow: • Embedding dimension [100, 300] • Hidden dimension [32, 64, 128, 256, 512] • Dropout [0.25, 0.5, 0.75] In our experiments, the batch size of 32 and, the Adam optimizer [ 21 ] and the Binary Cross Entropy (BCE) loss function have been used in both models. In the Word_LSTM model, we tested either using Glove pre-trained vectors and training the embedding layer from scratch. The detailed results of the p"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_15",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "In the Word_LSTM model, we tested either using Glove pre-trained vectors and training the embedding layer from scratch. The detailed results of the proposed models are presented in the section 5 . 4.4. Bert based models In addition to the models based on Recurrent Neural Networks (RNNs), we tested two transfer learning based models using BERT language model [ 22 ]. In one of the experiments, we fine- tuned English Bert for the task of hate speech identification. For this purpose, we followed the recommended hyper-parameters by the authors [ 22 ]. As the other transfer learning based model, we used Bert for extracting features from textual data. In other words, in this approach, the Bert language model was used to convert text data into vectors. The resulting vectors inputted into a Gated Recurrent Units (GRU) network. Different hyper-parameters tested on the data to choose the best para"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_16",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "tors. The resulting vectors inputted into a Gated Recurrent Units (GRU) network. Different hyper-parameters tested on the data to choose the best parameters. The range of different hyper-parameters which had been used in the feature extraction approach are as follow: • Hidden dimension [32, 64, 128, 256, 512] • Dropout [0.25, 0.5, 0.75] Like the LSTM based models, the batch size of 32 and, the Adam optimizer [ 21 ] and the Binary Cross Entropy (BCE) loss function have been used in this experiment. We present the detailed results by the different architectures in section 5 . In this section the achieved results on the training data are presented. For doing the experiments, the training dataset has been divided into train, validation and test datasets. The train part contains 70% of the whole data, the validation part consist of 10% of the data, and the test part contains the remaining 20%"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_17",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "datasets. The train part contains 70% of the whole data, the validation part consist of 10% of the data, and the test part contains the remaining 20% of the provided dataset. We tested all of the mentioned models with different hyper-parameters. The best achieved results are shown in tables 3 - 5 . In order to determine the impact of the pre-processing steps on the final results, we’ve repeated the experiments with the same hyper-parameters without applying the pre-processing steps. Although the runs without applying pre-processing could achieve competitive results in some cases, the experiments based on the pre-processed data outperforms the other ones in most of the cases. The performance of the submitted models for both sub-tasks are reported in details in [ 15 ]. The same architectures have been trained on the data for the sub-task 1B. The best achieved results on the second task we"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "experiment",
+    "chunk_id": "arxiv_2201_04227_experiment_18",
+    "start_char": 5250,
+    "end_char": 5476,
+    "text": "ported in details in [ 15 ]. The same architectures have been trained on the data for the sub-task 1B. The best achieved results on the second task were applied on the sub-task 1B test dataset and submitted to the shared task."
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2201_04227_conclusion_19",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "In this paper, we presented the proposed models on the task 1A and 1B of the shared task on hate speech and offensive content identification in English. We used a BERT based architecture and word and character based LSTM models for training a model to classify tweets into offensive and not offensive categories. Our experiments show that Bert based model outperform the other approaches. Model name Pre-processed Hyper-parameters F1 Embedding dimension Hidden dimension dropout Char_LSTM yes 50 256 0.5 0.75 yes 50 128 0.75 0.78 yes 100 64 0.5 0.76 yes 200 16 0.5 0.79 no 200 16 0.75 0.75 no 100 128 0.75 0.77 Word_LSTM yes 100 512 0.25 0.81 yes 300 256 0.25 0.83 yes 300 256 0.75 0.80 no 300 256 0.25 0.79 Table 3 The achieved results by the character based and word based LSTM models for the sub-task 1A Model name Pre-processed Hyper-parameters F1 Bert model Hidden dimension dropout BERT feature"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2201_04227_conclusion_20",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ter based and word based LSTM models for the sub-task 1A Model name Pre-processed Hyper-parameters F1 Bert model Hidden dimension dropout BERT feature extraction yes base 256 0.25 0.86 yes base 128 0.25 0.83 yes large 256 0.5 0.84 yes large 128 0.25 0.80 no base 128 0.25 0.79 Table 4 The achieved results by the BERT feature extraction based model for the sub-task 1A Model name Pre-processed Hyper-parameters F1 Bert model BERT fine-tuning yes base 0.81 no base 0.83 Table 5 The achieved results by the BERT fine-tuning model for the sub-task 1A Since over-fitting was one of the main issues for training different models during the com- petition, enriching the training data by adding data samples from different resources could be a possible solution for improving the results. Moreover, the proposed transfer learning based results could be compared with the results from the the other state-of-"
+  },
+  {
+    "paper_id": "arxiv_2201_04227",
+    "section": "conclusion",
+    "chunk_id": "arxiv_2201_04227_conclusion_21",
+    "start_char": 1500,
+    "end_char": 1895,
+    "text": "tion for improving the results. Moreover, the proposed transfer learning based results could be compared with the results from the the other state-of-the-art language models like GPT-3 to check if there is a significant difference in the performances. Acknowledgments We would like to thank the organizers of HASOC2021 shared task for organizing the competition and taking time on the inquiries."
+  }
+]

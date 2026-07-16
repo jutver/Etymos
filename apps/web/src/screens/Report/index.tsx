@@ -9,13 +9,13 @@ import {
 import { SAMPLE_DOCUMENT, HISTORY_SEED } from "../../lib/mockData";
 import { useAppStore } from "../../lib/store";
 import { formatDate, formatNumber } from "@etymos/shared";
-import { SimilarityBadge, SeverityTag, severityConfig } from "../../components/Severity";
+import { SimilarityBadge, SeverityTag } from "../../components/Severity";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { RewritePanel } from "./RewritePanel";
+import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import type { MatchedSource } from "@etymos/shared";
-import { cn } from "@etymos/shared";
 
 export default function ReportPage() {
   const { id } = useParams();
@@ -29,6 +29,7 @@ export default function ReportPage() {
   const doc = (id && checkedDocuments[id]) || SAMPLE_DOCUMENT;
   const historyMeta = history.find((h) => h.id === id) ?? HISTORY_SEED.find((h) => h.id === id);
 
+  // Đồng bộ giữa highlight trên PDF và match card đang được chọn
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [comparisonMatch, setComparisonMatch] = useState<MatchedSource | null>(null);
@@ -43,15 +44,9 @@ export default function ReportPage() {
     () => (isFree ? doc.matches.filter((m) => m.detectionType === "semantic") : []),
     [isFree, doc.matches],
   );
-  const visibleMatchIds = useMemo(() => new Set(visibleMatches.map((m) => m.id)), [visibleMatches]);
 
   const baseScore = isFree ? doc.similarityScoreFree : doc.similarityScore;
   const displayScore = Math.max(0, baseScore - resolvedIds.size * 4);
-
-  function scrollToMatch(matchId: string) {
-    setActiveMatchId(matchId);
-    document.getElementById(`match-${matchId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
 
   function handleAcceptRewrite(matchId: string) {
     setResolvedIds((prev) => new Set(prev).add(matchId));
@@ -114,36 +109,16 @@ export default function ReportPage() {
         <SeverityTag severity="low" />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.7fr_1fr]">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+
         {/* Document viewer */}
-        <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 lg:p-9">
-          <div className="mx-auto max-w-[62ch] space-y-5 text-body leading-[1.85] text-ink-800">
-            {doc.passages.map((p) => {
-              const isVisibleMatch = p.matchId && visibleMatchIds.has(p.matchId);
-              const isResolved = p.matchId && resolvedIds.has(p.matchId);
-
-              if (isVisibleMatch && p.severity) {
-                const c = severityConfig[p.severity];
-                return (
-                  <p key={p.id}>
-                    <span
-                      onClick={() => scrollToMatch(p.matchId!)}
-                      className={cn(
-                        "cursor-pointer rounded px-0.5 transition-colors",
-                        isResolved
-                          ? "bg-success-bg decoration-success"
-                          : cn(c.bg, activeMatchId === p.matchId && "ring-2 ring-brand-400"),
-                      )}
-                    >
-                      {p.text}
-                    </span>
-                  </p>
-                );
-              }
-
-              return <p key={p.id}>{p.text}</p>;
-            })}
-          </div>
+        <div className="rounded-[var(--radius-card-lg)] border border-line bg-surface-tint overflow-hidden">
+          <PlagiarismPdfViewer
+            pdfUrl={doc.pdfUrl || "/test-file.pdf"}
+            matches={visibleMatches}
+            activeMatchId={activeMatchId}
+            onMatchClick={setActiveMatchId}
+          />
         </div>
 
         {/* Match cards sidebar */}
@@ -153,7 +128,11 @@ export default function ReportPage() {
           </p>
 
           {visibleMatches.map((m, i) => (
-            <div key={m.id} className="relative">
+            <div
+              key={m.id}
+              className="relative cursor-pointer"
+              onClick={() => setActiveMatchId(m.id)}
+            >
               {resolvedIds.has(m.id) && (
                 <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-semibold text-success">
                   Resolved
