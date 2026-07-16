@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Envelope, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
-import { GOOGLE_MOCK_EMAIL, GOOGLE_MOCK_PASSWORD } from "../../lib/mockAuth";
 
 interface LocationState {
   from?: { pathname: string };
@@ -35,21 +34,21 @@ export default function LoginPage() {
     navigate(from, { replace: true });
   }
 
-  async function handleGoogleMock() {
+  async function handleGoogleOAuth() {
     setError(null);
     setGoogleLoading(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: GOOGLE_MOCK_EMAIL,
-      password: GOOGLE_MOCK_PASSWORD,
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
     setGoogleLoading(false);
-    if (signInError) {
-      setError("No demo Google account yet — sign up with Google first from the Sign up page.");
-      return;
+    if (oauthError) {
+      setError(oauthError.message);
     }
-    navigate(from, { replace: true });
   }
 
   return (
@@ -111,14 +110,11 @@ export default function LoginPage() {
         size="lg"
         fullWidth
         loading={googleLoading}
-        onClick={handleGoogleMock}
+        onClick={handleGoogleOAuth}
         iconLeft={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
       >
-        Continue with Google (demo)
+        Continue with Google
       </Button>
-      <p className="mt-2 text-center text-[0.6875rem] text-ink-400">
-        Demo mockup — no real Google account is used.
-      </p>
 
       <p className="mt-6 text-center text-sm text-ink-600">
         New to Etymos?{" "}
@@ -129,3 +125,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

@@ -5,10 +5,7 @@ const publishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "demo-p
 
 export const supabase = createClient(url, publishableKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+    persistSession: true,
+    autoRefreshToken: true,
   },
 });
-
-export const GOOGLE_MOCK_EMAIL = "google.demo@etymos.app";
-export const GOOGLE_MOCK_PASSWORD = "etymos-google-mock-2026";

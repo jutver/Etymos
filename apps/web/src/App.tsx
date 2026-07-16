@@ -20,6 +20,8 @@ import PaymentSuccessPage from "./screens/PaymentSuccess";
 import AccountProfilePage from "./screens/AccountProfile";
 import AccountPlanPage from "./screens/AccountPlan";
 import VerifyStudentPage from "./screens/VerifyStudent";
+import VerifyEmailPage from "./screens/VerifyEmail";
+import AuthCallbackPage from "./screens/AuthCallback";
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -50,6 +52,8 @@ function App() {
         <Route element={<AuthShell />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
         </Route>
 
         <Route element={<RequireAuth />}>
