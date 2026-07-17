@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_617b840b30a741c29f62f5a1e4d66d8258cc593c",
+    "section": "abstract",
+    "chunk_id": "doi_617b840b30a741c29f62f5a1e4d66d8258cc593c_abstract_0",
+    "start_char": 0,
+    "end_char": 586,
+    "text": "Research on the construction of text classification model based on deep neural network\nThis paper presents a novel text categorization model that integrates multi-channel feature extraction and attention mechanisms. The architecture combines convolutional neural networks (CNNs) and bidirectional LSTM (Bi-LSTM) in a parallel structure to effectively capture both local n-gram patterns and global contextual dependencies. Pre-trained word embeddings are employed in the embedding layer to initialize semantic representations, which are further refined through a self-attention mechanism"
+  }
+]

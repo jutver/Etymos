@@ -1,0 +1,18 @@
+[
+  {
+    "paper_id": "title_0703d89d78e9ed36d2ee75adcc1fb78f041af4ae",
+    "section": "abstract",
+    "chunk_id": "title_0703d89d78e9ed36d2ee75adcc1fb78f041af4ae_abstract_0",
+    "start_char": 0,
+    "end_char": 849,
+    "text": "Convolutional Neural Networks for Sentence ClassificationConvolutional Neural Networks for Sentence Classification[2301.11696] SLCNN: Sentence-Level Convolutional Neural ...Convolutional Neural Networks for Sentence ClassificationConvolutional Neural Networks for Sentence ClassificationAn analysis of convolutional neural networks for sentence ...\nAug 25, 2014 · We report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vectors for sentence-level classification tasks. We first show that a simple CNN ... We report on a series of experiments with convolutional neural networks (CNN) trained on top of pre-trained word vec- tors for sentence-level classication tasks. We show that a simple CNN with lit- tle hyperparameter tuning and static vec- tors achieves excellent results on multi- ple b"
+  },
+  {
+    "paper_id": "title_0703d89d78e9ed36d2ee75adcc1fb78f041af4ae",
+    "section": "abstract",
+    "chunk_id": "title_0703d89d78e9ed36d2ee75adcc1fb78f041af4ae_abstract_1",
+    "start_char": 750,
+    "end_char": 849,
+    "text": "with lit- tle hyperparameter tuning and static vec- tors achieves excellent results on multi- ple b"
+  }
+]

@@ -8,14 +8,14 @@ import {
 } from "@phosphor-icons/react";
 import { SAMPLE_DOCUMENT, HISTORY_SEED } from "../../lib/mockData";
 import { useAppStore } from "../../lib/store";
-import { formatDate, formatNumber } from "@etymos/shared";
+import { formatDate, formatNumber } from "../../lib/format";
 import { SimilarityBadge, SeverityTag } from "../../components/Severity";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { RewritePanel } from "./RewritePanel";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
-import type { MatchedSource } from "@etymos/shared";
+import type { MatchedSource } from "../../lib/types";
 
 export default function ReportPage() {
   const { id } = useParams();

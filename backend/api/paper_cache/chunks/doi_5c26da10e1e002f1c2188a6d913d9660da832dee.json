@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_5c26da10e1e002f1c2188a6d913d9660da832dee",
+    "section": "abstract",
+    "chunk_id": "doi_5c26da10e1e002f1c2188a6d913d9660da832dee_abstract_0",
+    "start_char": 0,
+    "end_char": 576,
+    "text": "Aspect Extraction from Customer Reviews Using Convolutional Neural Networks\nConvolutional Neural Networks (CNN) have emerged as a viable solution for text classification, including aspect extraction. Yet the existing state-of-the-art CNN architectures used in aspect extraction do not incorporate improvements (e.g. non-static CNN, multi-kernel convolution layers, and dropout regularization) that have been identified as beneficial for general text classification tasks. In this research, we present an improved CNN architecture with these enhancements for aspect extraction."
+  }
+]

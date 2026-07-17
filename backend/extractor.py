@@ -1,4 +1,5 @@
 import fitz
+import re
 from collections import Counter
 
 
@@ -11,6 +12,40 @@ def clean_text(text):
     text = text.replace("-\n", "")
     text = " ".join(text.split())
     return text.strip()
+
+
+def is_heavy_math_line(text):
+    """
+    Nhận diện các dòng chứa công thức toán học hoặc số thứ tự phương trình.
+    """
+    text_strip = text.strip()
+    if not text_strip:
+        return True
+
+    # 1. Bắt các dòng chỉ chứa đánh số phương trình, vd: "(1)", "(12)", "(3a)"
+    if re.fullmatch(r'\(\d+[a-zA-Z]*\)', text_strip):
+        return True
+
+    # 2. Tập hợp các ký hiệu toán học phổ biến (bao gồm cả dấu ⊕ trong bài của bro)
+    math_symbols = set("=+-×÷±∈∉∑∏∫≈≠≤≥∝∞∇∂⊕⊗")
+    symbol_count = sum(1 for c in text if c in math_symbols)
+
+    # Nếu 1 dòng ngắn hoặc vừa mà có từ 3-4 ký hiệu toán học trở lên -> Chắc chắn là phương trình
+    if symbol_count >= 3:
+        return True
+
+    # 3. Heuristic dựa trên tỷ lệ chữ cái
+    # Dòng text bình thường sẽ có mật độ chữ cái (a-z) rất cao.
+    # Công thức toán thường chứa nhiều khoảng trắng, ngoặc, số, và ký tự rời rạc.
+    alpha_count = sum(1 for c in text if c.isalpha())
+    total_chars = len(text.replace(" ", ""))
+
+    if total_chars > 0:
+        # Nếu chưa tới 50% số ký tự là chữ cái, và có chứa toán học/số -> Loại bỏ
+        if alpha_count / total_chars < 0.5 and (symbol_count > 0 or any(c.isdigit() for c in text)):
+            return True
+
+    return False
 
 
 def extract_lines_from_pdf(pdf_path):
@@ -170,7 +205,6 @@ def extract_inline_abstract(text):
         if sep in text:
             return text.split(sep, 1)[1].strip()
 
-    # If the line is exactly "Abstract", content is on following lines.
     if text.lower() == "abstract":
         return ""
 
@@ -253,7 +287,6 @@ def is_valid_major_heading(text):
 
     rest_lower = rest.lower()
 
-    # Loại footnote/link/citation
     if (
         "http://" in rest_lower
         or "https://" in rest_lower
@@ -262,11 +295,9 @@ def is_valid_major_heading(text):
     ):
         return False
 
-    # Loại dòng bảng/số liệu
     if is_table_or_equation_like(rest):
         return False
 
-    # Major heading thường ngắn
     if len(rest.split()) > 10:
         return False
 
@@ -349,12 +380,6 @@ def build_chunks_from_sections(sections, paper_id="input_paper", chunk_size=900,
     return chunks
 
 def build_heading_candidates(lines):
-    """
-    Main design:
-    - Prefer major headings: 1 Introduction, 2 Related Work, 3 Some Model, 4 Experiments.
-    - Plain headings such as Dataset/Evaluation are only used if no major experiment heading exists.
-    - Unknown major heading is kept for positional fallback.
-    """
     body_size = get_body_font_size(lines)
     raw_candidates = []
     seen = set()
@@ -373,7 +398,6 @@ def build_heading_candidates(lines):
 
         candidate = None
 
-        # Abstract inline or standalone.
         if text.lower().startswith("abstract"):
             candidate = {
                 "index": i,
@@ -383,7 +407,6 @@ def build_heading_candidates(lines):
                 "level": "major"
             }
 
-        # Major heading in one line: "3 VIHATET5", "4 Experiments and Results".
         elif is_valid_major_heading(text):
             section = section_from_heading(text) or "unknown"
             candidate = {
@@ -394,7 +417,6 @@ def build_heading_candidates(lines):
                 "level": "major"
             }
 
-        # Split major heading: "3" + "VIHATET5".
         elif is_major_marker(text) and i + 1 < len(lines):
             next_text = normalize_heading_text(lines[i + 1]["text"]).strip()
             combined = f"{text} {next_text}"
@@ -409,7 +431,6 @@ def build_heading_candidates(lines):
                     "level": "major"
                 }
 
-        # Plain heading fallback.
         elif is_valid_plain_heading(text):
             candidate = {
                 "index": i,
@@ -430,11 +451,6 @@ def build_heading_candidates(lines):
 
 
 def filter_and_fix_headings(candidates):
-    """
-    1. If major headings exist, remove plain duplicate/subsection headings.
-    2. Convert unknown major heading between related_work and experiment/conclusion into method.
-    3. Remove result section from retrieval boundary by keeping it as experiment.
-    """
     candidates = sorted(candidates, key=lambda x: x["index"])
 
     has_major = any(c["level"] == "major" for c in candidates)
@@ -442,14 +458,12 @@ def filter_and_fix_headings(candidates):
 
     for c in candidates:
         if has_major and c["level"] == "plain":
-            # Keep only References as plain heading; ignore Dataset/Evaluation/Conclusions duplicates.
             if c["section"] == "references":
                 filtered.append(c)
             continue
 
         filtered.append(c)
 
-    # Positional fallback for unknown major heading.
     for i, c in enumerate(filtered):
         if c["section"] != "unknown":
             continue
@@ -482,15 +496,12 @@ def filter_and_fix_headings(candidates):
             ):
                 c["section"] = "method"
 
-    # Convert result to experiment for current retrieval sections.
     for c in filtered:
         if c["section"] == "result":
             c["section"] = "experiment"
 
-    # Drop remaining unknowns.
     filtered = [c for c in filtered if c["section"] != "unknown"]
 
-    # Deduplicate same section heading repeated closely.
     final = []
     seen_pairs = set()
 
@@ -588,6 +599,11 @@ def extract_sections_from_pdf(pdf_path, heading_labels=None):
 
             if normalized in ["references", "bibliography"]:
                 break
+
+            # === ĐÃ THÊM LỌC TOÁN HỌC Ở ĐÂY ===
+            if is_heavy_math_line(text):
+                continue
+            # ==================================
 
             content.append(text)
 

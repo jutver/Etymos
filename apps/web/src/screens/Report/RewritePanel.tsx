@@ -18,28 +18,46 @@ export function RewritePanel({
   onClose: () => void;
   onAccept: (matchId: string) => void;
 }) {
-  const [variantIndex, setVariantIndex] = useState(0);
+  const [variant, setVariant] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
+  // Mỗi khi panel mở hoặc đổi match, gọi AI ngay lập tức
   useEffect(() => {
-    if (open) {
-      setVariantIndex(0);
-      setCopied(false);
+    if (open && match) {
+      handleRegenerate();
     }
   }, [open, match?.id]);
 
   if (!match) return null;
 
-  const variant = match.rewriteSuggestions[variantIndex % match.rewriteSuggestions.length];
-
-  function handleRegenerate() {
+  async function handleRegenerate() {
+    if (!match) return;
+    
     setRegenerating(true);
     setCopied(false);
-    setTimeout(() => {
-      setVariantIndex((i) => i + 1);
+    
+    try {
+      // Gọi API Rewrite mới tạo ở Backend
+      const response = await fetch("http://localhost:8000/api/ai/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input_sentence: match.userSnippet,
+          source_sentence: match.sourceSnippet 
+        })
+      });
+
+      if (!response.ok) throw new Error("AI Rewrite failed");
+      
+      const data = await response.json();
+      setVariant(data.rewritten_text);
+    } catch (err) {
+      console.error("Rewrite error:", err);
+      setVariant("Đã có lỗi xảy ra khi gọi AI. Vui lòng thử lại.");
+    } finally {
       setRegenerating(false);
-    }, 600);
+    }
   }
 
   function handleCopy() {
@@ -84,9 +102,10 @@ export function RewritePanel({
             className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline disabled:opacity-50"
           >
             <ArrowClockwise size={14} className={cn(regenerating && "animate-spin")} />
-            Regenerate
+            {regenerating ? "Regenerating..." : "Regenerate"}
           </button>
         </div>
+        
         <div className="mt-2 min-h-[7rem] rounded-[var(--radius-card)] border border-brand-300/60 bg-brand-100/40 p-4">
           {regenerating ? (
             <div className="flex flex-col gap-2">

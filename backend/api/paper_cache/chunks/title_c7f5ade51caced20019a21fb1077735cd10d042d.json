@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_c7f5ade51caced20019a21fb1077735cd10d042d",
+    "section": "abstract",
+    "chunk_id": "title_c7f5ade51caced20019a21fb1077735cd10d042d_abstract_0",
+    "start_char": 0,
+    "end_char": 304,
+    "text": "(PDF) A Convolutional Neural Network for Modelling Sentences (2014)\nTL;DR: In this article, CNNs are trained on top of pre-trained word vectors for sentence-level classification tasks and a simple CNN with little hyperparameter tuning and static vectors achieves excellent results on multiple benchmarks."
+  }
+]

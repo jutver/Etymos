@@ -3,12 +3,10 @@ import { Document, Page, pdfjs } from "react-pdf";
 import { CaretLeft, CaretRight, MagnifyingGlassMinus, MagnifyingGlassPlus } from "@phosphor-icons/react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import type { MatchedSource, Severity } from "@etymos/shared";
+import type { MatchedSource, Severity } from "../lib/types";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+// Ép nó load chính xác version đang dùng qua mạng
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 type PlagiarismPdfViewerProps = {
   pdfUrl: File | string;
