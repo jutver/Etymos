@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
+import { Eye, EyeSlash, LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
@@ -21,9 +21,11 @@ export default function AccountProfilePage() {
   const [recoveryEmail, setRecoveryEmail] = useState((user?.user_metadata?.recovery_email as string) ?? "");
   const [savingRecovery, setSavingRecovery] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [showPasswordFields, setShowPasswordFields] = useState(false);
 
   const googleIdentity = user?.identities?.find((identity) => identity.provider === "google");
 
@@ -50,6 +52,10 @@ export default function AccountProfilePage() {
   }
 
   async function savePassword() {
+    if (!currentPassword) {
+      pushToast({ kind: "error", title: "Current password required" });
+      return;
+    }
     if (newPassword.length < 6) {
       pushToast({ kind: "error", title: "Password too short", description: "Use at least 6 characters." });
       return;
@@ -58,13 +64,30 @@ export default function AccountProfilePage() {
       pushToast({ kind: "error", title: "Passwords don't match" });
       return;
     }
+    if (!user?.email) {
+      pushToast({ kind: "error", title: "Couldn't update password", description: "No email on this account." });
+      return;
+    }
+
     setSavingPassword(true);
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (reauthError) {
+      setSavingPassword(false);
+      pushToast({ kind: "error", title: "Current password is incorrect" });
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setSavingPassword(false);
     if (error) {
       pushToast({ kind: "error", title: "Couldn't update password", description: error.message });
       return;
     }
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     pushToast({ kind: "success", title: "Password updated" });
@@ -138,15 +161,32 @@ export default function AccountProfilePage() {
           <h2 className="text-sm font-bold uppercase tracking-wide">Change password</h2>
         </div>
         <div className="mt-4 flex flex-col gap-3">
+          <div className="relative">
+            <input
+              type={showPasswordFields ? "text" : "password"}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current password"
+              className="w-full rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 pr-10 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPasswordFields((v) => !v)}
+              aria-label={showPasswordFields ? "Hide passwords" : "Show passwords"}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-500"
+            >
+              {showPasswordFields ? <EyeSlash size={17} /> : <Eye size={17} />}
+            </button>
+          </div>
           <input
-            type="password"
+            type={showPasswordFields ? "text" : "password"}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="New password"
             className="w-full rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
           <input
-            type="password"
+            type={showPasswordFields ? "text" : "password"}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirm new password"

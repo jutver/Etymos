@@ -1,4 +1,4 @@
-from __future__ import annotations
+
 
 import logging
 import os
@@ -20,6 +20,7 @@ from slowapi.util import get_remote_address
 
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent))
 from job_manager import create_job, get_job, make_progress_callback, update_job
 from report_store import delete_report, get_report, list_reports, save_report
 from main import check_pdf_plagiarism
