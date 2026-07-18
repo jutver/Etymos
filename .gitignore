@@ -30,6 +30,7 @@ venv
 .codex
 .impeccable
 .env*
+.venv*
 .vercel
 .npm-cache
 graphify-out/
