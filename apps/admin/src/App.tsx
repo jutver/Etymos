@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
 import { AdminShell } from "./components/layout/AdminShell";
 import LoginPage from "./screens/Login";
+import AuthCallbackPage from "./screens/AuthCallback";
 import DashboardPage from "./screens/Dashboard";
 import UsersPage from "./screens/Users";
 import UserDetailPage from "./screens/Users/UserDetail";
@@ -18,6 +19,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route element={<RequireAdmin />}>
         <Route element={<AdminShell />}>

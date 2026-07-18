@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   if (!loading && user) {
     const from = (location.state as { from?: Location } | null)?.from;
@@ -23,6 +24,19 @@ export default function LoginPage() {
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     setSubmitting(false);
     if (signInError) setError(signInError.message);
+  }
+
+  async function handleGoogleOAuth() {
+    setError(null);
+    setGoogleLoading(true);
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    setGoogleLoading(false);
+    if (oauthError) setError(oauthError.message);
   }
 
   return (
@@ -80,6 +94,22 @@ export default function LoginPage() {
             {submitting ? "Signing in…" : "Log in"}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-caption font-medium text-fg-subtle">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          disabled={googleLoading}
+          onClick={handleGoogleOAuth}
+          className="flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-control border border-border bg-surface px-4 py-2.5 text-body font-semibold text-fg transition hover:bg-surface-raised active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />
+          {googleLoading ? "Connecting…" : "Continue with Google"}
+        </button>
       </div>
     </div>
   );

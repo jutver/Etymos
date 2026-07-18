@@ -53,6 +53,23 @@ Go to **Authentication > Providers > Email** and turn on **Confirm email**
 version). This forces new signups through the email-confirmation link before
 they can use the app, which the frontend's confirmation-gate UI expects.
 
+### 2a. Switch the confirmation email to a code, not a link
+
+The frontend's `/verify-email` screen (`apps/web/src/screens/VerifyEmail`)
+asks the user to type a 6-digit code and calls
+`supabase.auth.verifyOtp({ email, token, type: "signup" })` — it does **not**
+expect the user to click a link. By default Supabase's "Confirm signup"
+email template embeds `{{ .ConfirmationURL }}`, a link that redirects back
+into the app; if the Site URL / Redirect URLs aren't configured for that
+domain, clicking it can land somewhere unexpected (e.g. a raw file listing)
+instead of confirming the account — which is the bug this fixes.
+
+Go to **Authentication > Email Templates > Confirm signup** and replace the
+template body's `{{ .ConfirmationURL }}` link with `{{ .Token }}` (Supabase's
+docs call this the "OTP" or "token" variable) so the email shows the 6-digit
+code instead of a clickable link. No redirect URL is needed for this flow at
+all, since the code is typed back into the app.
+
 ## 3. Enable identity linking for Google sign-in
 
 So that a Google sign-in using an email address that already has a
