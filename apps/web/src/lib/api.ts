@@ -49,6 +49,17 @@ function buildUrl(path: string) {
   return `${API_BASE_URL}${path}`;
 }
 
+async function errorMessageFromResponse(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const parsed = JSON.parse(text) as { detail?: string };
+    if (parsed.detail) return parsed.detail;
+  } catch {
+    // response wasn't JSON — fall back to raw text
+  }
+  return text || `Request failed with ${response.status}`;
+}
+
 async function getAuthHeader(): Promise<Record<string, string>> {
   const { data, error } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
@@ -66,8 +77,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with ${response.status}`);
+    throw new Error(await errorMessageFromResponse(response));
   }
 
   return response.json() as Promise<T>;
@@ -91,8 +101,7 @@ export async function submitPdfCheck(file: File): Promise<BackendJob> {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with ${response.status}`);
+    throw new Error(await errorMessageFromResponse(response));
   }
 
   return response.json() as Promise<BackendJob>;
