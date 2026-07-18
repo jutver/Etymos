@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, CircleNotch, ClockCounterClockwise, FileMagnifyingGlass } from "@phosphor-icons/react";
+import { CheckCircle, CircleNotch, ClockCounterClockwise, FileMagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
 import { useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
@@ -226,6 +226,7 @@ export default function AnalyzingPage() {
 
   const progress = Math.min(100, Math.round((stepIndex / steps.length) * 100));
   const docLabel = docLabels.length > 1 ? `${docLabels.length} documents` : docLabels[0];
+  const failed = jobStatus === "failed";
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-68px)] max-w-2xl flex-col items-center justify-center px-5 py-16 text-center">
@@ -235,24 +236,45 @@ export default function AnalyzingPage() {
         transition={{ duration: 0.4 }}
         className={cn(
           "flex size-16 items-center justify-center rounded-full",
-          resultIds ? "bg-success-bg text-success" : "bg-brand-100 text-brand-600",
+          failed
+            ? "bg-severity-high-bg text-severity-high"
+            : resultIds
+              ? "bg-success-bg text-success"
+              : "bg-brand-100 text-brand-600",
         )}
       >
-        {resultIds ? <CheckCircle size={30} weight="fill" /> : <FileMagnifyingGlass size={30} weight="bold" />}
+        {failed ? (
+          <WarningCircle size={30} weight="fill" />
+        ) : resultIds ? (
+          <CheckCircle size={30} weight="fill" />
+        ) : (
+          <FileMagnifyingGlass size={30} weight="bold" />
+        )}
       </motion.div>
 
       <h1 className="mt-6 text-h2 font-bold tracking-tight text-navy-900">
-        {resultIds ? "Analysis complete" : "Analyzing your document"}
+        {failed ? "Analysis failed" : resultIds ? "Analysis complete" : "Analyzing your document"}
       </h1>
       <p className="mt-2 max-w-sm text-sm text-ink-500">{docLabel}</p>
-      {state.reportMode === "backend" && !resultIds && (
-        <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm text-ink-600">
-          <p className="font-semibold text-ink-900">{jobStatus === "completed" ? "Finishing up" : jobMessage ?? "Waiting for backend"}</p>
-          {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">Progress: {jobProgress}%</p>}
+
+      {failed ? (
+        <div className="mt-4 w-full max-w-sm rounded-lg border border-severity-high-line bg-severity-high-bg px-4 py-3 text-left text-sm">
+          <p className="font-semibold text-severity-high">
+            We couldn't finish analyzing this document. Please try again.
+          </p>
+          {jobMessage && <p className="mt-1 text-xs text-severity-high/80">{jobMessage}</p>}
         </div>
+      ) : (
+        state.reportMode === "backend" &&
+        !resultIds && (
+          <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm text-ink-600">
+            <p className="font-semibold text-ink-900">{jobStatus === "completed" ? "Finishing up" : jobMessage ?? "Waiting for backend"}</p>
+            {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">Progress: {jobProgress}%</p>}
+          </div>
+        )
       )}
 
-      {!resultIds && (
+      {!resultIds && !failed && (
         <div className="mt-8 w-full max-w-sm">
           <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
             <motion.div
@@ -265,36 +287,55 @@ export default function AnalyzingPage() {
         </div>
       )}
 
-      <div className="mt-10 flex w-full max-w-sm flex-col gap-3 text-left">
-        <AnimatePresence initial={false}>
-          {steps.map((step, i) => {
-            const done = i < stepIndex || resultIds;
-            const active = i === stepIndex && !resultIds;
-            if (i > stepIndex && !resultIds) return null;
-            return (
-              <motion.div
-                key={step.id}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className={cn(
-                  "flex items-center gap-3 rounded-[var(--radius-control)] border px-4 py-3",
-                  active ? "border-brand-300 bg-brand-100/40" : "border-line bg-white",
-                )}
-              >
-                {done ? (
-                  <CheckCircle size={20} weight="fill" className="text-success shrink-0" />
-                ) : (
-                  <CircleNotch size={20} className="shrink-0 animate-spin text-brand-500" />
-                )}
-                <span className={cn("text-sm font-medium", done ? "text-ink-500" : "text-ink-900")}>
-                  {step.label}
-                </span>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </div>
+      {!failed && (
+        <div className="mt-10 flex w-full max-w-sm flex-col gap-3 text-left">
+          <AnimatePresence initial={false}>
+            {steps.map((step, i) => {
+              const done = i < stepIndex || resultIds;
+              const active = i === stepIndex && !resultIds;
+              if (i > stepIndex && !resultIds) return null;
+              return (
+                <motion.div
+                  key={step.id}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className={cn(
+                    "flex items-center gap-3 rounded-[var(--radius-control)] border px-4 py-3",
+                    active ? "border-brand-300 bg-brand-100/40" : "border-line bg-white",
+                  )}
+                >
+                  {done ? (
+                    <CheckCircle size={20} weight="fill" className="text-success shrink-0" />
+                  ) : (
+                    <CircleNotch size={20} className="shrink-0 animate-spin text-brand-500" />
+                  )}
+                  <span className={cn("text-sm font-medium", done ? "text-ink-500" : "text-ink-900")}>
+                    {step.label}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {failed && (
+        <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+          <Button size="lg" fullWidth onClick={() => navigate("/upload", { replace: true })}>
+            Try again
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            fullWidth
+            iconLeft={<ClockCounterClockwise size={18} />}
+            onClick={() => navigate("/history", { replace: true })}
+          >
+            Go to History
+          </Button>
+        </div>
+      )}
 
       {resultIds && (
         <div className="mt-8 flex w-full max-w-sm flex-col gap-3">

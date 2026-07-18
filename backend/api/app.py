@@ -27,6 +27,7 @@ from main import check_pdf_plagiarism
 from doan_van import check_text_plagiarism
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
+from usage import ensure_quota_available, record_check_used
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,8 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
+        if user_id is not None:
+            record_check_used(user_id)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
@@ -193,6 +196,8 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None) -> None:
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
+        if user_id is not None:
+            record_check_used(user_id)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
@@ -206,6 +211,8 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
     filename = file.filename or "uploaded.pdf"
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    ensure_quota_available(user.user_id)
 
     job_id = create_job(input_type="pdf", input_name=filename, user_id=user.user_id)
     temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
@@ -235,6 +242,8 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
 @limiter.limit(RATE_LIMIT_CHECK_TEXT)
 def create_text_check(request: Request, body: TextCheckRequest,
                        user: AuthedUser = Depends(verify_supabase_jwt)):
+    ensure_quota_available(user.user_id)
+
     job_id = create_job(input_type="text", input_name="Pasted text", user_id=user.user_id)
     threading.Thread(
         target=run_text_job,

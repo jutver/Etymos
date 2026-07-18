@@ -29,6 +29,12 @@ uvicorn[standard]==0.35.0
 python-multipart==0.0.20
 pydantic==2.11.7
 
+# --- Local Qwen metadata-extraction model (llm_metadata.py) ---
+# AutoModelForCausalLM.from_pretrained(device_map="auto", low_cpu_mem_usage=True)
+# requires this; without it every check that hits the local-model path
+# (gemini_metadata_extraction flag off) crashes at the metadata_extraction step.
+accelerate==1.11.0
+
 # --- Auth, rate limiting, Supabase integration ---
 PyJWT==2.12.0
 # Required by PyJWT for ES256/RS256 verification (asymmetric Supabase JWT
