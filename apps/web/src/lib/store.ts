@@ -75,6 +75,14 @@ interface AppState {
 
   balanceMode: () => BalanceMode;
   remaining: () => number;
+  syncFromProfile: (profile: {
+    plan: PlanTier;
+    billingCycle: BillingCycle | null;
+    credits: number;
+    checksUsedThisPeriod: number;
+    planPeriodStart: string;
+    studentVerified: boolean;
+  }) => void;
   requestCheck: (docLabel?: string, count?: number) => boolean;
   clearPendingCheck: () => void;
   selectCheckoutItem: (item: CheckoutItem) => void;
@@ -103,7 +111,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       plan: "free",
       billingCycle: "monthly",
-      checksUsedThisPeriod: 1,
+      checksUsedThisPeriod: 0,
       credits: 0,
       history: [],
       historyLoading: false,
@@ -131,6 +139,16 @@ export const useAppStore = create<AppState>()(
         if (credits > 0) return credits;
         return Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod);
       },
+
+      syncFromProfile: (profile) =>
+        set({
+          plan: profile.plan,
+          billingCycle: profile.billingCycle ?? "monthly",
+          credits: profile.credits,
+          checksUsedThisPeriod: profile.checksUsedThisPeriod,
+          planPeriodStart: profile.planPeriodStart,
+          studentVerified: profile.studentVerified,
+        }),
 
       requestCheck: (docLabel, count = 1) => {
         const { plan, credits, checksUsedThisPeriod } = get();

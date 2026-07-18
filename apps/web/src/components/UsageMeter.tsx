@@ -51,7 +51,7 @@ export function UsageMeter({ compact = false }: { compact?: boolean }) {
         )}
       >
         {(low || zero) && <Warning size={compact ? 13 : 15} weight="fill" />}
-        {remaining} of {limit} checks left this month
+        {remaining} check{remaining === 1 ? "" : "s"} left this month
       </div>
       {!compact && (
         <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-muted">
