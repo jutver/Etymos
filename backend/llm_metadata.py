@@ -1,35 +1,77 @@
 import json
+import logging
+import os
 import re
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import threading
+import time
+
+import google.generativeai as genai
+
 from config import LLM_MODEL_NAME
+from supabase_client import get_client
+
+logger = logging.getLogger(__name__)
 
 
 # =========================
-# Load local LLM
+# Lazy local (Qwen) LLM load
 # =========================
+#
+# NOTE: torch/transformers and the multi-GB Qwen weights are only loaded on
+# the first call into a *local*-path function (extract_metadata_with_llm /
+# extract_section_metadata_with_llm / extract_all_section_metadata /
+# extract_all_section_metadata_one_call). Simply `import llm_metadata` no
+# longer forces this load — important when the `gemini_metadata_extraction`
+# feature flag is active and the local model is never used at all.
 
-tokenizer = AutoTokenizer.from_pretrained(
-    LLM_MODEL_NAME,
-    trust_remote_code=True
-)
+_local_model_lock = threading.Lock()
+_tokenizer = None
+_model = None
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True
-)
 
-model = AutoModelForCausalLM.from_pretrained(
-    LLM_MODEL_NAME,
-    quantization_config=bnb_config,
-    device_map="auto",
-    trust_remote_code=True,
-    low_cpu_mem_usage=True
-)
+def _ensure_local_model_loaded():
+    global _tokenizer, _model
 
-model.eval()
+    if _model is not None:
+        return
+
+    with _local_model_lock:
+        if _model is not None:
+            return
+
+        import torch
+        from transformers import (
+            AutoModelForCausalLM,
+            AutoTokenizer,
+            BitsAndBytesConfig,
+        )
+
+        logger.info("Loading local LLM %s (lazy, first local-path use)...", LLM_MODEL_NAME)
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            LLM_MODEL_NAME,
+            trust_remote_code=True
+        )
+
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            LLM_MODEL_NAME,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            low_cpu_mem_usage=True
+        )
+
+        model.eval()
+
+        _tokenizer = tokenizer
+        _model = model
 
 
 # =========================
@@ -129,10 +171,12 @@ def normalize_metadata(metadata):
 
 
 # =========================
-# LLM generation helper
+# Local LLM generation helper
 # =========================
 
 def generate_json_from_prompt(prompt, max_new_tokens=256, max_length=4096):
+    _ensure_local_model_loaded()
+
     messages = [
         {
             "role": "system",
@@ -144,30 +188,32 @@ def generate_json_from_prompt(prompt, max_new_tokens=256, max_length=4096):
         }
     ]
 
-    input_text = tokenizer.apply_chat_template(
+    input_text = _tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=True
     )
 
-    inputs = tokenizer(
+    inputs = _tokenizer(
         input_text,
         return_tensors="pt",
         truncation=True,
         max_length=max_length
-    ).to(model.device)
+    ).to(_model.device)
+
+    import torch
 
     with torch.no_grad():
-        outputs = model.generate(
+        outputs = _model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
-            pad_token_id=tokenizer.eos_token_id
+            pad_token_id=_tokenizer.eos_token_id
         )
 
     generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
 
-    decoded = tokenizer.decode(
+    decoded = _tokenizer.decode(
         generated_tokens,
         skip_special_tokens=True
     ).strip()
@@ -176,7 +222,51 @@ def generate_json_from_prompt(prompt, max_new_tokens=256, max_length=4096):
 
 
 # =========================
-# Metadata extraction: one paper
+# Shared prompt builder (used by both the local and Gemini paths, so the
+# extraction rules/schema stay in one place instead of drifting apart)
+# =========================
+
+def _build_section_metadata_prompt(section_name, section_text):
+    return f"""
+You are an academic paper section metadata extractor.
+
+Return ONLY valid JSON. Do not add explanation.
+
+Schema:
+{{
+  "field": "",
+  "task": "",
+  "subtask": "",
+  "problem": "",
+  "method": [],
+  "model": [],
+  "dataset": [],
+  "language": "",
+  "domain": "",
+  "keywords": []
+}}
+
+Rules:
+- Extract only information explicitly present in this section.
+- Do not hallucinate.
+- If information is missing, use "" or [].
+- method, model, dataset, keywords must be lists.
+- keywords should be concise academic search terms.
+- If this section is Related Work, prefer extracting related research themes, models, methods, and datasets mentioned.
+- If this section is Experiment, prioritize dataset names, metrics, baselines, and evaluation setting.
+- If this section is Method, prioritize model architecture, algorithms, and pipeline components.
+- If this section is Introduction, prioritize problem, task, language, domain, and motivation.
+
+SECTION NAME:
+{section_name}
+
+SECTION TEXT:
+{section_text[:1200]}
+"""
+
+
+# =========================
+# Metadata extraction: one paper (local model)
 # =========================
 
 def extract_metadata_with_llm(title, abstract, introduction=""):
@@ -250,7 +340,7 @@ INTRODUCTION:
 
 
 # =========================
-# Metadata extraction: section-by-section
+# Metadata extraction: section-by-section (local model)
 # =========================
 
 def extract_section_metadata_with_llm(section_name, section_text):
@@ -262,42 +352,7 @@ def extract_section_metadata_with_llm(section_name, section_text):
     if not section_text or len(section_text.strip()) < 50:
         return normalize_metadata({})
 
-    prompt = f"""
-You are an academic paper section metadata extractor.
-
-Return ONLY valid JSON. Do not add explanation.
-
-Schema:
-{{
-  "field": "",
-  "task": "",
-  "subtask": "",
-  "problem": "",
-  "method": [],
-  "model": [],
-  "dataset": [],
-  "language": "",
-  "domain": "",
-  "keywords": []
-}}
-
-Rules:
-- Extract only information explicitly present in this section.
-- Do not hallucinate.
-- If information is missing, use "" or [].
-- method, model, dataset, keywords must be lists.
-- keywords should be concise academic search terms.
-- If this section is Related Work, prefer extracting related research themes, models, methods, and datasets mentioned.
-- If this section is Experiment, prioritize dataset names, metrics, baselines, and evaluation setting.
-- If this section is Method, prioritize model architecture, algorithms, and pipeline components.
-- If this section is Introduction, prioritize problem, task, language, domain, and motivation.
-
-SECTION NAME:
-{section_name}
-
-SECTION TEXT:
-{section_text[:1200]}
-"""
+    prompt = _build_section_metadata_prompt(section_name, section_text)
 
     decoded = generate_json_from_prompt(
         prompt,
@@ -313,9 +368,9 @@ SECTION TEXT:
 
 def extract_all_section_metadata(section_texts):
     """
-    Recommended function.
-    Calls LLM once per section, producing reliable JSON for each section.
-    Slower than one-call, but much more stable for small local LLMs.
+    Recommended local-model function.
+    Calls the local LLM once per section, producing reliable JSON for each
+    section. Slower than one-call, but much more stable for small local LLMs.
     """
     section_metadata = {}
 
@@ -345,7 +400,7 @@ def extract_all_section_metadata(section_texts):
 
 
 # =========================
-# Optional: faster but less stable one-call version
+# Optional: faster but less stable one-call version (local model)
 # =========================
 
 def extract_all_section_metadata_one_call(section_texts):
@@ -433,6 +488,153 @@ EXPERIMENT:
         result[section] = normalize_metadata(data.get(section, {}))
 
     return result
+
+
+# =========================
+# Metadata extraction: Gemini API path
+# =========================
+#
+# Alongside the local Qwen path above, this uses the Gemini API for the
+# same section-by-section metadata extraction, with the same output shape
+# (a dict per section, normalized via normalize_metadata). Selected at
+# call sites (backend/main.py, backend/doan_van.py) via the
+# `gemini_metadata_extraction` feature flag — see
+# is_gemini_metadata_extraction_enabled() below.
+
+GEMINI_METADATA_MODEL = os.getenv("GEMINI_METADATA_MODEL", "gemini-flash-latest")
+_genai_configured = False
+_genai_configure_lock = threading.Lock()
+
+
+def _ensure_genai_configured():
+    global _genai_configured
+    if _genai_configured:
+        return
+    with _genai_configure_lock:
+        if _genai_configured:
+            return
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set; cannot use Gemini metadata extraction."
+            )
+        genai.configure(api_key=api_key)
+        _genai_configured = True
+
+
+def extract_section_metadata_with_gemini(section_name, section_text):
+    """
+    Gemini-API equivalent of extract_section_metadata_with_llm: same
+    schema, same rules, same normalized return shape — routed through the
+    Gemini API instead of the local Qwen model.
+    """
+    if not section_text or len(section_text.strip()) < 50:
+        return normalize_metadata({})
+
+    prompt = _build_section_metadata_prompt(section_name, section_text)
+
+    try:
+        _ensure_genai_configured()
+        gemini_model = genai.GenerativeModel(GEMINI_METADATA_MODEL)
+        response = gemini_model.generate_content(prompt)
+        decoded = (getattr(response, "text", None) or "").strip()
+    except Exception:
+        logger.exception(
+            "Gemini metadata extraction failed for section=%s", section_name
+        )
+        return normalize_metadata({})
+
+    print(f"\n===== {section_name.upper()} METADATA RAW OUTPUT (Gemini) =====")
+    print(decoded)
+
+    return normalize_metadata(extract_json(decoded))
+
+
+def extract_all_section_metadata_gemini(section_texts):
+    """
+    Gemini-API equivalent of extract_all_section_metadata. Same output
+    shape: a dict keyed by section name, each value a normalized metadata
+    dict.
+    """
+    section_metadata = {}
+
+    target_sections = [
+        "title_abstract",
+        "introduction",
+        "related_work",
+        "method",
+        "experiment"
+    ]
+
+    for section_name in target_sections:
+        text = section_texts.get(section_name, "")
+
+        print(f"\nExtracting metadata for section (Gemini): {section_name}")
+        metadata = extract_section_metadata_with_gemini(section_name, text)
+
+        section_metadata[section_name] = metadata
+
+        print(f"\n===== {section_name.upper()} JSON METADATA (Gemini) =====")
+        print(json.dumps(metadata, indent=2, ensure_ascii=False))
+
+    return section_metadata
+
+
+# =========================
+# Feature flag: gemini_metadata_extraction
+# =========================
+
+_FEATURE_FLAG_KEY = "gemini_metadata_extraction"
+_FEATURE_FLAG_TTL_SECONDS = float(os.getenv("FEATURE_FLAG_CACHE_TTL_SECONDS", "45"))
+_flag_cache: dict = {}
+_flag_cache_lock = threading.Lock()
+
+
+def is_gemini_metadata_extraction_enabled() -> bool:
+    """
+    Reads the `gemini_metadata_extraction` feature flag from Supabase
+    (public.feature_flags, seeded by
+    supabase/migrations/20260716120000_student_verification_and_audit_log.sql),
+    with a short in-process cache (env FEATURE_FLAG_CACHE_TTL_SECONDS,
+    default 45s) so we don't hit the DB on every extraction call.
+
+    Falls back to False (i.e. use the local model) if the flag is
+    missing, unreadable, or Supabase isn't configured in this
+    environment — the VPS has a GPU, so local is the safe default per
+    PLAN.md.
+    """
+    now = time.time()
+
+    with _flag_cache_lock:
+        cached = _flag_cache.get(_FEATURE_FLAG_KEY)
+        if cached is not None and (now - cached[0]) < _FEATURE_FLAG_TTL_SECONDS:
+            return cached[1]
+
+    client = get_client()
+    value = False
+
+    if client is not None:
+        try:
+            resp = (
+                client.table("feature_flags")
+                .select("enabled")
+                .eq("key", _FEATURE_FLAG_KEY)
+                .maybe_single()
+                .execute()
+            )
+            if resp and resp.data:
+                value = bool(resp.data.get("enabled", False))
+        except Exception:
+            logger.exception(
+                "Failed to read feature flag %s; falling back to local model.",
+                _FEATURE_FLAG_KEY,
+            )
+            value = False
+
+    with _flag_cache_lock:
+        _flag_cache[_FEATURE_FLAG_KEY] = (now, value)
+
+    return value
 
 
 # =========================

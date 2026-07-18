@@ -31,7 +31,7 @@ async function checkHealth(): Promise<HealthState> {
 
 function Indicator({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-5">
+    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-5 shadow-card">
       {ok ? (
         <CheckCircle size={22} weight="fill" className="shrink-0 text-accent" />
       ) : (

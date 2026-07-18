@@ -4,11 +4,12 @@ import { CalendarBlank, Check, CreditCard, GraduationCap, ShieldCheck, WarningCi
 import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
-import { PLANS, CREDIT_PACKS, PAYMENT_METHODS } from "../../lib/mockData";
+import { PAYMENT_METHODS } from "../../lib/mockData";
+import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
-import type { BillingCycle, PaymentMethod } from "@etymos/shared";
+import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 
 export default function AccountPlanPage() {
   const navigate = useNavigate();
@@ -31,11 +32,26 @@ export default function AccountPlanPage() {
   const [method, setMethod] = useState<PaymentMethod>("vnpay");
   const [methodOpen, setMethodOpen] = useState(false);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [plans, setPlans] = useState<PlanDefinition[]>([]);
+  const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchPlanDefinitions(), fetchCreditPacks()])
+      .then(([planRows, packRows]) => {
+        if (cancelled) return;
+        setPlans(planRows);
+        setCreditPacks(packRows);
+      })
+      .catch((err: unknown) => console.error("Failed to load pricing config", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const maxAnnualSavings = Math.max(
-    ...PLANS.filter((p) => p.id !== "free").map((p) =>
-      annualSavingsPercent(p.priceMonthly, p.priceAnnual),
-    ),
+    0,
+    ...plans.filter((p) => p.id !== "free").map((p) => annualSavingsPercent(p.priceMonthly, p.priceAnnual)),
   );
 
   function cancelSubscription() {
@@ -44,7 +60,7 @@ export default function AccountPlanPage() {
     pushToast({ kind: "info", title: "Subscription canceled", description: "You're back on the Free plan." });
   }
 
-  function buyPack(packId: (typeof CREDIT_PACKS)[number]["id"]) {
+  function buyPack(packId: CreditPack["id"]) {
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -174,7 +190,7 @@ export default function AccountPlanPage() {
           </div>
         </div>
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
-          {PLANS.map((p) => (
+          {plans.map((p) => (
             <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
           ))}
         </div>
@@ -184,7 +200,7 @@ export default function AccountPlanPage() {
         <h2 className="text-h3 font-bold tracking-tight text-navy-900">Buy credits</h2>
         <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription required.</p>
         <div className="mx-auto mt-6 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
-          {CREDIT_PACKS.map((pack) => (
+          {creditPacks.map((pack) => (
             <div
               key={pack.id}
               className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"

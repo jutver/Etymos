@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   ChartLineUp,
   Users,
   ShieldWarning,
+  SealCheck,
   SlidersHorizontal,
   SignOut,
+  List,
+  X,
 } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { cn } from "@etymos/shared";
@@ -13,52 +17,135 @@ const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: ChartLineUp, end: true },
   { to: "/users", label: "Users", icon: Users },
   { to: "/moderation", label: "Moderation", icon: ShieldWarning },
+  { to: "/verification", label: "Verification", icon: SealCheck },
   { to: "/config", label: "Config", icon: SlidersHorizontal },
 ];
 
-export function AdminNav() {
+/** Etymos brand mark — mirrors apps/web/src/components/layout/Logo.tsx's LogoMark
+ * so the two apps read as the same product family (DESIGN.md's "One Gradient Rule":
+ * the brand gradient appears in a small, fixed set of places, including the mark). */
+function BrandMark({ size = 28 }: { size?: number }) {
   return (
-    <nav className="flex h-dvh w-60 shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-control bg-accent/15 font-mono text-sm font-semibold text-accent">
-          E
-        </div>
-        <span className="font-mono text-sm font-semibold tracking-tight text-fg">
-          Etymos Admin
-        </span>
-      </div>
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" className="shrink-0">
+      <defs>
+        <linearGradient id="admin-logo-g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#9FD2F0" />
+          <stop offset="1" stopColor="#1E4FC4" />
+        </linearGradient>
+      </defs>
+      <rect width="48" height="48" rx="12" fill="url(#admin-logo-g)" />
+      <path d="M15 14H33V19H20.5V21.8H31V26.6H20.5V29.6H33.3V34.4H15V14Z" fill="white" />
+    </svg>
+  );
+}
 
-      <div className="flex-1 space-y-1 px-3">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 rounded-control px-3 py-2 text-body font-medium transition-colors",
-                isActive
-                  ? "bg-accent-bg text-accent"
-                  : "text-fg-muted hover:bg-surface-raised hover:text-fg",
-              )
-            }
-          >
-            <Icon size={18} weight="bold" />
-            {label}
-          </NavLink>
-        ))}
+function Brand() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <BrandMark />
+      <div className="leading-tight">
+        <p className="text-sm font-bold tracking-tight text-white">Etymos</p>
+        <p className="text-micro font-medium uppercase tracking-wider text-white/50">Admin</p>
       </div>
+    </div>
+  );
+}
 
-      <div className="border-t border-border p-3">
+function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="flex-1 space-y-1 px-3">
+      {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-2.5 rounded-control px-3 py-2 text-body font-medium transition-colors",
+              isActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white",
+            )
+          }
+        >
+          <Icon size={18} weight="bold" />
+          {label}
+        </NavLink>
+      ))}
+    </div>
+  );
+}
+
+function LogoutButton() {
+  return (
+    <div className="border-t border-white/10 p-3">
+      <button
+        type="button"
+        onClick={() => supabase.auth.signOut()}
+        className="flex w-full cursor-pointer items-center gap-2.5 rounded-control px-3 py-2 text-body font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+      >
+        <SignOut size={18} weight="bold" />
+        Log out
+      </button>
+    </div>
+  );
+}
+
+export function AdminNav() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Mobile/tablet top bar */}
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-navy-700/60 bg-navy-900 px-4 md:hidden">
+        <Brand />
         <button
           type="button"
-          onClick={() => supabase.auth.signOut()}
-          className="flex w-full cursor-pointer items-center gap-2.5 rounded-control px-3 py-2 text-body font-medium text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Toggle navigation"
+          aria-expanded={open}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-control text-white/80 transition hover:bg-white/10"
         >
-          <SignOut size={18} weight="bold" />
-          Log out
+          {open ? <X size={20} /> : <List size={20} />}
         </button>
-      </div>
-    </nav>
+      </header>
+
+      {/* Mobile/tablet drawer */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-navy-900/60 md:hidden"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <nav
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-dvh w-64 max-w-[80vw] flex-col bg-navy-900 shadow-pop transition-transform duration-200 ease-out md:hidden",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between px-5 py-5">
+          <Brand />
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close navigation"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-control text-white/70 hover:bg-white/10"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <NavLinks onNavigate={() => setOpen(false)} />
+        <LogoutButton />
+      </nav>
+
+      {/* Desktop sidebar */}
+      <nav className="sticky top-0 z-30 hidden h-dvh w-60 shrink-0 flex-col bg-navy-900 md:flex">
+        <div className="flex items-center gap-2 px-5 py-5">
+          <Brand />
+        </div>
+        <NavLinks />
+        <LogoutButton />
+      </nav>
+    </>
   );
 }

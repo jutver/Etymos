@@ -1,46 +1,71 @@
 @import "tailwindcss";
 
 @theme {
-  /* Data-dense dark theme — deliberately decoupled from apps/web's
-     "Confidence Blue" system (DESIGN.md). See ADMIN_DESIGN.md. */
-  --color-bg: #0f172a;
-  --color-surface: #1e293b;
-  --color-surface-raised: #253449;
-  --color-surface-muted: #172033;
-  --color-border: #334155;
-  --color-border-strong: #475569;
-  --color-fg: #f8fafc;
-  --color-fg-muted: #94a3b8;
-  --color-fg-subtle: #64748b;
+  /* Etymos "Confidence Blue" system — same token spec as apps/web/DESIGN.md,
+     applied to the admin dashboard's denser, data-first layout. Semantic
+     token NAMES below are unchanged from the previous dark theme so every
+     existing bg/text/border utility in this app keeps working; only
+     the VALUES were repointed at the DESIGN.md palette. See ADMIN_DESIGN.md. */
+  --color-bg: #f5faff; /* mist-tint page wash */
+  --color-surface: #ffffff; /* paper white — cards, table, panels */
+  --color-surface-raised: #eef3fb; /* hover fill on surface */
+  --color-surface-muted: #eef3fb; /* recessed inputs, selects */
+  --color-border: #e2e8f5; /* line */
+  --color-border-strong: #c7d1e8;
+  --color-fg: #1a2233; /* ink-900 */
+  --color-fg-muted: #5c6680; /* ink-500 */
+  --color-fg-subtle: #9aa4bd; /* ink-300 */
 
-  --color-accent: #22c55e;
-  --color-accent-bg: #14532d33;
-  --color-destructive: #ef4444;
-  --color-destructive-bg: #7f1d1d33;
-  --color-warning: #f59e0b;
-  --color-warning-bg: #78350f33;
-  --color-info: #38bdf8;
-  --color-info-bg: #0c4a6e33;
+  /* Brand — confidence blue, reserved for primary actions & active state,
+     never used to signal a plagiarism/verification result (Functional Wall Rule). */
+  --color-accent: #1e4fc4; /* confidence-blue-deep */
+  --color-accent-hover: #2c5fd6; /* confidence-blue-mid */
+  --color-accent-bg: #eaf5ff;
 
-  --font-sans: "Fira Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Functional (result) colors — severity red/amber/yellow, kept out of the
+     blue system entirely, matching DESIGN.md's five-color functional palette. */
+  --color-destructive: #dc2626; /* alert-red — high severity, reject, danger */
+  --color-destructive-bg: #fef2f2;
+  --color-warning: #d97706; /* caution-amber — moderate severity, pending */
+  --color-warning-bg: #fffbeb;
+  --color-info: #ca8a04; /* notice-yellow — low severity / informational */
+  --color-info-bg: #fefce8;
+  --color-success: #059669; /* confirmed-green — approved, resolved, healthy */
+  --color-success-bg: #ecfdf5;
+
+  /* Navy — the authority surface, reserved for the nav shell only (never
+     used for cards/panels, which stay paper white per DESIGN.md §2). */
+  --color-navy-900: #0f1b3d;
+  --color-navy-800: #16234a;
+  --color-navy-700: #1e2e5c;
+
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Numeric/tabular figures (metrics, IDs, timestamps) stay monospace so
+     dense columns of numbers align — a deliberate, scoped exception to the
+     Single-Family Rule, which governs marketing/product hierarchy, not
+     tabular data legibility in an internal tool. */
   --font-mono: "Fira Code", ui-monospace, "SF Mono", monospace;
 
-  --text-h1: 1.5rem;
-  --text-h1--line-height: 1.25;
-  --text-h2: 1.125rem;
+  --text-h1: 1.75rem;
+  --text-h1--line-height: 1.2;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: 1.25rem;
   --text-h2--line-height: 1.3;
-  --text-body: 0.875rem;
-  --text-body--line-height: 1.55;
-  --text-caption: 0.75rem;
-  --text-caption--line-height: 1.4;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.6;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.5;
   --text-micro: 0.6875rem;
-  --text-micro--line-height: 1.35;
+  --text-micro--line-height: 1.4;
 
-  /* Density-8 spacing: tighter than the marketing site, dashboard-appropriate */
-  --radius-control: 0.5rem;
-  --radius-card: 0.625rem;
+  --radius-input: 0.625rem;
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px -4px rgba(0, 0, 0, 0.3);
+  /* Shadows tinted toward ink navy, never neutral gray or black (Tinted Shadow Rule). */
+  --shadow-card: 0 1px 2px rgba(15, 27, 61, 0.04), 0 8px 24px -12px rgba(15, 27, 61, 0.12);
+  --shadow-card-hover: 0 2px 4px rgba(15, 27, 61, 0.06), 0 16px 32px -12px rgba(15, 27, 61, 0.18);
+  --shadow-pop: 0 12px 40px -8px rgba(15, 27, 61, 0.28);
 }
 
 @layer base {
@@ -49,7 +74,7 @@
   }
 
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
@@ -61,8 +86,8 @@
   }
 
   ::selection {
-    background-color: var(--color-accent);
-    color: var(--color-bg);
+    background-color: var(--color-accent-bg);
+    color: var(--color-accent);
   }
 
   :focus-visible {

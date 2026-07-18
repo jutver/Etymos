@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, CircleNotch, Lock, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
-import { PLANS, CREDIT_PACKS, PAYMENT_METHODS } from "../../lib/mockData";
+import { PAYMENT_METHODS } from "../../lib/mockData";
+import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
-import type { PaymentMethod } from "@etymos/shared";
+import type { CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 
 type Status = "idle" | "processing" | "declined";
 
@@ -16,15 +17,38 @@ export default function CheckoutPage() {
   const completePurchase = useAppStore((s) => s.completePurchase);
   const [method, setMethod] = useState<PaymentMethod>("vnpay");
   const [status, setStatus] = useState<Status>("idle");
+  const [plans, setPlans] = useState<PlanDefinition[]>([]);
+  const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
+  const [configLoading, setConfigLoading] = useState(true);
 
   useEffect(() => {
     if (!item) navigate("/pricing", { replace: true });
   }, [item, navigate]);
 
-  if (!item) return null;
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchPlanDefinitions(), fetchCreditPacks()])
+      .then(([planRows, packRows]) => {
+        if (cancelled) return;
+        setPlans(planRows);
+        setCreditPacks(packRows);
+      })
+      .catch((err: unknown) => console.error("Failed to load pricing config", err))
+      .finally(() => {
+        if (!cancelled) setConfigLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const plan = item.kind === "plan" ? PLANS.find((p) => p.id === item.plan) : null;
-  const pack = item.kind === "pack" ? CREDIT_PACKS.find((p) => p.id === item.packId) : null;
+  if (!item) return null;
+  if (configLoading) {
+    return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>;
+  }
+
+  const plan = item.kind === "plan" ? plans.find((p) => p.id === item.plan) : null;
+  const pack = item.kind === "pack" ? creditPacks.find((p) => p.id === item.packId) : null;
   const price = plan
     ? item.kind === "plan" && item.billingCycle === "annual"
       ? plan.priceAnnual
@@ -38,7 +62,7 @@ export default function CheckoutPage() {
       if (shouldDecline) {
         setStatus("declined");
       } else {
-        completePurchase();
+        completePurchase(pack?.checks);
         navigate("/payment-success");
       }
     }, 1600);

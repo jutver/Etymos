@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Python virtualenvs (e.g. backend/.venv, used by `npm test`'s backend leg)
+.venv
+venv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,9 +30,11 @@ dist-ssr
 .codex
 .impeccable
 .env*
+.venv*
 .vercel
 .npm-cache
 graphify-out/
 diagrams/
 .mcp.json
 *.md
+!docs/**/*.md

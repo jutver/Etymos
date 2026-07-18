@@ -33,7 +33,7 @@ export function DataTable<T>({
   onPageChange,
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-surface">
+    <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-body">
           <thead>

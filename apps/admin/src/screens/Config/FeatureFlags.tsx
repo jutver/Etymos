@@ -41,7 +41,7 @@ export default function FeatureFlagsPage() {
   }
 
   return (
-    <div className="divide-y divide-border rounded-card border border-border bg-surface">
+    <div className="divide-y divide-border rounded-card border border-border bg-surface shadow-card">
       {flags.map((flag) => (
         <div key={flag.key} className="flex items-center justify-between px-5 py-4">
           <div>

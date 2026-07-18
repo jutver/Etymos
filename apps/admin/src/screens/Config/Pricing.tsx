@@ -94,7 +94,7 @@ export default function PricingConfigPage() {
           <h2 className="text-h2 font-semibold text-fg">Plans</h2>
           <div className="mt-3 space-y-3">
             {plans.map((plan) => (
-              <div key={plan.id} className="rounded-card border border-border bg-surface p-5">
+              <div key={plan.id} className="rounded-card border border-border bg-surface p-5 shadow-card">
                 <p className="text-body font-medium text-fg capitalize">{plan.name}</p>
                 <div className="mt-3 grid grid-cols-4 gap-3">
                   <NumberField
@@ -137,7 +137,7 @@ export default function PricingConfigPage() {
           <h2 className="text-h2 font-semibold text-fg">Credit packs</h2>
           <div className="mt-3 space-y-3">
             {packs.map((pack) => (
-              <div key={pack.id} className="rounded-card border border-border bg-surface p-5">
+              <div key={pack.id} className="rounded-card border border-border bg-surface p-5 shadow-card">
                 <p className="text-body font-medium text-fg">{pack.label}</p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <NumberField

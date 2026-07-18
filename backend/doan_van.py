@@ -113,6 +113,8 @@ def check_text_plagiarism(
     from llm_metadata import (
         build_queries_from_section_metadata,
         extract_all_section_metadata,
+        extract_all_section_metadata_gemini,
+        is_gemini_metadata_extraction_enabled,
     )
     from paper_cache import cache_candidate_papers
     from plagiarism_matcher import (
@@ -164,8 +166,11 @@ def check_text_plagiarism(
         "Extracting metadata from input text",
     )
 
-    section_metadata = extract_all_section_metadata(
-        metadata_section_texts
+    use_gemini = is_gemini_metadata_extraction_enabled()
+    section_metadata = (
+        extract_all_section_metadata_gemini(metadata_section_texts)
+        if use_gemini
+        else extract_all_section_metadata(metadata_section_texts)
     )
 
     queries = build_queries_from_section_metadata(

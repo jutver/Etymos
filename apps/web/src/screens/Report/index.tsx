@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   DownloadSimple,
+  FileMagnifyingGlass,
   GraduationCap,
   LockSimple,
   Translate,
 } from "@phosphor-icons/react";
-import { SAMPLE_DOCUMENT, HISTORY_SEED } from "../../lib/mockData";
 import { useAppStore } from "../../lib/store";
+import { fetchCheckedDocument } from "../../lib/documentsQueries";
 import { formatDate, formatNumber } from "../../lib/format";
 import { SimilarityBadge, SeverityTag } from "../../components/Severity";
 import { MatchCard } from "../../components/MatchCard";
@@ -15,7 +16,7 @@ import { Button } from "../../components/ui/Button";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { RewritePanel } from "./RewritePanel";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
-import type { MatchedSource } from "../../lib/types";
+import type { CheckedDocument, MatchedSource } from "../../lib/types";
 
 export default function ReportPage() {
   const { id } = useParams();
@@ -26,8 +27,45 @@ export default function ReportPage() {
 
   const checkedDocuments = useAppStore((s) => s.checkedDocuments);
   const history = useAppStore((s) => s.history);
-  const doc = (id && checkedDocuments[id]) || SAMPLE_DOCUMENT;
-  const historyMeta = history.find((h) => h.id === id) ?? HISTORY_SEED.find((h) => h.id === id);
+  // Fast path: the document was just created in this session (right after
+  // Upload/Analyzing) and is already sitting in the local zustand cache —
+  // no need to round-trip to Supabase for it.
+  const cachedDoc = id ? checkedDocuments[id] : undefined;
+
+  const [remoteDoc, setRemoteDoc] = useState<CheckedDocument | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!id || cachedDoc) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    setNotFound(false);
+    fetchCheckedDocument(id)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result) {
+          setNotFound(true);
+        } else {
+          setRemoteDoc(result as CheckedDocument);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load report");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, cachedDoc]);
+
+  const doc = cachedDoc ?? remoteDoc ?? null;
+  const historyMeta = id ? history.find((h) => h.id === id) : undefined;
 
   // Đồng bộ giữa highlight trên PDF và match card đang được chọn
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -37,15 +75,15 @@ export default function ReportPage() {
   const [exporting, setExporting] = useState(false);
 
   const visibleMatches = useMemo(
-    () => (isFree ? doc.matches.filter((m) => m.detectionType === "traditional") : doc.matches),
-    [isFree, doc.matches],
+    () => (doc ? (isFree ? doc.matches.filter((m) => m.detectionType === "traditional") : doc.matches) : []),
+    [isFree, doc],
   );
   const lockedMatches = useMemo(
-    () => (isFree ? doc.matches.filter((m) => m.detectionType === "semantic") : []),
-    [isFree, doc.matches],
+    () => (doc && isFree ? doc.matches.filter((m) => m.detectionType === "semantic") : []),
+    [isFree, doc],
   );
 
-  const baseScore = isFree ? doc.similarityScoreFree : doc.similarityScore;
+  const baseScore = doc ? (isFree ? doc.similarityScoreFree : doc.similarityScore) : 0;
   const displayScore = Math.max(0, baseScore - resolvedIds.size * 4);
 
   function handleAcceptRewrite(matchId: string) {
@@ -67,6 +105,39 @@ export default function ReportPage() {
       setExporting(false);
       pushToast({ kind: "success", title: "Report exported", description: "Etymos-Report.pdf is ready." });
     }, 1200);
+  }
+
+  if (!id || notFound || loadError) {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-24 text-center sm:px-8">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-surface-tint text-ink-400">
+          <FileMagnifyingGlass size={26} />
+        </div>
+        <h1 className="mt-5 text-h3 font-bold text-navy-900">Report not found</h1>
+        <p className="mt-2 text-sm text-ink-500">
+          {loadError ??
+            "We couldn't find this document. It may have been deleted, moved to trash, or the link is incorrect."}
+        </p>
+        <Button className="mt-6" onClick={() => navigate("/history")}>
+          Back to History
+        </Button>
+      </div>
+    );
+  }
+
+  if (loading || !doc) {
+    return (
+      <div className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+        <div className="flex flex-col gap-5 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
+          <div className="h-6 w-64 animate-pulse rounded bg-surface-muted" />
+          <div className="h-4 w-40 animate-pulse rounded bg-surface-muted" />
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="h-[600px] animate-pulse rounded-[var(--radius-card-lg)] bg-surface-tint" />
+          <div className="h-[600px] animate-pulse rounded-[var(--radius-card-lg)] bg-surface-tint" />
+        </div>
+      </div>
+    );
   }
 
   return (

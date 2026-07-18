@@ -1,6 +1,6 @@
 import { cn } from "@etymos/shared";
 
-type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info";
+type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
 const TONE_CLASSES: Record<BadgeTone, string> = {
   neutral: "bg-surface-raised text-fg-muted",
@@ -8,6 +8,7 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
   destructive: "bg-destructive-bg text-destructive",
   warning: "bg-warning-bg text-warning",
   info: "bg-info-bg text-info",
+  success: "bg-success-bg text-success",
 };
 
 export function StatusBadge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {

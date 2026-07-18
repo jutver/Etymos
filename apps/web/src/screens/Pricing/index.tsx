@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretDown, Check, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
-import { PLANS, CREDIT_PACKS, FEATURE_MATRIX } from "../../lib/mockData";
+import { FEATURE_MATRIX } from "../../lib/mockData";
+import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
-import type { BillingCycle } from "@etymos/shared";
+import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 
 const faqs = [
   {
@@ -38,13 +39,29 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
 
+  const [plans, setPlans] = useState<PlanDefinition[]>([]);
+  const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchPlanDefinitions(), fetchCreditPacks()])
+      .then(([planRows, packRows]) => {
+        if (cancelled) return;
+        setPlans(planRows);
+        setCreditPacks(packRows);
+      })
+      .catch((err: unknown) => console.error("Failed to load pricing config", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const maxAnnualSavings = Math.max(
-    ...PLANS.filter((p) => p.id !== "free").map((p) =>
-      annualSavingsPercent(p.priceMonthly, p.priceAnnual),
-    ),
+    0,
+    ...plans.filter((p) => p.id !== "free").map((p) => annualSavingsPercent(p.priceMonthly, p.priceAnnual)),
   );
 
-  function buyPack(packId: (typeof CREDIT_PACKS)[number]["id"]) {
+  function buyPack(packId: CreditPack["id"]) {
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -86,7 +103,7 @@ export default function PricingPage() {
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
-          {PLANS.map((plan) => (
+          {plans.map((plan) => (
             <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle} />
           ))}
         </div>
@@ -105,7 +122,7 @@ export default function PricingPage() {
           </div>
 
           <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
-            {CREDIT_PACKS.map((pack) => (
+            {creditPacks.map((pack) => (
               <div
                 key={pack.id}
                 className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"

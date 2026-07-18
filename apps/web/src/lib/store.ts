@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { CREDIT_PACKS, HISTORY_SEED } from "./mockData";
+import { fetchHistory as fetchHistoryEntries, fetchTrash as fetchTrashEntries } from "./documentsQueries";
 import type {
   BillingCycle,
   CheckedDocument,
@@ -10,6 +10,10 @@ import type {
   Toast,
 } from "@etymos/shared";
 
+// Hardcoded fallback only — used before configQueries.ts's fetchPlanDefinitions()
+// resolves (or if it fails). Once that fetch succeeds, setPlanLimitsFromConfig()
+// overwrites these in place with the live plan_definitions.doc_limit/word_limit
+// values, which are the actual source of truth.
 export const PLAN_DOC_LIMITS: Record<PlanTier, number> = {
   free: 2,
   student: 10,
@@ -32,9 +36,22 @@ export function planWordLimit(plan: PlanTier): number {
   return PLAN_WORD_LIMITS[plan];
 }
 
-const DEFAULT_PROJECTS = Array.from(
-  new Set(HISTORY_SEED.map((h) => h.project).filter(Boolean)),
-) as string[];
+/** Mutates the fallback maps in place so planDocLimit()/planWordLimit() callers
+ * (plain functions, not store selectors) see live values without re-plumbing. */
+export function setPlanLimitsFromConfig(
+  plans: { id: PlanTier; docLimit: number | null; wordLimit: number | null }[],
+): void {
+  for (const p of plans) {
+    if (typeof p.docLimit === "number") PLAN_DOC_LIMITS[p.id] = p.docLimit;
+    if (typeof p.wordLimit === "number") PLAN_WORD_LIMITS[p.id] = p.wordLimit;
+  }
+}
+
+// Multi-project management is gone — every user has a single implicit
+// "Default" project. Kept as an array (not a string) so screens that still
+// render `projects.map(...)` (History/Upload, pending a follow-up cleanup)
+// keep working without a type change.
+export const PROJECTS: string[] = ["Default"];
 
 interface AppState {
   plan: PlanTier;
@@ -42,6 +59,8 @@ interface AppState {
   checksUsedThisPeriod: number;
   credits: number;
   history: HistoryEntry[];
+  historyLoading: boolean;
+  historyError: string | null;
   trash: HistoryEntry[];
   projects: string[];
   checkedDocuments: Record<string, CheckedDocument>;
@@ -59,15 +78,16 @@ interface AppState {
   requestCheck: (docLabel?: string, count?: number) => boolean;
   clearPendingCheck: () => void;
   selectCheckoutItem: (item: CheckoutItem) => void;
-  completePurchase: () => void;
+  /** `checks` is required for `kind: "pack"` purchases — the caller (Checkout
+   * screen) resolves it from the live `credit_packs` row it already fetched,
+   * since the store no longer keeps a static copy of pack data. */
+  completePurchase: (checks?: number) => void;
   addHistoryEntry: (entry: HistoryEntry) => void;
   addHistoryEntries: (entries: HistoryEntry[]) => void;
+  fetchHistory: (userId: string) => Promise<void>;
   cancelSubscription: () => void;
   recordCheckedDocument: (doc: CheckedDocument) => void;
   markFirstCheckComplete: () => void;
-  addProject: (name: string) => void;
-  deleteProjects: (names: string[]) => void;
-  moveHistoryEntry: (id: string, project: string) => void;
   moveToTrash: (id: string) => void;
   restoreFromTrash: (id: string) => void;
   permanentlyDeleteTrash: (id: string) => void;
@@ -85,9 +105,11 @@ export const useAppStore = create<AppState>()(
       billingCycle: "monthly",
       checksUsedThisPeriod: 1,
       credits: 0,
-      history: HISTORY_SEED,
+      history: [],
+      historyLoading: false,
+      historyError: null,
       trash: [],
-      projects: DEFAULT_PROJECTS,
+      projects: PROJECTS,
       checkedDocuments: {},
       hasCompletedFirstCheck: false,
       planPeriodStart: new Date().toISOString(),
@@ -133,7 +155,7 @@ export const useAppStore = create<AppState>()(
 
       selectCheckoutItem: (item) => set({ pendingCheckoutItem: item, lastCheckoutStatus: null }),
 
-      completePurchase: () => {
+      completePurchase: (checks) => {
         const { pendingCheckoutItem } = get();
         if (!pendingCheckoutItem) return;
         if (pendingCheckoutItem.kind === "plan") {
@@ -144,17 +166,30 @@ export const useAppStore = create<AppState>()(
             planPeriodStart: new Date().toISOString(),
             lastCheckoutStatus: "success",
           });
-        } else {
-          const pack = CREDIT_PACKS.find((p) => p.id === pendingCheckoutItem.packId);
-          if (pack) {
-            set((s) => ({ credits: s.credits + pack.checks, lastCheckoutStatus: "success" }));
-          }
+        } else if (typeof checks === "number") {
+          set((s) => ({ credits: s.credits + checks, lastCheckoutStatus: "success" }));
         }
       },
 
       addHistoryEntry: (entry) => set((s) => ({ history: [entry, ...s.history] })),
 
       addHistoryEntries: (entries) => set((s) => ({ history: [...entries, ...s.history] })),
+
+      fetchHistory: async (userId) => {
+        set({ historyLoading: true, historyError: null });
+        try {
+          const [history, trash] = await Promise.all([
+            fetchHistoryEntries(userId),
+            fetchTrashEntries(userId),
+          ]);
+          set({ history, trash, historyLoading: false });
+        } catch (err) {
+          set({
+            historyLoading: false,
+            historyError: err instanceof Error ? err.message : "Failed to load history",
+          });
+        }
+      },
 
       cancelSubscription: () =>
         set({ plan: "free", checksUsedThisPeriod: 0, planPeriodStart: new Date().toISOString() }),
@@ -163,28 +198,6 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ checkedDocuments: { ...s.checkedDocuments, [doc.id]: doc } })),
 
       markFirstCheckComplete: () => set({ hasCompletedFirstCheck: true }),
-
-      addProject: (name) =>
-        set((s) => (s.projects.includes(name) ? s : { projects: [...s.projects, name] })),
-
-      deleteProjects: (names) =>
-        set((s) => {
-          const nameSet = new Set(names);
-          return {
-            projects: s.projects.filter((p) => !nameSet.has(p)),
-            history: s.history.map((h) =>
-              h.project && nameSet.has(h.project) ? { ...h, project: undefined } : h,
-            ),
-            trash: s.trash.map((h) =>
-              h.project && nameSet.has(h.project) ? { ...h, project: undefined } : h,
-            ),
-          };
-        }),
-
-      moveHistoryEntry: (id, project) =>
-        set((s) => ({
-          history: s.history.map((h) => (h.id === id ? { ...h, project } : h)),
-        })),
 
       moveToTrash: (id) =>
         set((s) => {
@@ -247,9 +260,6 @@ export const useAppStore = create<AppState>()(
         billingCycle: s.billingCycle,
         checksUsedThisPeriod: s.checksUsedThisPeriod,
         credits: s.credits,
-        history: s.history,
-        trash: s.trash,
-        projects: s.projects,
         checkedDocuments: s.checkedDocuments,
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,

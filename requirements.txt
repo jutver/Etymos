@@ -1,6 +1,7 @@
-PyMuPDF==1.28.0
-sentence_transformers==5.6.0
-requests==2.32.4
-numpy==2.0.2
-ddgs==9.14.4
-bitsandbytes==0.49.2
+# Moved: the real, consolidated requirements list now lives at
+# backend/requirements.txt (covers the pipeline + FastAPI service +
+# auth/rate-limiting/Supabase deps in one place). No CI/tooling in this
+# repo referenced this root file at merge time; kept as a pointer for
+# anyone who runs `pip install -r requirements.txt` from the repo root out
+# of habit.
+-r backend/requirements.txt

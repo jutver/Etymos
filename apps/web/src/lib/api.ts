@@ -1,3 +1,5 @@
+import { supabase } from "@etymos/shared";
+
 export interface BackendJob {
   job_id: string;
   status: string;
@@ -47,10 +49,20 @@ function buildUrl(path: string) {
   return `${API_BASE_URL}${path}`;
 }
 
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (error || !accessToken) {
+    throw new Error("Your session has expired. Please sign in again and retry.");
+  }
+  return { Authorization: `Bearer ${accessToken}` };
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeader = await getAuthHeader();
   const response = await fetch(buildUrl(path), {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: { "Content-Type": "application/json", ...authHeader, ...init?.headers },
   });
 
   if (!response.ok) {
@@ -69,10 +81,12 @@ export async function submitTextCheck(text: string): Promise<BackendJob> {
 }
 
 export async function submitPdfCheck(file: File): Promise<BackendJob> {
+  const authHeader = await getAuthHeader();
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch(buildUrl("/api/check/pdf"), {
     method: "POST",
+    headers: { ...authHeader },
     body: formData,
   });
 
@@ -90,6 +104,18 @@ export async function getJob(jobId: string): Promise<BackendJob> {
 
 export async function getReport(reportId: string): Promise<BackendReport> {
   return requestJson<BackendReport>(`/api/reports/${reportId}`);
+}
+
+export interface RewriteResponse {
+  success: boolean;
+  rewritten_text: string;
+}
+
+export async function rewriteText(inputSentence: string, sourceSentence: string): Promise<RewriteResponse> {
+  return requestJson<RewriteResponse>("/api/ai/rewrite", {
+    method: "POST",
+    body: JSON.stringify({ input_sentence: inputSentence, source_sentence: sourceSentence }),
+  });
 }
 
 export async function pollJob(jobId: string, onProgress?: (job: BackendJob) => void): Promise<BackendJob> {

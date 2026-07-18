@@ -1,0 +1,28 @@
+# Cloudflare Tunnel config template for the Etymos backend API.
+#
+# This is a TEMPLATE — do not fill in real tunnel IDs or credential paths here
+# and do not commit a filled-in copy. On the VPS, either:
+#   a) let `cloudflared service install <token>` generate/manage this file
+#      for you (recommended, see docs/DEPLOY_BACKEND.md), or
+#   b) copy this file to /etc/cloudflared/config.yml on the VPS and replace
+#      the placeholders below with the real tunnel UUID and hostname after
+#      running `cloudflared tunnel create etymos-api`.
+
+# Placeholder — replace with the UUID printed by `cloudflared tunnel create etymos-api`.
+tunnel: <TUNNEL_ID>
+
+# Placeholder — path to the credentials JSON that `cloudflared tunnel create`
+# writes (default: ~/.cloudflared/<TUNNEL_ID>.json). Use an absolute path
+# when running cloudflared as a systemd service.
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # Placeholder hostname — replace with the DNS name routed via
+  # `cloudflared tunnel route dns etymos-api <hostname>`.
+  # Traffic for this hostname is forwarded to the FastAPI container's
+  # published port (see docker-compose.yml: api service, port 8000).
+  - hostname: <API_HOSTNAME>
+    service: http://localhost:8000
+
+  # Catch-all: required by cloudflared, must be last.
+  - service: http_status:404

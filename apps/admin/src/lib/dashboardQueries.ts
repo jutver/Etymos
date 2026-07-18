@@ -1,38 +1,65 @@
 import { supabase } from "@etymos/shared";
 
-const DAYS = 30;
-// MVP: client-side aggregation over a bounded recent window. Revisit with a
+// MVP: client-side aggregation over a date-range-bounded query. Revisit with a
 // SQL view/RPC if the table sizes make this slow.
 const FETCH_LIMIT = 5000;
 
-export interface DailyPoint {
-  date: string;
-  value: number;
+export type DateRangePreset = "7d" | "30d" | "90d" | "1y" | "custom";
+
+export interface DateRange {
+  preset: DateRangePreset;
+  /** yyyy-mm-dd, inclusive */
+  start: string;
+  /** yyyy-mm-dd, inclusive */
+  end: string;
 }
 
-export interface PlanDistributionPoint {
-  plan: string;
-  count: number;
+const PRESET_DAYS: Record<Exclude<DateRangePreset, "custom">, number> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  "1y": 365,
+};
+
+const PRESET_LABELS: Record<Exclude<DateRangePreset, "custom">, string> = {
+  "7d": "last 7 days",
+  "30d": "last 30 days",
+  "90d": "last 90 days",
+  "1y": "last year",
+};
+
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-export interface DashboardMetrics {
-  totalUsers: number;
-  mrr: number;
-  signupsByDay: DailyPoint[];
-  documentsByDay: DailyPoint[];
-  checkoutVolumeByDay: DailyPoint[];
-  planDistribution: PlanDistributionPoint[];
+export function presetRange(preset: Exclude<DateRangePreset, "custom">, now: Date = new Date()): DateRange {
+  const days = PRESET_DAYS[preset];
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setDate(start.getDate() - (days - 1));
+  return { preset, start: toISODate(start), end: toISODate(end) };
 }
 
-function lastNDays(n: number): string[] {
+export const DEFAULT_DATE_RANGE: DateRange = presetRange("30d");
+
+export function formatRangeLabel(range: DateRange): string {
+  if (range.preset !== "custom") return PRESET_LABELS[range.preset];
+  return `${range.start} to ${range.end}`;
+}
+
+function daysInRange(start: string, end: string): string[] {
   const days: string[] = [];
-  const now = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+  const cur = new Date(`${start}T00:00:00.000Z`);
+  const last = new Date(`${end}T00:00:00.000Z`);
+  while (cur <= last) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return days;
+}
+
+function rangeBounds(range: DateRange): { gte: string; lte: string } {
+  return { gte: `${range.start}T00:00:00.000Z`, lte: `${range.end}T23:59:59.999Z` };
 }
 
 function bucketByDay(dates: string[], days: string[]): DailyPoint[] {
@@ -44,24 +71,76 @@ function bucketByDay(dates: string[], days: string[]): DailyPoint[] {
   return days.map((date) => ({ date, value: counts.get(date) ?? 0 }));
 }
 
-export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
-  const [profilesRes, documentsRes, checkoutRes, plansRes] = await Promise.all([
-    supabase.from("profiles").select("id, plan_tier, billing_cycle, created_at").limit(FETCH_LIMIT),
-    supabase.from("documents").select("id, uploaded_at").limit(FETCH_LIMIT),
+export interface DailyPoint {
+  date: string;
+  value: number;
+}
+
+export interface PlanDistributionPoint {
+  plan: string;
+  count: number;
+}
+
+export interface SeverityDistributionPoint {
+  status: string;
+  count: number;
+}
+
+export interface DashboardMetrics {
+  /** Lifetime total, not scoped to the selected range. */
+  totalUsers: number;
+  /** Current MRR snapshot from active profiles, not scoped to the selected range. */
+  mrr: number;
+  signupsByDay: DailyPoint[];
+  documentsByDay: DailyPoint[];
+  checkoutVolumeByDay: DailyPoint[];
+  /** Current plan mix snapshot, not scoped to the selected range. */
+  planDistribution: PlanDistributionPoint[];
+  /** documents.status breakdown for documents uploaded within the selected range. */
+  severityDistribution: SeverityDistributionPoint[];
+  /** Share (0..1) of in-range documents with moderation_status = 'flagged'. */
+  flaggedDocumentRate: number;
+  /** Total documents uploaded within the selected range (denominator for flaggedDocumentRate). */
+  documentsInRange: number;
+  /** Count of pending student_verification_requests. Not range-scoped — this is a live queue depth. */
+  verificationQueueDepth: number;
+}
+
+const SEVERITY_ORDER = ["clean", "low", "moderate", "high", "unscored"];
+
+export async function fetchDashboardMetrics(range: DateRange): Promise<DashboardMetrics> {
+  const { gte, lte } = rangeBounds(range);
+  const days = daysInRange(range.start, range.end);
+
+  const [profilesRes, signupsRes, documentsRes, checkoutRes, plansRes, verificationQueueRes] = await Promise.all([
+    supabase.from("profiles").select("id, plan_tier, billing_cycle").limit(FETCH_LIMIT),
+    supabase.from("profiles").select("created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
+    supabase
+      .from("documents")
+      .select("uploaded_at, status, moderation_status")
+      .gte("uploaded_at", gte)
+      .lte("uploaded_at", lte)
+      .limit(FETCH_LIMIT),
     supabase
       .from("checkout_events")
       .select("amount, created_at")
       .eq("status", "success")
+      .gte("created_at", gte)
+      .lte("created_at", lte)
       .limit(FETCH_LIMIT),
     supabase.from("plan_definitions").select("id, price_monthly, price_annual"),
+    supabase.from("student_verification_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
 
   if (profilesRes.error) throw profilesRes.error;
+  if (signupsRes.error) throw signupsRes.error;
   if (documentsRes.error) throw documentsRes.error;
   if (checkoutRes.error) throw checkoutRes.error;
   if (plansRes.error) throw plansRes.error;
+  if (verificationQueueRes.error) throw verificationQueueRes.error;
 
   const profiles = profilesRes.data ?? [];
+  const signups = signupsRes.data ?? [];
   const documents = documentsRes.data ?? [];
   const checkoutEvents = checkoutRes.data ?? [];
   const plans = plansRes.data ?? [];
@@ -79,13 +158,19 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     planCounts.set(p.plan_tier, (planCounts.get(p.plan_tier) ?? 0) + 1);
   }
 
-  const days = lastNDays(DAYS);
+  const severityCounts = new Map<string, number>();
+  let flaggedCount = 0;
+  for (const d of documents) {
+    const status = d.status ?? "unscored";
+    severityCounts.set(status, (severityCounts.get(status) ?? 0) + 1);
+    if (d.moderation_status === "flagged") flaggedCount += 1;
+  }
 
   return {
     totalUsers: profiles.length,
     mrr,
     signupsByDay: bucketByDay(
-      profiles.map((p) => p.created_at),
+      signups.map((p) => p.created_at),
       days,
     ),
     documentsByDay: bucketByDay(
@@ -101,5 +186,12 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       return days.map((date) => ({ date, value: totals.get(date) ?? 0 }));
     })(),
     planDistribution: Array.from(planCounts.entries()).map(([plan, count]) => ({ plan, count })),
+    severityDistribution: SEVERITY_ORDER.filter((s) => severityCounts.has(s)).map((status) => ({
+      status,
+      count: severityCounts.get(status) ?? 0,
+    })),
+    flaggedDocumentRate: documents.length ? flaggedCount / documents.length : 0,
+    documentsInRange: documents.length,
+    verificationQueueDepth: verificationQueueRes.count ?? 0,
   };
 }

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
-import { Toggle } from "../../components/ui/Toggle";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export default function AccountProfilePage() {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ export default function AccountProfilePage() {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [name, setName] = useState(displayNameFor(user));
   const [savingName, setSavingName] = useState(false);
@@ -23,8 +25,7 @@ export default function AccountProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [googleLinked, setGoogleLinked] = useState(Boolean(user?.user_metadata?.google_linked));
-  const [linkingGoogle, setLinkingGoogle] = useState(false);
+  const googleIdentity = user?.identities?.find((identity) => identity.provider === "google");
 
   async function saveName() {
     setSavingName(true);
@@ -69,27 +70,44 @@ export default function AccountProfilePage() {
     pushToast({ kind: "success", title: "Password updated" });
   }
 
-  async function toggleGoogleLink(next: boolean) {
-    setLinkingGoogle(true);
-    const { error } = await supabase.auth.updateUser({ data: { google_linked: next } });
-    setLinkingGoogle(false);
-    if (error) {
-      pushToast({ kind: "error", title: "Couldn't update Google link", description: error.message });
-      return;
-    }
-    setGoogleLinked(next);
-    pushToast({
-      kind: "success",
-      title: next ? "Google account linked" : "Google account unlinked",
-      description: "Demo mockup — no real Google account is contacted.",
-    });
-  }
-
   async function deleteAccount() {
     setDeletingAccount(true);
-    await supabase.auth.signOut();
-    useAppStore.persist.clearStorage();
-    window.location.assign("/");
+    setDeleteError(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error("Your session has expired. Please sign in again and retry.");
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/account`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        let detail = text;
+        try {
+          const parsed = JSON.parse(text) as { detail?: string };
+          detail = parsed.detail || text;
+        } catch {
+          // response wasn't JSON — fall back to raw text
+        }
+        throw new Error(detail || `Request failed with ${response.status}`);
+      }
+
+      // Only sign out and clear local state after the server confirms deletion.
+      await supabase.auth.signOut();
+      useAppStore.persist.clearStorage();
+      window.location.assign("/");
+    } catch (err) {
+      setDeletingAccount(false);
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setDeleteError(message);
+      pushToast({ kind: "error", title: "Couldn't delete account", description: message });
+    }
   }
 
   return (
@@ -161,14 +179,24 @@ export default function AccountProfilePage() {
 
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <h2 className="text-sm font-bold uppercase tracking-wide text-ink-900">Connected accounts</h2>
-        <div className="mt-4">
-          <Toggle
-            checked={googleLinked}
-            onChange={toggleGoogleLink}
-            label="Google"
-            description={linkingGoogle ? "Updating..." : googleLinked ? "Linked (demo mockup)" : "Not linked"}
-            icon={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
-          />
+        <p className="mt-1 text-xs text-ink-500">
+          Sign-in methods linked to your account. To link or unlink Google, sign in with Google using this
+          account's email.
+        </p>
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-line bg-white px-4 py-3">
+          <div className="flex items-center gap-3">
+            <img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />
+            <p className="text-sm font-semibold text-ink-900">Google</p>
+          </div>
+          <span
+            className={
+              googleIdentity
+                ? "inline-flex items-center rounded-full border border-severity-low-line bg-severity-low-bg px-2.5 py-1 text-xs font-semibold text-severity-low"
+                : "inline-flex items-center rounded-full border border-line bg-ink-50 px-2.5 py-1 text-xs font-semibold text-ink-500"
+            }
+          >
+            {googleIdentity ? "Linked" : "Not linked"}
+          </span>
         </div>
       </section>
 
@@ -184,14 +212,23 @@ export default function AccountProfilePage() {
             <div className="flex-1">
               <p className="font-semibold">Delete your account?</p>
               <p className="mt-0.5 text-severity-high/90">
-                You'll be signed out immediately and lose access to your documents and history.
+                You'll be signed out immediately and lose access to your documents and history. This can't be
+                undone.
               </p>
+              {deleteError && <p className="mt-1.5 font-semibold text-severity-high">{deleteError}</p>}
             </div>
             <div className="flex shrink-0 gap-2">
               <Button size="sm" variant="danger" loading={deletingAccount} onClick={deleteAccount}>
                 Confirm
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setConfirmDelete(false);
+                  setDeleteError(null);
+                }}
+              >
                 Cancel
               </Button>
             </div>
