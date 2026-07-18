@@ -1,13 +1,25 @@
 """
 auth.py
 -------
-FastAPI dependency that verifies Supabase-issued JWTs LOCALLY (via PyJWT +
-the project's JWT secret), avoiding a network round trip to Supabase Auth on
-every request. Mirrors the two-step pattern in
-`apps/admin/src/lib/auth.tsx` (`useAdminAuth`): (1) verify the session/token
-to get a user id, (2) look up `profiles.role` for that user id to decide
-admin-ness. Step 1 here is local/offline; step 2 is a lightweight DB read
-through the service-role client (backend/api/supabase_client.py).
+FastAPI dependency that verifies Supabase-issued JWTs LOCALLY (via PyJWT),
+avoiding a network round trip to Supabase Auth on every request. Mirrors the
+two-step pattern in `apps/admin/src/lib/auth.tsx` (`useAdminAuth`): (1)
+verify the session/token to get a user id, (2) look up `profiles.role` for
+that user id to decide admin-ness. Step 1 here is local/offline; step 2 is a
+lightweight DB read through the service-role client
+(backend/api/supabase_client.py).
+
+Supabase projects sign access tokens one of two ways depending on when the
+project was created / whether "Legacy JWT Secret" was enabled:
+  - Legacy: HS256, verified with a shared secret (SUPABASE_JWT_SECRET).
+  - Current default: an asymmetric algorithm (ES256/RS256), verified with a
+    public key fetched from the project's JWKS endpoint — no shared secret
+    involved at all. Hardcoding HS256-only verification against this kind
+    of project fails every request with "Invalid token." (PyJWT rejects the
+    token immediately on algorithm mismatch), which is indistinguishable
+    from an actually-invalid token from the client's point of view. This
+    module picks the verification path per-token based on its `alg` header
+    so it works against either kind of project without configuration.
 """
 
 from __future__ import annotations
@@ -20,17 +32,32 @@ from typing import Optional
 import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient, PyJWKClientError
 
 from supabase_client import get_client
 
 logger = logging.getLogger(__name__)
 
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 # Supabase-issued access tokens carry aud="authenticated" by default.
 JWT_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
-JWT_ALGORITHMS = ["HS256"]
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+_jwks_client: Optional[PyJWKClient] = None
+
+
+def _get_jwks_client() -> Optional[PyJWKClient]:
+    """
+    Lazily-built, process-wide PyJWKClient. It caches fetched signing keys
+    by `kid` internally, so this only hits the network on the first request
+    for a given key (and after Supabase rotates keys) — not on every call.
+    """
+    global _jwks_client
+    if _jwks_client is None and SUPABASE_URL:
+        _jwks_client = PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")
+    return _jwks_client
 
 
 @dataclass
@@ -81,29 +108,59 @@ async def verify_supabase_jwt(
     route handlers can either take it as a dependency return value or read
     `request.state.user`.
     """
-    if not SUPABASE_JWT_SECRET:
-        # Fail loudly rather than silently accepting unverified requests.
-        logger.error(
-            "SUPABASE_JWT_SECRET is not configured; refusing to authenticate requests."
-        )
-        raise HTTPException(status_code=500, detail="Server auth is not configured.")
-
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Missing bearer token.")
 
     token = credentials.credentials
 
     try:
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=JWT_ALGORITHMS,
-            audience=JWT_AUDIENCE,
-            options={"require": ["exp", "sub"]},
-        )
+        header = jwt.get_unverified_header(token)
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token.")
+
+    alg = header.get("alg")
+
+    try:
+        if alg == "HS256":
+            if not SUPABASE_JWT_SECRET:
+                logger.error(
+                    "Received an HS256-signed token but SUPABASE_JWT_SECRET is not "
+                    "configured; refusing to authenticate."
+                )
+                raise HTTPException(status_code=500, detail="Server auth is not configured.")
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience=JWT_AUDIENCE,
+                options={"require": ["exp", "sub"]},
+            )
+        else:
+            # Current Supabase default: asymmetric signing (ES256/RS256),
+            # verified against the project's public JWKS — no shared secret.
+            jwks_client = _get_jwks_client()
+            if jwks_client is None:
+                logger.error(
+                    "Received a %s-signed token but SUPABASE_URL is not configured; "
+                    "cannot fetch JWKS to verify it.",
+                    alg,
+                )
+                raise HTTPException(status_code=500, detail="Server auth is not configured.")
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[alg],
+                audience=JWT_AUDIENCE,
+                options={"require": ["exp", "sub"]},
+            )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired.")
+    except PyJWKClientError:
+        logger.exception("Failed to resolve JWKS signing key for a %s-signed token.", alg)
+        raise HTTPException(status_code=401, detail="Invalid token.")
     except jwt.InvalidTokenError:
+        logger.warning("Rejected an invalid %s-signed token.", alg)
         raise HTTPException(status_code=401, detail="Invalid token.")
 
     user_id = payload.get("sub")
