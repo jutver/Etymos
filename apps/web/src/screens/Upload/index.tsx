@@ -9,8 +9,6 @@ import {
   FolderSimple,
   GraduationCap,
   Globe,
-  LockSimple,
-  Plus,
   Sparkle,
   UploadSimple,
   X,
@@ -23,7 +21,6 @@ import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { cn } from "../../lib/cn";
-import { MOCK_DOCUMENTS } from "../../lib/mockData";
 import type { Language } from "../../lib/types";
 
 const languages: { id: Language; label: string }[] = [
@@ -33,16 +30,12 @@ const languages: { id: Language; label: string }[] = [
   { id: "ja", label: "日本語" },
 ];
 
-const VISIBLE_SAMPLE_COUNT = 5;
-
 export default function UploadPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const plan = useAppStore((s) => s.plan);
   const history = useAppStore((s) => s.history);
   const projects = useAppStore((s) => s.projects);
-  const addProject = useAppStore((s) => s.addProject);
-  const hasCompletedFirstCheck = useAppStore((s) => s.hasCompletedFirstCheck);
   const requestCheck = useAppStore((s) => s.requestCheck);
   const remaining = useAppStore((s) => s.remaining());
 
@@ -68,18 +61,9 @@ export default function UploadPage() {
   const hasContent = tab === "file" ? files.length > 0 : pastedText.trim().length > 0;
   const docLabels = tab === "file" ? files.map((f) => f.name) : [pastedText.trim() ? "Pasted text" : ""].filter(Boolean);
 
-  const visibleSamples = MOCK_DOCUMENTS.slice(
-    0,
-    hasCompletedFirstCheck ? MOCK_DOCUMENTS.length : VISIBLE_SAMPLE_COUNT,
-  );
-  const lockedSampleCount = MOCK_DOCUMENTS.length - visibleSamples.length;
-
   const filteredProjects = projects.filter((p) =>
     p.toLowerCase().includes(projectQuery.trim().toLowerCase()),
   );
-  const canCreateProject =
-    projectQuery.trim().length > 0 &&
-    !projects.some((p) => p.toLowerCase() === projectQuery.trim().toLowerCase());
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
@@ -91,24 +75,10 @@ export default function UploadPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function loadSample(sampleId: string) {
-    const sample = MOCK_DOCUMENTS.find((d) => d.id === sampleId);
-    if (!sample) return;
-    setTab("paste");
-    setPastedText(sample.passages.map((p) => p.text).join("\n\n"));
-  }
-
   function chooseProject(name: string) {
     setProject(name);
     setProjectQuery("");
     setProjectOpen(false);
-  }
-
-  function createProject() {
-    const name = projectQuery.trim();
-    if (!name) return;
-    addProject(name);
-    chooseProject(name);
   }
 
   async function handleSubmit() {
@@ -314,8 +284,7 @@ export default function UploadPage() {
                 rows={10}
                 className="w-full resize-none rounded-[var(--radius-card)] border border-line bg-white p-4 text-sm leading-relaxed text-ink-900 placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
               />
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-ink-400">Or try a sample below</span>
+              <div className="mt-2 flex items-center justify-end">
                 <p className={cn("text-xs", overLimit ? "font-semibold text-severity-high" : "text-ink-400")}>
                   {wordCount.toLocaleString()} words / {wordLimit.toLocaleString()} limit
                 </p>
@@ -326,29 +295,6 @@ export default function UploadPage() {
                   {plan !== "professional" && " Upgrade for a higher limit."}
                 </p>
               )}
-
-              <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {visibleSamples.map((sample) => (
-                  <button
-                    key={sample.id}
-                    onClick={() => loadSample(sample.id)}
-                    className="flex flex-col items-start gap-1 rounded-[var(--radius-card)] border border-line bg-white p-3.5 text-left transition-colors hover:border-brand-300 hover:bg-surface-tint"
-                  >
-                    <p className="line-clamp-1 text-xs font-bold text-navy-900">{sample.title}</p>
-                    <p className="line-clamp-2 text-[0.6875rem] leading-relaxed text-ink-500">
-                      {sample.passages[0]?.text}
-                    </p>
-                  </button>
-                ))}
-                {lockedSampleCount > 0 && (
-                  <div className="flex flex-col items-center justify-center gap-1.5 rounded-[var(--radius-card)] border border-dashed border-line bg-surface-tint p-3.5 text-center">
-                    <LockSimple size={16} className="text-ink-300" />
-                    <p className="text-[0.6875rem] font-medium text-ink-400">
-                      {lockedSampleCount} more samples unlock after your first real check
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -420,7 +366,7 @@ export default function UploadPage() {
                     autoFocus
                     value={projectQuery}
                     onChange={(e) => setProjectQuery(e.target.value)}
-                    placeholder="Search or create a project"
+                    placeholder="Search projects"
                     className="mb-1 w-full rounded-lg border border-line bg-surface-tint px-3 py-2 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
                   />
                   <div className="max-h-48 overflow-y-auto scrollbar-thin">
@@ -437,15 +383,6 @@ export default function UploadPage() {
                         {p}
                       </button>
                     ))}
-                    {canCreateProject && (
-                      <button
-                        onClick={createProject}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-brand-600 hover:bg-brand-100/50"
-                      >
-                        <Plus size={14} weight="bold" />
-                        Create "{projectQuery.trim()}"
-                      </button>
-                    )}
                   </div>
                 </div>
               )}

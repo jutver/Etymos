@@ -7,6 +7,7 @@ import UsersPage from "./screens/Users";
 import UserDetailPage from "./screens/Users/UserDetail";
 import ModerationPage from "./screens/Moderation";
 import DocumentDetailPage from "./screens/Moderation/DocumentDetail";
+import VerificationPage from "./screens/Verification";
 import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import FeatureFlagsPage from "./screens/Config/FeatureFlags";
 import PricingConfigPage from "./screens/Config/Pricing";
@@ -25,6 +26,7 @@ function App() {
           <Route path="/users/:id" element={<UserDetailPage />} />
           <Route path="/moderation" element={<ModerationPage />} />
           <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
+          <Route path="/verification" element={<VerificationPage />} />
           <Route path="/config" element={<ConfigLayout />}>
             <Route index element={<Navigate to="/config/feature-flags" replace />} />
             <Route path="feature-flags" element={<FeatureFlagsPage />} />

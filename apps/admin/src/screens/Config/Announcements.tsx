@@ -8,9 +8,9 @@ import { friendlyError } from "../../lib/errors";
 
 const SEVERITIES: AnnouncementSeverity[] = ["info", "success", "warning", "error"];
 
-const SEVERITY_TONE: Record<AnnouncementSeverity, "info" | "accent" | "warning" | "destructive"> = {
+const SEVERITY_TONE: Record<AnnouncementSeverity, "info" | "success" | "warning" | "destructive"> = {
   info: "info",
-  success: "accent",
+  success: "success",
   warning: "warning",
   error: "destructive",
 };
@@ -61,7 +61,7 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-card border border-border bg-surface p-5">
+      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="text-h2 font-semibold text-fg">New announcement</h2>
         <div className="mt-3 space-y-3">
           <textarea
@@ -104,7 +104,7 @@ export default function AnnouncementsPage() {
           No announcements yet.
         </div>
       ) : (
-        <div className="divide-y divide-border rounded-card border border-border bg-surface">
+        <div className="divide-y divide-border rounded-card border border-border bg-surface shadow-card">
           {announcements.map((a) => (
             <div key={a.id} className="flex items-center justify-between gap-4 px-5 py-4">
               <div className="min-w-0">

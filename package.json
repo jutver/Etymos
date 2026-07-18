@@ -12,7 +12,11 @@
     "dev:admin": "npm run dev -w @etymos/admin",
     "build:web": "npm run build -w @etymos/web",
     "build:admin": "npm run build -w @etymos/admin",
-    "lint": "oxlint apps/*/src packages/*/src"
+    "lint": "oxlint apps/*/src packages/*/src",
+    "test:web": "npm run build -w @etymos/web && npm run lint -w @etymos/web && npm run test -w @etymos/web",
+    "test:admin": "npm run build -w @etymos/admin && npm run lint -w @etymos/admin",
+    "test:backend": "cd backend && ( [ -x .venv/bin/pytest ] && .venv/bin/pytest || pytest )",
+    "test": "npm run test:web && npm run test:admin && npm run test:backend"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

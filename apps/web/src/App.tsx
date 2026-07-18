@@ -5,6 +5,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { AuthShell } from "./components/layout/AuthShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { DemoNoticeModal } from "./components/DemoNoticeModal";
+import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import LandingPage from "./screens/Landing";
 import PricingPage from "./screens/Pricing";
 import LoginPage from "./screens/Login";
@@ -22,6 +23,27 @@ import AccountPlanPage from "./screens/AccountPlan";
 import VerifyStudentPage from "./screens/VerifyStudent";
 import VerifyEmailPage from "./screens/VerifyEmail";
 import AuthCallbackPage from "./screens/AuthCallback";
+
+// Thin wrappers so the banner sits above PublicShell/AppShell's own nav
+// without editing those components (out of scope for this change) — mirrors
+// how DemoNoticeModal is mounted globally below, just scoped to these routes.
+function PublicShellWithBanner() {
+  return (
+    <>
+      <AnnouncementBanner />
+      <PublicShell />
+    </>
+  );
+}
+
+function AppShellWithBanner() {
+  return (
+    <>
+      <AnnouncementBanner />
+      <AppShell />
+    </>
+  );
+}
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -44,7 +66,7 @@ function App() {
       <ScrollToTop />
       <DemoNoticeModal />
       <Routes>
-        <Route element={<PublicShell />}>
+        <Route element={<PublicShellWithBanner />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/pricing" element={<PricingPage />} />
         </Route>
@@ -57,7 +79,7 @@ function App() {
         </Route>
 
         <Route element={<RequireAuth />}>
-          <Route element={<AppShell />}>
+          <Route element={<AppShellWithBanner />}>
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/analyzing" element={<AnalyzingPage />} />
             <Route path="/report/:id" element={<ReportPage />} />

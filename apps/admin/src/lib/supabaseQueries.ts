@@ -37,3 +37,34 @@ export async function updateProfile(id: string, patch: Partial<Profile>): Promis
   const { error } = await supabase.from("profiles").update(patch).eq("id", id);
   if (error) throw error;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  actor_id: string | null;
+  target_user_id: string | null;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function listAuditLogForUser(userId: string): Promise<AuditLogEntry[]> {
+  const { data, error } = await supabase
+    .from("audit_log")
+    .select("*")
+    .eq("target_user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as AuditLogEntry[];
+}
+
+export interface NewAuditLogEntry {
+  actor_id: string;
+  target_user_id: string;
+  action: string;
+  metadata: Record<string, unknown>;
+}
+
+export async function insertAuditLog(entry: NewAuditLogEntry): Promise<void> {
+  const { error } = await supabase.from("audit_log").insert(entry);
+  if (error) throw error;
+}

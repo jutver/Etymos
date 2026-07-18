@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from config import TOP_K
 from extractor import (
     extract_sections_from_pdf,
@@ -9,6 +12,8 @@ from extractor import (
 )
 from llm_metadata import (
     extract_all_section_metadata,
+    extract_all_section_metadata_gemini,
+    is_gemini_metadata_extraction_enabled,
     build_queries_from_section_metadata
 )
 from search_paper.search_sources import search_all_sources
@@ -32,6 +37,19 @@ from final_report_builder import (
     save_final_report,
     print_final_report
 )
+
+# Intermediate cache directory for match/report JSON dumps written during a
+# run. Previously hardcoded to a Google Colab Drive mount
+# (/content/drive/MyDrive/Check_Dao_Van/paper_cache) which doesn't exist off
+# Colab and crashes on the VPS. Same configurable-path pattern as
+# backend/api/report_store.py's REPORT_DIR.
+PAPER_CACHE_DIR = Path(os.getenv(
+    "PAPER_CACHE_DIR",
+    "/content/drive/MyDrive/Check_Dao_Van/paper_cache"
+    if os.path.exists("/content/drive/MyDrive") else "./paper_cache"
+))
+PAPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def check_pdf_plagiarism(pdf_path, progress_callback=None):
     if progress_callback:
@@ -58,8 +76,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
               message="Extracting sections from PDF"
           )
     sections = extract_sections_from_pdf(pdf_path)
-    sections = extract_sections_from_pdf(pdf_path)
-    
+
     title = sections.get("title", "")
     abstract = sections.get("abstract", "")
     introduction = sections.get("introduction", "")
@@ -112,10 +129,13 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
           step="metadata_extraction",
           message="Extracting academic metadata"
       )
-    section_metadata = extract_all_section_metadata(section_texts)
-    print("\nExtracting section metadata with LLM...")
-    section_metadata = extract_all_section_metadata(section_texts)
-
+    use_gemini = is_gemini_metadata_extraction_enabled()
+    print(f"\nExtracting section metadata with {'Gemini' if use_gemini else 'local LLM'}...")
+    section_metadata = (
+        extract_all_section_metadata_gemini(section_texts)
+        if use_gemini
+        else extract_all_section_metadata(section_texts)
+    )
 
     print("\n===== SECTION JSON METADATA =====")
     for section_name, metadata in section_metadata.items():
@@ -172,7 +192,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
 
     save_matches(
         matches,
-        "/content/drive/MyDrive/Check_Dao_Van/paper_cache/plagiarism_matches.json"
+        str(PAPER_CACHE_DIR / "plagiarism_matches.json")
     )
 
     print_matches(matches, top_k=20)
@@ -181,7 +201,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
 
     save_verified_matches(
         verified_matches,
-        "/content/drive/MyDrive/Check_Dao_Van/paper_cache/sentence_matches.json"
+        str(PAPER_CACHE_DIR / "sentence_matches.json")
     )
 
     print_verified_matches(verified_matches, top_k=10)
@@ -194,7 +214,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
 
     save_final_report(
         final_report,
-        "/content/drive/MyDrive/Check_Dao_Van/paper_cache/final_report.json"
+        str(PAPER_CACHE_DIR / "final_report.json")
     )
 
     print_final_report(final_report, top_k=10)
@@ -221,7 +241,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
     return final_report
     
 if __name__ == "__main__":
-    test_pdf = "/content/drive/MyDrive/Check_Dao_Van/VIHateT5.pdf"
+    test_pdf = os.getenv("TEST_PDF_PATH", str(PAPER_CACHE_DIR / "VIHateT5.pdf"))
 
     def debug_progress(progress, step, message):
         print(f"[{progress}%] {step}: {message}")

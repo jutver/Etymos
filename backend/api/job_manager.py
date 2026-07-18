@@ -9,17 +9,29 @@ from typing import Any
 _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
 
+# NOTE on durability: job records (queued/processing/failed) are
+# intentionally in-memory only. Making in-flight job progress durable
+# across a process restart would require a real task queue, which is
+# explicitly out of scope here (this is a durability fix for *completed
+# report* data, not an infra rewrite). If the process restarts mid-job,
+# that job is lost the same way it was before this change; what's new is
+# that a *completed* report's data (persisted via report_store.py into
+# Supabase `documents`) survives the restart, and GET /api/reports/{id}
+# can still serve it.
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_job(input_type: str, input_name: str | None = None) -> str:
+def create_job(input_type: str, input_name: str | None = None,
+               user_id: str | None = None) -> str:
     job_id = f"job_{uuid.uuid4().hex}"
     job = {
         "job_id": job_id,
         "input_type": input_type,
         "input_name": input_name,
+        "user_id": user_id,
         "status": "queued",
         "progress": 0,
         "current_step": "queued",

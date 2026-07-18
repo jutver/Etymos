@@ -8,7 +8,7 @@ interface StatCardProps {
 
 export function StatCard({ label, value, icon: IconComponent }: StatCardProps) {
   return (
-    <div className="rounded-card border border-border bg-surface p-5">
+    <div className="rounded-card border border-border bg-surface p-5 shadow-card">
       <div className="flex items-center justify-between">
         <span className="text-caption font-medium text-fg-muted">{label}</span>
         <IconComponent size={16} weight="bold" className="text-fg-subtle" />

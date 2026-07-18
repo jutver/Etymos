@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { SeverityTag } from "../../components/Severity";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
+import { rewriteText } from "../../lib/api";
 
 export function RewritePanel({
   match,
@@ -39,18 +40,7 @@ export function RewritePanel({
     
     try {
       // Gọi API Rewrite mới tạo ở Backend
-      const response = await fetch("http://localhost:8000/api/ai/rewrite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input_sentence: match.userSnippet,
-          source_sentence: match.sourceSnippet 
-        })
-      });
-
-      if (!response.ok) throw new Error("AI Rewrite failed");
-      
-      const data = await response.json();
+      const data = await rewriteText(match.userSnippet, match.sourceSnippet);
       setVariant(data.rewritten_text);
     } catch (err) {
       console.error("Rewrite error:", err);
