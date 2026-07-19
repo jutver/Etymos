@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import { cn } from "@etymos/shared";
 
-export function LogoMark({ size = 32, onDark = false }: { size?: number; onDark?: boolean }) {
+export function LogoMark({ size = 44, onDark = false }: { size?: number; onDark?: boolean }) {
   // The white brand mark needs contrast to read on light backgrounds, so it
   // sits in a navy badge there; on already-dark nav/footer backgrounds it's
-  // shown directly with no badge.
+  // shown directly with no badge. The source SVG is cropped tight to the
+  // glyph, so a ~0.72 inset already reads comfortably inside the badge.
   if (onDark) {
     return (
       <img
@@ -18,14 +19,14 @@ export function LogoMark({ size = 32, onDark = false }: { size?: number; onDark?
   }
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-[10px] bg-navy-900"
+      className="inline-flex shrink-0 items-center justify-center rounded-[12px] bg-navy-900"
       style={{ width: size, height: size }}
     >
       <img
         src="/assets/logo/etymos-mark-white.svg"
         alt=""
-        width={size * 0.62}
-        height={size * 0.62}
+        width={size * 0.72}
+        height={size * 0.72}
         className="object-contain"
       />
     </span>
@@ -35,7 +36,7 @@ export function LogoMark({ size = 32, onDark = false }: { size?: number; onDark?
 export function Logo({
   variant = "default",
   to = "/",
-  size = 30,
+  size = 44,
 }: {
   variant?: "default" | "light";
   to?: string;
@@ -46,7 +47,7 @@ export function Logo({
       <LogoMark size={size} onDark={variant === "light"} />
       <span
         className={cn(
-          "text-lg font-bold tracking-tight",
+          "text-xl font-bold tracking-tight",
           variant === "light" ? "text-white" : "text-navy-900",
         )}
       >

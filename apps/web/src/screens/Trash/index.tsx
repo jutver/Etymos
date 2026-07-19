@@ -14,15 +14,31 @@ export default function TrashPage() {
   const pushToast = useAppStore((s) => s.pushToast);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  function restore(id: string) {
-    restoreFromTrash(id);
-    pushToast({ kind: "success", title: "Document restored", description: "It's back in your History." });
+  async function restore(id: string) {
+    try {
+      await restoreFromTrash(id);
+      pushToast({ kind: "success", title: "Document restored", description: "It's back in your History." });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: "Couldn't restore document",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    }
   }
 
-  function deleteForever(id: string) {
-    permanentlyDeleteTrash(id);
+  async function deleteForever(id: string) {
     setConfirmId(null);
-    pushToast({ kind: "info", title: "Document permanently deleted" });
+    try {
+      await permanentlyDeleteTrash(id);
+      pushToast({ kind: "info", title: "Document permanently deleted" });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: "Couldn't delete document",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    }
   }
 
   return (

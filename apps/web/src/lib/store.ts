@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { fetchHistory as fetchHistoryEntries, fetchTrash as fetchTrashEntries } from "./documentsQueries";
+import {
+  fetchHistory as fetchHistoryEntries,
+  fetchTrash as fetchTrashEntries,
+  moveDocumentToTrash,
+  restoreDocumentFromTrash,
+  permanentlyDeleteDocument,
+} from "./documentsQueries";
 import type {
   BillingCycle,
   CheckedDocument,
@@ -102,9 +108,9 @@ interface AppState {
   cancelSubscription: () => void;
   recordCheckedDocument: (doc: CheckedDocument) => void;
   markFirstCheckComplete: () => void;
-  moveToTrash: (id: string) => void;
-  restoreFromTrash: (id: string) => void;
-  permanentlyDeleteTrash: (id: string) => void;
+  moveToTrash: (id: string) => Promise<void>;
+  restoreFromTrash: (id: string) => Promise<void>;
+  permanentlyDeleteTrash: (id: string) => Promise<void>;
   /** Registers a freshly created, still-empty project name so it shows up
    * in the Documents screen before any document is assigned to it. */
   addKnownProject: (name: string) => void;
@@ -242,28 +248,35 @@ export const useAppStore = create<AppState>()(
 
       markFirstCheckComplete: () => set({ hasCompletedFirstCheck: true }),
 
-      moveToTrash: (id) =>
-        set((s) => {
-          const entry = s.history.find((h) => h.id === id);
-          if (!entry) return s;
-          return {
-            history: s.history.filter((h) => h.id !== id),
-            trash: [entry, ...s.trash],
-          };
-        }),
+      // These three persist to Supabase first and only mutate local state once
+      // the write is confirmed — previously they only ever touched the local
+      // history/trash arrays, so a "Delete Forever" (or move-to-trash, or
+      // restore) would disappear from the UI but the underlying `documents`
+      // row was never updated, reappearing on the next fetchHistory().
+      moveToTrash: async (id) => {
+        const entry = get().history.find((h) => h.id === id);
+        if (!entry) return;
+        await moveDocumentToTrash(id);
+        set((s) => ({
+          history: s.history.filter((h) => h.id !== id),
+          trash: [entry, ...s.trash],
+        }));
+      },
 
-      restoreFromTrash: (id) =>
-        set((s) => {
-          const entry = s.trash.find((h) => h.id === id);
-          if (!entry) return s;
-          return {
-            trash: s.trash.filter((h) => h.id !== id),
-            history: [entry, ...s.history],
-          };
-        }),
+      restoreFromTrash: async (id) => {
+        const entry = get().trash.find((h) => h.id === id);
+        if (!entry) return;
+        await restoreDocumentFromTrash(id);
+        set((s) => ({
+          trash: s.trash.filter((h) => h.id !== id),
+          history: [entry, ...s.history],
+        }));
+      },
 
-      permanentlyDeleteTrash: (id) =>
-        set((s) => ({ trash: s.trash.filter((h) => h.id !== id) })),
+      permanentlyDeleteTrash: async (id) => {
+        await permanentlyDeleteDocument(id);
+        set((s) => ({ trash: s.trash.filter((h) => h.id !== id) }));
+      },
 
       addKnownProject: (name) =>
         set((s) => (s.knownProjects.includes(name) ? s : { knownProjects: [...s.knownProjects, name] })),

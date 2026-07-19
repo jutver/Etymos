@@ -23,7 +23,7 @@ const NAV_ITEMS = [
 
 /** Etymos brand mark on the dark sidebar — mirrors apps/web/src/components/layout/Logo.tsx's
  * LogoMark(onDark) so the two apps read as the same product family. */
-function BrandMark({ size = 28 }: { size?: number }) {
+function BrandMark({ size = 38 }: { size?: number }) {
   return (
     <img
       src="/assets/logo/etymos-mark-white.svg"

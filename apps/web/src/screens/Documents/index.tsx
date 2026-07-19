@@ -217,26 +217,54 @@ export default function DocumentsPage() {
     }
   }
 
-  function handleDeleteDocument(doc: HistoryEntry) {
-    moveToTrash(doc.id);
-    pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+  async function handleDeleteDocument(doc: HistoryEntry) {
     setConfirm(null);
+    try {
+      await moveToTrash(doc.id);
+      pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: "Couldn't move to trash",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    }
   }
 
-  function handleBulkDelete() {
-    for (const id of selectedDocs) moveToTrash(id);
-    for (const name of selectedProjects) {
+  async function handleBulkDelete() {
+    const docIds = [...selectedDocs];
+    const projectNames = [...selectedProjects];
+
+    const docResults = await Promise.allSettled(docIds.map((id) => moveToTrash(id)));
+    const docFailures = docResults.filter((r) => r.status === "rejected").length;
+
+    let projectFailures = 0;
+    for (const name of projectNames) {
       const group = groups.find((g) => g.name === name);
       if (!group) continue;
-      void clearProjectFromDocuments(user!.id, name).catch(() => {});
-      clearProjectInHistory(name);
-      removeKnownProject(name);
+      try {
+        if (user?.id) await clearProjectFromDocuments(user.id, name);
+        clearProjectInHistory(name);
+        removeKnownProject(name);
+      } catch {
+        projectFailures++;
+      }
     }
-    pushToast({
-      kind: "info",
-      title: "Deleted selected items",
-      description: selectedDocs.size > 0 ? "Documents were moved to My Trash." : undefined,
-    });
+
+    if (docFailures === 0 && projectFailures === 0) {
+      pushToast({
+        kind: "info",
+        title: "Deleted selected items",
+        description: docIds.length > 0 ? "Documents were moved to My Trash." : undefined,
+      });
+    } else {
+      pushToast({
+        kind: "error",
+        title: "Some items couldn't be deleted",
+        description: "Please try again.",
+      });
+    }
+
     setSelectedDocs(new Set());
     setSelectedProjects(new Set());
     setConfirm(null);
@@ -401,8 +429,8 @@ export default function DocumentsPage() {
         onConfirm={() => {
           if (!confirm) return;
           if (confirm.kind === "delete-project") void handleDeleteProject(confirm.project);
-          else if (confirm.kind === "delete-document") handleDeleteDocument(confirm.doc);
-          else handleBulkDelete();
+          else if (confirm.kind === "delete-document") void handleDeleteDocument(confirm.doc);
+          else void handleBulkDelete();
         }}
       />
     </div>

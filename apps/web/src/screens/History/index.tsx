@@ -40,10 +40,18 @@ export default function HistoryPage() {
 
   const filtered = visible.filter((h) => h.title.toLowerCase().includes(query.toLowerCase()));
 
-  function handleDelete(e: React.MouseEvent, id: string) {
+  async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    moveToTrash(id);
-    pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+    try {
+      await moveToTrash(id);
+      pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: "Couldn't move to trash",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    }
   }
 
   return (
