@@ -19,7 +19,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 begin
   if auth.role() is null or auth.role() = 'service_role' or public.is_admin(auth.uid()) then
     return new;
@@ -38,4 +38,4 @@ begin
 
   return new;
 end;
-$;
+$$;
