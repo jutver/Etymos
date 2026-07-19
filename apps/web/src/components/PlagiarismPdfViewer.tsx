@@ -13,6 +13,11 @@ type PlagiarismPdfViewerProps = {
   matches: MatchedSource[];
   activeMatchId?: string | null;
   onMatchClick?: (matchId: string) => void;
+  // Set by the caller when it tried and failed to resolve a real pdfUrl
+  // (e.g. a signed-URL fetch error) — distinct from simply having no PDF to
+  // show at all (e.g. a text-only submission), so the empty state doesn't
+  // read as a false "everything's fine, there's just nothing here".
+  unavailableMessage?: string;
 };
 
 // Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
@@ -107,7 +112,13 @@ function dedupeOverlappingRects(rects: HighlightRect[]): HighlightRect[] {
   return kept;
 }
 
-export function PlagiarismPdfViewer({ pdfUrl, matches, activeMatchId, onMatchClick }: PlagiarismPdfViewerProps) {
+export function PlagiarismPdfViewer({
+  pdfUrl,
+  matches,
+  activeMatchId,
+  onMatchClick,
+  unavailableMessage,
+}: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.1);
@@ -419,7 +430,11 @@ export function PlagiarismPdfViewer({ pdfUrl, matches, activeMatchId, onMatchCli
       {/* Viewer */}
       <div className="flex justify-center overflow-auto rounded-lg bg-ink-100/40 p-4">
         {!pdfUrl ? (
-          <p className="py-12 text-sm text-ink-400">Không có file PDF gốc để hiển thị preview.</p>
+          <p
+            className={`py-12 text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}
+          >
+            {unavailableMessage ?? "Không có file PDF gốc để hiển thị preview."}
+          </p>
         ) : bufferError ? (
           <p className="py-12 text-sm font-medium text-severity-high">{bufferError}</p>
         ) : loadError ? (

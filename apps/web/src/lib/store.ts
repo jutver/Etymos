@@ -63,6 +63,12 @@ interface AppState {
   historyError: string | null;
   trash: HistoryEntry[];
   projects: string[];
+  /** Project names the user has created but that have no documents in them
+   * yet — since `documents.project` is a plain text column with no backing
+   * projects table, an empty project only exists client-side until the
+   * first document is assigned to it. Merged with the distinct project
+   * names present in `history` by the Documents screen. */
+  knownProjects: string[];
   checkedDocuments: Record<string, CheckedDocument>;
   hasCompletedFirstCheck: boolean;
   planPeriodStart: string;
@@ -99,6 +105,24 @@ interface AppState {
   moveToTrash: (id: string) => void;
   restoreFromTrash: (id: string) => void;
   permanentlyDeleteTrash: (id: string) => void;
+  /** Registers a freshly created, still-empty project name so it shows up
+   * in the Documents screen before any document is assigned to it. */
+  addKnownProject: (name: string) => void;
+  removeKnownProject: (name: string) => void;
+  /** Updates the `project` field on every matching history entry in place
+   * (mirrors a `renameProjectDocuments` Supabase call already made by the
+   * caller) and renames the entry in `knownProjects` if present. */
+  renameProjectInHistory: (oldName: string, newName: string) => void;
+  /** Ungroups every history entry in `name` back to the implicit Default
+   * bucket (mirrors a `clearProjectFromDocuments` call) and forgets it from
+   * `knownProjects`. */
+  clearProjectInHistory: (name: string) => void;
+  /** Updates a single history entry's `project` field in place (mirrors a
+   * `moveDocumentToProject` Supabase call already made by the caller). */
+  setDocumentProject: (id: string, project: string | null) => void;
+  /** Updates a single history entry's `title` in place (mirrors a
+   * `renameDocument` Supabase call already made by the caller). */
+  renameDocumentInHistory: (id: string, title: string) => void;
   planResetInfo: () => { daysLeft: number; resetDate: Date };
   rolloverPlanPeriodIfNeeded: () => void;
   completeStudentVerification: () => void;
@@ -118,6 +142,7 @@ export const useAppStore = create<AppState>()(
       historyError: null,
       trash: [],
       projects: PROJECTS,
+      knownProjects: [],
       checkedDocuments: {},
       hasCompletedFirstCheck: false,
       planPeriodStart: new Date().toISOString(),
@@ -240,6 +265,38 @@ export const useAppStore = create<AppState>()(
       permanentlyDeleteTrash: (id) =>
         set((s) => ({ trash: s.trash.filter((h) => h.id !== id) })),
 
+      addKnownProject: (name) =>
+        set((s) => (s.knownProjects.includes(name) ? s : { knownProjects: [...s.knownProjects, name] })),
+
+      removeKnownProject: (name) =>
+        set((s) => ({ knownProjects: s.knownProjects.filter((p) => p !== name) })),
+
+      renameProjectInHistory: (oldName, newName) =>
+        set((s) => ({
+          history: s.history.map((h) =>
+            (h.project ?? PROJECTS[0]) === oldName ? { ...h, project: newName } : h,
+          ),
+          knownProjects: s.knownProjects.map((p) => (p === oldName ? newName : p)),
+        })),
+
+      clearProjectInHistory: (name) =>
+        set((s) => ({
+          history: s.history.map((h) =>
+            (h.project ?? PROJECTS[0]) === name ? { ...h, project: undefined } : h,
+          ),
+          knownProjects: s.knownProjects.filter((p) => p !== name),
+        })),
+
+      setDocumentProject: (id, project) =>
+        set((s) => ({
+          history: s.history.map((h) => (h.id === id ? { ...h, project: project ?? undefined } : h)),
+        })),
+
+      renameDocumentInHistory: (id, title) =>
+        set((s) => ({
+          history: s.history.map((h) => (h.id === id ? { ...h, title } : h)),
+        })),
+
       planResetInfo: () => {
         const { planPeriodStart } = get();
         const start = new Date(planPeriodStart);
@@ -282,6 +339,7 @@ export const useAppStore = create<AppState>()(
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,
         studentVerified: s.studentVerified,
+        knownProjects: s.knownProjects,
       }),
     },
   ),

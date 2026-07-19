@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { CaretDown, ClockCounterClockwise, List, SignOut, Trash, UploadSimple, User, X } from "@phosphor-icons/react";
+import {
+  CaretDown,
+  ClockCounterClockwise,
+  FolderOpen,
+  List,
+  SignOut,
+  Trash,
+  UploadSimple,
+  User,
+  X,
+} from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { UsageMeter } from "../UsageMeter";
 import { cn } from "@etymos/shared";
@@ -10,6 +20,7 @@ import { supabase } from "@etymos/shared";
 
 const navLinks = [
   { label: "Upload", href: "/upload", icon: UploadSimple },
+  { label: "Documents", href: "/documents", icon: FolderOpen },
   { label: "History", href: "/history", icon: ClockCounterClockwise },
   { label: "My Trash", href: "/trash", icon: Trash },
 ];

@@ -21,21 +21,17 @@ const NAV_ITEMS = [
   { to: "/config", label: "Config", icon: SlidersHorizontal },
 ];
 
-/** Etymos brand mark — mirrors apps/web/src/components/layout/Logo.tsx's LogoMark
- * so the two apps read as the same product family (DESIGN.md's "One Gradient Rule":
- * the brand gradient appears in a small, fixed set of places, including the mark). */
+/** Etymos brand mark on the dark sidebar — mirrors apps/web/src/components/layout/Logo.tsx's
+ * LogoMark(onDark) so the two apps read as the same product family. */
 function BrandMark({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" className="shrink-0">
-      <defs>
-        <linearGradient id="admin-logo-g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#9FD2F0" />
-          <stop offset="1" stopColor="#1E4FC4" />
-        </linearGradient>
-      </defs>
-      <rect width="48" height="48" rx="12" fill="url(#admin-logo-g)" />
-      <path d="M15 14H33V19H20.5V21.8H31V26.6H20.5V29.6H33.3V34.4H15V14Z" fill="white" />
-    </svg>
+    <img
+      src="/assets/logo/etymos-mark-white.svg"
+      alt=""
+      width={size}
+      height={size}
+      className="shrink-0 object-contain"
+    />
   );
 }
 

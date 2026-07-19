@@ -14,6 +14,7 @@ import UploadPage from "./screens/Upload";
 import AnalyzingPage from "./screens/Analyzing";
 import ReportPage from "./screens/Report";
 import HistoryPage from "./screens/History";
+import DocumentsPage from "./screens/Documents";
 import TrashPage from "./screens/Trash";
 import PaywallPage from "./screens/Paywall";
 import CheckoutPage from "./screens/Checkout";
@@ -83,6 +84,7 @@ function App() {
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/analyzing" element={<AnalyzingPage />} />
             <Route path="/report/:id" element={<ReportPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/trash" element={<TrashPage />} />
             <Route path="/paywall" element={<PaywallPage />} />

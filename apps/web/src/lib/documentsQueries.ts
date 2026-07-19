@@ -160,3 +160,51 @@ export async function permanentlyDeleteDocument(id: string): Promise<void> {
   const { error } = await supabase.from("documents").delete().eq("id", id);
   if (error) throw error;
 }
+
+// --- Documents (Finder-style) screen helpers -------------------------------
+// `documents.project` is a plain nullable text column — there is no
+// dedicated projects table, so "projects" are purely a client-side grouping
+// by this field. `null` is the conventional "ungrouped" bucket, displayed as
+// PROJECTS[0] ("Default") by callers — see store.ts.
+
+/** Bulk-renames every document whose `project` exactly matches `oldProject`
+ * to `newProject`, scoped to the given user. Callers should only invoke this
+ * for real (non-default) project names — the implicit "Default"/ungrouped
+ * bucket (`project IS NULL`) is not renameable through this helper. */
+export async function renameProjectDocuments(
+  userId: string,
+  oldProject: string,
+  newProject: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("documents")
+    .update({ project: newProject })
+    .eq("user_id", userId)
+    .eq("project", oldProject);
+  if (error) throw error;
+}
+
+/** Moves a single document into `project` (or ungroups it back to the
+ * implicit Default bucket when `project` is null). */
+export async function moveDocumentToProject(id: string, project: string | null): Promise<void> {
+  const { error } = await supabase.from("documents").update({ project }).eq("id", id);
+  if (error) throw error;
+}
+
+/** "Deletes" a project by ungrouping every matching document back to the
+ * implicit Default bucket (`project: null`). Documents themselves are not
+ * deleted — only the grouping. Scoped to real (non-default) project names. */
+export async function clearProjectFromDocuments(userId: string, project: string): Promise<void> {
+  const { error } = await supabase
+    .from("documents")
+    .update({ project: null })
+    .eq("user_id", userId)
+    .eq("project", project);
+  if (error) throw error;
+}
+
+/** Renames a single document's display title. */
+export async function renameDocument(id: string, title: string): Promise<void> {
+  const { error } = await supabase.from("documents").update({ title }).eq("id", id);
+  if (error) throw error;
+}

@@ -1,18 +1,34 @@
 import { Link } from "react-router-dom";
 import { cn } from "@etymos/shared";
 
-export function LogoMark({ size = 32 }: { size?: number }) {
+export function LogoMark({ size = 32, onDark = false }: { size?: number; onDark?: boolean }) {
+  // The white brand mark needs contrast to read on light backgrounds, so it
+  // sits in a navy badge there; on already-dark nav/footer backgrounds it's
+  // shown directly with no badge.
+  if (onDark) {
+    return (
+      <img
+        src="/assets/logo/etymos-mark-white.svg"
+        alt=""
+        width={size}
+        height={size}
+        className="shrink-0 object-contain"
+      />
+    );
+  }
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" className="shrink-0">
-      <defs>
-        <linearGradient id="logo-g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#9FD2F0" />
-          <stop offset="1" stopColor="#1E4FC4" />
-        </linearGradient>
-      </defs>
-      <rect width="48" height="48" rx="12" fill="url(#logo-g)" />
-      <path d="M15 14H33V19H20.5V21.8H31V26.6H20.5V29.6H33.3V34.4H15V14Z" fill="white" />
-    </svg>
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-[10px] bg-navy-900"
+      style={{ width: size, height: size }}
+    >
+      <img
+        src="/assets/logo/etymos-mark-white.svg"
+        alt=""
+        width={size * 0.62}
+        height={size * 0.62}
+        className="object-contain"
+      />
+    </span>
   );
 }
 
@@ -27,7 +43,7 @@ export function Logo({
 }) {
   return (
     <Link to={to} className="inline-flex items-center gap-2.5">
-      <LogoMark size={size} />
+      <LogoMark size={size} onDark={variant === "light"} />
       <span
         className={cn(
           "text-lg font-bold tracking-tight",

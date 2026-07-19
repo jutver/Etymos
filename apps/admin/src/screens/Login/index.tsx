@@ -43,9 +43,9 @@ export default function LoginPage() {
     <div className="flex min-h-dvh items-center justify-center bg-bg px-6">
       <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
         <div className="mb-6 flex items-center gap-2">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-control bg-accent/15 font-mono text-sm font-semibold text-accent">
-            E
-          </div>
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-control bg-accent">
+            <img src="/assets/logo/etymos-mark-white.svg" alt="" width={16} height={16} className="object-contain" />
+          </span>
           <span className="font-mono text-sm font-semibold tracking-tight text-fg">
             Etymos Admin
           </span>

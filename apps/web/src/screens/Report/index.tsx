@@ -7,7 +7,9 @@ import {
   LockSimple,
   Translate,
 } from "@phosphor-icons/react";
+import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { useAuth } from "../../lib/auth";
 import { fetchCheckedDocument } from "../../lib/documentsQueries";
 import { formatDate, formatNumber } from "../../lib/format";
 import { SimilarityBadge, SeverityTag } from "../../components/Severity";
@@ -17,6 +19,14 @@ import { SourceComparisonModal } from "./SourceComparisonModal";
 import { RewritePanel } from "./RewritePanel";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import type { CheckedDocument, MatchedSource } from "../../lib/types";
+
+// Private Storage bucket the backend uploads original PDFs into (see
+// backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
+const DOCUMENTS_BUCKET = "documents";
+// Short-lived on purpose (regenerated fresh every time this screen loads a
+// historical document — see the signed-URL effect below), matching the
+// pattern already used in apps/admin/src/lib/verificationQueries.ts.
+const PDF_SIGNED_URL_TTL_SECONDS = 300;
 
 export default function ReportPage() {
   const { id } = useParams();
@@ -66,6 +76,54 @@ export default function ReportPage() {
 
   const doc = cachedDoc ?? remoteDoc ?? null;
   const historyMeta = id ? history.find((h) => h.id === id) : undefined;
+
+  // fetchCheckedDocument() (documentsQueries.ts) only ever reads the
+  // `documents`/`document_matches`/`document_passages` tables — it never
+  // returns a `pdfUrl`, so any document loaded from history (as opposed to
+  // the fast `cachedDoc` path right after Upload/Analyzing, which already
+  // carries an in-memory data URL) previously fell through to a bare
+  // "/test-file.pdf" fallback that doesn't exist in apps/web/public, causing
+  // react-pdf's onLoadError to fire. The real original PDF lives in the
+  // private `documents` Storage bucket at `{user_id}/{document_id}.pdf`
+  // (backend/api/app.py's _storage_path/get_source_pdf) — fetch it with a
+  // signed URL here, the same pattern apps/admin/src/lib/verificationQueries.ts
+  // uses for student-verification evidence files.
+  const { user } = useAuth();
+  const [signedPdfUrl, setSignedPdfUrl] = useState<string | null>(null);
+  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Skip when: no id, doc came from the in-memory fast path (already has
+    // a working pdfUrl if any), doc hasn't loaded yet, the doc has no
+    // fileName (text-only submissions have no source PDF in Storage at
+    // all), or we don't yet know who's signed in.
+    if (!id || cachedDoc || !doc || !doc.fileName || !user) {
+      setSignedPdfUrl(null);
+      setPdfFetchError(null);
+      return;
+    }
+    let cancelled = false;
+    setPdfFetchError(null);
+    supabase.storage
+      .from(DOCUMENTS_BUCKET)
+      .createSignedUrl(`${user.id}/${id}.pdf`, PDF_SIGNED_URL_TTL_SECONDS)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data?.signedUrl) {
+          setSignedPdfUrl(null);
+          setPdfFetchError(
+            error?.message ?? "Không thể tạo liên kết xem trước cho file PDF gốc.",
+          );
+          return;
+        }
+        setSignedPdfUrl(data.signedUrl);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, cachedDoc, doc, user]);
+
+  const effectivePdfUrl = cachedDoc?.pdfUrl || signedPdfUrl || undefined;
 
   // Đồng bộ giữa highlight trên PDF và match card đang được chọn
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -185,7 +243,8 @@ export default function ReportPage() {
         {/* Document viewer */}
         <div className="rounded-[var(--radius-card-lg)] border border-line bg-surface-tint overflow-hidden">
           <PlagiarismPdfViewer
-            pdfUrl={doc.pdfUrl || "/test-file.pdf"}
+            pdfUrl={effectivePdfUrl ?? ""}
+            unavailableMessage={pdfFetchError ?? undefined}
             matches={visibleMatches}
             activeMatchId={activeMatchId}
             onMatchClick={setActiveMatchId}
