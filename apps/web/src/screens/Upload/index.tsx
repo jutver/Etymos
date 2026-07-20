@@ -390,7 +390,7 @@ export default function UploadPage() {
                     autoFocus
                     value={projectQuery}
                     onChange={(e) => setProjectQuery(e.target.value)}
-                    placeholder="Search projects"
+                    placeholder="Search or create projects"
                     className="mb-1 w-full rounded-lg border border-line bg-surface-tint px-3 py-2 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
                   />
                   <div className="max-h-48 overflow-y-auto scrollbar-thin">
