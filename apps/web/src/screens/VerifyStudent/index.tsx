@@ -1,12 +1,22 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, Clock, FileImage, GraduationCap, UploadSimple, X } from "@phosphor-icons/react";
+import {
+  CheckCircle,
+  Clock,
+  FileImage,
+  GraduationCap,
+  UploadSimple,
+  Warning,
+  X,
+} from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
 import { useAppStore } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
 
 const EVIDENCE_BUCKET = "student-verification";
+
+type ExistingStatus = "pending" | "approved" | "rejected" | null;
 
 export default function VerifyStudentPage() {
   const navigate = useNavigate();
@@ -19,6 +29,34 @@ export default function VerifyStudentPage() {
   const [file, setFile] = useState<{ name: string; previewUrl: string; blob: File } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [existingStatus, setExistingStatus] = useState<ExistingStatus>(null);
+  const [checkingExisting, setCheckingExisting] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setCheckingExisting(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("student_verification_requests")
+          .select("status")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (cancelled) return;
+        setExistingStatus((data?.status as ExistingStatus) ?? null);
+      } finally {
+        if (!cancelled) setCheckingExisting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   function pickFile(list: FileList | null) {
     const picked = list?.[0];
@@ -61,16 +99,19 @@ export default function VerifyStudentPage() {
     }
   }
 
-  if (submitted) {
+  if (submitted || (!checkingExisting && existingStatus === "pending")) {
     return (
       <div className="mx-auto max-w-xl px-5 py-14 sm:px-8">
         <div className="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-600">
           <Clock size={24} weight="fill" />
         </div>
-        <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">Submitted for review</h1>
+        <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">
+          {submitted ? "Submitted for review" : "Verification in progress"}
+        </h1>
         <p className="mt-1.5 text-sm text-ink-500">
-          Your document was uploaded and a verification request is now pending. An admin will review it and
-          your account will be updated automatically once it's approved.
+          {submitted
+            ? "Your document was uploaded and a verification request is now pending. An admin will review it and your account will be updated automatically once it's approved."
+            : "We already have a verification request from you and it's currently being reviewed by an admin. Your account will be updated automatically once a decision is made."}
         </p>
 
         <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
@@ -81,6 +122,9 @@ export default function VerifyStudentPage() {
               <p className="text-xs text-ink-500">We'll let you know as soon as a decision is made.</p>
             </div>
           </div>
+          <p className="mt-4 text-xs text-ink-400">
+            Think this is a mistake? <a href="mailto:support@etymos.ai" className="font-semibold text-brand-600 underline underline-offset-2">Contact support</a>.
+          </p>
 
           <Button
             size="lg"
@@ -101,6 +145,29 @@ export default function VerifyStudentPage() {
     );
   }
 
+  if (!checkingExisting && existingStatus === "approved") {
+    return (
+      <div className="mx-auto max-w-xl px-5 py-14 sm:px-8">
+        <div className="flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
+          <CheckCircle size={24} weight="fill" />
+        </div>
+        <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">You're already verified</h1>
+        <p className="mt-1.5 text-sm text-ink-500">
+          Your student status has already been approved — no further action is needed.
+        </p>
+        <Button size="lg" className="mt-6" onClick={() => navigate("/account/plan")}>
+          Go to My Plan
+        </Button>
+      </div>
+    );
+  }
+
+  if (checkingExisting) {
+    return (
+      <div className="mx-auto max-w-xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl px-5 py-14 sm:px-8">
       <div className="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-600">
@@ -111,6 +178,18 @@ export default function VerifyStudentPage() {
         Standard requires a quick one-time verification. Upload a photo of your student ID or
         an enrollment document to continue.
       </p>
+
+      {existingStatus === "rejected" && (
+        <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-4 py-3.5 text-sm text-severity-high">
+          <Warning size={20} weight="fill" className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">Your previous submission was rejected</p>
+            <p className="mt-0.5 text-severity-high/90">
+              Please upload a clearer document and resubmit for review.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
         {file ? (

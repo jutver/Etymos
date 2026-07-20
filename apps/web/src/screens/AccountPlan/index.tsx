@@ -85,7 +85,7 @@ export default function AccountPlanPage() {
               )}
             </p>
           </div>
-          <UsageMeter />
+          <UsageMeter interactive={false} />
         </div>
 
         <p className="mt-4 text-xs text-ink-500">

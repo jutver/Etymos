@@ -11,12 +11,13 @@ const SOURCE_ICON: Record<BalanceSource, typeof Coins> = {
 };
 
 /** Renders all three independent balances (plan allowance, standard credits,
- * premium credits) as a row of selectable pills — clicking one calls
- * `setSelectedBalance` so the Upload screen (and anywhere else that reads
- * `selectedBalance`) knows which bucket to spend from. Replaces the old
- * single-balance display that only ever showed whichever bucket happened to
- * be nonzero. */
-export function UsageMeter({ compact = false }: { compact?: boolean }) {
+ * premium credits) as a row of pills. When `interactive` (default), clicking
+ * one calls `setSelectedBalance` so the Upload screen (and anywhere else that
+ * reads `selectedBalance`) knows which bucket to spend from. Pass
+ * `interactive={false}` for placements that are display-only (nav bar, My
+ * Plan) — those render plain non-clickable pills with no darkened/selected
+ * state, since selection only actually matters on the Upload screen. */
+export function UsageMeter({ compact = false, interactive = true }: { compact?: boolean; interactive?: boolean }) {
   const balances = useAppStore((s) => s.balances());
   const selectedBalance = useAppStore((s) => s.selectedBalance);
   const setSelectedBalance = useAppStore((s) => s.setSelectedBalance);
@@ -28,15 +29,16 @@ export function UsageMeter({ compact = false }: { compact?: boolean }) {
       <div className={cn("flex flex-wrap items-center gap-1.5", compact && "gap-1")}>
         {balances.map((b) => {
           const Icon = SOURCE_ICON[b.source];
-          const selected = b.source === selectedBalance;
+          const selected = interactive && b.source === selectedBalance;
           const zero = b.remaining <= 0;
+          const Tag = interactive ? "button" : "div";
 
           return (
-            <button
+            <Tag
               key={b.source}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => setSelectedBalance(b.source)}
+              {...(interactive
+                ? { type: "button" as const, "aria-pressed": selected, onClick: () => setSelectedBalance(b.source) }
+                : {})}
               title={b.label}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors",
@@ -44,8 +46,9 @@ export function UsageMeter({ compact = false }: { compact?: boolean }) {
                 selected
                   ? "border-brand-500 bg-brand-100/40 text-brand-700"
                   : zero
-                    ? "border-line bg-surface-tint text-ink-400 hover:border-brand-300"
-                    : "border-line bg-white text-ink-600 hover:border-brand-300 hover:text-ink-800",
+                    ? "border-line bg-surface-tint text-ink-400" + (interactive ? " hover:border-brand-300" : "")
+                    : "border-line bg-white text-ink-600" +
+                      (interactive ? " hover:border-brand-300 hover:text-ink-800" : ""),
               )}
             >
               {zero ? (
@@ -59,7 +62,7 @@ export function UsageMeter({ compact = false }: { compact?: boolean }) {
               )}
               <span>{b.remaining}</span>
               {!compact && <span className="font-medium opacity-70">{b.label}</span>}
-            </button>
+            </Tag>
           );
         })}
       </div>

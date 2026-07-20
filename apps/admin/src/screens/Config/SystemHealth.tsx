@@ -2,11 +2,30 @@ import { useEffect, useState } from "react";
 import { CheckCircle, XCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+
 interface HealthState {
   connectivityOk: boolean;
   latencyMs: number | null;
-  lastDocumentAt: string | null;
+  backendOk: boolean;
+  backendLatencyMs: number | null;
+  backendDetail: string;
   checkedAt: string;
+}
+
+async function checkBackendHealth(): Promise<{ ok: boolean; latencyMs: number | null; detail: string }> {
+  const start = performance.now();
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/health`);
+    const latencyMs = Math.round(performance.now() - start);
+    if (!response.ok) {
+      return { ok: false, latencyMs, detail: `Responded with HTTP ${response.status}` };
+    }
+    const body = (await response.json()) as { status?: string; service?: string };
+    return { ok: body.status === "ok", latencyMs, detail: body.service ?? "Responding" };
+  } catch {
+    return { ok: false, latencyMs: null, detail: "Unreachable — check the backend deployment" };
+  }
 }
 
 async function checkHealth(): Promise<HealthState> {
@@ -14,17 +33,14 @@ async function checkHealth(): Promise<HealthState> {
   const { error } = await supabase.from("plan_definitions").select("id").limit(1);
   const latencyMs = Math.round(performance.now() - start);
 
-  const { data: lastDoc } = await supabase
-    .from("documents")
-    .select("uploaded_at")
-    .order("uploaded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const backend = await checkBackendHealth();
 
   return {
     connectivityOk: !error,
     latencyMs,
-    lastDocumentAt: lastDoc?.uploaded_at ?? null,
+    backendOk: backend.ok,
+    backendLatencyMs: backend.latencyMs,
+    backendDetail: backend.detail,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -91,12 +107,12 @@ export default function SystemHealthPage() {
               }
             />
             <Indicator
-              ok={health.lastDocumentAt != null}
-              label="Recent document activity"
+              ok={health.backendOk}
+              label="Backend API"
               detail={
-                health.lastDocumentAt
-                  ? `Last upload: ${new Date(health.lastDocumentAt).toLocaleString()}`
-                  : "No documents recorded yet"
+                health.backendOk
+                  ? `${health.backendDetail} (${health.backendLatencyMs}ms)`
+                  : health.backendDetail
               }
             />
           </div>

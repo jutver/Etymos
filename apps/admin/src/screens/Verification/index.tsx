@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MagnifyingGlass, Eye, Check, X } from "@phosphor-icons/react";
+import { MagnifyingGlass, Eye, Check, X, CircleNotch } from "@phosphor-icons/react";
 import { DataTable, type Column } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
@@ -40,6 +40,8 @@ export default function VerificationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ url: string; storagePath: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   function reload() {
     let cancelled = false;
@@ -64,11 +66,14 @@ export default function VerificationPage() {
 
   async function handlePreview(row: VerificationRequest) {
     setError(null);
+    setPreviewLoading(true);
     try {
       const url = await getEvidenceSignedUrl(row.storage_path);
-      window.open(url, "_blank", "noopener,noreferrer");
+      setPreview({ url, storagePath: row.storage_path });
     } catch (err) {
       setError(friendlyError(err));
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -132,10 +137,15 @@ export default function VerificationPage() {
           <button
             type="button"
             onClick={() => handlePreview(r)}
+            disabled={previewLoading}
             title="Preview evidence"
-            className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95"
+            className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Eye size={14} weight="bold" />
+            {previewLoading ? (
+              <CircleNotch size={14} className="animate-spin" />
+            ) : (
+              <Eye size={14} weight="bold" />
+            )}
           </button>
           {r.status === "pending" && (
             <>
@@ -224,6 +234,43 @@ export default function VerificationPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-pop"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+              <p className="truncate text-body font-medium text-fg">
+                {preview.storagePath.split("/").pop() ?? preview.storagePath}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                title="Close"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-surface-muted p-4">
+              {preview.storagePath.toLowerCase().endsWith(".pdf") ? (
+                <iframe src={preview.url} title="Evidence document" className="h-[65vh] w-full rounded-control" />
+              ) : (
+                <img
+                  src={preview.url}
+                  alt="Verification evidence"
+                  className="mx-auto max-h-[65vh] w-auto rounded-control object-contain"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

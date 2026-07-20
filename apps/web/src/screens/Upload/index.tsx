@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitTextCheck, submitPdfCheck } from "../../lib/api";
 import {
@@ -9,6 +9,7 @@ import {
   FolderSimple,
   GraduationCap,
   Globe,
+  Plus,
   Sparkle,
   UploadSimple,
   X,
@@ -18,7 +19,7 @@ import { Toggle } from "../../components/ui/Toggle";
 import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
-import { useAppStore, planLabel, planWordLimit } from "../../lib/store";
+import { useAppStore, planLabel, planWordLimit, PROJECTS } from "../../lib/store";
 import { formatDate } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import type { Language } from "../../lib/types";
@@ -35,7 +36,8 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const plan = useAppStore((s) => s.plan);
   const history = useAppStore((s) => s.history);
-  const projects = useAppStore((s) => s.projects);
+  const knownProjects = useAppStore((s) => s.knownProjects);
+  const addKnownProject = useAppStore((s) => s.addKnownProject);
   const requestCheck = useAppStore((s) => s.requestCheck);
   const remaining = useAppStore((s) => s.remaining());
   const selectedBalance = useAppStore((s) => s.selectedBalance);
@@ -49,7 +51,7 @@ export default function UploadPage() {
   const [language, setLanguage] = useState<Language>("vi");
   const [langOpen, setLangOpen] = useState(false);
 
-  const [project, setProject] = useState<string>(projects[0] ?? "");
+  const [project, setProject] = useState<string>(PROJECTS[0]);
   const [projectQuery, setProjectQuery] = useState("");
   const [projectOpen, setProjectOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,9 +64,25 @@ export default function UploadPage() {
   const hasContent = tab === "file" ? files.length > 0 : pastedText.trim().length > 0;
   const docLabels = tab === "file" ? files.map((f) => f.name) : [pastedText.trim() ? "Pasted text" : ""].filter(Boolean);
 
-  const filteredProjects = projects.filter((p) =>
-    p.toLowerCase().includes(projectQuery.trim().toLowerCase()),
+  // Mirrors Documents.tsx's project-name aggregation: the Default bucket plus
+  // any client-known-but-empty projects plus every distinct project name
+  // already present in history.
+  const allProjectNames = useMemo(() => {
+    const names = new Set<string>([PROJECTS[0], ...knownProjects]);
+    for (const h of history) names.add(h.project ?? PROJECTS[0]);
+    return [...names].sort((a, b) => {
+      if (a === PROJECTS[0]) return -1;
+      if (b === PROJECTS[0]) return 1;
+      return a.localeCompare(b);
+    });
+  }, [history, knownProjects]);
+
+  const trimmedQuery = projectQuery.trim();
+  const filteredProjects = allProjectNames.filter((p) =>
+    p.toLowerCase().includes(trimmedQuery.toLowerCase()),
   );
+  const canCreateProject =
+    trimmedQuery.length > 0 && !allProjectNames.some((p) => p.toLowerCase() === trimmedQuery.toLowerCase());
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
@@ -80,6 +98,11 @@ export default function UploadPage() {
     setProject(name);
     setProjectQuery("");
     setProjectOpen(false);
+  }
+
+  function createProject(name: string) {
+    if (name !== PROJECTS[0]) addKnownProject(name);
+    chooseProject(name);
   }
 
   async function handleSubmit() {
@@ -384,6 +407,18 @@ export default function UploadPage() {
                         {p}
                       </button>
                     ))}
+                    {canCreateProject && (
+                      <button
+                        onClick={() => createProject(trimmedQuery)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-brand-600 hover:bg-surface-tint"
+                      >
+                        <Plus size={14} weight="bold" />
+                        Create project "{trimmedQuery}"
+                      </button>
+                    )}
+                    {filteredProjects.length === 0 && !canCreateProject && (
+                      <p className="px-3 py-2 text-sm text-ink-400">No projects found</p>
+                    )}
                   </div>
                 </div>
               )}

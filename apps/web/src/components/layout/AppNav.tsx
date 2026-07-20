@@ -70,7 +70,7 @@ export function AppNav() {
 
         <div className="flex items-center gap-3">
           <div className="hidden sm:block">
-            <UsageMeter compact />
+            <UsageMeter compact interactive={false} />
           </div>
 
           <button
@@ -134,7 +134,7 @@ export function AppNav() {
       {mobileNavOpen && (
         <div className="border-t border-navy-700/60 bg-navy-900 px-5 py-4 md:hidden">
           <div className="mb-3 sm:hidden">
-            <UsageMeter />
+            <UsageMeter interactive={false} />
           </div>
           <nav className="flex flex-col gap-1">
             {navLinks.map((l) => {
