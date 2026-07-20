@@ -20,7 +20,8 @@ const BILLING_OPTIONS: BillingCycle[] = ["monthly", "annual"];
 const FIELD_LABELS: Record<string, string> = {
   plan_tier: "Plan tier",
   billing_cycle: "Billing cycle",
-  credits: "Credits",
+  standard_credits: "Standard credits",
+  premium_credits: "Premium credits",
   student_verified: "Student verified",
 };
 
@@ -34,7 +35,10 @@ function formatAuditValue(value: unknown): string {
   return String(value);
 }
 
-type EditableProfileFields = Pick<Profile, "plan_tier" | "billing_cycle" | "credits" | "student_verified">;
+type EditableProfileFields = Pick<
+  Profile,
+  "plan_tier" | "billing_cycle" | "standard_credits" | "premium_credits" | "student_verified"
+>;
 
 /** Diffs only the fields that actually changed, for a compact audit_log metadata payload. */
 function diffProfileFields(before: EditableProfileFields, after: EditableProfileFields) {
@@ -60,7 +64,8 @@ export default function UserDetailPage() {
 
   const [planTier, setPlanTier] = useState<PlanTier>("free");
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
-  const [credits, setCredits] = useState(0);
+  const [standardCredits, setStandardCredits] = useState(0);
+  const [premiumCredits, setPremiumCredits] = useState(0);
   const [studentVerified, setStudentVerified] = useState(false);
 
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -76,7 +81,8 @@ export default function UserDetailPage() {
         setProfile(p);
         setPlanTier(p.plan_tier);
         setBillingCycle(p.billing_cycle ?? "monthly");
-        setCredits(p.credits);
+        setStandardCredits(p.standard_credits);
+        setPremiumCredits(p.premium_credits);
         setStudentVerified(p.student_verified);
       })
       .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
@@ -107,13 +113,15 @@ export default function UserDetailPage() {
       const before: EditableProfileFields = {
         plan_tier: profile.plan_tier,
         billing_cycle: profile.billing_cycle,
-        credits: profile.credits,
+        standard_credits: profile.standard_credits,
+        premium_credits: profile.premium_credits,
         student_verified: profile.student_verified,
       };
       const after: EditableProfileFields = {
         plan_tier: planTier,
         billing_cycle: billingCycle,
-        credits,
+        standard_credits: standardCredits,
+        premium_credits: premiumCredits,
         student_verified: studentVerified,
       };
 
@@ -207,12 +215,23 @@ export default function UserDetailPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Credits</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Standard credits</label>
             <input
               type="number"
               min={0}
-              value={credits}
-              onChange={(e) => setCredits(Number(e.target.value))}
+              value={standardCredits}
+              onChange={(e) => setStandardCredits(Number(e.target.value))}
+              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Premium credits</label>
+            <input
+              type="number"
+              min={0}
+              value={premiumCredits}
+              onChange={(e) => setPremiumCredits(Number(e.target.value))}
               className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
             />
           </div>

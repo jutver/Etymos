@@ -16,7 +16,9 @@ export default function HistoryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const plan = useAppStore((s) => s.plan);
-  const credits = useAppStore((s) => s.credits);
+  const standardCredits = useAppStore((s) => s.standardCredits);
+  const premiumCredits = useAppStore((s) => s.premiumCredits);
+  const credits = standardCredits + premiumCredits;
   const history = useAppStore((s) => s.history);
   const historyLoading = useAppStore((s) => s.historyLoading);
   const historyError = useAppStore((s) => s.historyError);

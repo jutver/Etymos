@@ -32,7 +32,17 @@ export const PLAN_WORD_LIMITS: Record<PlanTier, number> = {
 };
 export const PLAN_PERIOD_DAYS = 30;
 
-export type BalanceMode = "credits" | "plan-meter";
+/** Which of the three independent balances a check should be spent from.
+ * "plan" = the plan's monthly doc_limit (checksUsedThisPeriod); "standard"/
+ * "premium" = the matching credit-pack balance. The user picks one per check
+ * (Upload screen) instead of the old auto-detected single-`credits` model. */
+export type BalanceSource = "plan" | "standard" | "premium";
+
+export interface BalanceOption {
+  source: BalanceSource;
+  label: string;
+  remaining: number;
+}
 
 export function planDocLimit(plan: PlanTier): number {
   return PLAN_DOC_LIMITS[plan];
@@ -63,7 +73,9 @@ interface AppState {
   plan: PlanTier;
   billingCycle: BillingCycle;
   checksUsedThisPeriod: number;
-  credits: number;
+  standardCredits: number;
+  premiumCredits: number;
+  selectedBalance: BalanceSource;
   history: HistoryEntry[];
   historyLoading: boolean;
   historyError: string | null;
@@ -85,23 +97,32 @@ interface AppState {
   studentVerified: boolean;
   toasts: Toast[];
 
-  balanceMode: () => BalanceMode;
-  remaining: () => number;
+  /** All three balances at once, for UI that lists them (UsageMeter, the
+   * Upload-screen balance picker). */
+  balances: () => BalanceOption[];
+  /** Remaining amount for one balance; defaults to `selectedBalance`. */
+  remaining: (source?: BalanceSource) => number;
+  setSelectedBalance: (source: BalanceSource) => void;
   syncFromProfile: (profile: {
     plan: PlanTier;
     billingCycle: BillingCycle | null;
-    credits: number;
+    standardCredits: number;
+    premiumCredits: number;
     checksUsedThisPeriod: number;
     planPeriodStart: string;
     studentVerified: boolean;
   }) => void;
-  requestCheck: (docLabel?: string, count?: number) => boolean;
+  /** Cosmetic local mirror of the server-side deduction in
+   * backend/api/usage.py — decrements the chosen balance optimistically so
+   * the UI updates immediately; the backend is the actual gate/spend. */
+  requestCheck: (source: BalanceSource, docLabel?: string, count?: number) => boolean;
   clearPendingCheck: () => void;
   selectCheckoutItem: (item: CheckoutItem) => void;
-  /** `checks` is required for `kind: "pack"` purchases — the caller (Checkout
-   * screen) resolves it from the live `credit_packs` row it already fetched,
-   * since the store no longer keeps a static copy of pack data. */
-  completePurchase: (checks?: number) => void;
+  /** `packId` + `checks` are required for `kind: "pack"` purchases — the
+   * caller (Checkout screen) resolves both from the live `credit_packs` row
+   * it already fetched. `packId` picks which balance column gets credited
+   * ("pack-standard" -> standardCredits, "pack-premium" -> premiumCredits). */
+  completePurchase: (packId?: string, checks?: number) => void;
   addHistoryEntry: (entry: HistoryEntry) => void;
   addHistoryEntries: (entries: HistoryEntry[]) => void;
   fetchHistory: (userId: string) => Promise<void>;
@@ -142,7 +163,9 @@ export const useAppStore = create<AppState>()(
       plan: "free",
       billingCycle: "monthly",
       checksUsedThisPeriod: 0,
-      credits: 0,
+      standardCredits: 0,
+      premiumCredits: 0,
+      selectedBalance: "plan",
       history: [],
       historyLoading: false,
       historyError: null,
@@ -159,39 +182,66 @@ export const useAppStore = create<AppState>()(
       studentVerified: false,
       toasts: [],
 
-      balanceMode: () => {
-        const { credits } = get();
-        if (credits > 0) return "credits";
-        return "plan-meter";
+      balances: () => {
+        const { plan, standardCredits, premiumCredits, checksUsedThisPeriod } = get();
+        return [
+          {
+            source: "plan",
+            label: `${planLabel(plan)} plan checks`,
+            remaining: Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod),
+          },
+          { source: "standard", label: "Standard credits", remaining: standardCredits },
+          { source: "premium", label: "Premium credits", remaining: premiumCredits },
+        ];
       },
 
-      remaining: () => {
-        const { plan, credits, checksUsedThisPeriod } = get();
-        if (credits > 0) return credits;
-        return Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod);
+      remaining: (source) => {
+        const { plan, standardCredits, premiumCredits, checksUsedThisPeriod, selectedBalance } = get();
+        switch (source ?? selectedBalance) {
+          case "standard":
+            return standardCredits;
+          case "premium":
+            return premiumCredits;
+          default:
+            return Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod);
+        }
       },
+
+      setSelectedBalance: (source) => set({ selectedBalance: source }),
 
       syncFromProfile: (profile) =>
         set({
           plan: profile.plan,
           billingCycle: profile.billingCycle ?? "monthly",
-          credits: profile.credits,
+          standardCredits: profile.standardCredits,
+          premiumCredits: profile.premiumCredits,
           checksUsedThisPeriod: profile.checksUsedThisPeriod,
           planPeriodStart: profile.planPeriodStart,
           studentVerified: profile.studentVerified,
         }),
 
-      requestCheck: (docLabel, count = 1) => {
-        const { plan, credits, checksUsedThisPeriod } = get();
+      requestCheck: (source, docLabel, count = 1) => {
+        const { plan, standardCredits, premiumCredits, checksUsedThisPeriod } = get();
         if (docLabel) set({ pendingDocLabel: docLabel });
-        if (credits > 0) {
-          if (credits < count) {
+
+        if (source === "standard") {
+          if (standardCredits < count) {
             set({ hasPendingCheck: true });
             return false;
           }
-          set({ credits: credits - count });
+          set({ standardCredits: standardCredits - count });
           return true;
         }
+
+        if (source === "premium") {
+          if (premiumCredits < count) {
+            set({ hasPendingCheck: true });
+            return false;
+          }
+          set({ premiumCredits: premiumCredits - count });
+          return true;
+        }
+
         if (checksUsedThisPeriod + count <= PLAN_DOC_LIMITS[plan]) {
           set({ checksUsedThisPeriod: checksUsedThisPeriod + count });
           return true;
@@ -204,7 +254,7 @@ export const useAppStore = create<AppState>()(
 
       selectCheckoutItem: (item) => set({ pendingCheckoutItem: item, lastCheckoutStatus: null }),
 
-      completePurchase: (checks) => {
+      completePurchase: (packId, checks) => {
         const { pendingCheckoutItem } = get();
         if (!pendingCheckoutItem) return;
         if (pendingCheckoutItem.kind === "plan") {
@@ -216,7 +266,11 @@ export const useAppStore = create<AppState>()(
             lastCheckoutStatus: "success",
           });
         } else if (typeof checks === "number") {
-          set((s) => ({ credits: s.credits + checks, lastCheckoutStatus: "success" }));
+          if (packId === "pack-premium") {
+            set((s) => ({ premiumCredits: s.premiumCredits + checks, lastCheckoutStatus: "success" }));
+          } else {
+            set((s) => ({ standardCredits: s.standardCredits + checks, lastCheckoutStatus: "success" }));
+          }
         }
       },
 
@@ -347,7 +401,9 @@ export const useAppStore = create<AppState>()(
         plan: s.plan,
         billingCycle: s.billingCycle,
         checksUsedThisPeriod: s.checksUsedThisPeriod,
-        credits: s.credits,
+        standardCredits: s.standardCredits,
+        premiumCredits: s.premiumCredits,
+        selectedBalance: s.selectedBalance,
         checkedDocuments: s.checkedDocuments,
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,

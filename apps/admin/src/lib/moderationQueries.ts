@@ -9,7 +9,10 @@ export async function listDocuments(page: number, search: string): Promise<Paged
 
   let query = supabase
     .from("documents")
-    .select("*, profiles(id, email, display_name)", { count: "exact" })
+    // documents has two FKs to profiles (user_id, flagged_by); the embed
+    // must be disambiguated with the constraint name or PostgREST returns
+    // PGRST201 "more than one relationship was found".
+    .select("*, profiles!documents_user_id_fkey(id, email, display_name)", { count: "exact" })
     .order("uploaded_at", { ascending: false })
     .range(from, to);
 
@@ -25,7 +28,7 @@ export async function listDocuments(page: number, search: string): Promise<Paged
 export async function getDocument(id: string): Promise<AdminDocument> {
   const { data, error } = await supabase
     .from("documents")
-    .select("*, profiles(id, email, display_name)")
+    .select("*, profiles!documents_user_id_fkey(id, email, display_name)")
     .eq("id", id)
     .single();
   if (error) throw error;

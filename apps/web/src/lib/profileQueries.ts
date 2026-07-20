@@ -7,7 +7,8 @@ import type { BillingCycle, PlanTier } from "@etymos/shared";
 export interface MyProfile {
   plan: PlanTier;
   billingCycle: BillingCycle | null;
-  credits: number;
+  standardCredits: number;
+  premiumCredits: number;
   checksUsedThisPeriod: number;
   planPeriodStart: string;
   studentVerified: boolean;
@@ -16,7 +17,8 @@ export interface MyProfile {
 interface ProfileRow {
   plan_tier: PlanTier;
   billing_cycle: BillingCycle | null;
-  credits: number;
+  standard_credits: number;
+  premium_credits: number;
   checks_used_this_period: number;
   plan_period_start: string;
   student_verified: boolean;
@@ -25,7 +27,9 @@ interface ProfileRow {
 export async function fetchMyProfile(userId: string): Promise<MyProfile> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("plan_tier, billing_cycle, credits, checks_used_this_period, plan_period_start, student_verified")
+    .select(
+      "plan_tier, billing_cycle, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified",
+    )
     .eq("id", userId)
     .single();
   if (error) throw error;
@@ -34,7 +38,8 @@ export async function fetchMyProfile(userId: string): Promise<MyProfile> {
   return {
     plan: row.plan_tier,
     billingCycle: row.billing_cycle,
-    credits: row.credits,
+    standardCredits: row.standard_credits,
+    premiumCredits: row.premium_credits,
     checksUsedThisPeriod: row.checks_used_this_period,
     planPeriodStart: row.plan_period_start,
     studentVerified: row.student_verified,

@@ -1,5 +1,12 @@
 import { supabase } from "@etymos/shared";
-import type { AdminCreditPack, AdminPlanDefinition, Announcement, FeatureFlag } from "./types";
+import type {
+  AdminCreditPack,
+  AdminDiscountCode,
+  AdminPlanDefinition,
+  AdminPlanDiscount,
+  Announcement,
+  FeatureFlag,
+} from "./types";
 
 export async function listFeatureFlags(): Promise<FeatureFlag[]> {
   const { data, error } = await supabase.from("feature_flags").select("*").order("key");
@@ -64,5 +71,79 @@ export async function createAnnouncement(
 
 export async function setAnnouncementActive(id: string, isActive: boolean): Promise<void> {
   const { error } = await supabase.from("announcements").update({ is_active: isActive }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function listPlanDiscounts(): Promise<AdminPlanDiscount[]> {
+  const { data, error } = await supabase
+    .from("plan_discounts")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createPlanDiscount(
+  input: Pick<
+    AdminPlanDiscount,
+    "target_type" | "target_id" | "discount_type" | "amount" | "starts_at" | "ends_at" | "active"
+  >,
+): Promise<void> {
+  const { error } = await supabase.from("plan_discounts").insert(input);
+  if (error) throw error;
+}
+
+export async function updatePlanDiscount(
+  id: string,
+  patch: Partial<
+    Pick<
+      AdminPlanDiscount,
+      "target_type" | "target_id" | "discount_type" | "amount" | "starts_at" | "ends_at" | "active"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase.from("plan_discounts").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePlanDiscount(id: string): Promise<void> {
+  const { error } = await supabase.from("plan_discounts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listDiscountCodes(): Promise<AdminDiscountCode[]> {
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createDiscountCode(
+  input: Pick<
+    AdminDiscountCode,
+    "code" | "discount_type" | "amount" | "starts_at" | "ends_at" | "max_redemptions" | "active"
+  >,
+): Promise<void> {
+  const { error } = await supabase.from("discount_codes").insert(input);
+  if (error) throw error;
+}
+
+export async function updateDiscountCode(
+  id: string,
+  patch: Partial<
+    Pick<
+      AdminDiscountCode,
+      "code" | "discount_type" | "amount" | "starts_at" | "ends_at" | "max_redemptions" | "active"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase.from("discount_codes").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteDiscountCode(id: string): Promise<void> {
+  const { error } = await supabase.from("discount_codes").delete().eq("id", id);
   if (error) throw error;
 }

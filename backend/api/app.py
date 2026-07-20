@@ -7,9 +7,10 @@ import tempfile
 import threading
 import traceback
 from pathlib import Path
+from typing import Literal
 import sys
 import google.generativeai as genai
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -140,8 +141,14 @@ def _delete_pdf(user_id: str | None, report_id: str) -> None:
     fallback_path.unlink(missing_ok=True)
 
 
+# Which of the user's three independent balances to spend on a check:
+# their plan's monthly allowance, or one of the two purchased credit packs.
+BalanceSource = Literal["plan", "standard", "premium"]
+
+
 class TextCheckRequest(BaseModel):
     text: str = Field(min_length=30, max_length=100_000)
+    balance_source: BalanceSource
 
 class RewriteRequest(BaseModel):
     input_sentence: str
@@ -153,7 +160,8 @@ def health():
     return {"status": "ok", "service": "plagiarism-checker"}
 
 
-def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None) -> None:
+def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
+                 balance_source: BalanceSource) -> None:
     callback = make_progress_callback(job_id)
 
     try:
@@ -170,7 +178,7 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
         if user_id is not None:
-            record_check_used(user_id)
+            record_check_used(user_id, balance_source)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
@@ -186,7 +194,8 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
             pass
 
 
-def run_text_job(*, job_id: str, user_text: str, user_id: str | None) -> None:
+def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
+                  balance_source: BalanceSource) -> None:
     callback = make_progress_callback(job_id)
     try:
         update_job(job_id, status="processing", progress=1,
@@ -197,7 +206,7 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None) -> None:
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
         if user_id is not None:
-            record_check_used(user_id)
+            record_check_used(user_id, balance_source)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
@@ -207,12 +216,13 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None) -> None:
 @app.post("/api/check/pdf", status_code=202)
 @limiter.limit(RATE_LIMIT_CHECK_PDF)
 async def create_pdf_check(request: Request, file: UploadFile = File(...),
+                            balance_source: BalanceSource = Form(...),
                             user: AuthedUser = Depends(verify_supabase_jwt)):
     filename = file.filename or "uploaded.pdf"
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    ensure_quota_available(user.user_id)
+    ensure_quota_available(user.user_id, balance_source)
 
     job_id = create_job(input_type="pdf", input_name=filename, user_id=user.user_id)
     temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
@@ -231,7 +241,8 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
 
     threading.Thread(
         target=run_pdf_job,
-        kwargs={"job_id": job_id, "pdf_path": str(pdf_path), "original_name": filename, "user_id": user.user_id},
+        kwargs={"job_id": job_id, "pdf_path": str(pdf_path), "original_name": filename,
+                "user_id": user.user_id, "balance_source": balance_source},
         daemon=True,
     ).start()
 
@@ -242,12 +253,13 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
 @limiter.limit(RATE_LIMIT_CHECK_TEXT)
 def create_text_check(request: Request, body: TextCheckRequest,
                        user: AuthedUser = Depends(verify_supabase_jwt)):
-    ensure_quota_available(user.user_id)
+    ensure_quota_available(user.user_id, body.balance_source)
 
     job_id = create_job(input_type="text", input_name="Pasted text", user_id=user.user_id)
     threading.Thread(
         target=run_text_job,
-        kwargs={"job_id": job_id, "user_text": body.text.strip(), "user_id": user.user_id},
+        kwargs={"job_id": job_id, "user_text": body.text.strip(), "user_id": user.user_id,
+                "balance_source": body.balance_source},
         daemon=True,
     ).start()
     return {"job_id": job_id, "status": "queued", "input_type": "text"}

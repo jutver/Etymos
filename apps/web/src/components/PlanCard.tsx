@@ -9,9 +9,12 @@ import { cn } from "@etymos/shared";
 export function PlanCard({
   plan,
   billingCycle,
+  discountedPrice,
 }: {
   plan: PlanDefinition;
   billingCycle: BillingCycle;
+  /** If set (and lower than the base price), rendered alongside the struck-through original price. */
+  discountedPrice?: number;
 }) {
   const navigate = useNavigate();
   const currentPlan = useAppStore((s) => s.plan);
@@ -19,6 +22,7 @@ export function PlanCard({
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const isCurrent = currentPlan === plan.id;
   const price = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
+  const hasDiscount = discountedPrice !== undefined && discountedPrice < price;
   const needsVerification = plan.requiresVerification && !studentVerified;
 
   function handleSelect() {
@@ -58,8 +62,11 @@ export function PlanCard({
       <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{plan.tagline}</p>
 
       <div className="mt-6 flex items-baseline gap-1.5">
-        <span className="text-3xl font-extrabold tracking-tight text-navy-900">
-          {price === 0 ? "0 đ" : formatVND(price)}
+        {hasDiscount && (
+          <span className="text-lg font-semibold text-ink-400 line-through">{formatVND(price)}</span>
+        )}
+        <span className={cn("text-3xl font-extrabold tracking-tight", hasDiscount ? "text-success" : "text-navy-900")}>
+          {(hasDiscount ? discountedPrice! : price) === 0 ? "0 đ" : formatVND(hasDiscount ? discountedPrice! : price)}
         </span>
         {price > 0 && (
           <span className="text-sm font-medium text-ink-500">

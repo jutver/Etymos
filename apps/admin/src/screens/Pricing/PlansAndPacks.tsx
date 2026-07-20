@@ -31,7 +31,7 @@ function NumberField({
   );
 }
 
-export default function PricingConfigPage() {
+export default function PlansAndPacksPage() {
   const [plans, setPlans] = useState<AdminPlanDefinition[]>([]);
   const [packs, setPacks] = useState<AdminCreditPack[]>([]);
   const [loading, setLoading] = useState(true);

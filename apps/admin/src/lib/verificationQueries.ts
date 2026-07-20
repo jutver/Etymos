@@ -28,7 +28,10 @@ export async function listVerificationRequests(
 
   let query = supabase
     .from("student_verification_requests")
-    .select("*, profiles(id, email, display_name)", { count: "exact" })
+    // student_verification_requests has two FKs to profiles (user_id,
+    // reviewed_by); the embed must be disambiguated with the constraint
+    // name or PostgREST returns PGRST201 "more than one relationship".
+    .select("*, profiles!student_verification_requests_user_id_fkey(id, email, display_name)", { count: "exact" })
     .order("created_at", { ascending: status === "pending" })
     .range(from, to);
 

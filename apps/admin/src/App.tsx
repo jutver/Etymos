@@ -11,9 +11,11 @@ import DocumentDetailPage from "./screens/Moderation/DocumentDetail";
 import VerificationPage from "./screens/Verification";
 import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import FeatureFlagsPage from "./screens/Config/FeatureFlags";
-import PricingConfigPage from "./screens/Config/Pricing";
 import AnnouncementsPage from "./screens/Config/Announcements";
 import SystemHealthPage from "./screens/Config/SystemHealth";
+import { PricingLayout } from "./screens/Pricing/PricingLayout";
+import PlansAndPacksPage from "./screens/Pricing/PlansAndPacks";
+import DiscountsPage from "./screens/Pricing/Discounts";
 
 function App() {
   return (
@@ -29,10 +31,14 @@ function App() {
           <Route path="/moderation" element={<ModerationPage />} />
           <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
           <Route path="/verification" element={<VerificationPage />} />
+          <Route path="/pricing" element={<PricingLayout />}>
+            <Route index element={<Navigate to="/pricing/plans" replace />} />
+            <Route path="plans" element={<PlansAndPacksPage />} />
+            <Route path="discounts" element={<DiscountsPage />} />
+          </Route>
           <Route path="/config" element={<ConfigLayout />}>
             <Route index element={<Navigate to="/config/feature-flags" replace />} />
             <Route path="feature-flags" element={<FeatureFlagsPage />} />
-            <Route path="pricing" element={<PricingConfigPage />} />
             <Route path="announcements" element={<AnnouncementsPage />} />
             <Route path="system-health" element={<SystemHealthPage />} />
           </Route>

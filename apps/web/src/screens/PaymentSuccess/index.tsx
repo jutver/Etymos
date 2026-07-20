@@ -3,12 +3,15 @@ import { motion } from "motion/react";
 import { ArrowRight, CheckCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { useAppStore, planLabel } from "../../lib/store";
+import type { BalanceSource } from "../../lib/store";
 import { PLANS } from "../../lib/mockData";
 
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
-  const credits = useAppStore((s) => s.credits);
+  const standardCredits = useAppStore((s) => s.standardCredits);
+  const premiumCredits = useAppStore((s) => s.premiumCredits);
+  const totalCredits = standardCredits + premiumCredits;
   const pendingCheckoutItem = useAppStore((s) => s.pendingCheckoutItem);
   const hasPendingCheck = useAppStore((s) => s.hasPendingCheck);
   const pendingDocLabel = useAppStore((s) => s.pendingDocLabel);
@@ -20,8 +23,17 @@ export default function PaymentSuccessPage() {
 
   function resumeCheck() {
     const label = pendingDocLabel ?? undefined;
+    // Prefer the balance the user just bought (so a credit-pack purchase
+    // resumes the check by spending from that pack), falling back to the
+    // plan allowance when this success screen followed a plan upgrade.
+    const source: BalanceSource =
+      pendingCheckoutItem?.kind === "pack"
+        ? pendingCheckoutItem.packId === "pack-premium"
+          ? "premium"
+          : "standard"
+        : "plan";
     clearPendingCheck();
-    requestCheck(label);
+    requestCheck(source, label);
     navigate("/analyzing", { state: { docLabels: label ? [label] : undefined } });
   }
 
@@ -40,7 +52,7 @@ export default function PaymentSuccessPage() {
       <p className="mt-2 text-body-lg text-ink-600">
         {purchasedPlan
           ? `You're now on ${purchasedPlan.name}.`
-          : `${credits} credits have been added to your account.`}
+          : `${totalCredits} credits have been added to your account.`}
       </p>
 
       <div className="mt-7 w-full rounded-[var(--radius-card-lg)] border border-line bg-white p-6 text-left">
@@ -50,7 +62,7 @@ export default function PaymentSuccessPage() {
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
           <span className="text-sm text-ink-500">Credit balance</span>
-          <span className="text-sm font-bold text-navy-900">{credits} checks</span>
+          <span className="text-sm font-bold text-navy-900">{totalCredits} checks</span>
         </div>
       </div>
 

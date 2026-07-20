@@ -1,13 +1,18 @@
 """
 usage.py
 --------
-Server-side enforcement + bookkeeping for the plan-based check quota
-(`profiles.credits` / `profiles.checks_used_this_period`). apps/web's local
-display of these values is cosmetic only — this module is the actual gate,
-and (along with the admin dashboard and the RLS-lockdown-exempt service
-role) the only writer of these columns
+Server-side enforcement + bookkeeping for the three independent check
+balances (`profiles.standard_credits`, `profiles.premium_credits`, and the
+plan-based `checks_used_this_period` vs `plan_definitions.doc_limit`).
+apps/web's local display of these values is cosmetic only — this module is
+the actual gate, and (along with the admin dashboard and the
+RLS-lockdown-exempt service role) the only writer of these columns
 (supabase/migrations/20260719000000_lock_down_profile_self_updates.sql
 blocks everyone else from touching them).
+
+Callers pick which balance to spend per check (`balance_source`, one of
+"plan" | "standard" | "premium") — see ensure_quota_available() and
+record_check_used() below.
 
 Deduction happens on SUCCESS only, from the job runners in app.py, not at
 submission — a crashed/failed job should never cost the user a check. This
@@ -67,7 +72,8 @@ def _get_plan_doc_limit(plan_tier: str) -> Optional[int]:
 @dataclass
 class ProfileUsage:
     plan_tier: str
-    credits: int
+    standard_credits: int
+    premium_credits: int
     checks_used_this_period: int
     plan_period_start: Optional[str]
 
@@ -79,7 +85,7 @@ def _fetch_profile_usage(user_id: str) -> Optional[ProfileUsage]:
     try:
         resp = (
             client.table("profiles")
-            .select("plan_tier, credits, checks_used_this_period, plan_period_start")
+            .select("plan_tier, standard_credits, premium_credits, checks_used_this_period, plan_period_start")
             .eq("id", user_id)
             .single()
             .execute()
@@ -94,7 +100,8 @@ def _fetch_profile_usage(user_id: str) -> Optional[ProfileUsage]:
 
     return ProfileUsage(
         plan_tier=data.get("plan_tier") or "free",
-        credits=int(data.get("credits") or 0),
+        standard_credits=int(data.get("standard_credits") or 0),
+        premium_credits=int(data.get("premium_credits") or 0),
         checks_used_this_period=int(data.get("checks_used_this_period") or 0),
         plan_period_start=data.get("plan_period_start"),
     )
@@ -110,9 +117,10 @@ def _period_elapsed(plan_period_start: Optional[str]) -> bool:
     return datetime.now(timezone.utc) >= start + timedelta(days=PLAN_PERIOD_DAYS)
 
 
-def ensure_quota_available(user_id: str) -> None:
+def ensure_quota_available(user_id: str, balance_source: str) -> None:
     """
-    Raises 402 if the caller has no checks/credits left this period. Called
+    Raises 402 if the caller has nothing left in the requested balance
+    (`balance_source`, one of "plan" | "standard" | "premium"). Called
     before a check job is accepted — read-only, does not reserve or deduct
     anything (that only happens on success, in record_check_used()).
 
@@ -125,9 +133,23 @@ def ensure_quota_available(user_id: str) -> None:
     if usage is None:
         return
 
-    if usage.credits > 0:
+    if balance_source == "standard":
+        if usage.standard_credits <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail="You have no standard credits left. Buy more credits to continue.",
+            )
         return
 
+    if balance_source == "premium":
+        if usage.premium_credits <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail="You have no premium credits left. Buy more credits to continue.",
+            )
+        return
+
+    # balance_source == "plan"
     used = 0 if _period_elapsed(usage.plan_period_start) else usage.checks_used_this_period
     limit = _get_plan_doc_limit(usage.plan_tier)
     if limit is not None and used >= limit:
@@ -137,13 +159,15 @@ def ensure_quota_available(user_id: str) -> None:
         )
 
 
-def record_check_used(user_id: str) -> None:
+def record_check_used(user_id: str, balance_source: str) -> None:
     """
-    Called only after a check job completes successfully. Spends one
-    credit if the caller has any, otherwise increments
-    checks_used_this_period (rolling the period over first if it has
-    elapsed). Best-effort: logged on failure, never raises — the check
-    itself already succeeded and must not be undone by a bookkeeping error.
+    Called only after a check job completes successfully. Spends one unit
+    from the requested balance (`balance_source`, one of
+    "plan" | "standard" | "premium"): decrements standard_credits or
+    premium_credits, or increments checks_used_this_period (rolling the
+    period over first if it has elapsed) for "plan". Best-effort: logged on
+    failure, never raises — the check itself already succeeded and must not
+    be undone by a bookkeeping error.
     """
     client = get_client()
     if client is None:
@@ -154,10 +178,19 @@ def record_check_used(user_id: str) -> None:
         return
 
     try:
-        if usage.credits > 0:
-            client.table("profiles").update({"credits": usage.credits - 1}).eq("id", user_id).execute()
+        if balance_source == "standard":
+            client.table("profiles").update(
+                {"standard_credits": usage.standard_credits - 1}
+            ).eq("id", user_id).execute()
             return
 
+        if balance_source == "premium":
+            client.table("profiles").update(
+                {"premium_credits": usage.premium_credits - 1}
+            ).eq("id", user_id).execute()
+            return
+
+        # balance_source == "plan"
         if _period_elapsed(usage.plan_period_start):
             client.table("profiles").update(
                 {

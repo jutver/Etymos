@@ -9,7 +9,8 @@ export interface Profile {
   role: AdminRole;
   plan_tier: PlanTier;
   billing_cycle: BillingCycle | null;
-  credits: number;
+  standard_credits: number;
+  premium_credits: number;
   checks_used_this_period: number;
   plan_period_start: string;
   student_verified: boolean;
@@ -67,6 +68,35 @@ export interface AdminCreditPack {
   price: number;
   badge: string | null;
   sort_order: number;
+  updated_at: string;
+}
+
+export type DiscountType = "percent" | "fixed";
+
+export interface AdminPlanDiscount {
+  id: string;
+  target_type: "plan" | "pack";
+  target_id: string;
+  discount_type: DiscountType;
+  amount: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminDiscountCode {
+  id: string;
+  code: string;
+  discount_type: DiscountType;
+  amount: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  max_redemptions: number | null;
+  redemption_count: number;
+  active: boolean;
+  created_at: string;
   updated_at: string;
 }
 

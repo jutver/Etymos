@@ -2,16 +2,15 @@ import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@etymos/shared";
 
 const TABS = [
-  { to: "/config/feature-flags", label: "Feature flags" },
-  { to: "/config/announcements", label: "Announcements" },
-  { to: "/config/system-health", label: "System health" },
+  { to: "/pricing/plans", label: "Plans & packs" },
+  { to: "/pricing/discounts", label: "Discounts" },
 ];
 
-export function ConfigLayout() {
+export function PricingLayout() {
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">Config</h1>
-      <p className="mt-1 text-body text-fg-muted">Feature flags, announcements, and system health.</p>
+      <h1 className="text-h1 font-semibold text-fg">Pricing</h1>
+      <p className="mt-1 text-body text-fg-muted">Plans, credit packs, and discounts.</p>
 
       <div className="mt-5 flex gap-1 border-b border-border">
         {TABS.map((tab) => (

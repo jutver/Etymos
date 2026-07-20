@@ -14,7 +14,8 @@ import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@e
 export default function AccountPlanPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
-  const credits = useAppStore((s) => s.credits);
+  const standardCredits = useAppStore((s) => s.standardCredits);
+  const premiumCredits = useAppStore((s) => s.premiumCredits);
   const checksUsedThisPeriod = useAppStore((s) => s.checksUsedThisPeriod);
   const studentVerified = useAppStore((s) => s.studentVerified);
   const planResetInfo = useAppStore((s) => s.planResetInfo);
@@ -219,7 +220,9 @@ export default function AccountPlanPage() {
             </div>
           ))}
         </div>
-        <p className="mt-4 text-xs text-ink-400">Current credit balance: {credits} checks</p>
+        <p className="mt-4 text-xs text-ink-400">
+          Current credit balance: {standardCredits} standard, {premiumCredits} premium
+        </p>
       </section>
     </div>
   );

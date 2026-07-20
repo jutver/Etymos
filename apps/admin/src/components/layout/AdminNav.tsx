@@ -5,6 +5,7 @@ import {
   Users,
   ShieldWarning,
   SealCheck,
+  Tag,
   SlidersHorizontal,
   SignOut,
   List,
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { to: "/users", label: "Users", icon: Users },
   { to: "/moderation", label: "Moderation", icon: ShieldWarning },
   { to: "/verification", label: "Verification", icon: SealCheck },
+  { to: "/pricing", label: "Pricing", icon: Tag },
   { to: "/config", label: "Config", icon: SlidersHorizontal },
 ];
 

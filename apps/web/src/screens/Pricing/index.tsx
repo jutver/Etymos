@@ -4,11 +4,18 @@ import { CaretDown, Check, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
 import { FEATURE_MATRIX } from "../../lib/mockData";
-import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
+import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
+import type { ActivePlanDiscount } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
+
+function applyDiscount(price: number, discount: ActivePlanDiscount): number {
+  return discount.discount_type === "percent"
+    ? price * (1 - discount.amount / 100)
+    : Math.max(0, price - discount.amount);
+}
 
 const faqs = [
   {
@@ -41,14 +48,16 @@ export default function PricingPage() {
 
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
+  const [discounts, setDiscounts] = useState<ActivePlanDiscount[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPlanDefinitions(), fetchCreditPacks()])
-      .then(([planRows, packRows]) => {
+    Promise.all([fetchPlanDefinitions(), fetchCreditPacks(), fetchActivePlanDiscounts()])
+      .then(([planRows, packRows, discountRows]) => {
         if (cancelled) return;
         setPlans(planRows);
         setCreditPacks(packRows);
+        setDiscounts(discountRows);
       })
       .catch((err: unknown) => console.error("Failed to load pricing config", err));
     return () => {
@@ -103,9 +112,14 @@ export default function PricingPage() {
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
-          {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle} />
-          ))}
+          {plans.map((plan) => {
+            const discount = discounts.find((d) => d.target_type === "plan" && d.target_id === plan.id);
+            const basePrice = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
+            const discountedPrice = discount ? applyDiscount(basePrice, discount) : undefined;
+            return (
+              <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle} discountedPrice={discountedPrice} />
+            );
+          })}
         </div>
       </section>
 
@@ -122,24 +136,38 @@ export default function PricingPage() {
           </div>
 
           <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
-            {creditPacks.map((pack) => (
-              <div
-                key={pack.id}
-                className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
-              >
-                {pack.badge && (
-                  <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">
-                    {pack.badge}
-                  </span>
-                )}
-                <p className="text-lg font-bold text-navy-900">{pack.label}</p>
-                <p className="mt-3 text-3xl font-extrabold text-navy-900">{formatVND(pack.price)}</p>
-                <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
-                <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
-                  Buy credits
-                </Button>
-              </div>
-            ))}
+            {creditPacks.map((pack) => {
+              const discount = discounts.find((d) => d.target_type === "pack" && d.target_id === pack.id);
+              const discountedPrice = discount ? applyDiscount(pack.price, discount) : undefined;
+              const hasDiscount = discountedPrice !== undefined && discountedPrice < pack.price;
+              return (
+                <div
+                  key={pack.id}
+                  className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
+                >
+                  {pack.badge && (
+                    <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">
+                      {pack.badge}
+                    </span>
+                  )}
+                  <p className="text-lg font-bold text-navy-900">{pack.label}</p>
+                  <div className="mt-3 flex items-baseline justify-center gap-1.5">
+                    {hasDiscount && (
+                      <span className="text-base font-semibold text-ink-400 line-through">
+                        {formatVND(pack.price)}
+                      </span>
+                    )}
+                    <span className={cn("text-3xl font-extrabold", hasDiscount ? "text-success" : "text-navy-900")}>
+                      {formatVND(hasDiscount ? discountedPrice : pack.price)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
+                  <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
+                    Buy credits
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

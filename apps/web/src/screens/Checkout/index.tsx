@@ -1,15 +1,29 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, CircleNotch, Lock, WarningCircle } from "@phosphor-icons/react";
+import { Check, CircleNotch, Lock, Tag, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { PAYMENT_METHODS } from "../../lib/mockData";
-import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
-import { formatVND } from "@etymos/shared";
+import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
+import { formatVND, supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import type { CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 
 type Status = "idle" | "processing" | "declined";
+
+interface AppliedDiscount {
+  discount_type: "percent" | "fixed";
+  amount: number;
+  source: "auto" | "code";
+}
+
+function applyDiscount(price: number, discount: AppliedDiscount): number {
+  return discount.discount_type === "percent"
+    ? price * (1 - discount.amount / 100)
+    : Math.max(0, price - discount.amount);
+}
+
+type CodeStatus = "idle" | "applying" | "error";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -21,17 +35,30 @@ export default function CheckoutPage() {
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
 
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeStatus, setCodeStatus] = useState<CodeStatus>("idle");
+  const [codeError, setCodeError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!item) navigate("/pricing", { replace: true });
   }, [item, navigate]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPlanDefinitions(), fetchCreditPacks()])
-      .then(([planRows, packRows]) => {
+    Promise.all([fetchPlanDefinitions(), fetchCreditPacks(), fetchActivePlanDiscounts()])
+      .then(([planRows, packRows, discountRows]) => {
         if (cancelled) return;
         setPlans(planRows);
         setCreditPacks(packRows);
+
+        if (!item) return;
+        const targetType = item.kind === "plan" ? "plan" : "pack";
+        const targetId = item.kind === "plan" ? item.plan : item.packId;
+        const match = discountRows.find((d) => d.target_type === targetType && d.target_id === targetId);
+        if (match) {
+          setAppliedDiscount({ discount_type: match.discount_type, amount: match.amount, source: "auto" });
+        }
       })
       .catch((err: unknown) => console.error("Failed to load pricing config", err))
       .finally(() => {
@@ -40,6 +67,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!item) return null;
@@ -49,12 +77,37 @@ export default function CheckoutPage() {
 
   const plan = item.kind === "plan" ? plans.find((p) => p.id === item.plan) : null;
   const pack = item.kind === "pack" ? creditPacks.find((p) => p.id === item.packId) : null;
-  const price = plan
+  const basePrice = plan
     ? item.kind === "plan" && item.billingCycle === "annual"
       ? plan.priceAnnual
       : plan.priceMonthly
     : (pack?.price ?? 0);
+  const price = appliedDiscount ? applyDiscount(basePrice, appliedDiscount) : basePrice;
+  const hasDiscount = price < basePrice;
   const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method);
+
+  async function applyCode() {
+    const code = codeInput.trim();
+    if (!code) return;
+    setCodeStatus("applying");
+    setCodeError(null);
+    const { data, error } = await supabase.rpc("redeem_discount_code", { p_code: code });
+    if (error) {
+      setCodeStatus("error");
+      setCodeError(error.message);
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      setCodeStatus("error");
+      setCodeError("Invalid discount code.");
+      return;
+    }
+    // A manually-applied code overrides any automatic plan/pack discount
+    // rather than stacking with it — simpler and less confusing to the user.
+    setAppliedDiscount({ discount_type: row.discount_type, amount: row.amount, source: "code" });
+    setCodeStatus("idle");
+  }
 
   function confirmPay(shouldDecline: boolean) {
     setStatus("processing");
@@ -62,7 +115,7 @@ export default function CheckoutPage() {
       if (shouldDecline) {
         setStatus("declined");
       } else {
-        completePurchase(pack?.checks);
+        completePurchase(pack?.id, pack?.checks);
         navigate("/payment-success");
       }
     }, 1600);
@@ -86,11 +139,54 @@ export default function CheckoutPage() {
                 : "One-time purchase, credits never expire"}
             </p>
           </div>
-          <p className="text-sm font-bold text-ink-900">{formatVND(price)}</p>
+          <div className="flex items-baseline gap-1.5">
+            {hasDiscount && (
+              <span className="text-xs font-semibold text-ink-400 line-through">{formatVND(basePrice)}</span>
+            )}
+            <p className={cn("text-sm font-bold", hasDiscount ? "text-success" : "text-ink-900")}>
+              {formatVND(price)}
+            </p>
+          </div>
         </div>
+
+        <div className="border-b border-line pb-4">
+          <div className="flex items-center gap-2">
+            <Tag size={14} className="shrink-0 text-ink-400" />
+            <input
+              value={codeInput}
+              onChange={(e) => {
+                setCodeInput(e.target.value);
+                setCodeStatus("idle");
+                setCodeError(null);
+              }}
+              placeholder="Discount code"
+              className="min-w-0 flex-1 rounded-full border border-line bg-surface-tint px-3.5 py-1.5 text-xs placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            />
+            <button
+              type="button"
+              onClick={() => void applyCode()}
+              disabled={!codeInput.trim() || codeStatus === "applying"}
+              className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink-700 hover:border-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {codeStatus === "applying" ? "Applying…" : "Apply"}
+            </button>
+          </div>
+          {codeError && <p className="mt-2 text-xs font-medium text-severity-high">{codeError}</p>}
+          {appliedDiscount?.source === "code" && !codeError && (
+            <p className="mt-2 text-xs font-medium text-success">Discount code applied.</p>
+          )}
+        </div>
+
         <div className="flex items-center justify-between pt-4">
           <p className="text-sm font-bold text-navy-900">Total</p>
-          <p className="text-lg font-extrabold text-navy-900">{formatVND(price)}</p>
+          <div className="flex items-baseline gap-1.5">
+            {hasDiscount && (
+              <span className="text-sm font-semibold text-ink-400 line-through">{formatVND(basePrice)}</span>
+            )}
+            <p className={cn("text-lg font-extrabold", hasDiscount ? "text-success" : "text-navy-900")}>
+              {formatVND(price)}
+            </p>
+          </div>
         </div>
       </div>
 

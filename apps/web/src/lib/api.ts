@@ -83,17 +83,20 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function submitTextCheck(text: string): Promise<BackendJob> {
+export type BalanceSource = "plan" | "standard" | "premium";
+
+export async function submitTextCheck(text: string, balanceSource: BalanceSource): Promise<BackendJob> {
   return requestJson<BackendJob>("/api/check/text", {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, balance_source: balanceSource }),
   });
 }
 
-export async function submitPdfCheck(file: File): Promise<BackendJob> {
+export async function submitPdfCheck(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
   const authHeader = await getAuthHeader();
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("balance_source", balanceSource);
   const response = await fetch(buildUrl("/api/check/pdf"), {
     method: "POST",
     headers: { ...authHeader },

@@ -38,6 +38,7 @@ export default function UploadPage() {
   const projects = useAppStore((s) => s.projects);
   const requestCheck = useAppStore((s) => s.requestCheck);
   const remaining = useAppStore((s) => s.remaining());
+  const selectedBalance = useAppStore((s) => s.selectedBalance);
 
   const [tab, setTab] = useState<"file" | "paste">("file");
   const [dragActive, setDragActive] = useState(false);
@@ -85,7 +86,7 @@ export default function UploadPage() {
     if (!hasContent || overLimit) return;
 
     const summaryLabel = docLabels.length > 1 ? `${docLabels.length} documents` : docLabels[0];
-    const allowed = requestCheck(summaryLabel || "Untitled document", docLabels.length);
+    const allowed = requestCheck(selectedBalance, summaryLabel || "Untitled document", docLabels.length);
     if (!allowed) {
       navigate("/paywall");
       return;
@@ -96,7 +97,7 @@ export default function UploadPage() {
 
     try {
       if (tab === "paste") {
-        const job = await submitTextCheck(pastedText.trim());
+        const job = await submitTextCheck(pastedText.trim(), selectedBalance);
         navigate("/analyzing", {
           state: {
             docLabels,
@@ -131,7 +132,7 @@ export default function UploadPage() {
           reader.readAsDataURL(file);
         });
 
-        const job = await submitPdfCheck(file);
+        const job = await submitPdfCheck(file, selectedBalance);
         navigate("/analyzing", {
           state: {
             docLabels,

@@ -77,3 +77,27 @@ export async function fetchCreditPacks(): Promise<CreditPack[]> {
   if (error) throw error;
   return ((data ?? []) as CreditPackRow[]).map(toCreditPack);
 }
+
+export interface ActivePlanDiscount {
+  target_type: "plan" | "pack";
+  target_id: string;
+  discount_type: "percent" | "fixed";
+  amount: number;
+}
+
+/**
+ * Fetches currently-active direct discounts on plans/credit packs
+ * (plan_discounts table), scoped to rows whose optional schedule window
+ * covers "now". Public-readable, same pattern as plan_definitions/credit_packs.
+ */
+export async function fetchActivePlanDiscounts(): Promise<ActivePlanDiscount[]> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("plan_discounts")
+    .select("target_type, target_id, discount_type, amount")
+    .eq("active", true)
+    .or(`starts_at.is.null,starts_at.lte.${nowIso}`)
+    .or(`ends_at.is.null,ends_at.gte.${nowIso}`);
+  if (error) throw error;
+  return (data ?? []) as ActivePlanDiscount[];
+}

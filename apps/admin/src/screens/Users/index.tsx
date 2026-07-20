@@ -43,7 +43,8 @@ export default function UsersPage() {
     { key: "email", label: "Email", render: (r) => r.email ?? r.display_name ?? r.id },
     { key: "role", label: "Role", render: (r) => <StatusBadge label={r.role} tone={roleTone(r.role)} /> },
     { key: "plan", label: "Plan", render: (r) => <span className="capitalize">{r.plan_tier}</span> },
-    { key: "credits", label: "Credits", render: (r) => r.credits },
+    { key: "standard_credits", label: "Standard", render: (r) => r.standard_credits },
+    { key: "premium_credits", label: "Premium", render: (r) => r.premium_credits },
     {
       key: "student_verified",
       label: "Student verified",

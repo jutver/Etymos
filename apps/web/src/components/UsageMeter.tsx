@@ -1,68 +1,72 @@
-import { Coins, Warning } from "@phosphor-icons/react";
-import { useAppStore, planDocLimit } from "../lib/store";
+import { Coins, GraduationCap, Sparkle, Warning } from "@phosphor-icons/react";
+import { useAppStore } from "../lib/store";
+import type { BalanceSource } from "../lib/store";
 import { cn } from "@etymos/shared";
 import { Link } from "react-router-dom";
 
+const SOURCE_ICON: Record<BalanceSource, typeof Coins> = {
+  plan: GraduationCap,
+  standard: Coins,
+  premium: Sparkle,
+};
+
+/** Renders all three independent balances (plan allowance, standard credits,
+ * premium credits) as a row of selectable pills — clicking one calls
+ * `setSelectedBalance` so the Upload screen (and anywhere else that reads
+ * `selectedBalance`) knows which bucket to spend from. Replaces the old
+ * single-balance display that only ever showed whichever bucket happened to
+ * be nonzero. */
 export function UsageMeter({ compact = false }: { compact?: boolean }) {
-  const plan = useAppStore((s) => s.plan);
-  const mode = useAppStore((s) => s.balanceMode());
-  const remaining = useAppStore((s) => s.remaining());
-  const checksUsedThisPeriod = useAppStore((s) => s.checksUsedThisPeriod);
-  const limit = planDocLimit(plan);
+  const balances = useAppStore((s) => s.balances());
+  const selectedBalance = useAppStore((s) => s.selectedBalance);
+  const setSelectedBalance = useAppStore((s) => s.setSelectedBalance);
 
-  const low = remaining <= 1;
-  const zero = remaining <= 0;
-
-  if (mode === "credits") {
-    return (
-      <div
-        className={cn(
-          "inline-flex items-center gap-2 rounded-full border font-semibold",
-          zero
-            ? "border-severity-high-line bg-severity-high-bg text-severity-high"
-            : low
-              ? "border-severity-moderate-line bg-severity-moderate-bg text-severity-moderate"
-              : "border-line bg-surface-tint text-ink-700",
-          compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        )}
-      >
-        <Coins size={compact ? 13 : 15} weight="fill" />
-        {remaining} credit{remaining === 1 ? "" : "s"} left
-        {zero && !compact && (
-          <Link to="/pricing" className="ml-1 underline underline-offset-2">
-            Top up
-          </Link>
-        )}
-      </div>
-    );
-  }
+  const allZero = balances.every((b) => b.remaining <= 0);
 
   return (
-    <div className="flex items-center gap-2.5">
-      <div
-        className={cn(
-          "inline-flex items-center gap-2 rounded-full border font-semibold",
-          zero
-            ? "border-severity-high-line bg-severity-high-bg text-severity-high"
-            : low
-              ? "border-severity-moderate-line bg-severity-moderate-bg text-severity-moderate"
-              : "border-line bg-surface-tint text-ink-700",
-          compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        )}
-      >
-        {(low || zero) && <Warning size={compact ? 13 : 15} weight="fill" />}
-        {remaining} check{remaining === 1 ? "" : "s"} left this month
+    <div className="flex flex-col gap-1.5">
+      <div className={cn("flex flex-wrap items-center gap-1.5", compact && "gap-1")}>
+        {balances.map((b) => {
+          const Icon = SOURCE_ICON[b.source];
+          const selected = b.source === selectedBalance;
+          const zero = b.remaining <= 0;
+
+          return (
+            <button
+              key={b.source}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setSelectedBalance(b.source)}
+              title={b.label}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors",
+                compact ? "px-2.5 py-1 text-[0.6875rem]" : "px-3.5 py-1.5 text-xs",
+                selected
+                  ? "border-brand-500 bg-brand-100/40 text-brand-700"
+                  : zero
+                    ? "border-line bg-surface-tint text-ink-400 hover:border-brand-300"
+                    : "border-line bg-white text-ink-600 hover:border-brand-300 hover:text-ink-800",
+              )}
+            >
+              {zero ? (
+                <Warning
+                  size={compact ? 12 : 14}
+                  weight="fill"
+                  className={selected ? "text-severity-high" : undefined}
+                />
+              ) : (
+                <Icon size={compact ? 12 : 14} weight={selected ? "fill" : "regular"} />
+              )}
+              <span>{b.remaining}</span>
+              {!compact && <span className="font-medium opacity-70">{b.label}</span>}
+            </button>
+          );
+        })}
       </div>
-      {!compact && (
-        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-muted">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              zero ? "bg-severity-high" : low ? "bg-severity-moderate" : "bg-brand-500",
-            )}
-            style={{ width: `${(checksUsedThisPeriod / limit) * 100}%` }}
-          />
-        </div>
+      {allZero && !compact && (
+        <Link to="/pricing" className="w-fit text-xs font-semibold text-brand-600 underline underline-offset-2">
+          Upgrade or buy credits
+        </Link>
       )}
     </div>
   );
