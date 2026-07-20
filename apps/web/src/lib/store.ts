@@ -157,6 +157,12 @@ interface AppState {
   dismissToast: (id: string) => void;
 }
 
+// balances() must return a referentially stable array when its inputs are
+// unchanged — otherwise a `useAppStore((s) => s.balances())` selector (see
+// UsageMeter) hands React a brand-new snapshot on every call, which makes
+// useSyncExternalStore re-render in an infinite loop (React error #185).
+let balancesCache: { key: string; value: BalanceOption[] } | null = null;
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -184,7 +190,9 @@ export const useAppStore = create<AppState>()(
 
       balances: () => {
         const { plan, standardCredits, premiumCredits, checksUsedThisPeriod } = get();
-        return [
+        const key = `${plan}|${standardCredits}|${premiumCredits}|${checksUsedThisPeriod}`;
+        if (balancesCache && balancesCache.key === key) return balancesCache.value;
+        const value: BalanceOption[] = [
           {
             source: "plan",
             label: `${planLabel(plan)} plan checks`,
@@ -193,6 +201,8 @@ export const useAppStore = create<AppState>()(
           { source: "standard", label: "Standard credits", remaining: standardCredits },
           { source: "premium", label: "Premium credits", remaining: premiumCredits },
         ];
+        balancesCache = { key, value };
+        return value;
       },
 
       remaining: (source) => {
