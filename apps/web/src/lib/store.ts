@@ -3,10 +3,15 @@ import { persist } from "zustand/middleware";
 import {
   fetchHistory as fetchHistoryEntries,
   fetchTrash as fetchTrashEntries,
+  finalizeCheckingDocument,
+  markCheckFailed,
   moveDocumentToTrash,
   restoreDocumentFromTrash,
   permanentlyDeleteDocument,
 } from "./documentsQueries";
+import type { CheckState, HistoryEntryWithCheck } from "./documentsQueries";
+import { getJob, getReport, isJobMissingError } from "./api";
+import { statusFromScore } from "../components/Severity";
 import type {
   BillingCycle,
   CheckedDocument,
@@ -69,6 +74,19 @@ export function setPlanLimitsFromConfig(
 // keep working without a type change.
 export const PROJECTS: string[] = ["Default"];
 
+/** How long an unsettled check may sit before it is written off as
+ * interrupted. The backend keeps its job table in memory
+ * (backend/api/job_manager.py), so a restart erases every running job — after
+ * that `getJob` 404s and reconciliation resolves the row immediately. This
+ * timeout is the backstop for the cases where it can't: the API being
+ * unreachable, or the tab closing before a job id was ever attached. Without
+ * it a row could spin as "Checking" forever, which is the failure mode this
+ * whole feature exists to prevent. */
+export const CHECK_STALE_MS = 30 * 60 * 1000;
+
+const INTERRUPTED_MESSAGE =
+  "This check was interrupted and never finished. Please run it again.";
+
 interface AppState {
   plan: PlanTier;
   billingCycle: BillingCycle;
@@ -76,10 +94,10 @@ interface AppState {
   standardCredits: number;
   premiumCredits: number;
   selectedBalance: BalanceSource;
-  history: HistoryEntry[];
+  history: HistoryEntryWithCheck[];
   historyLoading: boolean;
   historyError: string | null;
-  trash: HistoryEntry[];
+  trash: HistoryEntryWithCheck[];
   projects: string[];
   /** Project names the user has created but that have no documents in them
    * yet — since `documents.project` is a plain text column with no backing
@@ -126,6 +144,18 @@ interface AppState {
   addHistoryEntry: (entry: HistoryEntry) => void;
   addHistoryEntries: (entries: HistoryEntry[]) => void;
   fetchHistory: (userId: string) => Promise<void>;
+  /** Inserts a just-started check at the top of the list so it is visible
+   * before (and independently of) the analysis finishing. */
+  addCheckingEntry: (entry: HistoryEntryWithCheck) => void;
+  /** Patches one history row in place — used as each check settles. */
+  updateHistoryEntry: (id: string, patch: Partial<HistoryEntryWithCheck>) => void;
+  /** Replaces a placeholder row's id once the check resolves onto the
+   * backend's canonical report row. */
+  replaceHistoryEntryId: (fromId: string, toId: string) => void;
+  /** Asks the backend what became of every still-'checking' row and settles
+   * each one. Runs after fetchHistory, i.e. on every Documents/History mount
+   * and after a full page reload. */
+  reconcileCheckingDocuments: () => Promise<void>;
   cancelSubscription: () => void;
   recordCheckedDocument: (doc: CheckedDocument) => void;
   markFirstCheckComplete: () => void;
@@ -162,6 +192,16 @@ interface AppState {
 // UsageMeter) hands React a brand-new snapshot on every call, which makes
 // useSyncExternalStore re-render in an infinite loop (React error #185).
 let balancesCache: { key: string; value: BalanceOption[] } | null = null;
+
+/** Entries added by screens that already have their results (the legacy
+ * local-only path) are settled by definition. */
+function withCheckDefaults(entry: HistoryEntry): HistoryEntryWithCheck {
+  return {
+    ...entry,
+    checkState: "completed",
+    startedAt: (entry as HistoryEntryWithCheck).startedAt ?? new Date().toISOString(),
+  };
+}
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -284,9 +324,10 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      addHistoryEntry: (entry) => set((s) => ({ history: [entry, ...s.history] })),
+      addHistoryEntry: (entry) => set((s) => ({ history: [withCheckDefaults(entry), ...s.history] })),
 
-      addHistoryEntries: (entries) => set((s) => ({ history: [...entries, ...s.history] })),
+      addHistoryEntries: (entries) =>
+        set((s) => ({ history: [...entries.map(withCheckDefaults), ...s.history] })),
 
       fetchHistory: async (userId) => {
         set({ historyLoading: true, historyError: null });
@@ -301,6 +342,138 @@ export const useAppStore = create<AppState>()(
             historyLoading: false,
             historyError: err instanceof Error ? err.message : "Failed to load history",
           });
+          return;
+        }
+        await get().reconcileCheckingDocuments();
+      },
+
+      addCheckingEntry: (entry) => set((s) => ({ history: [entry, ...s.history] })),
+
+      updateHistoryEntry: (id, patch) =>
+        set((s) => ({
+          history: s.history.map((h) => (h.id === id ? { ...h, ...patch } : h)),
+        })),
+
+      replaceHistoryEntryId: (fromId, toId) =>
+        set((s) => {
+          const source = s.history.find((h) => h.id === fromId);
+          if (!source) return s;
+          const withoutPlaceholder = s.history.filter((h) => h.id !== fromId);
+          // The canonical row may already be in the list (the backend upserted
+          // it before this fetch); patch it rather than duplicating it.
+          const existing = withoutPlaceholder.find((h) => h.id === toId);
+          if (existing) {
+            return {
+              history: withoutPlaceholder.map((h) =>
+                h.id === toId
+                  ? {
+                      ...h,
+                      title: source.title,
+                      project: source.project,
+                      checkState: "completed" as CheckState,
+                      checkError: undefined,
+                    }
+                  : h,
+              ),
+            };
+          }
+          return {
+            history: [
+              { ...source, id: toId, checkState: "completed" as CheckState, checkError: undefined },
+              ...withoutPlaceholder,
+            ],
+          };
+        }),
+
+      reconcileCheckingDocuments: async () => {
+        const pending = get().history.filter((h) => h.checkState === "checking");
+        if (pending.length === 0) return;
+
+        const fail = async (id: string, message: string) => {
+          try {
+            await markCheckFailed(id, message);
+          } catch {
+            // Even if the write fails, settle it locally — the next mount
+            // re-reads 'checking' from the DB and retries the write.
+          }
+          get().updateHistoryEntry(id, { checkState: "failed", checkError: message });
+        };
+
+        for (const entry of pending) {
+          const startedAt = new Date(entry.startedAt).getTime();
+          const stale = Number.isFinite(startedAt) && Date.now() - startedAt > CHECK_STALE_MS;
+
+          // The tab closed between inserting the placeholder and receiving a
+          // job id — there is nothing to poll, so only the age-out applies.
+          if (!entry.checkJobId) {
+            if (stale) await fail(entry.id, INTERRUPTED_MESSAGE);
+            continue;
+          }
+
+          try {
+            const job = await getJob(entry.checkJobId);
+
+            if (job.status === "failed") {
+              await fail(entry.id, job.error ?? "Analysis failed.");
+              continue;
+            }
+
+            if (job.status !== "completed") {
+              // Genuinely still running: leave it as "Checking" unless it has
+              // outlived any plausible run.
+              if (stale) await fail(entry.id, INTERRUPTED_MESSAGE);
+              continue;
+            }
+
+            let results: Parameters<typeof finalizeCheckingDocument>[0]["results"];
+            if (job.report_id) {
+              try {
+                const report = await getReport(job.report_id);
+                results = {
+                  status: statusFromScore(report.overall_score),
+                  similarityScore: report.overall_score,
+                  wordCount: Math.max(1, Math.round((report.total_input_chunks || 1) * 900)),
+                  webSourcesScanned: (report.coverage?.total_candidate_papers as number) ?? 0,
+                  academicSourcesScanned: (report.coverage?.checked_papers as number) ?? 0,
+                };
+              } catch {
+                // Report body unavailable; still settle the row so it can't
+                // spin forever. Whatever the backend persisted is kept.
+              }
+            }
+
+            const resolvedId = await finalizeCheckingDocument({
+              placeholderId: entry.id,
+              reportId: job.report_id ?? null,
+              results,
+            });
+
+            if (resolvedId === entry.id) {
+              get().updateHistoryEntry(entry.id, {
+                checkState: "completed",
+                checkError: undefined,
+                ...(results
+                  ? {
+                      status: results.status,
+                      similarityScore: results.similarityScore,
+                      wordCount: results.wordCount,
+                    }
+                  : {}),
+              });
+            } else {
+              get().replaceHistoryEntryId(entry.id, resolvedId);
+            }
+          } catch (err) {
+            // A 404 is the backend positively saying it has no record of this
+            // job — the API process restarted mid-check and lost its in-memory
+            // job table. That job is never coming back, so settle it now
+            // instead of leaving a row spinning forever.
+            if (isJobMissingError(err) || stale) {
+              await fail(entry.id, INTERRUPTED_MESSAGE);
+            }
+            // Any other error (backend temporarily unreachable) leaves the row
+            // as "Checking"; the next mount retries.
+          }
         }
       },
 

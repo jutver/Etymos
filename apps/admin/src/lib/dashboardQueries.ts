@@ -104,6 +104,10 @@ export interface DashboardMetrics {
   documentsInRange: number;
   /** Count of pending student_verification_requests. Not range-scoped — this is a live queue depth. */
   verificationQueueDepth: number;
+  /** Count of profiles still waiting on app access. Live queue depth, not range-scoped. */
+  accessQueueDepth: number;
+  /** Count of pending checkout_events awaiting approval. Live queue depth, not range-scoped. */
+  purchaseQueueDepth: number;
 }
 
 const SEVERITY_ORDER = ["clean", "low", "moderate", "high", "unscored"];
@@ -112,7 +116,16 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   const { gte, lte } = rangeBounds(range);
   const days = daysInRange(range.start, range.end);
 
-  const [profilesRes, signupsRes, documentsRes, checkoutRes, plansRes, verificationQueueRes] = await Promise.all([
+  const [
+    profilesRes,
+    signupsRes,
+    documentsRes,
+    checkoutRes,
+    plansRes,
+    verificationQueueRes,
+    accessQueueRes,
+    purchaseQueueRes,
+  ] = await Promise.all([
     supabase.from("profiles").select("id, plan_tier, billing_cycle").limit(FETCH_LIMIT),
     supabase.from("profiles").select("created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
     supabase
@@ -130,6 +143,8 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
       .limit(FETCH_LIMIT),
     supabase.from("plan_definitions").select("id, price_monthly, price_annual"),
     supabase.from("student_verification_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("access_status", "waitlisted"),
+    supabase.from("checkout_events").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
 
   if (profilesRes.error) throw profilesRes.error;
@@ -138,6 +153,8 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   if (checkoutRes.error) throw checkoutRes.error;
   if (plansRes.error) throw plansRes.error;
   if (verificationQueueRes.error) throw verificationQueueRes.error;
+  if (accessQueueRes.error) throw accessQueueRes.error;
+  if (purchaseQueueRes.error) throw purchaseQueueRes.error;
 
   const profiles = profilesRes.data ?? [];
   const signups = signupsRes.data ?? [];
@@ -193,5 +210,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     flaggedDocumentRate: documents.length ? flaggedCount / documents.length : 0,
     documentsInRange: documents.length,
     verificationQueueDepth: verificationQueueRes.count ?? 0,
+    accessQueueDepth: accessQueueRes.count ?? 0,
+    purchaseQueueDepth: purchaseQueueRes.count ?? 0,
   };
 }

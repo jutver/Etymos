@@ -4,6 +4,9 @@ import { CaretRight, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/
 import type { HistoryEntry } from "@etymos/shared";
 import { formatDate, cn } from "@etymos/shared";
 import { StatusPill } from "../../components/Severity";
+import { CheckStatePill } from "./CheckStatePill";
+import { analyzingStateFor } from "../../lib/documentsQueries";
+import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import type { ProjectGroup } from "./types";
 
 interface DocumentsListViewProps {
@@ -34,6 +37,12 @@ export function DocumentsListView({
   onCreateProject,
 }: DocumentsListViewProps) {
   const navigate = useNavigate();
+
+  /** Still-running checks have no report yet — open the progress view. */
+  function openDoc(doc: HistoryEntryWithCheck) {
+    if (doc.checkState === "checking") navigate("/analyzing", { state: analyzingStateFor(doc) });
+    else navigate(`/report/${doc.id}`);
+  }
 
   return (
     <div className="divide-y divide-line overflow-hidden rounded-[var(--radius-card-lg)] border border-line bg-white">
@@ -109,7 +118,7 @@ export function DocumentsListView({
                           e.preventDefault();
                           onDocContextMenu(e, doc);
                         }}
-                        onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : navigate(`/report/${doc.id}`))}
+                        onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : openDoc(doc))}
                         className="flex cursor-pointer items-center gap-3 border-t border-line/60 py-3 pl-16 pr-4 text-left transition-colors first:border-t-0 hover:bg-white"
                       >
                         {manageMode && (
@@ -126,9 +135,13 @@ export function DocumentsListView({
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{doc.title}</span>
                         <span className="hidden shrink-0 text-xs text-ink-400 sm:inline">{formatDate(doc.date)}</span>
                         <span className="hidden shrink-0 text-xs font-semibold text-ink-700 sm:inline">
-                          {doc.similarityScore}%
+                          {doc.checkState === "completed" ? `${doc.similarityScore}%` : "—"}
                         </span>
-                        <StatusPill status={doc.status} className="shrink-0" />
+                        {doc.checkState === "completed" ? (
+                          <StatusPill status={doc.status} className="shrink-0" />
+                        ) : (
+                          <CheckStatePill state={doc.checkState} className="shrink-0" />
+                        )}
                       </div>
                     );
                   })

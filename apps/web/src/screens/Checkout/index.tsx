@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, CircleNotch, Lock, Tag, WarningCircle } from "@phosphor-icons/react";
+import { Check, HourglassMedium, PaperPlaneTilt, Tag, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { PAYMENT_METHODS } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
 import { formatVND, supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { useAuth } from "../../lib/auth";
+import { createPurchaseRequest, describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 
-type Status = "idle" | "processing" | "declined";
+type Status = "idle" | "submitting" | "error";
 
 interface AppliedDiscount {
   discount_type: "percent" | "fixed";
@@ -28,9 +30,11 @@ type CodeStatus = "idle" | "applying" | "error";
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const item = useAppStore((s) => s.pendingCheckoutItem);
-  const completePurchase = useAppStore((s) => s.completePurchase);
+  const { user } = useAuth();
+  const { pending, loading: pendingLoading, refresh: refreshPending } = useMyPendingRequest();
   const [method, setMethod] = useState<PaymentMethod>("vnpay");
   const [status, setStatus] = useState<Status>("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
@@ -71,8 +75,35 @@ export default function CheckoutPage() {
   }, []);
 
   if (!item) return null;
-  if (configLoading) {
+  if (configLoading || pendingLoading) {
     return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>;
+  }
+
+  // One outstanding request at a time. Only an admin can clear it, so there is
+  // nothing useful the user can do here until it is reviewed.
+  if (pending) {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
+        <h1 className="text-h2 font-bold tracking-tight text-navy-900">Request awaiting approval</h1>
+        <div className="mt-7 flex items-start gap-3 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+          <HourglassMedium size={22} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
+          <div>
+            <p className="text-sm font-semibold text-navy-900">
+              You already have a request for {describePurchaseRequest(pending)}.
+            </p>
+            <p className="mt-1 text-sm text-ink-500">
+              An admin reviews it manually. You'll be able to make another request once this one has been
+              approved or declined.
+            </p>
+          </div>
+        </div>
+        <div className="mt-7 flex flex-col gap-3">
+          <Button as="link" to="/account/plan" size="lg" fullWidth>
+            Back to My Plan
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const plan = item.kind === "plan" ? plans.find((p) => p.id === item.plan) : null;
@@ -109,22 +140,30 @@ export default function CheckoutPage() {
     setCodeStatus("idle");
   }
 
-  function confirmPay(shouldDecline: boolean) {
-    setStatus("processing");
-    setTimeout(() => {
-      if (shouldDecline) {
-        setStatus("declined");
-      } else {
-        completePurchase(pack?.id, pack?.checks);
-        navigate("/payment-success");
-      }
-    }, 1600);
+  // Submitting does NOT change the user's plan or credit balances — it only
+  // files a pending checkout_events row for an admin to approve. Access is
+  // granted admin-side; this screen never writes to `profiles`.
+  async function submitRequest() {
+    if (!item || !user) return;
+    setStatus("submitting");
+    setSubmitError(null);
+    try {
+      await createPurchaseRequest({ userId: user.id, item, amount: price, paymentMethod: method });
+      refreshPending();
+      navigate("/payment-success");
+    } catch (err: unknown) {
+      setStatus("error");
+      setSubmitError(err instanceof Error ? err.message : "Could not submit your request. Please try again.");
+    }
   }
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
-      <h1 className="text-h2 font-bold tracking-tight text-navy-900">Checkout</h1>
-      <p className="mt-1.5 text-sm text-ink-500">Mock payment for demo purposes. No real charge occurs.</p>
+      <h1 className="text-h2 font-bold tracking-tight text-navy-900">Request access</h1>
+      <p className="mt-1.5 text-sm text-ink-500">
+        Transfer the amount below, then submit your request. An admin confirms the payment manually before
+        your plan or credits are applied.
+      </p>
 
       <div className="mt-7 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Order summary</p>
@@ -215,8 +254,10 @@ export default function CheckoutPage() {
           <div className="mt-4 rounded-[var(--radius-card)] border border-line bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-navy-900">Demo VietQR</p>
-                <p className="text-xs text-ink-500">Scan this preview to continue the mock payment flow.</p>
+                <p className="text-sm font-semibold text-navy-900">VietQR transfer</p>
+                <p className="text-xs text-ink-500">
+                  Scan to transfer, then submit your request below for an admin to confirm.
+                </p>
               </div>
               <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
                 Scan to pay
@@ -234,15 +275,12 @@ export default function CheckoutPage() {
         )}
       </div>
 
-      {status === "declined" && (
+      {status === "error" && (
         <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-4 py-3.5 text-sm text-severity-high">
           <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Payment declined</p>
-            <p className="mt-0.5 text-severity-high/90">
-              {PAYMENT_METHODS.find((m) => m.id === method)?.label} declined this transaction. Try again or
-              use a different payment method.
-            </p>
+            <p className="font-semibold">Couldn't submit your request</p>
+            <p className="mt-0.5 text-severity-high/90">{submitError}</p>
           </div>
         </div>
       )}
@@ -250,28 +288,18 @@ export default function CheckoutPage() {
       <div className="mt-7 flex flex-col gap-3">
         <Button
           size="lg"
-          loading={status === "processing"}
-          onClick={() => confirmPay(false)}
-          iconLeft={<Lock size={16} weight="fill" />}
+          loading={status === "submitting"}
+          onClick={() => void submitRequest()}
+          iconLeft={<PaperPlaneTilt size={16} weight="fill" />}
           fullWidth
         >
-          {status === "processing" ? "Processing payment..." : `Confirm & Pay ${formatVND(price)}`}
+          {status === "submitting"
+            ? "Submitting request..."
+            : `Submit request for ${formatVND(price)}`}
         </Button>
-
-        {status === "declined" ? (
-          <Button variant="outline" fullWidth onClick={() => setStatus("idle")}>
-            Try again
-          </Button>
-        ) : (
-          <button
-            onClick={() => confirmPay(true)}
-            disabled={status === "processing"}
-            className="mx-auto flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-600 disabled:opacity-40"
-          >
-            {status === "processing" && <CircleNotch size={12} className="animate-spin" />}
-            Simulate a declined payment (demo)
-          </button>
-        )}
+        <p className="text-center text-xs text-ink-400">
+          Nothing is charged automatically and no access is granted until an admin approves your request.
+        </p>
       </div>
     </div>
   );

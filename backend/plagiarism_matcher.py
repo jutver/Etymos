@@ -131,6 +131,14 @@ def match_chunks(
                     "input_section": input_section,
                     "input_text": input_text,
 
+                    # Where this chunk lives in the canonical document
+                    # (document_model.build_document). Sentence offsets
+                    # computed inside `input_text` are made absolute by
+                    # adding input_chunk_doc_start — see
+                    # sentence_matcher.verify_match_sentences.
+                    "input_chunk_doc_start": input_chunk.get("doc_start_char"),
+                    "input_chunk_doc_end": input_chunk.get("doc_end_char"),
+
                     "source_paper_id": source_chunk.get("source_paper_id"),
                     "source_title": source_chunk.get("source_title", ""),
                     "source_chunk_id": source_chunk.get("chunk_id"),

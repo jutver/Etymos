@@ -91,7 +91,7 @@ export function RewritePanel({
             disabled={regenerating}
             className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline disabled:opacity-50"
           >
-            <ArrowClockwise size={14} className={cn(regenerating && "animate-spin")} />
+            <ArrowClockwise size={14} className={cn(regenerating && "animate-spin motion-reduce:animate-none")} />
             {regenerating ? "Regenerating..." : "Regenerate"}
           </button>
         </div>
@@ -99,9 +99,9 @@ export function RewritePanel({
         <div className="mt-2 min-h-[7rem] rounded-[var(--radius-card)] border border-brand-300/60 bg-brand-100/40 p-4">
           {regenerating ? (
             <div className="flex flex-col gap-2">
-              <div className="h-3 w-full animate-pulse rounded shimmer-bg" />
-              <div className="h-3 w-full animate-pulse rounded shimmer-bg" />
-              <div className="h-3 w-2/3 animate-pulse rounded shimmer-bg" />
+              <div className="h-3 w-full animate-pulse motion-reduce:animate-none rounded shimmer-bg" />
+              <div className="h-3 w-full animate-pulse motion-reduce:animate-none rounded shimmer-bg" />
+              <div className="h-3 w-2/3 animate-pulse motion-reduce:animate-none rounded shimmer-bg" />
             </div>
           ) : (
             <p className="text-sm leading-relaxed text-ink-900">{variant}</p>

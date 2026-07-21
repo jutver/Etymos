@@ -20,6 +20,8 @@ import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit, PROJECTS } from "../../lib/store";
+import { attachCheckJobId, createCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
+import { useAuth } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import type { Language } from "../../lib/types";
@@ -33,8 +35,11 @@ const languages: { id: Language; label: string }[] = [
 
 export default function UploadPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const plan = useAppStore((s) => s.plan);
+  const addCheckingEntry = useAppStore((s) => s.addCheckingEntry);
+  const updateHistoryEntry = useAppStore((s) => s.updateHistoryEntry);
   const history = useAppStore((s) => s.history);
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
@@ -118,9 +123,46 @@ export default function UploadPage() {
     setSubmitting(true);
     setSubmitError(null);
 
+    // Register the check in the document list *before* the upload request even
+    // starts, so it shows as "Checking" in Documents/History from this moment
+    // on — including if the user leaves the Analyzing screen or reloads.
+    // Purely additive: if this fails (offline, Supabase down) the check still
+    // runs, it just isn't listed until it completes, i.e. the old behaviour.
+    const rawLabel = tab === "paste" ? "Pasted text" : (docLabels[0] ?? "Untitled document");
+    const title = rawLabel !== "Pasted text" ? rawLabel.replace(/\.(pdf|docx?|txt)$/i, "") : rawLabel;
+    let placeholderId: string | null = null;
+
+    if (user?.id) {
+      try {
+        const entry = await createCheckingDocument({
+          userId: user.id,
+          title,
+          fileName: tab === "paste" ? null : (docLabels[0] ?? null),
+          language,
+          project: project === PROJECTS[0] ? null : project,
+        });
+        placeholderId = entry.id;
+        addCheckingEntry(entry);
+      } catch {
+        placeholderId = null;
+      }
+    }
+
+    /** Links the placeholder to the backend job so a reload can reconcile it. */
+    async function trackJob(jobId: string) {
+      if (!placeholderId) return;
+      try {
+        await attachCheckJobId(placeholderId, jobId);
+        updateHistoryEntry(placeholderId, { checkJobId: jobId });
+      } catch {
+        // Non-fatal: reconciliation ages the row out rather than stranding it.
+      }
+    }
+
     try {
       if (tab === "paste") {
         const job = await submitTextCheck(pastedText.trim(), selectedBalance);
+        await trackJob(job.job_id);
         navigate("/analyzing", {
           state: {
             docLabels,
@@ -129,6 +171,7 @@ export default function UploadPage() {
             academicSources,
             language,
             jobId: job.job_id,
+            documentId: placeholderId,
             reportMode: "backend",
           },
         });
@@ -156,6 +199,7 @@ export default function UploadPage() {
         });
 
         const job = await submitPdfCheck(file, selectedBalance);
+        await trackJob(job.job_id);
         navigate("/analyzing", {
           state: {
             docLabels,
@@ -164,6 +208,7 @@ export default function UploadPage() {
             academicSources,
             language,
             jobId: job.job_id,
+            documentId: placeholderId,
             reportMode: "backend",
             pdfDataUrl,
           },
@@ -173,7 +218,15 @@ export default function UploadPage() {
 
       throw new Error("Please add content before checking.");
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to start analysis.");
+      const message = error instanceof Error ? error.message : "Unable to start analysis.";
+      setSubmitError(message);
+      // The job never started, so settle its row instead of leaving a
+      // permanent "Checking" entry behind.
+      if (placeholderId) {
+        const failedId = placeholderId;
+        void markCheckFailed(failedId, message).catch(() => undefined);
+        updateHistoryEntry(failedId, { checkState: "failed", checkError: message });
+      }
     } finally {
       setSubmitting(false);
     }

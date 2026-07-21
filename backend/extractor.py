@@ -348,8 +348,29 @@ def is_valid_plain_heading(text):
 
     return compact in allowed_compacts or text.lower().startswith("abstract")
 
-def build_chunks_from_sections(sections, paper_id="input_paper", chunk_size=900, overlap=150):
+def build_chunks_from_sections(
+    sections,
+    paper_id="input_paper",
+    chunk_size=900,
+    overlap=150,
+    section_offsets=None
+):
+    """
+    Split each section into overlapping chunks.
+
+    `section_offsets` (optional) maps a section name to the start offset
+    of that section's stripped text inside the canonical document string
+    built by document_model.build_document(). When supplied, every chunk
+    also carries `doc_start_char` / `doc_end_char`: absolute character
+    offsets into `report["input_text"]`. These are what let the matcher
+    report the true span of a match instead of an approximation.
+
+    `start_char` / `end_char` remain section-relative, as before, and are
+    now exact: the leading/trailing whitespace stripped off `chunk_text`
+    is accounted for, so `text[start_char:end_char] == chunk_text`.
+    """
     chunks = []
+    section_offsets = section_offsets or {}
 
     for section_name, section_text in sections.items():
         if section_name == "title":
@@ -360,20 +381,32 @@ def build_chunks_from_sections(sections, paper_id="input_paper", chunk_size=900,
 
         start = 0
         text = section_text.strip()
+        base = section_offsets.get(section_name)
 
         while start < len(text):
-            end = start + chunk_size
-            chunk_text = text[start:end].strip()
+            end = min(start + chunk_size, len(text))
+            raw = text[start:end]
+            chunk_text = raw.strip()
 
             if len(chunk_text) >= 80:
-                chunks.append({
+                lead = len(raw) - len(raw.lstrip())
+                exact_start = start + lead
+                exact_end = exact_start + len(chunk_text)
+
+                chunk = {
                     "paper_id": paper_id,
                     "section": section_name,
                     "chunk_id": f"{paper_id}_{section_name}_{len(chunks)}",
-                    "start_char": start,
-                    "end_char": min(end, len(text)),
+                    "start_char": exact_start,
+                    "end_char": exact_end,
                     "text": chunk_text
-                })
+                }
+
+                if base is not None:
+                    chunk["doc_start_char"] = base + exact_start
+                    chunk["doc_end_char"] = base + exact_end
+
+                chunks.append(chunk)
 
             start += chunk_size - overlap
 

@@ -13,6 +13,9 @@ import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import FeatureFlagsPage from "./screens/Config/FeatureFlags";
 import AnnouncementsPage from "./screens/Config/Announcements";
 import SystemHealthPage from "./screens/Config/SystemHealth";
+import { WaitlistLayout } from "./screens/Waitlist/WaitlistLayout";
+import AccessPage from "./screens/Waitlist/Access";
+import PurchasesPage from "./screens/Waitlist/Purchases";
 import { PricingLayout } from "./screens/Pricing/PricingLayout";
 import PlansAndPacksPage from "./screens/Pricing/PlansAndPacks";
 import DiscountsPage from "./screens/Pricing/Discounts";
@@ -31,6 +34,11 @@ function App() {
           <Route path="/moderation" element={<ModerationPage />} />
           <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
           <Route path="/verification" element={<VerificationPage />} />
+          <Route path="/waitlist" element={<WaitlistLayout />}>
+            <Route index element={<Navigate to="/waitlist/access" replace />} />
+            <Route path="access" element={<AccessPage />} />
+            <Route path="purchases" element={<PurchasesPage />} />
+          </Route>
           <Route path="/pricing" element={<PricingLayout />}>
             <Route index element={<Navigate to="/pricing/plans" replace />} />
             <Route path="plans" element={<PlansAndPacksPage />} />

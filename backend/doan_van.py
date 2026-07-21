@@ -82,6 +82,26 @@ def _emit_progress(
         callback(progress, step, message)
 
 
+def _empty_scoring(document: dict[str, Any]) -> dict[str, Any]:
+    """`scoring` block for the early-return (0%) reports, so every report
+    the API returns carries the same shape."""
+    from document_model import LABEL_WEIGHT
+
+    total = document.get("total_chars", 0)
+
+    return {
+        "version": 2,
+        "method": "weighted_char_coverage",
+        "label_weights": dict(LABEL_WEIGHT),
+        "total_chars": total,
+        "matched_chars": 0.0,
+        "covered_chars": 0,
+        "raw_coverage_percent": 0.0,
+        "legacy_overall_score": 0.0,
+        "legacy_total_chars": total,
+    }
+
+
 def _save_json(data: Any, path: str) -> None:
     directory = os.path.dirname(path)
 
@@ -105,6 +125,7 @@ def check_text_plagiarism(
 
     Khi gọi từ API nên để output_dir=None để không lưu input/intermediate.
     """
+    from document_model import build_document
     from extractor import (
         build_chunks_from_sections,
         build_weighted_sections,
@@ -140,11 +161,18 @@ def check_text_plagiarism(
     input_sections = build_input_sections(cleaned_text)
     metadata_section_texts = build_metadata_section_texts(cleaned_text)
 
+    # Canonical document for the pasted-text path. With a single
+    # non-empty section, document["text"] == cleaned_text, so existing
+    # `input_text` consumers are unaffected — but chunks and matches now
+    # carry absolute offsets into it, exactly as on the PDF path.
+    document = build_document(input_sections)
+
     input_chunks = build_chunks_from_sections(
         input_sections,
         paper_id="input_text",
         chunk_size=900,
         overlap=150,
+        section_offsets=document["section_offsets"],
     )
 
     if not input_chunks:
@@ -196,6 +224,7 @@ def check_text_plagiarism(
             "matched_papers": [],
             "matches": [],
             "input_text": cleaned_text,
+            "scoring": _empty_scoring(document),
             "coverage": {
                 "total_candidate_papers": 0,
                 "checked_papers": 0,
@@ -258,6 +287,7 @@ def check_text_plagiarism(
             "matched_papers": [],
             "matches": [],
             "input_text": cleaned_text,
+            "scoring": _empty_scoring(document),
             "coverage": {
                 "total_candidate_papers": len(cached_papers),
                 "checked_papers": 0,
@@ -312,6 +342,7 @@ def check_text_plagiarism(
         verified_matches=verified_matches,
         input_chunks=input_chunks,
         input_text=cleaned_text,
+        document=document,
     )
 
     final_report["coverage"] = {

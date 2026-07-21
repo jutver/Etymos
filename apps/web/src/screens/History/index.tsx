@@ -7,6 +7,9 @@ import { formatDate } from "@etymos/shared";
 import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { cn } from "@etymos/shared";
+import { CheckStatePill } from "../Documents/CheckStatePill";
+import { analyzingStateFor } from "../../lib/documentsQueries";
+import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
@@ -23,6 +26,7 @@ export default function HistoryPage() {
   const historyLoading = useAppStore((s) => s.historyLoading);
   const historyError = useAppStore((s) => s.historyError);
   const fetchHistory = useAppStore((s) => s.fetchHistory);
+  const reconcileCheckingDocuments = useAppStore((s) => s.reconcileCheckingDocuments);
   const moveToTrash = useAppStore((s) => s.moveToTrash);
   const pushToast = useAppStore((s) => s.pushToast);
   const [query, setQuery] = useState("");
@@ -31,6 +35,15 @@ export default function HistoryPage() {
     if (!user?.id) return;
     void fetchHistory(user.id);
   }, [user?.id, fetchHistory]);
+
+  // While anything is still checking, keep asking the backend how it's going so
+  // the row settles without the user having to navigate away and back.
+  const hasCheckingDocs = history.some((h) => h.checkState === "checking");
+  useEffect(() => {
+    if (!hasCheckingDocs) return;
+    const timer = window.setInterval(() => void reconcileCheckingDocuments(), 5000);
+    return () => window.clearInterval(timer);
+  }, [hasCheckingDocs, reconcileCheckingDocuments]);
 
   const retentionDays = credits > 0 ? CREDIT_RETENTION_DAYS : RETENTION_DAYS[plan];
   const { visible, expiredCount } = useMemo(() => {
@@ -41,6 +54,16 @@ export default function HistoryPage() {
   }, [history, retentionDays]);
 
   const filtered = visible.filter((h) => h.title.toLowerCase().includes(query.toLowerCase()));
+
+  /** A check that hasn't finished has no report to show — send it back to the
+   * progress view instead of an empty report. */
+  function openEntry(entry: HistoryEntryWithCheck) {
+    if (entry.checkState === "checking") {
+      navigate("/analyzing", { state: analyzingStateFor(entry) });
+      return;
+    }
+    navigate(`/report/${entry.id}`);
+  }
 
   async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation();
@@ -113,7 +136,7 @@ export default function HistoryPage() {
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={`skeleton-${i}`} className="border-b border-line last:border-0">
                   <td colSpan={6} className="px-5 py-4">
-                    <div className="h-4 w-full animate-pulse rounded bg-surface-muted" />
+                    <div className="h-4 w-full animate-pulse motion-reduce:animate-none rounded bg-surface-muted" />
                   </td>
                 </tr>
               ))}
@@ -122,7 +145,7 @@ export default function HistoryPage() {
               filtered.map((h) => (
                 <tr
                   key={h.id}
-                  onClick={() => navigate(`/report/${h.id}`)}
+                  onClick={() => openEntry(h)}
                   className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-tint"
                 >
                   <td className="max-w-xs truncate px-5 py-4 font-medium text-ink-900">
@@ -131,9 +154,15 @@ export default function HistoryPage() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-ink-500">{formatDate(h.date)}</td>
-                  <td className="px-5 py-4 font-semibold text-ink-700">{h.similarityScore}%</td>
+                  <td className="px-5 py-4 font-semibold text-ink-700">
+                    {h.checkState === "completed" ? `${h.similarityScore}%` : "—"}
+                  </td>
                   <td className="px-5 py-4">
-                    <StatusPill status={h.status} />
+                    {h.checkState === "completed" ? (
+                      <StatusPill status={h.status} />
+                    ) : (
+                      <CheckStatePill state={h.checkState} />
+                    )}
                   </td>
                   <td className="px-5 py-4 text-ink-500">{h.project ?? PROJECTS[0]}</td>
                   <td className="px-5 py-4 text-right">

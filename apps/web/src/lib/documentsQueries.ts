@@ -24,6 +24,26 @@ interface DocumentRow {
   project: string | null;
   is_trashed: boolean;
   uploaded_at: string;
+  // Added by supabase/migrations/20260721000100_document_checking_status.sql.
+  // Nullable in the type (not the schema) so rows selected before the
+  // migration is applied still parse instead of throwing.
+  check_state?: CheckState | null;
+  check_job_id?: string | null;
+  check_error?: string | null;
+}
+
+/** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
+ * similarity severity and only exists once a check has completed). */
+export type CheckState = "checking" | "completed" | "failed";
+
+/** A history row that also knows whether its check is still running. Extends
+ * the shared `HistoryEntry` so every existing consumer keeps typechecking. */
+export interface HistoryEntryWithCheck extends HistoryEntry {
+  checkState: CheckState;
+  checkJobId?: string;
+  checkError?: string;
+  /** Raw `uploaded_at`, used to age out jobs the backend forgot about. */
+  startedAt: string;
 }
 
 interface DocumentMatchRow {
@@ -51,7 +71,7 @@ interface DocumentPassageRow {
   sort_order: number | null;
 }
 
-function toHistoryEntry(row: DocumentRow): HistoryEntry {
+function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
   return {
     id: row.id,
     title: row.title ?? "Untitled document",
@@ -60,11 +80,15 @@ function toHistoryEntry(row: DocumentRow): HistoryEntry {
     status: row.status ?? "clean",
     project: row.project ?? undefined,
     wordCount: row.word_count ?? 0,
+    checkState: row.check_state ?? "completed",
+    checkJobId: row.check_job_id ?? undefined,
+    checkError: row.check_error ?? undefined,
+    startedAt: row.uploaded_at,
   };
 }
 
 /** Non-trashed documents for the given user, newest first — replaces HISTORY_SEED. */
-export async function fetchHistory(userId: string): Promise<HistoryEntry[]> {
+export async function fetchHistory(userId: string): Promise<HistoryEntryWithCheck[]> {
   const { data, error } = await supabase
     .from("documents")
     .select("*")
@@ -76,7 +100,7 @@ export async function fetchHistory(userId: string): Promise<HistoryEntry[]> {
 }
 
 /** Trashed documents for the given user, newest first. */
-export async function fetchTrash(userId: string): Promise<HistoryEntry[]> {
+export async function fetchTrash(userId: string): Promise<HistoryEntryWithCheck[]> {
   const { data, error } = await supabase
     .from("documents")
     .select("*")
@@ -144,6 +168,156 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     passages,
     matches,
   };
+}
+
+// --- In-flight check lifecycle ---------------------------------------------
+// A check used to become visible only once the backend had finished and
+// `save_report()` upserted a `documents` row keyed by its report_id. The web
+// app now inserts its own placeholder row up front (check_state='checking') so
+// the document shows in Documents/History while it runs, survives a reload,
+// and cannot be lost by navigating away from the Analyzing screen.
+
+/** Inserts the placeholder row for a check the user just started. Called
+ * *before* the upload request completes, so the job appears in the list
+ * immediately; `attachCheckJobId` fills in the backend job id once known. */
+export async function createCheckingDocument(params: {
+  userId: string;
+  title: string;
+  fileName: string | null;
+  language: string;
+  project: string | null;
+}): Promise<HistoryEntryWithCheck> {
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({
+      user_id: params.userId,
+      title: params.title,
+      file_name: params.fileName,
+      language: params.language,
+      project: params.project,
+      check_state: "checking",
+      // `status`/`similarity_score` stay null until the analysis produces them.
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return toHistoryEntry(data as DocumentRow);
+}
+
+/** Links the placeholder to the backend job so a later reload can ask the
+ * backend what happened to it. */
+export async function attachCheckJobId(id: string, jobId: string): Promise<void> {
+  const { error } = await supabase.from("documents").update({ check_job_id: jobId }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Terminal failure state — the row stops showing a spinner and shows why. */
+export async function markCheckFailed(id: string, message: string): Promise<void> {
+  const { error } = await supabase
+    .from("documents")
+    .update({ check_state: "failed", check_error: message })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Router state for re-opening a still-running check on the Analyzing screen.
+ * Shared by History and both Documents views so a "Checking" row never lands
+ * on an empty report. */
+export function analyzingStateFor(entry: HistoryEntryWithCheck) {
+  return {
+    docLabels: [entry.title],
+    project: entry.project,
+    jobId: entry.checkJobId,
+    documentId: entry.id,
+    reportMode: "backend",
+  };
+}
+
+async function documentExists(id: string): Promise<boolean> {
+  const { data, error } = await supabase.from("documents").select("id").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export interface CheckResults {
+  status: DocStatus;
+  similarityScore: number;
+  wordCount: number;
+  webSourcesScanned: number;
+  academicSourcesScanned: number;
+}
+
+export interface FinalizeCheckParams {
+  placeholderId: string;
+  /** The backend's report id, which is also the id of the row
+   * `report_store.py::_persist_to_supabase` upserts when Supabase is
+   * configured for the API process. */
+  reportId: string | null;
+  /** Omitted when the report body couldn't be fetched — the row is still
+   * settled (no stuck spinner), keeping whatever scores the backend wrote. */
+  results?: CheckResults;
+}
+
+/**
+ * Settles a finished check and returns the id the report should be opened by.
+ *
+ * The backend independently upserts its own `documents` row keyed by report_id,
+ * so blindly completing the placeholder would leave the user with two rows for
+ * one check. Instead:
+ *   - backend row present -> carry the user-authored fields (title/project/
+ *     language) onto it and drop the placeholder; the backend row is canonical.
+ *   - backend row absent (API running without Supabase configured) -> complete
+ *     the placeholder in place so the check isn't lost.
+ */
+export async function finalizeCheckingDocument(params: FinalizeCheckParams): Promise<string> {
+  const { placeholderId, reportId } = params;
+
+  const results = {
+    check_state: "completed" as const,
+    check_error: null,
+    ...(params.results
+      ? {
+          status: params.results.status,
+          similarity_score: params.results.similarityScore,
+          similarity_score_free: params.results.similarityScore,
+          word_count: params.results.wordCount,
+          web_sources_scanned: params.results.webSourcesScanned,
+          academic_sources_scanned: params.results.academicSourcesScanned,
+        }
+      : {}),
+  };
+
+  if (reportId && reportId !== placeholderId && (await documentExists(reportId))) {
+    const { data: placeholder, error: readError } = await supabase
+      .from("documents")
+      .select("*")
+      .eq("id", placeholderId)
+      .maybeSingle();
+    if (readError) throw readError;
+
+    if (placeholder) {
+      const row = placeholder as DocumentRow;
+      const { error: mergeError } = await supabase
+        .from("documents")
+        .update({
+          ...results,
+          title: row.title,
+          file_name: row.file_name,
+          language: row.language,
+          project: row.project,
+        })
+        .eq("id", reportId);
+      if (mergeError) throw mergeError;
+
+      const { error: deleteError } = await supabase.from("documents").delete().eq("id", placeholderId);
+      if (deleteError) throw deleteError;
+    }
+    return reportId;
+  }
+
+  const { error } = await supabase.from("documents").update(results).eq("id", placeholderId);
+  if (error) throw error;
+  return placeholderId;
 }
 
 export async function moveDocumentToTrash(id: string): Promise<void> {

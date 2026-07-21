@@ -1,6 +1,7 @@
 import re
 import json
 import numpy as np
+from document_model import split_sentences_with_spans
 from embedding_model import embed_query, embed_passage
 from plagiarism_matcher import (
     cosine_similarity,
@@ -36,22 +37,8 @@ def is_common_academic_definition(text):
     return count >= 2
 
 def split_sentences(text):
-    text = re.sub(r"\s+", " ", text.strip())
-
-    sentences = re.split(
-        r"(?<=[.!?])\s+|(?<=\))\s+(?=[A-Z])",
-        text
-    )
-
-    clean = []
-
-    for s in sentences:
-        s = s.strip()
-
-        if len(s) >= 40:
-            clean.append(s)
-
-    return clean
+    """Backwards-compatible wrapper: sentence strings only, no spans."""
+    return [item["text"] for item in split_sentences_with_spans(text)]
 
 
 def classify_sentence_match(semantic, word_overlap, char_overlap, input_sentence="", source_sentence=""):
@@ -75,11 +62,18 @@ def classify_sentence_match(semantic, word_overlap, char_overlap, input_sentence
 
 
 def verify_match_sentences(match, top_k=3):
-    input_sentences = split_sentences(match["input_text"])
-    source_sentences = split_sentences(match["source_text"])
+    input_spans = split_sentences_with_spans(match["input_text"])
+    source_spans = split_sentences_with_spans(match["source_text"])
 
-    if not input_sentences or not source_sentences:
+    if not input_spans or not source_spans:
         return []
+
+    # Absolute offset of this chunk inside the canonical document
+    # (document_model). None on legacy/text paths that don't build a
+    # document, in which case only chunk-relative offsets are emitted.
+    chunk_doc_start = match.get("input_chunk_doc_start")
+
+    source_sentences = [item["text"] for item in source_spans]
 
     source_embeddings = [
         embed_passage(s)
@@ -88,7 +82,8 @@ def verify_match_sentences(match, top_k=3):
 
     sentence_matches = []
 
-    for i, input_sentence in enumerate(input_sentences):
+    for i, input_span in enumerate(input_spans):
+        input_sentence = input_span["text"]
         input_embedding = embed_query(input_sentence)
 
         scored = []
@@ -118,7 +113,9 @@ def verify_match_sentences(match, top_k=3):
             )
 
             if label in ["likely_plagiarism", "suspicious", "common_academic_definition"]:
-                scored.append({
+                source_span = source_spans[j]
+
+                record = {
                     "input_sentence_index": i,
                     "source_sentence_index": j,
                     "input_sentence": input_sentence,
@@ -126,8 +123,21 @@ def verify_match_sentences(match, top_k=3):
                     "semantic_similarity": semantic,
                     "word_overlap": word_overlap,
                     "char_ngram_overlap": char_overlap,
-                    "label": label
-                })
+                    "label": label,
+
+                    # Offsets within the chunk texts these sentences came
+                    # from (match["input_text"] / match["source_text"]).
+                    "input_chunk_start": input_span["start"],
+                    "input_chunk_end": input_span["end"],
+                    "source_chunk_start": source_span["start"],
+                    "source_chunk_end": source_span["end"],
+                }
+
+                if chunk_doc_start is not None:
+                    record["input_doc_start"] = chunk_doc_start + input_span["start"]
+                    record["input_doc_end"] = chunk_doc_start + input_span["end"]
+
+                scored.append(record)
 
         scored = sorted(
             scored,

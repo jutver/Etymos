@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, CurrencyDollar, FileText, ShoppingCart, Flag, GraduationCap } from "@phosphor-icons/react";
+import {
+  Users,
+  CurrencyDollar,
+  FileText,
+  ShoppingCart,
+  Flag,
+  GraduationCap,
+  Hourglass,
+  Receipt,
+} from "@phosphor-icons/react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -103,6 +112,20 @@ export default function DashboardPage() {
             label="Verification queue"
             value={loading ? "…" : String(metrics?.verificationQueueDepth ?? 0)}
             icon={GraduationCap}
+          />
+        </Link>
+        <Link to="/waitlist/access" className="block transition-opacity hover:opacity-80">
+          <StatCard
+            label="Pending access requests"
+            value={loading ? "…" : String(metrics?.accessQueueDepth ?? 0)}
+            icon={Hourglass}
+          />
+        </Link>
+        <Link to="/waitlist/purchases" className="block transition-opacity hover:opacity-80">
+          <StatCard
+            label="Pending purchases"
+            value={loading ? "…" : String(metrics?.purchaseQueueDepth ?? 0)}
+            icon={Receipt}
           />
         </Link>
       </div>

@@ -27,6 +27,16 @@ Related files:
 This is a manual runbook. No agent has shell access to n1.ckey.vn or any real
 credentials for it — every command below is meant to be run **by you**.
 
+**On working directories.** Except where a step says otherwise, every command
+below runs from `etymos/backend` — the directory you land in at the end of
+step 1. Steps 2 through 6 do *not* move you anywhere else; you stay in that
+one shell, in that one directory, for the whole runbook. Each step restates
+its working directory at the top so you can pick the doc back up mid-deploy
+without guessing. Where an absolute `/path/to/etymos/...` appears it's because
+the file being written (supervisord's config, cloudflared's config) is read
+later by a daemon that may not share your shell's working directory — it is
+*not* a hint that you should `cd` somewhere else to run the command.
+
 ---
 
 ## 0. Prerequisites
@@ -50,6 +60,10 @@ credentials for it — every command below is meant to be run **by you**.
 ---
 
 ## 1. Clone the repo and set up the Python environment
+
+**Working directory:** anywhere you want the clone to live (your home
+directory is fine) — the `cd` below then puts you in `etymos/backend`, where
+every later step expects you to be.
 
 ```bash
 git clone <YOUR_REPO_URL> etymos
@@ -75,6 +89,8 @@ active in whatever shell starts it.
 ---
 
 ## 2. Configure environment variables
+
+**Working directory:** `etymos/backend` — where step 1 left you.
 
 Create an **uncommitted** `.env` file at `etymos/backend/.env` (already
 covered by `.gitignore`'s `.env*` pattern — never commit it). Required keys:
@@ -121,20 +137,60 @@ sleep 2 && curl -f http://localhost:8000/api/health
 kill %1
 ```
 
+**That `kill %1` is not optional, and this is the one thing people get wrong
+here.** This foreground run is a throwaway check that `.env` is readable, the
+venv resolves, and the app imports — nothing more. From step 3 onward
+`supervisord` is what runs `scripts/run_api.sh`; you never run it by hand
+again. The two are alternatives, not companions. Leave this one alive and
+supervisord will start a *second* uvicorn against port 8000, which loses the
+bind and dies with `[Errno 98] address already in use` — and because
+`autorestart=true` it will keep retrying and failing until supervisord marks
+it `FATAL`, which reads like a broken deploy when really it's just the smoke
+test still holding the port.
+
 ---
 
 ## 3. Install and configure supervisord
 
+**Working directory:** `etymos/backend` — the same directory as step 2, in
+the same shell. Nothing moves between steps 2 and 3.
+
 No systemd here, so `supervisord` takes over the "keep it running, restart on
-crash" job for both the API and the tunnel.
+crash" job for both the API and the tunnel. Concretely: `supervisord` becomes
+the thing that runs `scripts/run_api.sh` — look at `command=` under
+`[program:etymos-api]` below, it's the exact script you smoke-tested by hand
+in step 2. So you do **not** run `./scripts/run_api.sh` alongside this; that
+script has exactly one owner from here on, and it's supervisord.
+
+First confirm the step 2 smoke test really is gone — nothing should be
+holding port 8000 before supervisord starts:
+
+```bash
+curl -f http://localhost:8000/api/health   # want: connection refused
+```
+
+If that *succeeds*, something is still listening and you have a stray uvicorn
+to clean up (the `kill %1` didn't take, or you're in a different shell than
+the one that launched it):
+
+```bash
+pkill -f 'uvicorn api.app:app'   # or: fuser -k 8000/tcp
+```
+
+Then install supervisor into the venv:
 
 ```bash
 source .venv/bin/activate
 pip install supervisor
 ```
 
-Create `etymos/backend/supervisord.conf` (replace `/path/to/etymos` with the
-real absolute path from your clone):
+Create `supervisord.conf` in this same directory — i.e. at
+`etymos/backend/supervisord.conf`. Replace every `/path/to/etymos` with the
+real absolute path from your clone (`cd ../ && pwd` prints it, or just read
+`pwd` and drop the trailing `/backend`). The paths are absolute because
+supervisord daemonizes and its children inherit *its* working directory, not
+your shell's — that's a property of the config file, not an instruction to
+run these commands from elsewhere.
 
 ```ini
 [supervisord]
@@ -179,9 +235,35 @@ mkdir -p logs
 .venv/bin/supervisorctl -c supervisord.conf status
 ```
 
+`etymos-api` should report `RUNNING`. `cloudflared` will report `FATAL` or
+`BACKOFF` at this point and that's expected — the binary doesn't exist until
+step 4 installs it. Ignore it for now; step 4 ends with the `supervisorctl
+update` / `restart cloudflared` that brings it up.
+
+**Restarting the API from here on.** Once supervisord owns the process, ask
+supervisord — don't re-run the script:
+
+```bash
+.venv/bin/supervisorctl -c supervisord.conf restart etymos-api
+```
+
+Use this after any change to `.env` or to backend code (uvicorn is not running
+with `--reload` in production, so a code change needs a restart to take
+effect). Running `./scripts/run_api.sh` again instead is the port-8000
+collision described at the end of step 2 — supervisord's copy already holds
+the port, so your manual one dies immediately and the API you're actually
+serving is unchanged, which is a confusing way to spend twenty minutes.
+Likewise `stop etymos-api` / `start etymos-api` rather than hunting the pid
+with `kill`, so supervisord's state matches reality.
+
 ---
 
 ## 4. Install cloudflared and create the tunnel
+
+**Working directory:** still `etymos/backend`. The install target
+(`/usr/local/bin`) is absolute, so it doesn't matter where you are for that
+command specifically — but the `supervisorctl` calls at the end of this step
+do need to find `supervisord.conf`, which lives here.
 
 Direct binary download — no apt/systemd dependency, works inside any
 container regardless of base image:
@@ -206,7 +288,17 @@ n2.ckey.vn.
 cloudflared tunnel --url http://localhost:8000
 ```
 
-The assigned URL is printed to stderr — grab it with:
+You don't need to run that by hand — it's the command shape, and it's already
+what `[program:cloudflared]` in step 3 has. Let supervisord start it via the
+`update` / `restart` at the end of this step, the same way it owns the API. A
+manual foreground run wouldn't collide on a port (the tunnel is outbound), but
+it would open a *second* tunnel with its own separate random hostname, and
+then you'd have two candidate URLs and no way to tell which one the frontend
+should point at.
+
+The assigned URL is printed to stderr, which supervisord captures into
+`cloudflared.err.log` — so this grep only returns anything after supervisord
+has actually started the tunnel:
 
 ```bash
 grep -o 'https://[a-zA-Z0-9.-]*trycloudflare.com' /path/to/etymos/backend/logs/cloudflared.err.log | tail -1
@@ -248,28 +340,44 @@ Copy `cloudflared/config.yml` from this repo next to the tunnel credentials
 and fill in the placeholders with the real tunnel ID, credentials path, and
 hostname from the commands above:
 
+Note the source path: `cloudflared/config.yml` lives at the **repo root**, one
+level up from where you're standing, so reference it as `../cloudflared/...`
+from `etymos/backend`. The destination is that same repo-root directory, which
+is why the copy below looks like a no-op — it isn't quite one; you're
+replacing the committed template with a filled-in copy that stays uncommitted.
+
 ```bash
 mkdir -p /path/to/etymos/cloudflared
-cp cloudflared/config.yml /path/to/etymos/cloudflared/config.yml
+cp ../cloudflared/config.yml /path/to/etymos/cloudflared/config.yml
 "$EDITOR" /path/to/etymos/cloudflared/config.yml   # replace <TUNNEL_ID> and <API_HOSTNAME>
 ```
 
-Test it in the foreground first, before letting supervisord own it:
+Test it in the foreground first, before letting supervisord own it. Unlike the
+quick-tunnel case there's a real reason to do this: a named tunnel can fail on
+config or credentials in ways that are much easier to read in the foreground
+than out of a log file. Make sure supervisord isn't already running its own
+copy against the same tunnel name first:
 
 ```bash
+.venv/bin/supervisorctl -c supervisord.conf stop cloudflared
 cloudflared tunnel --config /path/to/etymos/cloudflared/config.yml run etymos-api
 # in another terminal / from your own machine:
 curl -f https://api.yourdomain.com/api/health
 ```
 
-Ctrl-C once confirmed, then update supervisord's `[program:cloudflared]`
-`command=` to:
+Ctrl-C once confirmed — and as with `run_api.sh`, don't leave it running;
+supervisord takes ownership from here. Then update supervisord's
+`[program:cloudflared]` `command=` to:
 
 ```
 command=/usr/local/bin/cloudflared tunnel --config /path/to/etymos/cloudflared/config.yml run etymos-api
 ```
 
 ### Either way, once `command=` is set correctly
+
+Back in `etymos/backend`, so `supervisorctl` finds `supervisord.conf`.
+`update` re-reads the config file and picks up your edited `command=`;
+`restart` then swaps the running tunnel for one started with it:
 
 ```bash
 .venv/bin/supervisorctl -c supervisord.conf update
@@ -279,6 +387,10 @@ command=/usr/local/bin/cloudflared tunnel --config /path/to/etymos/cloudflared/c
 ---
 
 ## 5. Surviving a container restart
+
+**Working directory:** `etymos/backend` for anything you run by hand here —
+but note the startup-hook command below `cd`s there explicitly, because a
+container entrypoint starts wherever the image says, not where you left off.
 
 There's no systemd, so "starts on boot" means "starts when the container's
 entrypoint runs again" — and that's entirely up to how n1.ckey.vn lets you
@@ -299,6 +411,9 @@ intervene for those.
 
 ## 6. Verify end-to-end
 
+**Working directory:** `etymos/backend`, for the `supervisorctl` and
+`curl` commands below.
+
 - `.venv/bin/supervisorctl -c supervisord.conf status` — both `etymos-api`
   and `cloudflared` show `RUNNING`.
 - `curl -f http://localhost:8000/api/health` from inside the container.
@@ -307,7 +422,11 @@ intervene for those.
   that section first; it changes across restarts.
 - No inbound ports beyond whatever the provider requires for shell access —
   the tunnel is fully outbound.
-- Kill the API process manually (`.venv/bin/supervisorctl -c supervisord.conf
-  stop etymos-api && ... start etymos-api`, or just `kill` the uvicorn pid)
-  and confirm supervisord brings it back on its own within a few seconds —
-  confirms `autorestart=true` actually works before you rely on it.
+- Kill the uvicorn pid directly (`pkill -f 'uvicorn api.app:app'`) and confirm
+  supervisord brings it back on its own within a few seconds — this confirms
+  `autorestart=true` actually works before you rely on it. Use a raw `kill`
+  here rather than `supervisorctl stop`: a `stop` is a deliberate shutdown and
+  supervisord will correctly *not* restart it, which would look like the
+  restart policy is broken when it isn't. `supervisorctl stop` / `start` are
+  the right tools for intentional restarts (see step 3), just not for testing
+  crash recovery.

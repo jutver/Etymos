@@ -7,6 +7,7 @@ import { useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { pollJob, getReport } from "../../lib/api";
+import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 
 interface LocationState {
@@ -16,27 +17,63 @@ interface LocationState {
   academicSources?: boolean;
   language?: string;
   jobId?: string;
+  /** Id of the `documents` row inserted the moment the check was requested
+   * (see screens/Upload). Present both on the initial navigation and when the
+   * user re-opens a still-checking document from Documents/History. */
+  documentId?: string | null;
   reportMode?: string;
   pdfDataUrl?: string | null;
 }
 
 const TOTAL_DURATION = 10000;
 
-function splitDocumentIntoPassages(text: string) {
-  const normalized = text.replace(/\r\n/g, "\n").trim();
-  if (!normalized) return [];
+/** A passage plus where it sits in the report's `input_text`.
+ *
+ * The offsets matter: the backend reports match positions as absolute
+ * character indices into `input_text`, but the Report screen highlights
+ * *within* a passage, so we need each passage's own origin to rebase them.
+ * Everything here therefore indexes the raw string — no `\r\n` normalisation
+ * and no leading trim of the whole document, either of which would shift
+ * every offset after it and silently mis-place highlights. */
+interface PassageSlice {
+  text: string;
+  /** Inclusive offset of `text[0]` in the original `input_text`. */
+  start: number;
+  /** Exclusive end offset of `text` in the original `input_text`. */
+  end: number;
+}
 
-  const paragraphs = normalized
-    .split(/\n{2,}/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+/** Trims `text.slice(start, end)` and records where the trimmed run landed.
+ * Blank segments are dropped, matching the previous split behaviour. */
+function pushSlice(text: string, start: number, end: number, out: PassageSlice[]): void {
+  const raw = text.slice(start, end);
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  const leading = raw.length - raw.trimStart().length;
+  out.push({ text: trimmed, start: start + leading, end: start + leading + trimmed.length });
+}
 
+/** Splits on `separator` (which must be global) while tracking offsets. */
+function sliceOn(text: string, separator: RegExp): PassageSlice[] {
+  const out: PassageSlice[] = [];
+  let cursor = 0;
+  for (const hit of text.matchAll(separator)) {
+    pushSlice(text, cursor, hit.index, out);
+    cursor = hit.index + hit[0].length;
+  }
+  pushSlice(text, cursor, text.length, out);
+  return out;
+}
+
+function splitDocumentIntoPassages(text: string): PassageSlice[] {
+  if (!text.trim()) return [];
+
+  // `\r?\n` rather than `\n` so CRLF documents split the same way without
+  // rewriting the string (which would invalidate the offsets).
+  const paragraphs = sliceOn(text, /(?:\r?\n){2,}/g);
   if (paragraphs.length > 1) return paragraphs;
 
-  return normalized
-    .split(/(?<=[.!?])\s+/u)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+  return sliceOn(text, /(?<=[.!?])\s+/gu);
 }
 
 export default function AnalyzingPage() {
@@ -48,6 +85,8 @@ export default function AnalyzingPage() {
   const addHistoryEntries = useAppStore((s) => s.addHistoryEntries);
   const recordCheckedDocument = useAppStore((s) => s.recordCheckedDocument);
   const markFirstCheckComplete = useAppStore((s) => s.markFirstCheckComplete);
+  const updateHistoryEntry = useAppStore((s) => s.updateHistoryEntry);
+  const replaceHistoryEntryId = useAppStore((s) => s.replaceHistoryEntryId);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<number | null>(null);
@@ -70,6 +109,21 @@ export default function AnalyzingPage() {
   const completedRef = useRef(false);
 
   useEffect(() => {
+    // Re-opened a "Checking" row whose job id was never recorded (the tab
+    // closed between inserting the row and the submit returning). There is
+    // nothing to poll, and falling through to the simulated path below would
+    // fabricate a report — settle it as failed instead.
+    if (state.reportMode === "backend" && state.documentId && !state.jobId) {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      const message = "This check was interrupted and never finished. Please run it again.";
+      setJobStatus("failed");
+      setJobMessage(message);
+      void markCheckFailed(state.documentId, message).catch(() => undefined);
+      updateHistoryEntry(state.documentId, { checkState: "failed", checkError: message });
+      return;
+    }
+
     if (state.reportMode === "backend" && state.jobId) {
       let cancelled = false;
 
@@ -85,8 +139,15 @@ export default function AnalyzingPage() {
           if (cancelled) return;
 
           if (job.status === "failed") {
+            const message = job.error ?? "Analysis failed.";
             setJobStatus("failed");
-            setJobMessage(job.error ?? "Analysis failed.");
+            setJobMessage(message);
+            // Settle the row the Upload screen inserted, so Documents/History
+            // show it as failed instead of checking forever.
+            if (state.documentId) {
+              void markCheckFailed(state.documentId, message).catch(() => undefined);
+              updateHistoryEntry(state.documentId, { checkState: "failed", checkError: message });
+            }
             return;
           }
 
@@ -95,7 +156,36 @@ export default function AnalyzingPage() {
           const entries: HistoryEntry[] = [];
           const ids: string[] = [];
 
-          const docId = `check-${Date.now()}`;
+          const overallScore = report.overall_score;
+          const estimatedWordCount = Math.max(1, Math.round((report.total_input_chunks || 1) * 900));
+
+          // Settle the placeholder row and adopt whichever id ends up being
+          // canonical — the backend's own report row when it persisted one,
+          // otherwise the placeholder itself. Using that id (rather than a
+          // synthetic `check-<ts>`) means /report/:id resolves against
+          // Supabase after a reload, not just this session's local cache.
+          let docId = `check-${Date.now()}`;
+          if (state.documentId) {
+            try {
+              docId = await finalizeCheckingDocument({
+                placeholderId: state.documentId,
+                reportId: job.report_id ?? null,
+                results: {
+                  status: statusFromScore(overallScore),
+                  similarityScore: overallScore,
+                  wordCount: estimatedWordCount,
+                  webSourcesScanned: (report.coverage?.total_candidate_papers as number) ?? 0,
+                  academicSourcesScanned: (report.coverage?.checked_papers as number) ?? 0,
+                },
+              });
+            } catch {
+              // Couldn't settle in Supabase — fall back to the placeholder id
+              // so the local view is still coherent; reconciliation on the
+              // next Documents/History mount retries the write.
+              docId = state.documentId;
+            }
+          }
+
           const cleanTitle = docLabels[0] && docLabels[0] !== "Pasted text"
             ? docLabels[0].replace(/\.(pdf|docx?|txt)$/i, "")
             : "Backend analysis";
@@ -113,17 +203,52 @@ export default function AnalyzingPage() {
             sourceSnippet: match.source_sentence,
             explanation: `Matched ${match.label.replace(/_/g, " ")}.`,
             rewriteSuggestions: [],
+            // `input_offset` is omitted (never zeroed) when the backend could
+            // not localise the sentence, so its presence is the capability
+            // check. Spreading conditionally keeps the fields genuinely
+            // absent rather than `undefined`-but-present.
+            ...(match.input_offset
+              ? {
+                  startOffset: match.input_offset.start,
+                  endOffset: match.input_offset.end,
+                  blockId: match.input_offset.block_id ?? undefined,
+                  sectionId: match.input_offset.section ?? undefined,
+                }
+              : {}),
+            ...(match.source_offset
+              ? {
+                  sourceStartOffset: match.source_offset.chunk_start ?? undefined,
+                  sourceEndOffset: match.source_offset.chunk_end ?? undefined,
+                }
+              : {}),
           }));
 
-          const passages = splitDocumentIntoPassages(report.input_text ?? "").map((text, index) => {
-            const matchingMatch = matches.find((match) => {
-              const userSnippet = match.userSnippet?.trim() ?? "";
-              return Boolean(userSnippet) && (text.trim() === userSnippet || text.includes(userSnippet));
-            });
+          const passages = splitDocumentIntoPassages(report.input_text ?? "").map((slice, index) => {
+            // Prefer the backend's offsets: a match belongs to the passage
+            // whose character range contains it. Falls back to the old
+            // snippet-containment guess for matches without offsets.
+            const matchingMatch =
+              matches.find(
+                (match) =>
+                  match.startOffset != null &&
+                  match.endOffset != null &&
+                  match.startOffset >= slice.start &&
+                  match.endOffset <= slice.end,
+              ) ??
+              matches.find((match) => {
+                if (match.startOffset != null) return false;
+                const userSnippet = match.userSnippet?.trim() ?? "";
+                return (
+                  Boolean(userSnippet) &&
+                  (slice.text.trim() === userSnippet || slice.text.includes(userSnippet))
+                );
+              });
 
             return {
               id: `${docId}-passage-${index}`,
-              text,
+              text: slice.text,
+              startOffset: slice.start,
+              endOffset: slice.end,
               severity: matchingMatch?.severity,
               matchId: matchingMatch?.id,
             };
@@ -134,10 +259,10 @@ export default function AnalyzingPage() {
             title: cleanTitle,
             fileName: docLabels[0] ?? "analysis",
             language: (state.language as "vi" | "en" | "fr" | "ja") ?? "vi",
-            wordCount: Math.max(1, Math.round((report.total_input_chunks || 1) * 900)),
+            wordCount: estimatedWordCount,
             uploadedAt: today,
-            similarityScore: report.overall_score,
-            similarityScoreFree: report.overall_score,
+            similarityScore: overallScore,
+            similarityScoreFree: overallScore,
             webSourcesScanned: report.coverage?.total_candidate_papers as number ?? 0,
             academicSourcesScanned: report.coverage?.checked_papers as number ?? 0,
             passages: passages.length > 0 ? passages : report.matches.slice(0, 5).map((match: any, index: number) => ({
@@ -151,23 +276,45 @@ export default function AnalyzingPage() {
           };
 
           recordCheckedDocument(doc);
-          entries.push({
+          const settled = {
             id: docId,
             title: cleanTitle,
             date: today,
-            similarityScore: report.overall_score,
-            status: statusFromScore(report.overall_score),
+            similarityScore: overallScore,
+            status: statusFromScore(overallScore),
             project: state.project || undefined,
             wordCount: doc.wordCount,
-          });
+          };
           ids.push(docId);
 
-          addHistoryEntries(entries);
+          if (state.documentId) {
+            // The row already exists (added on submit) — settle it in place so
+            // the list doesn't end up with both a "Checking" and a completed
+            // copy of the same check.
+            if (docId === state.documentId) {
+              updateHistoryEntry(docId, {
+                ...settled,
+                checkState: "completed",
+                checkError: undefined,
+              });
+            } else {
+              replaceHistoryEntryId(state.documentId, docId);
+              updateHistoryEntry(docId, { ...settled, checkState: "completed" });
+            }
+          } else {
+            entries.push(settled);
+            addHistoryEntries(entries);
+          }
           markFirstCheckComplete();
           setResultIds(ids);
         } catch (error) {
+          const message = error instanceof Error ? error.message : "Analysis failed.";
           setJobStatus("failed");
-          setJobMessage(error instanceof Error ? error.message : "Analysis failed.");
+          setJobMessage(message);
+          if (state.documentId) {
+            void markCheckFailed(state.documentId, message).catch(() => undefined);
+            updateHistoryEntry(state.documentId, { checkState: "failed", checkError: message });
+          }
         }
       }
 
@@ -287,6 +434,22 @@ export default function AnalyzingPage() {
         </div>
       )}
 
+      {!resultIds && !failed && state.documentId && (
+        <div className="mt-6 flex w-full max-w-sm flex-col items-center gap-3">
+          <p className="text-xs text-ink-400">
+            This check keeps running if you leave — it stays in your documents as “Checking”.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            iconLeft={<ClockCounterClockwise size={15} />}
+            onClick={() => navigate("/documents")}
+          >
+            Continue in background
+          </Button>
+        </div>
+      )}
+
       {!failed && (
         <div className="mt-10 flex w-full max-w-sm flex-col gap-3 text-left">
           <AnimatePresence initial={false}>
@@ -308,7 +471,7 @@ export default function AnalyzingPage() {
                   {done ? (
                     <CheckCircle size={20} weight="fill" className="text-success shrink-0" />
                   ) : (
-                    <CircleNotch size={20} className="shrink-0 animate-spin text-brand-500" />
+                    <CircleNotch size={20} className="shrink-0 animate-spin motion-reduce:animate-none text-brand-500" />
                   )}
                   <span className={cn("text-sm font-medium", done ? "text-ink-500" : "text-ink-900")}>
                     {step.label}

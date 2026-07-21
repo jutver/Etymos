@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CaretDown, Check, Minus } from "@phosphor-icons/react";
+import { CaretDown, Check, HourglassMedium, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
 import { FEATURE_MATRIX } from "../../lib/mockData";
@@ -8,6 +8,7 @@ import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from
 import type { ActivePlanDiscount } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 
@@ -45,6 +46,8 @@ export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
+  // Null for signed-out visitors — this page is public.
+  const { pending } = useMyPendingRequest();
 
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
@@ -71,6 +74,7 @@ export default function PricingPage() {
   );
 
   function buyPack(packId: CreditPack["id"]) {
+    if (pending) return;
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -109,6 +113,19 @@ export default function PricingPage() {
           </button>
         </div>
       </section>
+
+      {pending && (
+        <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
+          <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
+          <div>
+            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              {describePurchaseRequest(pending)} — an admin confirms it before your access changes. You can't
+              submit another request until then.
+            </p>
+          </div>
+        </div>
+      )}
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
@@ -162,8 +179,14 @@ export default function PricingPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
-                  <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
-                    Buy credits
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    className="mt-5"
+                    disabled={!!pending}
+                    onClick={() => buyPack(pack.id)}
+                  >
+                    {pending ? "Request pending" : "Buy credits"}
                   </Button>
                 </div>
               );

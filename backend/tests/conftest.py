@@ -9,3 +9,9 @@ from pathlib import Path
 BACKEND_API_DIR = Path(__file__).resolve().parent.parent / "api"
 if str(BACKEND_API_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_API_DIR))
+
+# The pipeline modules (document_model, citations, extractor, ...) are
+# likewise imported as flat top-level names from backend/.
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))

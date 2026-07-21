@@ -4,6 +4,9 @@ import { CaretLeft, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/r
 import type { HistoryEntry } from "@etymos/shared";
 import { formatDate, cn } from "@etymos/shared";
 import { StatusPill } from "../../components/Severity";
+import { CheckStatePill } from "./CheckStatePill";
+import { analyzingStateFor } from "../../lib/documentsQueries";
+import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import type { ProjectGroup } from "./types";
 
 interface DocumentsIconViewProps {
@@ -60,6 +63,12 @@ export function DocumentsIconView({
 }: DocumentsIconViewProps) {
   const navigate = useNavigate();
 
+  /** Still-running checks have no report yet — open the progress view. */
+  function openDoc(doc: HistoryEntryWithCheck) {
+    if (doc.checkState === "checking") navigate("/analyzing", { state: analyzingStateFor(doc) });
+    else navigate(`/report/${doc.id}`);
+  }
+
   if (activeFolder) {
     const group = groups.find((g) => g.name === activeFolder);
     const docs = group?.docs ?? [];
@@ -92,7 +101,7 @@ export function DocumentsIconView({
                     e.preventDefault();
                     onDocContextMenu(e, doc);
                   }}
-                  onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : navigate(`/report/${doc.id}`))}
+                  onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : openDoc(doc))}
                   className={cn(
                     "group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
                     docSelected ? "border-brand-400 ring-2 ring-brand-200" : "border-line",
@@ -110,7 +119,11 @@ export function DocumentsIconView({
                   </span>
                   <span className="line-clamp-2 w-full text-xs font-semibold text-ink-900">{doc.title}</span>
                   <span className="text-[11px] text-ink-400">{formatDate(doc.date)}</span>
-                  <StatusPill status={doc.status} className="scale-90" />
+                  {doc.checkState === "completed" ? (
+                    <StatusPill status={doc.status} className="scale-90" />
+                  ) : (
+                    <CheckStatePill state={doc.checkState} className="scale-90" />
+                  )}
                 </div>
               );
             })}

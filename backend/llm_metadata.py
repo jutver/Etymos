@@ -3,12 +3,11 @@ import logging
 import os
 import re
 import threading
-import time
 
 import google.generativeai as genai
 
 from config import LLM_MODEL_NAME
-from supabase_client import get_client
+from feature_flags import is_flag_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -585,56 +584,21 @@ def extract_all_section_metadata_gemini(section_texts):
 # =========================
 
 _FEATURE_FLAG_KEY = "gemini_metadata_extraction"
-_FEATURE_FLAG_TTL_SECONDS = float(os.getenv("FEATURE_FLAG_CACHE_TTL_SECONDS", "45"))
-_flag_cache: dict = {}
-_flag_cache_lock = threading.Lock()
 
 
 def is_gemini_metadata_extraction_enabled() -> bool:
     """
     Reads the `gemini_metadata_extraction` feature flag from Supabase
     (public.feature_flags, seeded by
-    supabase/migrations/20260716120000_student_verification_and_audit_log.sql),
-    with a short in-process cache (env FEATURE_FLAG_CACHE_TTL_SECONDS,
-    default 45s) so we don't hit the DB on every extraction call.
+    supabase/migrations/20260716120000_student_verification_and_audit_log.sql).
 
-    Falls back to False (i.e. use the local model) if the flag is
-    missing, unreadable, or Supabase isn't configured in this
-    environment — the VPS has a GPU, so local is the safe default per
-    PLAN.md.
+    The caching/fallback logic now lives in feature_flags.is_flag_enabled
+    so this toggle and the `gemini_ai_rewrite` toggle behave identically
+    (same TTL env var, same safe default). Behaviour is unchanged:
+    falls back to False — the local model — whenever the flag is missing,
+    unreadable, or Supabase isn't configured, because the VPS has a GPU.
     """
-    now = time.time()
-
-    with _flag_cache_lock:
-        cached = _flag_cache.get(_FEATURE_FLAG_KEY)
-        if cached is not None and (now - cached[0]) < _FEATURE_FLAG_TTL_SECONDS:
-            return cached[1]
-
-    client = get_client()
-    value = False
-
-    if client is not None:
-        try:
-            resp = (
-                client.table("feature_flags")
-                .select("enabled")
-                .eq("key", _FEATURE_FLAG_KEY)
-                .maybe_single()
-                .execute()
-            )
-            if resp and resp.data:
-                value = bool(resp.data.get("enabled", False))
-        except Exception:
-            logger.exception(
-                "Failed to read feature flag %s; falling back to local model.",
-                _FEATURE_FLAG_KEY,
-            )
-            value = False
-
-    with _flag_cache_lock:
-        _flag_cache[_FEATURE_FLAG_KEY] = (now, value)
-
-    return value
+    return is_flag_enabled(_FEATURE_FLAG_KEY, default=False)
 
 
 # =========================

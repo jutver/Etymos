@@ -93,7 +93,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((props, ref) =>
   const buttonRest = rest as ButtonHTMLAttributes<HTMLButtonElement>;
   return (
     <button ref={ref} className={classes} disabled={loading || buttonRest.disabled} {...buttonRest}>
-      {loading ? <CircleNotch size={18} weight="bold" className="animate-spin" /> : iconLeft}
+      {loading ? <CircleNotch size={18} weight="bold" className="animate-spin motion-reduce:animate-none" /> : iconLeft}
       {children}
       {!loading && iconRight}
     </button>

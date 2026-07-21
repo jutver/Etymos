@@ -6,24 +6,31 @@ import { AuthShell } from "./components/layout/AuthShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { DemoNoticeModal } from "./components/DemoNoticeModal";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
-import LandingPage from "./screens/Landing";
-import PricingPage from "./screens/Pricing";
-import LoginPage from "./screens/Login";
-import SignupPage from "./screens/Signup";
-import UploadPage from "./screens/Upload";
-import AnalyzingPage from "./screens/Analyzing";
-import ReportPage from "./screens/Report";
-import HistoryPage from "./screens/History";
-import DocumentsPage from "./screens/Documents";
-import TrashPage from "./screens/Trash";
-import PaywallPage from "./screens/Paywall";
-import CheckoutPage from "./screens/Checkout";
-import PaymentSuccessPage from "./screens/PaymentSuccess";
-import AccountProfilePage from "./screens/AccountProfile";
-import AccountPlanPage from "./screens/AccountPlan";
-import VerifyStudentPage from "./screens/VerifyStudent";
-import VerifyEmailPage from "./screens/VerifyEmail";
-import AuthCallbackPage from "./screens/AuthCallback";
+// Screens are lazy-loaded so each route is its own chunk — this roughly halves
+// the initial payload. The Suspense fallbacks live inside the layout shells,
+// so nav/footer stay mounted across a route transition.
+import {
+  LandingPage,
+  PricingPage,
+  LoginPage,
+  SignupPage,
+  UploadPage,
+  AnalyzingPage,
+  ReportPage,
+  HistoryPage,
+  DocumentsPage,
+  TrashPage,
+  PaywallPage,
+  CheckoutPage,
+  PaymentSuccessPage,
+  AccountProfilePage,
+  AccountPlanPage,
+  VerifyStudentPage,
+  VerifyEmailPage,
+  AuthCallbackPage,
+  WaitlistPage,
+} from "./components/layout/lazyScreens";
+import { ClosedBetaModal } from "./components/ClosedBetaModal";
 
 // Thin wrappers so the banner sits above PublicShell/AppShell's own nav
 // without editing those components (out of scope for this change) — mirrors
@@ -68,7 +75,15 @@ function App() {
       <DemoNoticeModal />
       <Routes>
         <Route element={<PublicShellWithBanner />}>
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <>
+                <ClosedBetaModal />
+                <LandingPage />
+              </>
+            }
+          />
           <Route path="/pricing" element={<PricingPage />} />
         </Route>
 
@@ -80,6 +95,10 @@ function App() {
         </Route>
 
         <Route element={<RequireAuth />}>
+          {/* Outside the AppShell gate on purpose — a waitlisted user must be
+              able to reach this without the authenticated app chrome. */}
+          <Route path="/waitlist" element={<WaitlistPage />} />
+
           <Route element={<AppShellWithBanner />}>
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/analyzing" element={<AnalyzingPage />} />

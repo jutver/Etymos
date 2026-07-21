@@ -16,6 +16,7 @@ from llm_metadata import (
     is_gemini_metadata_extraction_enabled,
     build_queries_from_section_metadata
 )
+from document_model import build_document
 from search_paper.search_sources import search_all_sources
 from similarity import rank_papers
 from report import print_report
@@ -101,9 +102,16 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
         experiment=experiment
     )
 
-    input_text = "\n\n".join(
-        part for part in [title, abstract, introduction, related_work, method, experiment] if part and part.strip()
-    )
+    # Canonical, offset-addressable document. `document["text"]` is the
+    # single coordinate system every match offset in the final report is
+    # expressed in, and is returned to the client as `input_text`.
+    #
+    # NOTE: this now includes the `conclusion` section, which the old
+    # manual join dropped even though conclusion chunks were always fed
+    # to the matcher — a match in the conclusion previously had no text
+    # to point at.
+    document = build_document(sections)
+    input_text = document["text"]
 
     print("\n===== TITLE =====")
     print(title)
@@ -178,7 +186,8 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
 
     input_chunks = build_chunks_from_sections(
         sections,
-        paper_id="input_paper"
+        paper_id="input_paper",
+        section_offsets=document["section_offsets"]
     )
 
     candidate_chunks = load_candidate_chunks(cached_papers)
@@ -210,6 +219,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
         verified_matches=verified_matches,
         input_chunks=input_chunks,
         input_text=input_text,
+        document=document,
     )
 
     save_final_report(

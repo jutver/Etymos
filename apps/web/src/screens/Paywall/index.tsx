@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { Check, Coins, ShieldWarning, Sparkle } from "@phosphor-icons/react";
+import { Check, Coins, HourglassMedium, ShieldWarning, Sparkle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { PLANS, CREDIT_PACKS } from "../../lib/mockData";
 import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 
 export default function PaywallPage() {
@@ -11,15 +12,20 @@ export default function PaywallPage() {
   const pendingDocLabel = useAppStore((s) => s.pendingDocLabel);
   const clearPendingCheck = useAppStore((s) => s.clearPendingCheck);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
+  // A user may only have one unreviewed request at a time, so every buy/choose
+  // action is disabled while one is outstanding.
+  const { pending } = useMyPendingRequest();
 
   const subscribePlans = PLANS.filter((p) => p.id !== "free");
 
   function choosePlan(plan: (typeof subscribePlans)[number]) {
+    if (pending) return;
     selectCheckoutItem({ kind: "plan", plan: plan.id as "student" | "professional", billingCycle: "monthly" });
     navigate("/checkout");
   }
 
   function choosePack(packId: (typeof CREDIT_PACKS)[number]["id"]) {
+    if (pending) return;
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -45,6 +51,19 @@ export default function PaywallPage() {
         </p>
       </div>
 
+      {pending && (
+        <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
+          <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
+          <div>
+            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              {describePurchaseRequest(pending)} — an admin has to confirm it before your access changes. You
+              can't submit another request until then.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Subscribe */}
         <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
@@ -68,8 +87,13 @@ export default function PaywallPage() {
                   </p>
                   <p className="text-xs text-ink-500">{formatVND(plan.priceMonthly)}/mo</p>
                 </div>
-                <Button size="sm" variant={plan.mostPopular ? "primary" : "outline"} onClick={() => choosePlan(plan)}>
-                  Choose
+                <Button
+                  size="sm"
+                  variant={plan.mostPopular ? "primary" : "outline"}
+                  disabled={!!pending}
+                  onClick={() => choosePlan(plan)}
+                >
+                  {pending ? "Pending" : "Choose"}
                 </Button>
               </div>
             ))}
@@ -106,8 +130,8 @@ export default function PaywallPage() {
                     <p className="text-xs text-ink-500">{formatVND(pack.price)} · {pack.description}</p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => choosePack(pack.id)}>
-                  Buy
+                <Button size="sm" variant="outline" disabled={!!pending} onClick={() => choosePack(pack.id)}>
+                  {pending ? "Pending" : "Buy"}
                 </Button>
               </div>
             ))}

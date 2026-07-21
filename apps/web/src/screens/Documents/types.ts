@@ -1,4 +1,7 @@
+// `HistoryEntryWithCheck` extends the shared `HistoryEntry` with the in-flight
+// check state, so rows whose analysis is still running can be listed here too.
 import type { HistoryEntry } from "@etymos/shared";
+import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 
 /** A project "folder" for the Finder-style Documents screen. `documents.project`
  * is a plain nullable text column (no backing projects table), so a project
@@ -7,7 +10,7 @@ import type { HistoryEntry } from "@etymos/shared";
  * that can't be renamed or deleted. */
 export interface ProjectGroup {
   name: string;
-  docs: HistoryEntry[];
+  docs: HistoryEntryWithCheck[];
   isDefault: boolean;
 }
 

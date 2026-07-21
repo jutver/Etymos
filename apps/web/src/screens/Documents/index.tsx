@@ -10,6 +10,7 @@ import {
   renameDocument,
   renameProjectDocuments,
 } from "../../lib/documentsQueries";
+import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import { ViewModeToggle } from "./ViewModeToggle";
 import { DocumentsListView } from "./DocumentsListView";
 import { DocumentsIconView } from "./DocumentsIconView";
@@ -36,6 +37,7 @@ export default function DocumentsPage() {
   const historyLoading = useAppStore((s) => s.historyLoading);
   const historyError = useAppStore((s) => s.historyError);
   const fetchHistory = useAppStore((s) => s.fetchHistory);
+  const reconcileCheckingDocuments = useAppStore((s) => s.reconcileCheckingDocuments);
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const removeKnownProject = useAppStore((s) => s.removeKnownProject);
@@ -63,9 +65,18 @@ export default function DocumentsPage() {
     void fetchHistory(user.id);
   }, [user?.id, fetchHistory]);
 
+  // While anything is still checking, keep asking the backend how it's going so
+  // the row settles without the user having to navigate away and back.
+  const hasCheckingDocs = history.some((h) => h.checkState === "checking");
+  useEffect(() => {
+    if (!hasCheckingDocs) return;
+    const timer = window.setInterval(() => void reconcileCheckingDocuments(), 5000);
+    return () => window.clearInterval(timer);
+  }, [hasCheckingDocs, reconcileCheckingDocuments]);
+
   const groups = useMemo<ProjectGroup[]>(() => {
     const q = query.trim().toLowerCase();
-    const byName = new Map<string, HistoryEntry[]>();
+    const byName = new Map<string, HistoryEntryWithCheck[]>();
     byName.set(PROJECTS[0], []);
     for (const name of knownProjects) if (!byName.has(name)) byName.set(name, []);
 

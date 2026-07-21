@@ -1,6 +1,8 @@
 export type AdminRole = "user" | "admin";
 export type PlanTier = "free" | "student" | "professional";
 export type BillingCycle = "monthly" | "annual";
+/** Gate on whether a signed-up user may actually use the app (item 3 waitlist). */
+export type AccessStatus = "waitlisted" | "approved" | "rejected";
 
 export interface Profile {
   id: string;
@@ -14,6 +16,11 @@ export interface Profile {
   checks_used_this_period: number;
   plan_period_start: string;
   student_verified: boolean;
+  access_status: AccessStatus;
+  access_requested_at: string | null;
+  access_reviewed_at: string | null;
+  access_reviewed_by: string | null;
+  access_note: string | null;
   created_at: string;
   updated_at: string;
 }

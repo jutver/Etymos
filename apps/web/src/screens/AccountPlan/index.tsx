@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarBlank, Check, CreditCard, GraduationCap, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
+import {
+  CalendarBlank,
+  Check,
+  CreditCard,
+  GraduationCap,
+  HourglassMedium,
+  ShieldCheck,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
@@ -8,6 +16,7 @@ import { PAYMENT_METHODS } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
+import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 
@@ -23,6 +32,9 @@ export default function AccountPlanPage() {
   const pushToast = useAppStore((s) => s.pushToast);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const cancelSubscriptionAction = useAppStore((s) => s.cancelSubscription);
+  // Upgrades/credit purchases go through admin approval, so an outstanding
+  // request blocks starting another one.
+  const { pending } = useMyPendingRequest();
 
   useEffect(() => {
     rolloverPlanPeriodIfNeeded();
@@ -62,6 +74,7 @@ export default function AccountPlanPage() {
   }
 
   function buyPack(packId: CreditPack["id"]) {
+    if (pending) return;
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -70,6 +83,20 @@ export default function AccountPlanPage() {
     <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
       <h1 className="text-h1 font-bold tracking-tight text-navy-900">My Plan</h1>
       <p className="mt-1.5 text-sm text-ink-500">Usage, billing, and subscription in one place.</p>
+
+      {pending && (
+        <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5">
+          <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
+          <div>
+            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              {describePurchaseRequest(pending)}, requested{" "}
+              {new Date(pending.createdAt).toLocaleDateString("vi-VN")}. An admin confirms your payment before
+              the change is applied — you can't submit another request until then.
+            </p>
+          </div>
+        </div>
+      )}
 
       <section className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -190,11 +217,19 @@ export default function AccountPlanPage() {
             </button>
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
-          {plans.map((p) => (
-            <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
-          ))}
-        </div>
+        {pending ? (
+          // PlanCard routes straight to checkout; while a request is pending
+          // there is nothing to choose, so the grid is replaced outright.
+          <p className="mt-5 rounded-[var(--radius-card)] border border-dashed border-line bg-surface-tint px-5 py-6 text-center text-sm text-ink-500">
+            Plan changes are paused while your {describePurchaseRequest(pending)} request is under review.
+          </p>
+        ) : (
+          <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
+            {plans.map((p) => (
+              <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mt-10">
@@ -214,8 +249,14 @@ export default function AccountPlanPage() {
               <p className="text-lg font-bold text-navy-900">{pack.label}</p>
               <p className="mt-3 text-3xl font-extrabold text-navy-900">{formatVND(pack.price)}</p>
               <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
-              <Button variant="secondary" fullWidth className="mt-5" onClick={() => buyPack(pack.id)}>
-                Buy credits
+              <Button
+                variant="secondary"
+                fullWidth
+                className="mt-5"
+                disabled={!!pending}
+                onClick={() => buyPack(pack.id)}
+              >
+                {pending ? "Request pending" : "Buy credits"}
               </Button>
             </div>
           ))}

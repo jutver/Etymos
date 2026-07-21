@@ -37,10 +37,53 @@ export interface BackendReport {
     semantic_similarity: number;
     word_overlap?: number;
     char_ngram_overlap?: number;
+    /** Absolute character offsets of `input_sentence` inside `input_text`.
+     * The backend OMITS this key (it never zeroes it) when it could not
+     * localise the sentence, and reports produced before offsets shipped
+     * lack it entirely — so presence of this object is the capability check
+     * for "we have real offsets for this match". */
+    input_offset?: BackendMatchInputOffset;
+    /** Offsets of `source_sentence` inside its own source chunk. */
+    source_offset?: BackendMatchSourceOffset;
   }>;
   coverage?: Record<string, unknown>;
+  /** Present since the scoring fix; carries the new figure's provenance plus
+   * `legacy_overall_score` for comparison. */
+  scoring?: BackendScoring;
   queries?: string[];
   warnings?: string[];
+}
+
+export interface BackendMatchInputOffset {
+  /** Inclusive character index into `BackendReport.input_text`. */
+  start: number;
+  /** Exclusive character index into `BackendReport.input_text`. */
+  end: number;
+  length: number;
+  section?: string | null;
+  block_id?: string | null;
+  chunk_id?: string | null;
+  chunk_start?: number | null;
+  chunk_end?: number | null;
+}
+
+export interface BackendMatchSourceOffset {
+  chunk_id?: string | null;
+  chunk_start?: number | null;
+  chunk_end?: number | null;
+  length?: number;
+}
+
+export interface BackendScoring {
+  version?: string | number;
+  method?: string;
+  total_chars?: number;
+  matched_chars?: number;
+  covered_chars?: number;
+  raw_coverage_percent?: number;
+  /** The pre-fix percentage, which double-counted overlapping matches. */
+  legacy_overall_score?: number;
+  legacy_total_chars?: number;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -69,6 +112,27 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
+/** Carries the HTTP status so callers can distinguish "the backend has no
+ * record of this job" (404 — the job is gone for good, e.g. the API process
+ * restarted and lost its in-memory job table) from "the backend is momentarily
+ * unreachable" (network error — worth retrying). Job reconciliation depends on
+ * that difference: only the former may resolve a job to `failed`. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/** True when the backend positively answered "no such job" — as opposed to not
+ * answering at all. */
+export function isJobMissingError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const authHeader = await getAuthHeader();
   const response = await fetch(buildUrl(path), {
@@ -77,7 +141,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await errorMessageFromResponse(response));
+    throw new ApiError(await errorMessageFromResponse(response), response.status);
   }
 
   return response.json() as Promise<T>;
@@ -104,7 +168,7 @@ export async function submitPdfCheck(file: File, balanceSource: BalanceSource): 
   });
 
   if (!response.ok) {
-    throw new Error(await errorMessageFromResponse(response));
+    throw new ApiError(await errorMessageFromResponse(response), response.status);
   }
 
   return response.json() as Promise<BackendJob>;

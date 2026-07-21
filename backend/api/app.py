@@ -6,10 +6,10 @@ import shutil
 import tempfile
 import threading
 import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 import sys
-import google.generativeai as genai
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
@@ -26,13 +26,27 @@ from job_manager import create_job, get_job, make_progress_callback, update_job
 from report_store import delete_report, get_report, list_reports, save_report
 from main import check_pdf_plagiarism
 from doan_van import check_text_plagiarism
+from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
+from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
 from usage import ensure_quota_available, record_check_used
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Academic Plagiarism Checker API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Register backend-owned feature flags so they appear in the admin
+    portal's Config → Feature Flags screen. Idempotent, never overwrites
+    an admin's chosen value, and a no-op when Supabase isn't configured."""
+    try:
+        register_rewrite_flag()
+    except Exception:
+        logger.exception("Feature flag registration failed; using code defaults.")
+    yield
+
+
+app = FastAPI(title="Academic Plagiarism Checker API", version="0.1.0", lifespan=lifespan)
 
 # Cấu hình CORS
 # No wildcard fallback: ALLOWED_ORIGINS must be set explicitly. Defaults to
@@ -77,15 +91,25 @@ app.add_middleware(SlowAPIMiddleware)
 RATE_LIMIT_CHECK_PDF = os.getenv("RATE_LIMIT_CHECK_PDF", "10/hour")
 RATE_LIMIT_CHECK_TEXT = os.getenv("RATE_LIMIT_CHECK_TEXT", "20/hour")
 RATE_LIMIT_AI_REWRITE = os.getenv("RATE_LIMIT_AI_REWRITE", "30/hour")
+# Citing is a cheap pure-text transform, so it gets a much looser limit
+# than the model-backed endpoints — a user adding a bibliography can
+# easily insert dozens of citations in one editing session.
+RATE_LIMIT_CITE = os.getenv("RATE_LIMIT_CITE", "300/hour")
 
-# Cấu hình AI Gemini
+# Cấu hình AI Gemini.
+#
+# Each Gemini-capable module configures the SDK itself at first use
+# (llm_metadata._ensure_genai_configured, ai_rewrite.rewrite_with_gemini),
+# so there is nothing to configure here — only a startup warning. Without
+# a key the backend still works entirely on the local Qwen2.5 model; only
+# the opt-in Gemini feature flags become unavailable.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     logger.warning(
-        "GEMINI_API_KEY is not set; /api/ai/rewrite will return 500 until it is configured."
+        "GEMINI_API_KEY is not set; the Gemini feature flags "
+        "(gemini_metadata_extraction, gemini_ai_rewrite) cannot be used. "
+        "The local Qwen2.5 model handles both paths."
     )
-else:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 # Supabase Storage bucket for uploaded/checked PDFs (see
 # supabase/migrations/20260716120000_student_verification_and_audit_log.sql
@@ -153,6 +177,27 @@ class TextCheckRequest(BaseModel):
 class RewriteRequest(BaseModel):
     input_sentence: str
     source_sentence: str
+
+
+class ReferenceModel(BaseModel):
+    """One bibliography entry. `id` is what keeps a reference stable
+    across renumbering — the frontend should pass the match's
+    `source_paper_id` as the id when citing a matched source."""
+    id: str | None = None
+    source_paper_id: str | None = None
+    title: str | None = None
+    authors: str | list[str] | None = None
+    year: int | str | None = None
+    url: str | None = None
+    pdf_url: str | None = None
+
+
+class CiteRequest(BaseModel):
+    text: str = Field(max_length=1_000_000)
+    references: list[ReferenceModel] = Field(default_factory=list, max_length=500)
+    insert_at: int = Field(ge=0)
+    source: ReferenceModel
+    heading: str = DEFAULT_REFERENCE_HEADING
 
 
 @app.get("/api/health")
@@ -316,24 +361,67 @@ def get_source_pdf(report_id: str, user: AuthedUser = Depends(verify_supabase_jw
 @limiter.limit(RATE_LIMIT_AI_REWRITE)
 def rewrite_text_with_ai(request: Request, body: RewriteRequest,
                           user: AuthedUser = Depends(verify_supabase_jwt)):
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="AI rewrite is not configured on the server.")
+    """
+    AI Rewrite. Runs on the local Qwen2.5 model by default; admins can
+    switch it to the Gemini API from the admin portal via the
+    `gemini_ai_rewrite` feature flag (same mechanism as the existing
+    `gemini_metadata_extraction` toggle). If the selected provider fails,
+    the other one is tried before giving up.
+
+    Response is additive: `success` and `rewritten_text` are unchanged;
+    `provider` / `model` / `fallback_used` are new.
+    """
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
-        prompt = f"""
-        Viết lại đoạn văn bị đánh dấu đạo văn, giữ nguyên ý nghĩa học thuật.
-        Lưu ý: Văn bản này được trích xuất từ PDF nên có thể bị lỗi ký tự lạ (•). Hãy bỏ qua chúng.
+        result = rewrite_sentence(
+            input_sentence=body.input_sentence,
+            source_sentence=body.source_sentence,
+        )
+    except RewriteUnavailable as exc:
+        logger.warning("AI rewrite unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="AI rewrite is unavailable right now. Please try again shortly.",
+        )
+    except Exception:
+        logger.exception("AI rewrite failed unexpectedly.")
+        raise HTTPException(status_code=500, detail="AI rewrite failed.")
 
-        [VĂN BẢN GỐC]: "{body.source_sentence}"
-        [ĐOẠN VĂN NGƯỜI DÙNG]: "{body.input_sentence}"
+    return {
+        "success": True,
+        "rewritten_text": result["rewritten_text"],
+        "provider": result["provider"],
+        "model": result["model"],
+        "fallback_used": result["fallback_used"],
+    }
 
-        Yêu cầu: Viết lại đoạn văn người dùng, paraphrase để giảm đạo văn, tuyệt đối không trả về ký tự lạ.
-        Chỉ trả về nội dung đã viết lại, không giải thích.
-        """
-        response = model.generate_content(prompt)
-        return {"success": True, "rewritten_text": response.text.strip()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/documents/cite")
+@limiter.limit(RATE_LIMIT_CITE)
+def cite_source(request: Request, body: CiteRequest,
+                 user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Cite a source: insert an inline `[n]` marker at the caret, append the
+    source to the document's reference section, and renumber every
+    existing citation so markers read 1, 2, 3… in order of appearance.
+
+    Stateless by design — the client owns the document text and the
+    reference list, and this endpoint returns the edited document plus an
+    `offset_map` for rebasing any highlight offsets it is holding. That
+    keeps citing free of report-storage migrations.
+    """
+    try:
+        result = add_citation(
+            text=body.text,
+            references=[r.model_dump() for r in body.references],
+            insert_at=body.insert_at,
+            source=body.source.model_dump(),
+            heading=body.heading,
+        )
+    except Exception:
+        logger.exception("Failed to add citation.")
+        raise HTTPException(status_code=400, detail="Could not add this citation.")
+
+    return result
 
 
 @app.get("/api/reports")
