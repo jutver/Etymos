@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FileMagnifyingGlass } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
-import { useAppStore } from "../../lib/store";
+import { useAppStore, planWordLimit } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
 import { fetchCheckedDocument, renameDocument } from "../../lib/documentsQueries";
 import { statusFromScore } from "../../components/Severity";
@@ -15,6 +15,7 @@ import { FormatToolbar } from "./FormatToolbar";
 import { DocumentCanvas, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
+import { WordLimitGate } from "./WordLimitGate";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { buildRenderedPassages, countWords } from "./highlights";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
@@ -153,9 +154,13 @@ export default function ReportPage() {
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [view, setView] = useState<"document" | "original">("document");
+  // Default to the Original PDF view with plagiarism highlighted directly on
+  // the uploaded file — the Document (extracted-text) view is opt-in via the
+  // toolbar's view switcher, not the first thing a user sees.
+  const [view, setView] = useState<"document" | "original">("original");
   const [stats, setStats] = useState({ words: 0, characters: 0 });
   const [pageState, setPageState] = useState({ page: 1, pageCount: 1 });
+  const [originalPageState, setOriginalPageState] = useState({ page: 1, pageCount: 1 });
   const [fileName, setFileName] = useState("");
 
   useEffect(() => {
@@ -209,6 +214,23 @@ export default function ReportPage() {
   const handlePageChange = useCallback((page: number, pageCount: number) => {
     setPageState({ page, pageCount });
   }, []);
+
+  const handleOriginalPageChange = useCallback((page: number, pageCount: number) => {
+    setOriginalPageState({ page, pageCount });
+  }, []);
+
+  // The Original view isn't editable, so its word/character counts come
+  // straight off the document's stored metadata rather than a live DOM read.
+  const originalStats = useMemo(
+    () => ({
+      words: doc?.wordCount ?? 0,
+      characters: doc?.passages.reduce((sum, p) => sum + (p.text?.length ?? 0), 0) ?? 0,
+    }),
+    [doc],
+  );
+
+  const wordLimit = planWordLimit(plan);
+  const overWordLimit = Boolean(doc && doc.wordCount > wordLimit);
 
   function handleAcceptRewrite(matchId: string) {
     setResolvedIds((prev) => new Set(prev).add(matchId));
@@ -379,30 +401,39 @@ export default function ReportPage() {
           />
 
           {view === "original" ? (
-            <div className="flex-1 overflow-hidden pt-16">
+            <div className="relative flex-1 overflow-hidden pt-16">
               <PlagiarismPdfViewer
                 pdfUrl={effectivePdfUrl ?? ""}
                 unavailableMessage={pdfFetchError ?? undefined}
                 matches={visibleMatches}
                 activeMatchId={activeMatchId}
                 onMatchClick={setActiveMatchId}
+                onPageChange={handleOriginalPageChange}
               />
+              {overWordLimit && (
+                <WordLimitGate wordLimit={wordLimit} onUnlock={() => navigate("/paywall")} />
+              )}
             </div>
           ) : (
-            <DocumentCanvas
-              rendered={rendered}
-              colorIndexByMatch={colorIndexByMatch}
-              activeMatchId={activeMatchId}
-              onSelectMatch={setActiveMatchId}
-              locked={locked}
-              onInput={handleInput}
-              onPageChange={handlePageChange}
-              resetKey={resetKey}
-              editorRef={editorRef}
-            />
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <DocumentCanvas
+                rendered={rendered}
+                colorIndexByMatch={colorIndexByMatch}
+                activeMatchId={activeMatchId}
+                onSelectMatch={setActiveMatchId}
+                locked={locked}
+                onInput={handleInput}
+                onPageChange={handlePageChange}
+                resetKey={resetKey}
+                editorRef={editorRef}
+              />
+              {overWordLimit && (
+                <WordLimitGate wordLimit={wordLimit} onUnlock={() => navigate("/paywall")} />
+              )}
+            </div>
           )}
 
-          {view === "document" && (
+          {view === "document" ? (
             <WordCountPill
               words={stats.words}
               characters={stats.characters}
@@ -410,6 +441,15 @@ export default function ReportPage() {
               pageCount={pageState.pageCount}
               dirty={dirty}
               locked={locked}
+            />
+          ) : (
+            <WordCountPill
+              words={originalStats.words}
+              characters={originalStats.characters}
+              page={originalPageState.page}
+              pageCount={originalPageState.pageCount}
+              dirty={false}
+              locked
             />
           )}
         </main>

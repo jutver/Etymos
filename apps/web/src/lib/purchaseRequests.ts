@@ -39,6 +39,8 @@ export interface PurchaseRequest {
   currency: string;
   paymentMethod: PaymentMethod | null;
   status: CheckoutStatus;
+  /** Number of packs purchased. Always 1 for `kind: "plan"`. */
+  quantity: number;
   reviewedAt: string | null;
   reviewNote: string | null;
   createdAt: string;
@@ -55,6 +57,7 @@ function toPurchaseRequest(row: CheckoutEventRow): PurchaseRequest {
     currency: row.currency,
     paymentMethod: row.payment_method,
     status: row.status,
+    quantity: row.quantity ?? 1,
     reviewedAt: row.reviewed_at,
     reviewNote: row.review_note,
     createdAt: row.created_at,
@@ -68,6 +71,12 @@ export interface CreatePurchaseRequestInput {
   /** Final price after any discount, in VND. Stored for the admin reviewer. */
   amount: number;
   paymentMethod: PaymentMethod;
+  /**
+   * How many of `item.packId` were purchased. Only meaningful for
+   * `kind: "pack"` — ignored (stored as 1) for plan requests, which have no
+   * quantity concept. Defaults to 1.
+   */
+  quantity?: number;
 }
 
 /**
@@ -78,7 +87,7 @@ export interface CreatePurchaseRequestInput {
 export async function createPurchaseRequest(
   input: CreatePurchaseRequestInput,
 ): Promise<PurchaseRequest> {
-  const { userId, item, amount, paymentMethod } = input;
+  const { userId, item, amount, paymentMethod, quantity } = input;
   const { data, error } = await supabase
     .from("checkout_events")
     .insert({
@@ -92,6 +101,7 @@ export async function createPurchaseRequest(
       currency: "VND",
       payment_method: paymentMethod,
       status: "pending",
+      quantity: item.kind === "pack" ? Math.max(1, Math.round(quantity ?? 1)) : 1,
     })
     .select("*")
     .single();
@@ -135,7 +145,8 @@ export function describePurchaseRequest(request: PurchaseRequest): string {
     const cycle = request.billingCycle === "annual" ? "annual" : "monthly";
     return `${tier} plan (${cycle})`;
   }
-  return request.packId === "pack-premium" ? "Premium credit pack" : "Standard credit pack";
+  const label = request.packId === "pack-premium" ? "Premium credit pack" : "Standard credit pack";
+  return request.quantity > 1 ? `${label} ×${request.quantity}` : label;
 }
 
 export interface PendingRequestState {

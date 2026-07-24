@@ -19,6 +19,8 @@ export interface PurchaseRequest {
   currency: string | null;
   payment_method: string | null;
   status: PurchaseStatus;
+  /** Number of packs purchased in this request. Always 1 for `kind: "plan"`. */
+  quantity: number;
   reviewed_at: string | null;
   reviewed_by: string | null;
   review_note: string | null;

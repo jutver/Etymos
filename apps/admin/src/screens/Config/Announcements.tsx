@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
+import { Trash } from "@phosphor-icons/react";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
 import { useAdminAuth } from "../../lib/auth";
-import { listAnnouncements, createAnnouncement, setAnnouncementActive } from "../../lib/configQueries";
+import {
+  listAnnouncements,
+  createAnnouncement,
+  setAnnouncementActive,
+  deleteAnnouncement,
+} from "../../lib/configQueries";
 import type { Announcement, AnnouncementSeverity } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 
@@ -23,6 +29,8 @@ export default function AnnouncementsPage() {
   const [message, setMessage] = useState("");
   const [severity, setSeverity] = useState<AnnouncementSeverity>("info");
   const [creating, setCreating] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function refresh() {
     return listAnnouncements()
@@ -56,6 +64,20 @@ export default function AnnouncementsPage() {
     } catch (err) {
       setError(friendlyError(err));
       setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_active: !isActive } : x)));
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setError(null);
+    try {
+      await deleteAnnouncement(id);
+      setAnnouncements((prev) => prev.filter((x) => x.id !== id));
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -116,7 +138,37 @@ export default function AnnouncementsPage() {
                 </div>
                 <p className="mt-1 truncate text-body text-fg">{a.message}</p>
               </div>
-              <Switch checked={a.is_active} onChange={(v) => toggleActive(a, v)} />
+              <div className="flex shrink-0 items-center gap-3">
+                <Switch checked={a.is_active} onChange={(v) => toggleActive(a, v)} />
+                {confirmDeleteId === a.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={deletingId === a.id}
+                      onClick={() => handleDelete(a.id)}
+                      className="cursor-pointer rounded-control bg-destructive px-2.5 py-1 text-caption font-semibold text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === a.id ? "Deleting…" : "Confirm"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="cursor-pointer rounded-control px-2.5 py-1 text-caption font-medium text-fg-muted transition hover:bg-surface-raised"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(a.id)}
+                    title="Delete announcement"
+                    className="flex size-7 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-destructive-bg hover:text-destructive active:scale-95"
+                  >
+                    <Trash size={14} weight="bold" />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

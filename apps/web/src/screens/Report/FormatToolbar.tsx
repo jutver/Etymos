@@ -2,11 +2,13 @@ import { useState } from "react";
 import {
   ArrowUUpLeft,
   ArrowUUpRight,
+  Columns,
   FileText,
   ListBullets,
   ListNumbers,
   LockSimple,
   PaintBucket,
+  Table,
   TextAlignCenter,
   TextAlignJustify,
   TextAlignLeft,
@@ -28,6 +30,30 @@ import { cn } from "@etymos/shared";
  */
 function exec(command: string, value?: string) {
   document.execCommand(command, false, value);
+}
+
+/**
+ * Table/column insertion goes through `insertHTML` rather than a dedicated
+ * execCommand (browsers don't have one) — DocumentCanvas's `[&_table]`/
+ * `[&_td]` descendant selectors style whatever lands here, so no inline
+ * styling is needed on the inserted markup itself.
+ */
+function insertTable(rows: number, cols: number) {
+  const cells = Array.from({ length: cols }, () => "<td><br></td>").join("");
+  const body = Array.from({ length: rows }, () => `<tr>${cells}</tr>`).join("");
+  exec("insertHTML", `<table><tbody>${body}</tbody></table><p><br></p>`);
+}
+
+/** Inserts an empty CSS-columns section for 2- or 3-column layout — manual
+ * authoring, not automatic detection: the backend does not attempt to infer
+ * multi-column layout from an uploaded PDF (see extractor.py), so this is
+ * the toolbar's own way to add one, matching what a user could do in
+ * Google Docs' "Columns" menu. */
+function insertColumns(count: 2 | 3) {
+  exec(
+    "insertHTML",
+    `<div style="column-count:${count};column-gap:2rem;" class="my-5"><p>Column text…</p></div><p><br></p>`,
+  );
 }
 
 const TEXT_COLORS = [
@@ -90,6 +116,7 @@ export function FormatToolbar({
   onViewChange,
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
@@ -158,6 +185,7 @@ export function FormatToolbar({
               <option value="p">Body</option>
               <option value="h1">Heading 1</option>
               <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
               <option value="blockquote">Quote</option>
             </select>
 
@@ -230,6 +258,49 @@ export function FormatToolbar({
             <ToolButton label="Numbered list" onAction={() => exec("insertOrderedList")}>
               <ListNumbers size={16} />
             </ToolButton>
+
+            <Divider />
+
+            <ToolButton label="Insert table" onAction={() => insertTable(3, 3)}>
+              <Table size={16} />
+            </ToolButton>
+
+            <div className="relative">
+              <ToolButton
+                label="Columns"
+                active={columnsOpen}
+                onAction={() => setColumnsOpen((v) => !v)}
+              >
+                <Columns size={16} />
+              </ToolButton>
+              {columnsOpen && (
+                <div
+                  className="absolute left-1/2 top-[calc(100%+8px)] z-20 flex -translate-x-1/2 flex-col gap-0.5 rounded-[var(--radius-input)] border border-line bg-white p-1 shadow-[var(--shadow-pop)]"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      insertColumns(2);
+                      setColumnsOpen(false);
+                    }}
+                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
+                  >
+                    Two columns
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      insertColumns(3);
+                      setColumnsOpen(false);
+                    }}
+                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
+                  >
+                    Three columns
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

@@ -74,6 +74,11 @@ export async function setAnnouncementActive(id: string, isActive: boolean): Prom
   if (error) throw error;
 }
 
+export async function deleteAnnouncement(id: string): Promise<void> {
+  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function listPlanDiscounts(): Promise<AdminPlanDiscount[]> {
   const { data, error } = await supabase
     .from("plan_discounts")

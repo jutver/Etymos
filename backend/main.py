@@ -3,7 +3,8 @@ from pathlib import Path
 
 from config import TOP_K
 from extractor import (
-    extract_sections_from_pdf,
+    extract_structured_sections_from_pdf,
+    flatten_structured_sections,
     build_weighted_sections,
     debug_font_lines,
     build_heading_candidates,
@@ -76,7 +77,13 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
               step="extracting",
               message="Extracting sections from PDF"
           )
-    sections = extract_sections_from_pdf(pdf_path)
+    # Structured extraction is the single source of truth: `sections` (flat
+    # strings, for the matching/chunking pipeline below) is derived from the
+    # exact same blocks that get attached to `document["blocks"]` for the
+    # Document view, so nothing can drift between "what got matched" and
+    # "what the user sees". See extractor.extract_structured_sections_from_pdf.
+    structured = extract_structured_sections_from_pdf(pdf_path)
+    sections = flatten_structured_sections(structured)
 
     title = sections.get("title", "")
     abstract = sections.get("abstract", "")
@@ -110,7 +117,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
     # manual join dropped even though conclusion chunks were always fed
     # to the matcher — a match in the conclusion previously had no text
     # to point at.
-    document = build_document(sections)
+    document = build_document(sections, structured_sections=structured["sections"])
     input_text = document["text"]
 
     print("\n===== TITLE =====")
@@ -131,6 +138,100 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
     print("\n===== EXPERIMENT =====")
     print(experiment[:500])
 
+    return _run_matching_pipeline(
+        sections=sections,
+        document=document,
+        input_text=input_text,
+        weighted_sections=weighted_sections,
+        section_texts=section_texts,
+        progress_callback=progress_callback,
+    )
+
+
+def check_docx_plagiarism(docx_path, progress_callback=None):
+    """
+    .docx counterpart to check_pdf_plagiarism(). Extraction goes through
+    extract_docx.extract_structured_sections_from_docx() instead of the
+    PDF-specific font-size heuristics, but from `sections`/`document`
+    onward this runs the exact same matching pipeline (_run_matching_pipeline)
+    as the PDF path, so scoring/offsets/report shape are identical.
+
+    .docx documents essentially never carry the abstract/introduction/
+    method/... academic-paper structure extract_sections_from_pdf() looks
+    for (see extract_docx.py's module docstring), so there is no
+    per-section weighting to compute here — the whole document goes into
+    one "title_abstract"-keyed bucket for query building, and one "body"
+    section for chunking/matching. Search relevance for non-academic
+    content (a brand audit, a Vietnamese report) is inherently weaker than
+    for an actual paper matched against the academic-paper search sources
+    this pipeline was built for — a product-scope limitation, not a bug
+    introduced here.
+    """
+    from extract_docx import extract_structured_sections_from_docx
+
+    if progress_callback:
+        progress_callback(
+            progress=5,
+            step="preparing",
+            message="Preparing document analysis"
+        )
+
+    if progress_callback:
+        progress_callback(
+            progress=10,
+            step="extracting",
+            message="Extracting content from document"
+        )
+
+    structured = extract_structured_sections_from_docx(docx_path)
+    sections = flatten_structured_sections(structured)
+
+    title = sections.get("title", "")
+    body = sections.get("body", "")
+
+    section_texts = {
+        # First ~800 chars of body stands in for an abstract — .docx
+        # documents don't have one, but extract_all_section_metadata's
+        # prompt for "title_abstract" is the only bucket worth spending an
+        # LLM call on for a generic document; the other four target
+        # sections (introduction/related_work/method/experiment) are left
+        # empty and short-circuit to normalize_metadata({}) with no crash
+        # (see llm_metadata.extract_section_metadata_with_llm).
+        "title_abstract": (title + "\n" + body[:800]).strip(),
+    }
+
+    weighted_sections = {
+        "title_abstract": {"text": title + "\n" + body[:800], "weight": 1.0},
+        "body": {"text": body, "weight": 0.8},
+    }
+
+    document = build_document(sections, structured_sections=structured["sections"])
+    input_text = document["text"]
+
+    print("\n===== TITLE =====")
+    print(title)
+    print("\n===== BODY (first 500 chars) =====")
+    print(body[:500])
+
+    return _run_matching_pipeline(
+        sections=sections,
+        document=document,
+        input_text=input_text,
+        weighted_sections=weighted_sections,
+        section_texts=section_texts,
+        progress_callback=progress_callback,
+    )
+
+
+def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
+                            section_texts, progress_callback=None):
+    """
+    Shared tail of check_pdf_plagiarism()/check_docx_plagiarism(): metadata
+    extraction -> query building -> source search -> chunking -> matching
+    -> final report. Extraction-format-agnostic; everything it touches
+    (`sections`, `document`, `weighted_sections`, `section_texts`) is
+    already normalized to the same shape by both callers.
+    """
     if progress_callback:
       progress_callback(
           progress=25,
@@ -249,7 +350,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
       )
 
     return final_report
-    
+
 if __name__ == "__main__":
     test_pdf = os.getenv("TEST_PDF_PATH", str(PAPER_CACHE_DIR / "VIHateT5.pdf"))
 

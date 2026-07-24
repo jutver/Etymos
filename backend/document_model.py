@@ -42,6 +42,11 @@ SECTION_ORDER = [
     "method",
     "experiment",
     "conclusion",
+    # Catch-all for content extract_structured_sections_from_pdf() (and the
+    # docx extractor) could not place in a recognized academic bucket.
+    # Placed last so a document that DOES have real structure still reads
+    # in natural order first. See extractor.FALLBACK_SECTION.
+    "body",
 ]
 
 SECTION_LABELS = {
@@ -52,6 +57,7 @@ SECTION_LABELS = {
     "method": "Method",
     "experiment": "Experiment",
     "conclusion": "Conclusion",
+    "body": "Body",
     "input_text": "Text",
 }
 
@@ -117,11 +123,24 @@ def _split_paragraphs(text: str, base: int) -> list[tuple[int, int]]:
     ]
 
 
-def build_document(sections: dict) -> dict:
+def build_document(sections: dict, structured_sections: dict | None = None) -> dict:
     """
     Build the canonical document from a `sections` dict (as returned by
-    extractor.extract_sections_from_pdf, or the two-key dict doan_van.py
-    builds for the pasted-text path).
+    extractor.extract_sections_from_pdf/flatten_structured_sections, or the
+    two-key dict doan_van.py builds for the pasted-text path).
+
+    `structured_sections`, when given, is the `sections` half of
+    extractor.extract_structured_sections_from_pdf()'s return value (or the
+    docx extractor's equivalent): `{section_name: [block, ...]}` where each
+    block is `{"type", "level", "list_type", "text", "page"}`. Each
+    section's flattened `sections[name]` string MUST have been built by
+    joining those same blocks' `text` with "\\n\\n" (flatten_structured_sections
+    does this) — that guarantees `_split_paragraphs` recovers exactly one
+    span per block, in the same order, so they can be zipped to attach
+    `block_type` / `level` / `list_type` / `page` to the right span. If the
+    counts ever mismatch (a caller passed sections that weren't built this
+    way) we silently fall back to the plain "paragraph" typing below rather
+    than mis-tag content — never crash on this being best-effort.
 
     Returns:
         {
@@ -136,7 +155,9 @@ def build_document(sections: dict) -> dict:
           "blocks": [
             {"block_id": "abstract_0", "section": "abstract",
              "label": "Abstract", "type": "paragraph", "index": 0,
-             "start": int, "end": int}
+             "start": int, "end": int,
+             # present only when structured_sections supplied a match:
+             "level": 1, "list_type": "bullet", "page": 3}
           ]
         }
 
@@ -149,6 +170,7 @@ def build_document(sections: dict) -> dict:
     section_entries: list[dict] = []
     blocks: list[dict] = []
     cursor = 0
+    structured_sections = structured_sections or {}
 
     for name in _ordered_section_names(sections):
         raw = sections.get(name) or ""
@@ -174,16 +196,31 @@ def build_document(sections: dict) -> dict:
             "end": cursor,
         })
 
-        for index, (p_start, p_end) in enumerate(_split_paragraphs(content, start)):
-            blocks.append({
+        spans = _split_paragraphs(content, start)
+        struct_blocks = structured_sections.get(name) or []
+        type_hints = struct_blocks if len(struct_blocks) == len(spans) else None
+
+        for index, (p_start, p_end) in enumerate(spans):
+            hint = type_hints[index] if type_hints else None
+            block = {
                 "block_id": f"{name}_{index}",
                 "section": name,
                 "label": SECTION_LABELS.get(name, name.replace("_", " ").title()),
-                "type": "title" if name == "title" else "paragraph",
+                "type": "title" if name == "title" else (hint["type"] if hint else "paragraph"),
                 "index": index,
                 "start": p_start,
                 "end": p_end,
-            })
+            }
+            if hint:
+                if hint.get("level") is not None:
+                    block["level"] = hint["level"]
+                if hint.get("list_type"):
+                    block["list_type"] = hint["list_type"]
+                if hint.get("rows") is not None:
+                    block["rows"] = hint["rows"]
+                if hint.get("page") is not None:
+                    block["page"] = hint["page"]
+            blocks.append(block)
 
     text = "".join(parts)
 

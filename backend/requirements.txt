@@ -10,8 +10,11 @@
 # --extra-index-url needed) as long as the host has a compatible NVIDIA
 # driver installed.
 
-# --- Pipeline (PDF extraction, embeddings, search, quantized local LLM) ---
+# --- Pipeline (PDF/DOCX extraction, embeddings, search, quantized local LLM) ---
 PyMuPDF==1.28.0
+# .docx INPUT parsing (extract_docx.py) — unrelated to any docx *output*
+# generation library; python-docx only reads/writes the OOXML format.
+python-docx==1.1.2
 sentence_transformers==5.6.0
 requests==2.32.4
 numpy==2.0.2

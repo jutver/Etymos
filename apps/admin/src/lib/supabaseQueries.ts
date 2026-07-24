@@ -8,7 +8,19 @@ export interface PagedResult<T> {
   count: number;
 }
 
-export async function listProfiles(page: number, search: string): Promise<PagedResult<Profile>> {
+/** Half-open [from, to) range of ISO timestamps, used to filter `created_at`
+ * for the "signed up today / on a specific day" admin filter (CHANGES_I_WANT.md
+ * Admin Portal #1). */
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
+export async function listProfiles(
+  page: number,
+  search: string,
+  signupDateRange?: DateRange | null,
+): Promise<PagedResult<Profile>> {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -20,6 +32,10 @@ export async function listProfiles(page: number, search: string): Promise<PagedR
 
   if (search.trim()) {
     query = query.or(`email.ilike.%${search}%,display_name.ilike.%${search}%`);
+  }
+
+  if (signupDateRange) {
+    query = query.gte("created_at", signupDateRange.from).lt("created_at", signupDateRange.to);
   }
 
   const { data, error, count } = await query;

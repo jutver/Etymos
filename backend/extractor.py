@@ -589,13 +589,224 @@ def extract_title_from_lines(lines):
     return clean_text(" ".join(title_lines))
 
 
-def extract_sections_from_pdf(pdf_path, heading_labels=None):
+LIST_MARKER_RE = re.compile(
+    r'^(?:[•‣◦●○▪▫•●▪\-\*]|\(?\d{1,3}[\.\)]|\(?[a-zA-Z][\.\)])\s+'
+)
+BULLET_MARKER_CHARS = set("•‣◦●○▪▫-*•●▪")
+
+# Section catch-all label, used for any block whose home is the extraction
+# fallback described in extract_structured_sections_from_pdf() below rather
+# than one of the seven recognized academic-paper buckets.
+FALLBACK_SECTION = "body"
+
+
+def classify_block_type(line, body_size):
+    """
+    Classify one extracted PDF line for the Document-view renderer.
+
+    Returns (block_type, level, list_type, text):
+      - ("heading", 1|2|3, None, text)         font meaningfully > body size
+      - ("list_item", None, "bullet"|"number", text)  leading bullet/numeral
+      - ("paragraph", None, None, text)        everything else
+
+    This is independent of (and much looser than) build_heading_candidates()
+    above, which only recognizes the numbered/roman/academic-vocabulary
+    headings needed to slot content into the fixed section taxonomy. This
+    classifier runs over EVERY line (including ones already inside a
+    recognized section, and every line in the "body" fallback) purely to
+    give the Document view real <h1>/<h2>/<h3>/<ul>/<ol> structure instead
+    of one flat paragraph.
+    """
+    text = line["text"].strip()
+    size = line.get("size", body_size) or body_size
+    word_count = len(text.split())
+
+    if size >= body_size + 5 and word_count <= 20:
+        return "heading", 1, None, text
+    if size >= body_size + 2.5 and word_count <= 20:
+        return "heading", 2, None, text
+    if size >= body_size + 1 and word_count <= 16:
+        return "heading", 3, None, text
+
+    marker = LIST_MARKER_RE.match(text)
+    if marker:
+        stripped = text[marker.end():].strip()
+        if stripped:
+            marker_text = marker.group(0).strip()
+            list_type = "bullet" if marker_text[:1] in BULLET_MARKER_CHARS else "number"
+            return "list_item", None, list_type, stripped
+
+    return "paragraph", None, None, text
+
+
+def build_structured_blocks(section_lines, body_size):
+    """
+    Turn a list of raw line dicts (already stripped of equation/junk lines)
+    into merged structural blocks: consecutive paragraph lines are merged
+    into one paragraph block (the natural line-wrap of a PDF), while every
+    heading or list line becomes its own block.
+
+    Returns a list of {"type", "level", "list_type", "text", "page"} dicts.
+    """
+    blocks = []
+    current = None
+
+    def flush():
+        nonlocal current
+        if current is not None:
+            cleaned = clean_text(current["text"])
+            if cleaned:
+                current["text"] = cleaned
+                blocks.append(current)
+        current = None
+
+    for line in section_lines:
+        btype, level, list_type, raw_text = classify_block_type(line, body_size)
+        text = clean_text(raw_text)
+        if not text:
+            continue
+
+        if btype == "paragraph":
+            if current is not None and current["type"] == "paragraph":
+                current["text"] = current["text"] + " " + text
+            else:
+                flush()
+                current = {
+                    "type": "paragraph", "level": None, "list_type": None,
+                    "text": text, "page": line["page"],
+                }
+        else:
+            flush()
+            blocks.append({
+                "type": btype, "level": level, "list_type": list_type,
+                "text": text, "page": line["page"],
+            })
+
+    flush()
+    return blocks
+
+
+def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
+    """
+    Structure-preserving counterpart to extract_sections_from_pdf().
+
+    Fixes the "system unable to extract all the text, or none in the worst
+    case" bug: the previous extract_sections_from_pdf only ever wrote to
+    `sections[section]` when a heading matching the fixed 7-bucket academic
+    taxonomy (abstract/introduction/related_work/method/experiment/
+    conclusion/references) was recognized. Any document organized any other
+    way — most non-academic reports, most .docx-authored documents — fell
+    through with only the title captured, or nothing at all (verified on
+    TEST_Documents: a 7297-word Vietnamese report extracted to 15 words).
+
+    Every line PyMuPDF extracts now ends up in exactly one of: a recognized
+    section's blocks, the "body" catch-all section, or is discarded only
+    because is_heavy_math_line() flagged it as equation/junk. Nothing is
+    silently dropped for lack of a matching heading anymore.
+
+    Returns:
+        {
+          "title": str,
+          "sections": {
+            section_name: [
+              {"type": "heading"|"list_item"|"paragraph",
+               "level": 1|2|3|None, "list_type": "bullet"|"number"|None,
+               "text": str, "page": int},
+              ...
+            ]
+          }
+        }
+    """
     lines = extract_lines_from_pdf(pdf_path)
+    body_size = get_body_font_size(lines)
     candidates = build_heading_candidates(lines)
     headings = classify_heading_candidates(candidates, heading_labels)
 
-    sections = {
+    section_names = [
+        "abstract", "introduction", "related_work",
+        "method", "experiment", "conclusion",
+    ]
+    blocks_by_section = {name: [] for name in section_names}
+    claimed = set()
+
+    for idx, heading in enumerate(headings):
+        section = heading["section"]
+
+        if section == "references":
+            break
+
+        if section not in blocks_by_section:
+            continue
+
+        claimed.add(heading["index"])
+        start = heading["index"] + 1
+        end = headings[idx + 1]["index"] if idx + 1 < len(headings) else len(lines)
+
+        inline_content = heading.get("inline_content", "")
+        if inline_content:
+            blocks_by_section[section].append({
+                "type": "paragraph", "level": None, "list_type": None,
+                "text": clean_text(inline_content),
+                "page": lines[heading["index"]]["page"] if lines else 1,
+            })
+
+        survivors = []
+        for i in range(start, min(end, len(lines))):
+            line = lines[i]
+            normalized = normalize_heading_text(line["text"]).strip().lower()
+
+            if normalized in ["references", "bibliography"]:
+                break
+
+            # === ĐÃ THÊM LỌC TOÁN HỌC Ở ĐÂY ===
+            if is_heavy_math_line(line["text"]):
+                continue
+            # ==================================
+
+            claimed.add(i)
+            survivors.append(line)
+
+        blocks_by_section[section].extend(build_structured_blocks(survivors, body_size))
+
+    # --- Body fallback -----------------------------------------------------
+    # Everything not claimed above, in original extraction order. For a
+    # document with zero recognized headings this is the ENTIRE document
+    # (the previously-catastrophic case). For a partially structured
+    # document it recovers whatever fell outside the known 6-bucket
+    # taxonomy (including a references list whose heading wasn't
+    # recognized) instead of vanishing.
+    heading_indices = {h["index"] for h in headings}
+    unclaimed = [
+        lines[i] for i in range(len(lines))
+        if i not in claimed and i not in heading_indices
+        and not is_heavy_math_line(lines[i]["text"])
+    ]
+    body_blocks = build_structured_blocks(unclaimed, body_size)
+
+    result_sections = {name: blocks for name, blocks in blocks_by_section.items() if blocks}
+    if body_blocks:
+        result_sections[FALLBACK_SECTION] = body_blocks
+
+    return {
         "title": extract_title_from_lines(lines),
+        "sections": result_sections,
+    }
+
+
+def flatten_structured_sections(structured):
+    """
+    Collapse extract_structured_sections_from_pdf()'s block lists back to
+    the historical {section_name: str} shape that build_chunks_from_sections
+    (matching pipeline) and build_weighted_sections (query building) expect.
+
+    Blocks are joined with blank lines ("\\n\\n"), not single spaces — this
+    is what previously collapsed every section to one giant paragraph, and
+    what lets document_model.build_document() recover per-block spans (and,
+    when given `structured_sections`, per-block type/level/list_type) via
+    its existing blank-line paragraph splitter.
+    """
+    sections = {
+        "title": structured["title"],
         "abstract": "",
         "introduction": "",
         "related_work": "",
@@ -604,48 +815,21 @@ def extract_sections_from_pdf(pdf_path, heading_labels=None):
         "conclusion": "",
     }
 
+    for name, blocks in structured["sections"].items():
+        sections[name] = "\n\n".join(b["text"] for b in blocks if b["text"])
+
+    return sections
+
+
+def extract_sections_from_pdf(pdf_path, heading_labels=None):
+    structured = extract_structured_sections_from_pdf(pdf_path, heading_labels)
+    sections = flatten_structured_sections(structured)
+
     print("\n===== DETECTED HEADINGS =====")
-    for h in headings:
-        print(f"{h['text']} => {h['section']}")
-
-    for idx, heading in enumerate(headings):
-        section = heading["section"]
-
-        if section == "references":
-            break
-
-        if section not in sections:
-            continue
-
-        start = heading["index"] + 1
-        end = headings[idx + 1]["index"] if idx + 1 < len(headings) else len(lines)
-
-        content = []
-
-        inline_content = heading.get("inline_content", "")
-        if inline_content:
-            content.append(inline_content)
-
-        for line in lines[start:end]:
-            text = line["text"]
-            normalized = normalize_heading_text(text).strip().lower()
-
-            if normalized in ["references", "bibliography"]:
-                break
-
-            # === ĐÃ THÊM LỌC TOÁN HỌC Ở ĐÂY ===
-            if is_heavy_math_line(text):
-                continue
-            # ==================================
-
-            content.append(text)
-
-        section_text = clean_text(" ".join(content))
-
-        if section_text:
-            sections[section] = (
-                sections.get(section, "") + " " + section_text
-            ).strip()
+    for name, blocks in structured["sections"].items():
+        for b in blocks:
+            if b["type"] == "heading":
+                print(f"{b['text']} => {name}")
 
     return sections
 

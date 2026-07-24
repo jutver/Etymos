@@ -6,7 +6,7 @@ import { cn } from "../../lib/cn";
 import { useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
-import { pollJob, getReport } from "../../lib/api";
+import { pollJob, getReport, type BackendDocumentBlock } from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 
@@ -74,6 +74,75 @@ function splitDocumentIntoPassages(text: string): PassageSlice[] {
   if (paragraphs.length > 1) return paragraphs;
 
   return sliceOn(text, /(?<=[.!?])\s+/gu);
+}
+
+/** Backend block types the Document view knows how to render. Anything else
+ * (a value the backend might add later) degrades to a plain paragraph
+ * rather than being dropped — see DocumentCanvas's rendering switch. */
+const KNOWN_BLOCK_TYPES = new Set(["title", "heading", "paragraph", "list_item", "table", "image"]);
+
+/**
+ * Builds passages straight from the backend's structural blocks
+ * (`report.document.blocks` — backend/document_model.py) instead of
+ * re-splitting the flat `input_text` client-side. This is what gives the
+ * Document view real headings/lists/tables/page-breaks: each block already
+ * carries its own type, level, list marker, source page, and (for tables)
+ * grid rows, and its `start`/`end` are exact offsets into `input_text` — no
+ * guessing paragraph boundaries the way splitDocumentIntoPassages() has to
+ * for inputs that don't carry a `document` (the pasted-text check path,
+ * and any report generated before this shipped).
+ */
+function toHeadingLevel(level: number | undefined): 1 | 2 | 3 | undefined {
+  return level === 1 || level === 2 || level === 3 ? level : undefined;
+}
+
+function toListType(listType: string | undefined): "bullet" | "number" | undefined {
+  return listType === "bullet" || listType === "number" ? listType : undefined;
+}
+
+function buildPassagesFromBlocks(
+  blocks: BackendDocumentBlock[],
+  inputText: string,
+  matches: MatchedSource[],
+  docId: string,
+): CheckedDocument["passages"] {
+  return blocks
+    .map((block, index) => {
+      const text = inputText.slice(block.start, block.end).trim();
+      if (!text) return null;
+
+      const matchingMatch =
+        matches.find(
+          (match) =>
+            match.startOffset != null &&
+            match.endOffset != null &&
+            match.startOffset >= block.start &&
+            match.endOffset <= block.end,
+        ) ??
+        matches.find((match) => {
+          if (match.startOffset != null) return false;
+          const userSnippet = match.userSnippet?.trim() ?? "";
+          return Boolean(userSnippet) && (text === userSnippet || text.includes(userSnippet));
+        });
+
+      const level = toHeadingLevel(block.level);
+      const listType = toListType(block.list_type);
+
+      return {
+        id: `${docId}-passage-${index}`,
+        text,
+        startOffset: block.start,
+        endOffset: block.end,
+        severity: matchingMatch?.severity,
+        matchId: matchingMatch?.id,
+        blockType: KNOWN_BLOCK_TYPES.has(block.type) ? (block.type as CheckedDocument["passages"][number]["blockType"]) : "paragraph",
+        level,
+        listType,
+        page: block.page,
+        tableRows: block.rows,
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null);
 }
 
 export default function AnalyzingPage() {
@@ -223,36 +292,44 @@ export default function AnalyzingPage() {
               : {}),
           }));
 
-          const passages = splitDocumentIntoPassages(report.input_text ?? "").map((slice, index) => {
-            // Prefer the backend's offsets: a match belongs to the passage
-            // whose character range contains it. Falls back to the old
-            // snippet-containment guess for matches without offsets.
-            const matchingMatch =
-              matches.find(
-                (match) =>
-                  match.startOffset != null &&
-                  match.endOffset != null &&
-                  match.startOffset >= slice.start &&
-                  match.endOffset <= slice.end,
-              ) ??
-              matches.find((match) => {
-                if (match.startOffset != null) return false;
-                const userSnippet = match.userSnippet?.trim() ?? "";
-                return (
-                  Boolean(userSnippet) &&
-                  (slice.text.trim() === userSnippet || slice.text.includes(userSnippet))
-                );
-              });
+          // Prefer the backend's structural blocks (real headings/lists/
+          // tables/page numbers) over re-splitting the flat text; only
+          // fall back to the old paragraph/sentence heuristic when a
+          // report has no `document` at all (the pasted-text check path).
+          const blocks = report.document?.blocks;
+          const passages =
+            blocks && blocks.length > 0
+              ? buildPassagesFromBlocks(blocks, report.input_text ?? "", matches, docId)
+              : splitDocumentIntoPassages(report.input_text ?? "").map((slice, index) => {
+                  // Prefer the backend's offsets: a match belongs to the passage
+                  // whose character range contains it. Falls back to the old
+                  // snippet-containment guess for matches without offsets.
+                  const matchingMatch =
+                    matches.find(
+                      (match) =>
+                        match.startOffset != null &&
+                        match.endOffset != null &&
+                        match.startOffset >= slice.start &&
+                        match.endOffset <= slice.end,
+                    ) ??
+                    matches.find((match) => {
+                      if (match.startOffset != null) return false;
+                      const userSnippet = match.userSnippet?.trim() ?? "";
+                      return (
+                        Boolean(userSnippet) &&
+                        (slice.text.trim() === userSnippet || slice.text.includes(userSnippet))
+                      );
+                    });
 
-            return {
-              id: `${docId}-passage-${index}`,
-              text: slice.text,
-              startOffset: slice.start,
-              endOffset: slice.end,
-              severity: matchingMatch?.severity,
-              matchId: matchingMatch?.id,
-            };
-          });
+                  return {
+                    id: `${docId}-passage-${index}`,
+                    text: slice.text,
+                    startOffset: slice.start,
+                    endOffset: slice.end,
+                    severity: matchingMatch?.severity,
+                    matchId: matchingMatch?.id,
+                  };
+                });
 
           const doc: CheckedDocument = {
             id: docId,

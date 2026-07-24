@@ -7,6 +7,7 @@ import {
   House,
   LockSimple,
   LockSimpleOpen,
+  Sparkle,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { LogoMark } from "../../components/layout/Logo";
@@ -235,16 +236,27 @@ export function ReportTopBar({
           </BarIconButton>
 
           <BarIconButton
-            label={exportLocked ? "Export PDF (upgrade required)" : "Export PDF"}
+            label={exportLocked ? "Export PDF — upgrade to unlock" : "Export PDF"}
             onClick={onExport}
           >
-            {exporting ? (
-              <DownloadSimple size={18} className="animate-pulse motion-reduce:animate-none" />
-            ) : exportLocked ? (
-              <LockSimple size={17} weight="fill" />
-            ) : (
-              <DownloadSimple size={18} />
-            )}
+            <span className="relative inline-flex">
+              <DownloadSimple
+                size={18}
+                className={cn(exporting && "animate-pulse motion-reduce:animate-none")}
+              />
+              {/* Deliberately not a lock icon: the editing-lock toggle two
+                  buttons over already owns that glyph in this bar, and two
+                  lock icons back to back reads as "which lock is this?" —
+                  a small upgrade badge says "paid feature" without the
+                  ambiguity. */}
+              {exportLocked && !exporting && (
+                <Sparkle
+                  size={9}
+                  weight="fill"
+                  className="absolute -right-1.5 -top-1.5 text-brand-500"
+                />
+              )}
+            </span>
           </BarIconButton>
 
           <Button

@@ -28,6 +28,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // Presence heartbeat (CHANGES_I_WANT.md Admin Portal #2 — "see whether
+  // user is online in web app or not"). Writes `last_seen_at` on the user's
+  // own row every 60s, plus once immediately, for as long as they have the
+  // app open and signed in. `last_seen_at` is deliberately excluded from the
+  // profile self-privilege-escalation trigger (see the ban/delete/presence
+  // migration), so this plain self-update is allowed even for e.g. a banned
+  // user's stray in-flight tab. Best-effort: a failed heartbeat just means
+  // the admin sees this user as offline a little longer, nothing else reads
+  // or depends on it client-side.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    function heartbeat() {
+      supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", userId as string)
+        .then(({ error }) => {
+          if (error) console.warn("Presence heartbeat failed:", error.message);
+        });
+    }
+
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 60_000);
+    return () => window.clearInterval(interval);
+  }, [session?.user?.id]);
+
   return (
     <AuthContext.Provider value={{ session, user: session?.user ?? null, loading }}>
       {children}

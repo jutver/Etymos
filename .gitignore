@@ -38,3 +38,4 @@ diagrams/
 .mcp.json
 *.md
 !docs/**/*.md
+TEST_Documents/*

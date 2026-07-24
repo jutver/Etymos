@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, HourglassMedium, PaperPlaneTilt, Tag, WarningCircle } from "@phosphor-icons/react";
+import { Check, HourglassMedium, Minus, PaperPlaneTilt, Plus, Tag, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { PAYMENT_METHODS } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
@@ -27,6 +27,9 @@ function applyDiscount(price: number, discount: AppliedDiscount): number {
 
 type CodeStatus = "idle" | "applying" | "error";
 
+const MIN_PACK_QUANTITY = 1;
+const MAX_PACK_QUANTITY = 20;
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const item = useAppStore((s) => s.pendingCheckoutItem);
@@ -43,6 +46,9 @@ export default function CheckoutPage() {
   const [codeInput, setCodeInput] = useState("");
   const [codeStatus, setCodeStatus] = useState<CodeStatus>("idle");
   const [codeError, setCodeError] = useState<string | null>(null);
+  // Quantity only applies to pack purchases — a plan subscription has no
+  // "how many" concept. Defaults to 1 and is clamped on every change.
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (!item) navigate("/pricing", { replace: true });
@@ -108,14 +114,23 @@ export default function CheckoutPage() {
 
   const plan = item.kind === "plan" ? plans.find((p) => p.id === item.plan) : null;
   const pack = item.kind === "pack" ? creditPacks.find((p) => p.id === item.packId) : null;
-  const basePrice = plan
+  // Quantity only multiplies pack pricing; a plan's price is fixed per cycle.
+  // The discount (percent or a flat "fixed" amount) is applied once, after
+  // quantity, to the total — a flat discount code doesn't get bigger just
+  // because more packs were bought.
+  const unitPrice = plan
     ? item.kind === "plan" && item.billingCycle === "annual"
       ? plan.priceAnnual
       : plan.priceMonthly
     : (pack?.price ?? 0);
+  const basePrice = pack ? unitPrice * quantity : unitPrice;
   const price = appliedDiscount ? applyDiscount(basePrice, appliedDiscount) : basePrice;
   const hasDiscount = price < basePrice;
   const selectedMethod = PAYMENT_METHODS.find((m) => m.id === method);
+
+  function changeQuantity(next: number) {
+    setQuantity(Math.min(MAX_PACK_QUANTITY, Math.max(MIN_PACK_QUANTITY, next)));
+  }
 
   async function applyCode() {
     const code = codeInput.trim();
@@ -148,7 +163,13 @@ export default function CheckoutPage() {
     setStatus("submitting");
     setSubmitError(null);
     try {
-      await createPurchaseRequest({ userId: user.id, item, amount: price, paymentMethod: method });
+      await createPurchaseRequest({
+        userId: user.id,
+        item,
+        amount: price,
+        paymentMethod: method,
+        quantity: item.kind === "pack" ? quantity : 1,
+      });
       refreshPending();
       navigate("/payment-success");
     } catch (err: unknown) {
@@ -175,7 +196,9 @@ export default function CheckoutPage() {
             <p className="text-xs text-ink-500">
               {plan
                 ? `Billed ${item.kind === "plan" && item.billingCycle === "annual" ? "annually" : "monthly"}`
-                : "One-time purchase, credits never expire"}
+                : pack
+                  ? `${(pack.checks * quantity).toLocaleString()} credits total · never expire`
+                  : "One-time purchase, credits never expire"}
             </p>
           </div>
           <div className="flex items-baseline gap-1.5">
@@ -187,6 +210,44 @@ export default function CheckoutPage() {
             </p>
           </div>
         </div>
+
+        {item.kind === "pack" && pack && (
+          <div className="flex items-center justify-between border-b border-line py-4">
+            <div>
+              <p className="text-sm font-semibold text-navy-900">Quantity</p>
+              <p className="text-xs text-ink-500">{formatVND(pack.price)} per pack</p>
+            </div>
+            <div className="flex items-center gap-1 rounded-full border border-line p-1">
+              <button
+                type="button"
+                onClick={() => changeQuantity(quantity - 1)}
+                disabled={quantity <= MIN_PACK_QUANTITY}
+                aria-label="Decrease quantity"
+                className="flex size-7 items-center justify-center rounded-full text-ink-700 transition-colors hover:bg-surface-tint disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Minus size={13} weight="bold" />
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={MIN_PACK_QUANTITY}
+                max={MAX_PACK_QUANTITY}
+                value={quantity}
+                onChange={(e) => changeQuantity(Number(e.target.value) || MIN_PACK_QUANTITY)}
+                className="w-9 border-0 bg-transparent text-center text-sm font-bold text-navy-900 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button
+                type="button"
+                onClick={() => changeQuantity(quantity + 1)}
+                disabled={quantity >= MAX_PACK_QUANTITY}
+                aria-label="Increase quantity"
+                className="flex size-7 items-center justify-center rounded-full text-ink-700 transition-colors hover:bg-surface-tint disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus size={13} weight="bold" />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="border-b border-line pb-4">
           <div className="flex items-center gap-2">

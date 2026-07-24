@@ -89,8 +89,10 @@ export default function PurchasesPage() {
       return `${r.plan_tier ?? "—"} plan${r.billing_cycle ? ` · ${r.billing_cycle}` : ""}`;
     }
     const pack = packs.find((p) => p.id === r.pack_id);
-    if (!pack) return r.pack_id ?? "—";
-    return `${pack.label} · ${pack.checks} checks`;
+    const qty = r.quantity ?? 1;
+    const label = qty > 1 ? `${pack?.label ?? r.pack_id ?? "—"} ×${qty}` : (pack?.label ?? r.pack_id ?? "—");
+    if (!pack) return label;
+    return `${label} · ${pack.checks * qty} checks`;
   }
 
   async function handleApprove(row: PurchaseRequest) {

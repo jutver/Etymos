@@ -45,6 +45,8 @@ export interface CheckoutEventRow {
   currency: string;
   payment_method: PaymentMethod | null;
   status: CheckoutStatus;
+  /** Number of packs purchased in this request. Always 1 for `kind: "plan"`. */
+  quantity: number;
   reviewed_at: string | null;
   reviewed_by: string | null;
   review_note: string | null;
@@ -72,6 +74,12 @@ export interface PlanDefinition {
   features: string[];
 }
 
+/** Kind of structural block a passage renders as in the Document view.
+ * Absent (or "paragraph") is the historical default — every passage before
+ * this field existed, and every passage from a source that can't classify
+ * structure (plain pasted text), is a plain paragraph. */
+export type DocBlockType = "title" | "heading" | "paragraph" | "list_item" | "table" | "image";
+
 export interface DocPassage {
   id: string;
   text: string;
@@ -86,6 +94,26 @@ export interface DocPassage {
   /** Exclusive end offset of `text` inside `input_text`. Paired with
    * `startOffset`; both are present or both absent. */
   endOffset?: number;
+  /** --- Structure metadata (backend/document_model.py's `document.blocks`) ---
+   * All optional and additive: a passage with none of these renders exactly
+   * as before (a plain paragraph), so historical Supabase rows and the
+   * pasted-text check path (which has no structure to report) keep working
+   * unchanged. */
+  blockType?: DocBlockType;
+  /** Heading level 1-3, meaningful only when `blockType === "heading"`. */
+  level?: 1 | 2 | 3;
+  /** Bullet vs. numbered, meaningful only when `blockType === "list_item"`. */
+  listType?: "bullet" | "number";
+  /** 1-based source page number (PDF page, or a synthetic bucket for
+   * .docx — see backend/extract_docx.py). Consecutive passages sharing a
+   * page render inside the same "sheet"; a change in `page` is where the
+   * Document view draws a real blank-space page break. Undefined means
+   * "no page information" — the whole document renders as one sheet, the
+   * same single-scroll layout the view always used before this field
+   * existed. */
+  page?: number;
+  /** Grid contents, meaningful only when `blockType === "table"`. */
+  tableRows?: string[][];
 }
 
 export interface MatchedSource {

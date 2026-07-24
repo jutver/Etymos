@@ -50,8 +50,39 @@ export interface BackendReport {
   /** Present since the scoring fix; carries the new figure's provenance plus
    * `legacy_overall_score` for comparison. */
   scoring?: BackendScoring;
+  /** Structural view of `input_text` (backend/document_model.py's
+   * build_document), present whenever the backend had a `document` to
+   * attach — every PDF/.docx check today; absent for reports generated
+   * before this shipped. Drives the Document view's headings/lists/tables/
+   * page breaks — see screens/Analyzing's passage builder. */
+  document?: BackendDocument;
   queries?: string[];
   warnings?: string[];
+}
+
+export interface BackendDocumentBlock {
+  block_id: string;
+  section: string;
+  label: string;
+  /** "title" | "heading" | "paragraph" | "list_item" | "table" | "image" */
+  type: string;
+  index: number;
+  /** Inclusive character offset into `BackendReport.input_text`. */
+  start: number;
+  /** Exclusive character offset into `BackendReport.input_text`. */
+  end: number;
+  level?: number;
+  list_type?: string;
+  page?: number;
+  rows?: string[][];
+}
+
+export interface BackendDocument {
+  version?: number;
+  total_chars?: number;
+  sections?: Array<{ section: string; label: string; start: number; end: number }>;
+  blocks?: BackendDocumentBlock[];
+  text_field?: string;
 }
 
 export interface BackendMatchInputOffset {
@@ -192,6 +223,21 @@ export async function rewriteText(inputSentence: string, sourceSentence: string)
     method: "POST",
     body: JSON.stringify({ input_sentence: inputSentence, source_sentence: sourceSentence }),
   });
+}
+
+export interface DeleteAccountResponse {
+  deleted: boolean;
+  user_id: string;
+}
+
+/** Self-service account deletion (`DELETE /api/account` in backend/api/app.py).
+ * Takes no id — the backend derives the target strictly from the caller's
+ * own verified JWT, so this can only ever delete the signed-in user's own
+ * account. Used both by an eventual self-delete UI and by the
+ * admin-requested deletion-confirm flow (CHANGES_I_WANT.md Admin Portal #3)
+ * once the user clicks "confirm" in that dialog. */
+export async function deleteOwnAccount(): Promise<DeleteAccountResponse> {
+  return requestJson<DeleteAccountResponse>("/api/account", { method: "DELETE" });
 }
 
 export async function pollJob(jobId: string, onProgress?: (job: BackendJob) => void): Promise<BackendJob> {

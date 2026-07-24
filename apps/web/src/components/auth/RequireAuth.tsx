@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { CircleNotch } from "@phosphor-icons/react";
+import { supabase } from "@etymos/shared";
 import { useAuth } from "../../lib/auth";
 import { useAppStore } from "../../lib/store";
 import { fetchMyProfile } from "../../lib/profileQueries";
+import { BannedScreen, DeletionConfirmScreen } from "./AccountStatusScreens";
 
 /** Closed-beta gate state. `unknown` means the profile fetch is still in
  * flight — we must render a loading state rather than guessing, or we'd
@@ -12,6 +14,18 @@ import { fetchMyProfile } from "../../lib/profileQueries";
 type Access = "unknown" | "allowed" | "blocked";
 
 const WAITLIST_PATH = "/waitlist";
+
+/** Blocks the whole app shell in place of the normal access gate below.
+ * `banned` also carries the sign-out we perform for it — once set, it must
+ * survive the user going `null` (the ban check signs them out itself), so
+ * it's tracked separately from `access` and checked first, before the
+ * `!user` redirect-to-login branch would otherwise fire. `deletionRequested`
+ * deliberately does NOT sign the user out — they need a live session to
+ * confirm deletion with their own JWT. */
+type Gate =
+  | { kind: "none" }
+  | { kind: "banned"; reason: string | null; bannedUntil: string | null }
+  | { kind: "deletion-requested" };
 
 function FullPageLoader() {
   return (
@@ -27,6 +41,7 @@ export function RequireAuth() {
   const location = useLocation();
   const syncFromProfile = useAppStore((s) => s.syncFromProfile);
   const [access, setAccess] = useState<Access>("unknown");
+  const [gate, setGate] = useState<Gate>({ kind: "none" });
 
   useEffect(() => {
     if (!user) {
@@ -39,6 +54,17 @@ export function RequireAuth() {
       .then((profile) => {
         if (cancelled) return;
         syncFromProfile(profile);
+
+        if (profile.isBanned) {
+          setGate({ kind: "banned", reason: profile.banReason, bannedUntil: profile.bannedUntil });
+          // Fire-and-forget: the banned screen doesn't depend on this
+          // resolving, and `gate` staying "banned" is what keeps the screen
+          // up even once `user` goes null.
+          void supabase.auth.signOut();
+          return;
+        }
+        setGate(profile.deletionRequestedAt ? { kind: "deletion-requested" } : { kind: "none" });
+
         // Admins bypass the beta gate entirely.
         const allowed = profile.role === "admin" || profile.accessStatus === "approved";
         setAccess(allowed ? "allowed" : "blocked");
@@ -54,6 +80,14 @@ export function RequireAuth() {
       cancelled = true;
     };
   }, [user?.id, syncFromProfile]);
+
+  if (gate.kind === "banned") {
+    return <BannedScreen reason={gate.reason} bannedUntil={gate.bannedUntil} />;
+  }
+
+  if (gate.kind === "deletion-requested") {
+    return <DeletionConfirmScreen />;
+  }
 
   if (loading) {
     return <FullPageLoader />;

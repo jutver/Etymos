@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
 from job_manager import create_job, get_job, make_progress_callback, update_job
 from report_store import delete_report, get_report, list_reports, save_report
-from main import check_pdf_plagiarism
+from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
 from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
 from citations import DEFAULT_REFERENCE_HEADING, add_citation
@@ -165,6 +165,31 @@ def _delete_pdf(user_id: str | None, report_id: str) -> None:
     fallback_path.unlink(missing_ok=True)
 
 
+STUDENT_VERIFICATION_BUCKET = "student-verification"
+
+
+def _purge_user_storage(client, user_id: str) -> None:
+    """Best-effort delete of every Storage object under `{user_id}/` in both
+    per-user buckets. `documents`/`student-verification` objects aren't
+    referenced by any SQL foreign key, so deleting the `auth.users` row (see
+    `delete_account` / `force_delete_user`) never cascades to them on its
+    own — this is the only cleanup path for "along with all their data."
+    Failures are logged, not raised: an account deletion the caller already
+    committed to should not be left half-done because Storage listing/remove
+    hit a transient error.
+    """
+    for bucket in (DOCUMENTS_BUCKET, STUDENT_VERIFICATION_BUCKET):
+        try:
+            objects = client.storage.from_(bucket).list(user_id)
+            paths = [f"{user_id}/{obj['name']}" for obj in (objects or [])]
+            if paths:
+                client.storage.from_(bucket).remove(paths)
+        except Exception:
+            logger.exception(
+                "Failed to purge Storage objects for user_id=%s in bucket=%s", user_id, bucket
+            )
+
+
 # Which of the user's three independent balances to spend on a check:
 # their plan's monthly allowance, or one of the two purchased credit packs.
 BalanceSource = Literal["plan", "standard", "premium"]
@@ -206,17 +231,35 @@ def health():
 
 
 def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
-                 balance_source: BalanceSource) -> None:
+                 balance_source: BalanceSource, input_type: Literal["pdf", "docx"] = "pdf") -> None:
+    """
+    Runs either extraction pipeline depending on `input_type`. Named
+    run_pdf_job (not renamed to something generic) because it is still
+    reached exclusively via the `/api/check/pdf` endpoint below, which now
+    accepts both extensions — see create_pdf_check().
+
+    Original-PDF Storage upload (`_upload_pdf`) only happens for actual
+    PDFs: a .docx has no PDF rendering to show in the Report page's
+    Original view (owned by PlagiarismPdfViewer.tsx), so that view simply
+    has nothing to switch to for a docx-sourced report — the Document view
+    is the only view, which is the correct degraded behaviour rather than
+    uploading the wrong bytes under a `.pdf`-suffixed Storage key.
+    """
     callback = make_progress_callback(job_id)
 
     try:
         update_job(job_id, status="processing", progress=1,
-                   current_step="starting", message="Starting PDF analysis")
+                   current_step="starting",
+                   message=f"Starting {'DOCX' if input_type == 'docx' else 'PDF'} analysis")
 
-        report = check_pdf_plagiarism(pdf_path=pdf_path, progress_callback=callback)
-        report_id = save_report(report, input_type="pdf", input_name=original_name, user_id=user_id)
+        if input_type == "docx":
+            report = check_docx_plagiarism(docx_path=pdf_path, progress_callback=callback)
+        else:
+            report = check_pdf_plagiarism(pdf_path=pdf_path, progress_callback=callback)
 
-        if user_id is not None:
+        report_id = save_report(report, input_type=input_type, input_name=original_name, user_id=user_id)
+
+        if user_id is not None and input_type == "pdf":
             _upload_pdf(user_id, report_id, Path(pdf_path))
 
         update_job(job_id, status="completed", progress=100,
@@ -227,7 +270,7 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
-                   message="PDF analysis failed", error=str(exc))
+                   message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=str(exc))
     finally:
         try:
             Path(pdf_path).unlink(missing_ok=True)
@@ -263,35 +306,53 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
 async def create_pdf_check(request: Request, file: UploadFile = File(...),
                             balance_source: BalanceSource = Form(...),
                             user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Despite the path, this now accepts both .pdf and .docx — kept as one
+    endpoint (rather than adding /api/check/docx) because the web app's
+    submitPdfCheck() (apps/web/src/lib/api.ts) already just POSTs an
+    arbitrary File here, so a docx upload needs zero frontend wiring on
+    this side. What still gates docx end-to-end is the Upload screen's own
+    client-side `file.type === "application/pdf"` check (Upload/index.tsx)
+    — out of scope here (owned by a different in-flight change), so a docx
+    reaches this endpoint only via a direct API call today, not the
+    current Upload UI.
+    """
     filename = file.filename or "uploaded.pdf"
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    lower_name = filename.lower()
+    if lower_name.endswith(".pdf"):
+        input_type: Literal["pdf", "docx"] = "pdf"
+        suffix = ".pdf"
+    elif lower_name.endswith(".docx"):
+        input_type = "docx"
+        suffix = ".docx"
+    else:
+        raise HTTPException(status_code=400, detail="Only PDF or DOCX files are supported.")
 
     ensure_quota_available(user.user_id, balance_source)
 
-    job_id = create_job(input_type="pdf", input_name=filename, user_id=user.user_id)
+    job_id = create_job(input_type=input_type, input_name=filename, user_id=user.user_id)
     temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
-    pdf_path = temp_dir / "input.pdf"
+    upload_path = temp_dir / f"input{suffix}"
 
     try:
-        with pdf_path.open("wb") as output:
+        with upload_path.open("wb") as output:
             shutil.copyfileobj(file.file, output)
     finally:
         await file.close()
 
-    if pdf_path.stat().st_size == 0:
-        pdf_path.unlink(missing_ok=True)
+    if upload_path.stat().st_size == 0:
+        upload_path.unlink(missing_ok=True)
         temp_dir.rmdir()
-        raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     threading.Thread(
         target=run_pdf_job,
-        kwargs={"job_id": job_id, "pdf_path": str(pdf_path), "original_name": filename,
-                "user_id": user.user_id, "balance_source": balance_source},
+        kwargs={"job_id": job_id, "pdf_path": str(upload_path), "original_name": filename,
+                "user_id": user.user_id, "balance_source": balance_source, "input_type": input_type},
         daemon=True,
     ).start()
 
-    return {"job_id": job_id, "status": "queued", "input_type": "pdf"}
+    return {"job_id": job_id, "status": "queued", "input_type": input_type}
 
 
 @app.post("/api/check/text", status_code=202)
@@ -460,9 +521,38 @@ def delete_account(user: AuthedUser = Depends(verify_supabase_jwt)):
     client = get_client()
     if client is None:
         raise HTTPException(status_code=500, detail="Account deletion is not configured on this server.")
+    _purge_user_storage(client, user.user_id)
     try:
         client.auth.admin.delete_user(user.user_id)
     except Exception:
         logger.exception("Failed to delete account for user_id=%s", user.user_id)
         raise HTTPException(status_code=500, detail="Failed to delete account.")
     return {"deleted": True, "user_id": user.user_id}
+
+
+@app.delete("/api/admin/users/{target_user_id}")
+def force_delete_user(target_user_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Admin-triggered account deletion that skips the user-confirmation dialog
+    entirely (CHANGES_I_WANT.md Admin Portal #3: "force delete mode ... will
+    delete without user consent"). The non-force path deliberately reuses
+    `DELETE /api/account` instead of a separate endpoint: the admin side
+    only ever *requests* deletion (setting profiles.deletion_requested_at/by
+    via a direct client update — see apps/admin/src/lib/supabaseQueries.ts),
+    and the user's own browser is the one that calls `DELETE /api/account`
+    to actually confirm and execute it, using their own JWT. This endpoint
+    is the only path that lets an admin's JWT delete *someone else's*
+    account.
+    """
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    client = get_client()
+    if client is None:
+        raise HTTPException(status_code=500, detail="Account deletion is not configured on this server.")
+    _purge_user_storage(client, target_user_id)
+    try:
+        client.auth.admin.delete_user(target_user_id)
+    except Exception:
+        logger.exception("Admin %s failed to force-delete user_id=%s", user.user_id, target_user_id)
+        raise HTTPException(status_code=500, detail="Failed to delete account.")
+    return {"deleted": True, "user_id": target_user_id}

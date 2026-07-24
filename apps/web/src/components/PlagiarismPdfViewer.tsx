@@ -18,6 +18,10 @@ type PlagiarismPdfViewerProps = {
   // show at all (e.g. a text-only submission), so the empty state doesn't
   // read as a false "everything's fine, there's just nothing here".
   unavailableMessage?: string;
+  /** Fires whenever the current page or total page count changes, so a
+   * parent status bar (WordCountPill) can show "Page X of Y" for this view
+   * too, not just the editable Document view. */
+  onPageChange?: (page: number, pageCount: number) => void;
 };
 
 // Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
@@ -118,6 +122,7 @@ export function PlagiarismPdfViewer({
   activeMatchId,
   onMatchClick,
   unavailableMessage,
+  onPageChange,
 }: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -333,6 +338,10 @@ export function PlagiarismPdfViewer({
   useEffect(() => {
     setPageRects([]);
   }, [pageNumber, scale]);
+
+  useEffect(() => {
+    if (numPages) onPageChange?.(pageNumber, numPages);
+  }, [pageNumber, numPages, onPageChange]);
 
   // --- 4. Nhảy tới trang chứa match khi activeMatchId đổi ---
   useEffect(() => {

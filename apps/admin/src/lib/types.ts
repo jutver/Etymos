@@ -21,8 +21,33 @@ export interface Profile {
   access_reviewed_at: string | null;
   access_reviewed_by: string | null;
   access_note: string | null;
+  /** Presence heartbeat — written by the web app every ~60s while a user has
+   * it open (see apps/web/src/lib/auth.tsx). Null means "never seen". */
+  last_seen_at: string | null;
+  banned_permanent: boolean;
+  banned_until: string | null;
+  ban_reason: string | null;
+  banned_by: string | null;
+  deletion_requested_at: string | null;
+  deletion_requested_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Presence threshold: a user is considered "online" if their last heartbeat
+ * was within this window. 2 minutes comfortably covers the ~60s heartbeat
+ * interval plus one missed beat before flipping to offline. */
+export const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+export function isProfileOnline(lastSeenAt: string | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
+}
+
+export function isProfileBanned(p: Pick<Profile, "banned_permanent" | "banned_until">): boolean {
+  if (p.banned_permanent) return true;
+  if (p.banned_until) return new Date(p.banned_until).getTime() > Date.now();
+  return false;
 }
 
 export type ModerationStatus = "none" | "flagged" | "removed";
