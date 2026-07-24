@@ -580,6 +580,11 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "etymos-demo-state",
+      // checkedDocuments is deliberately excluded: it's a same-session fast
+      // path only (Report/index.tsx falls back to fetchCheckedDocument()
+      // from Supabase when a doc isn't in it), and full passage/table
+      // structure per document made it grow unbounded — persisting it blew
+      // the localStorage quota after enough checks accumulated.
       partialize: (s) => ({
         plan: s.plan,
         billingCycle: s.billingCycle,
@@ -587,7 +592,6 @@ export const useAppStore = create<AppState>()(
         standardCredits: s.standardCredits,
         premiumCredits: s.premiumCredits,
         selectedBalance: s.selectedBalance,
-        checkedDocuments: s.checkedDocuments,
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,
         studentVerified: s.studentVerified,
