@@ -15,9 +15,9 @@ import { FormatToolbar } from "./FormatToolbar";
 import { DocumentCanvas, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
-import { WordLimitGate } from "./WordLimitGate";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { buildRenderedPassages, countWords } from "./highlights";
+import { computeWordLimitOffset } from "./wordLimit";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 
 // Private Storage bucket the backend uploads original PDFs into (see
@@ -230,7 +230,13 @@ export default function ReportPage() {
   );
 
   const wordLimit = planWordLimit(plan);
-  const overWordLimit = Boolean(doc && doc.wordCount > wordLimit);
+  // Where (character offset into the document) the word limit is first
+  // crossed — feeds the per-view word-limit treatments so they can cut off
+  // at the right spot instead of just gating the whole view.
+  const overLimitOffset = useMemo(
+    () => computeWordLimitOffset(doc?.passages ?? [], wordLimit),
+    [doc?.passages, wordLimit],
+  );
 
   function handleAcceptRewrite(matchId: string) {
     setResolvedIds((prev) => new Set(prev).add(matchId));
@@ -409,10 +415,8 @@ export default function ReportPage() {
                 activeMatchId={activeMatchId}
                 onMatchClick={setActiveMatchId}
                 onPageChange={handleOriginalPageChange}
+                overLimitOffset={overLimitOffset}
               />
-              {overWordLimit && (
-                <WordLimitGate wordLimit={wordLimit} onUnlock={() => navigate("/paywall")} />
-              )}
             </div>
           ) : (
             <div className="relative flex min-h-0 flex-1 flex-col">
@@ -426,10 +430,8 @@ export default function ReportPage() {
                 onPageChange={handlePageChange}
                 resetKey={resetKey}
                 editorRef={editorRef}
+                overLimitOffset={overLimitOffset}
               />
-              {overWordLimit && (
-                <WordLimitGate wordLimit={wordLimit} onUnlock={() => navigate("/paywall")} />
-              )}
             </div>
           )}
 

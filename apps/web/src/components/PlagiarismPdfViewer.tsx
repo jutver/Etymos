@@ -22,6 +22,11 @@ type PlagiarismPdfViewerProps = {
    * parent status bar (WordCountPill) can show "Page X of Y" for this view
    * too, not just the editable Document view. */
   onPageChange?: (page: number, pageCount: number) => void;
+  /** Character offset (into the document's full text) past which the word
+   * limit has been exceeded. `Infinity`/undefined means nothing is over the
+   * limit. See the suppression logic inside `measurePage` for exactly how
+   * this is used — it's a deliberate approximation, documented there. */
+  overLimitOffset?: number;
 };
 
 // Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
@@ -79,7 +84,7 @@ function normalizeWithMap(raw: string): { normalized: string; map: number[] } {
 
   for (let i = 0; i < raw.length; i++) {
     let ch = raw[i];
-    if (ch === "\u201C" || ch === "\u201D" || ch === "\u2018" || ch === "\u2019") ch = '"';
+    if (ch === "“" || ch === "”" || ch === "‘" || ch === "’") ch = '"';
     const lower = ch.toLowerCase();
 
     if (/\s/.test(lower)) {
@@ -123,9 +128,14 @@ export function PlagiarismPdfViewer({
   onMatchClick,
   unavailableMessage,
   onPageChange,
+  overLimitOffset = Infinity,
 }: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
+  // "Trang hiện tại" giờ không còn điều khiển việc render nữa (mọi trang đều
+  // được mount cùng lúc trong dải cuộn dài) - nó chỉ là trang đang hiển thị
+  // nhiều nhất trong khung nhìn, dùng cho chỉ báo "Trang X / Y" + để biết mũi
+  // tên trước/sau nên cuộn tới đâu. Được cập nhật bởi scroll listener bên dưới.
+  const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.1);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -138,12 +148,17 @@ export function PlagiarismPdfViewer({
   const [analyzing, setAnalyzing] = useState(false);
   const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
 
-  // Toạ độ pixel thật của các match trên TRANG ĐANG XEM, đo trực tiếp từ DOM
-  // text layer mỗi khi trang render xong (chính xác tuyệt đối, không lem).
-  const [pageRects, setPageRects] = useState<HighlightRect[]>([]);
+  // Toạ độ pixel thật của các match, đo trực tiếp từ DOM text layer của TỪNG
+  // TRANG mỗi khi trang đó render text layer xong - khoá theo số trang vì bây
+  // giờ mọi trang đều mount cùng lúc (chính xác tuyệt đối, không lem).
+  const [pageRects, setPageRects] = useState<Record<number, HighlightRect[]>>({});
 
   const matchLocationsCache = useRef<Record<number, MatchLocation[]>>({});
-  const pageContainerRef = useRef<HTMLDivElement | null>(null);
+  // Container DOM của từng trang (để đo Range/getClientRects và để scrollIntoView).
+  const pageContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  // Vùng cuộn thực sự của viewer (KHÔNG phải toàn bộ trang Report) - đây là
+  // "zone" nội bộ mà bước 1 yêu cầu, để trang Report bên ngoài không bị cuộn theo.
+  const viewerRef = useRef<HTMLDivElement | null>(null);
 
   const matchById = useMemo(() => {
     const map = new Map<string, MatchedSource>();
@@ -180,10 +195,95 @@ export function PlagiarismPdfViewer({
     return fileBuffer;
   }, [pdfUrl, fileBuffer]);
 
-  // --- 2. Quét toàn bộ văn bản để biết trang nào có match nào, và lưu lại vị
+  // Đổi file (tài liệu mới) -> mọi ref/toạ độ trang cũ không còn hợp lệ nữa.
+  useEffect(() => {
+    pageContainerRefs.current.clear();
+    setPageRects({});
+    setCurrentPage(1);
+  }, [fileSource]);
+
+  // --- 2. Đo toạ độ pixel THẬT của match trên MỘT trang cụ thể, bằng Range
+  //         API trên text layer thật của trình duyệt. Đây là lý do hết lem
+  //         hoàn toàn: không còn tự suy ra vị trí/độ rộng chữ bằng công thức
+  //         transform hay ước lượng tỉ lệ ký tự nữa, mà lấy đúng
+  //         getClientRects() của chính đoạn text đó do trình duyệt layout ra.
+  //         Trước đây hàm này chỉ chạy cho "trang đang xem"; giờ mỗi trang
+  //         trong dải cuộn dài tự gọi hàm này qua onRenderTextLayerSuccess
+  //         của chính nó, nên tất cả các trang đã mount đều được tô cùng lúc. ---
+  const measurePage = useCallback(
+    (page: number) => {
+      const container = pageContainerRefs.current.get(page);
+      const locations = matchLocationsCache.current[page];
+      if (!container || !locations || locations.length === 0) {
+        setPageRects((prev) => {
+          if (!(page in prev)) return prev;
+          const next: Record<number, HighlightRect[]> = {};
+          for (const key of Object.keys(prev)) {
+            const k = Number(key);
+            if (k !== page) next[k] = prev[k];
+          }
+          return next;
+        });
+        return;
+      }
+      const spans = container.querySelectorAll<HTMLElement>("span");
+      if (spans.length === 0) {
+        setPageRects((prev) => ({ ...prev, [page]: [] }));
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const rects: HighlightRect[] = [];
+
+      for (const loc of locations) {
+        // --- Ẩn highlight của các match đã vượt giới hạn số từ ---------------
+        // `overLimitOffset` là offset ký tự (vào full text tài liệu) đánh dấu
+        // ranh giới "quá giới hạn". Chỉ những match CÓ `startOffset` từ backend
+        // mới được so sánh chính xác với ranh giới này - nếu match không có
+        // `startOffset` (rất nhiều match chỉ có snippet text, không có offset
+        // tuyệt đối) thì KHÔNG đoán mò vị trí của nó, cứ tô bình thường. Đây là
+        // lựa chọn đơn giản hoá có chủ đích (không phải thiếu sót): suy ra vị
+        // trí gần đúng cho match không có offset kém tin cậy hơn là cứ hiển thị nó.
+        const src = matchById.get(loc.id);
+        if (src?.startOffset != null && src.startOffset >= overLimitOffset) continue;
+
+        const startSpan = spans[loc.itemStart];
+        const endSpan = spans[loc.itemEnd];
+        const startNode = startSpan?.firstChild;
+        const endNode = endSpan?.firstChild;
+        if (!startNode || !endNode) continue;
+
+        try {
+          const range = document.createRange();
+          const startLen = startNode.textContent?.length ?? 0;
+          const endLen = endNode.textContent?.length ?? 0;
+          range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
+          range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
+
+          for (const cr of Array.from(range.getClientRects())) {
+            if (cr.width <= 0 || cr.height <= 0) continue;
+            rects.push({
+              matchId: loc.id,
+              severity: loc.severity,
+              x: cr.left - containerRect.left,
+              y: cr.top - containerRect.top,
+              width: cr.width,
+              height: cr.height,
+            });
+          }
+        } catch {
+          // Bỏ qua nếu range không hợp lệ (hiếm gặp, VD trang có cấu trúc đặc biệt)
+        }
+      }
+
+      setPageRects((prev) => ({ ...prev, [page]: dedupeOverlappingRects(rects) }));
+    },
+    [matchById, overLimitOffset],
+  );
+
+  // --- 3. Quét toàn bộ văn bản để biết trang nào có match nào, và lưu lại vị
   //         trí "logic" (item + offset ký tự) của từng match. KHÔNG tính toạ
-  //         độ pixel ở bước này - toạ độ pixel sẽ do trình duyệt tự đo thật
-  //         khi trang đó render (bước 3), nên không còn sai số/lem nữa. ---
+  //         độ pixel ở bước này - toạ độ pixel do trình duyệt tự đo thật khi
+  //         từng trang render (bước 2), nên không còn sai số/lem nữa. ---
   useEffect(() => {
     if (!fileSource) return;
     if (matches.length === 0) {
@@ -265,6 +365,14 @@ export function PlagiarismPdfViewer({
         if (!cancelled) {
           matchLocationsCache.current = locCache;
           setMatchesByPage(byPage);
+          // Các trang trong dải cuộn dài có thể đã render text layer XONG
+          // TRƯỚC KHI bước quét này hoàn tất (chạy song song), nên chủ động đo
+          // lại toàn bộ trang đã mount ngay khi có kết quả quét mới, thay vì
+          // chờ một sự kiện render khác không chắc sẽ xảy ra.
+          requestAnimationFrame(() => {
+            if (cancelled) return;
+            pageContainerRefs.current.forEach((_, p) => measurePage(p));
+          });
         }
       })
       .catch((err) => {
@@ -277,82 +385,65 @@ export function PlagiarismPdfViewer({
     return () => {
       cancelled = true;
     };
+    // measurePage cố ý không nằm trong dependency: nó chỉ được gọi lại ở đây
+    // để "bù" race giữa quét văn bản và render trang, không phải điều khiển
+    // luồng chính của effect này (chỉ nên chạy lại khi file/matches đổi).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileSource, matches]);
 
-  // --- 3. Đo toạ độ pixel THẬT của match trên trang đang hiển thị, bằng
-  //         Range API trên text layer thật của trình duyệt. Đây là lý do hết
-  //         lem hoàn toàn: không còn tự suy ra vị trí/độ rộng chữ bằng công
-  //         thức transform hay ước lượng tỉ lệ ký tự nữa, mà lấy đúng
-  //         getClientRects() của chính đoạn text đó do trình duyệt layout ra. ---
-  const measureCurrentPage = useCallback(() => {
-    const container = pageContainerRef.current;
-    const locations = matchLocationsCache.current[pageNumber];
-    if (!container || !locations || locations.length === 0) {
-      setPageRects([]);
-      return;
-    }
-    const spans = container.querySelectorAll<HTMLElement>("span");
-    if (spans.length === 0) {
-      setPageRects([]);
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const rects: HighlightRect[] = [];
-
-    for (const loc of locations) {
-      const startSpan = spans[loc.itemStart];
-      const endSpan = spans[loc.itemEnd];
-      const startNode = startSpan?.firstChild;
-      const endNode = endSpan?.firstChild;
-      if (!startNode || !endNode) continue;
-
-      try {
-        const range = document.createRange();
-        const startLen = startNode.textContent?.length ?? 0;
-        const endLen = endNode.textContent?.length ?? 0;
-        range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
-        range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
-
-        for (const cr of Array.from(range.getClientRects())) {
-          if (cr.width <= 0 || cr.height <= 0) continue;
-          rects.push({
-            matchId: loc.id,
-            severity: loc.severity,
-            x: cr.left - containerRect.left,
-            y: cr.top - containerRect.top,
-            width: cr.width,
-            height: cr.height,
-          });
-        }
-      } catch {
-        // Bỏ qua nếu range không hợp lệ (hiếm gặp, VD trang có cấu trúc đặc biệt)
-      }
-    }
-
-    setPageRects(dedupeOverlappingRects(rects));
-  }, [pageNumber]);
-
-  // Xoá highlight cũ ngay khi đổi trang/zoom để không hiện sai vị trí trong
-  // lúc chờ trang mới render xong (measureCurrentPage sẽ tự chạy lại qua
+  // Xoá toàn bộ highlight cũ ngay khi đổi zoom để không hiện sai vị trí trong
+  // lúc chờ các trang render lại theo scale mới (mỗi trang sẽ tự đo lại qua
   // onRenderTextLayerSuccess bên dưới).
   useEffect(() => {
-    setPageRects([]);
-  }, [pageNumber, scale]);
+    setPageRects({});
+  }, [scale]);
 
   useEffect(() => {
-    if (numPages) onPageChange?.(pageNumber, numPages);
-  }, [pageNumber, numPages, onPageChange]);
+    if (numPages) onPageChange?.(currentPage, numPages);
+  }, [currentPage, numPages, onPageChange]);
 
-  // --- 4. Nhảy tới trang chứa match khi activeMatchId đổi ---
+  // --- 4. Xác định trang nào đang "hiện diện" nhiều nhất trong khung nhìn của
+  //         chính viewer (không phải window/Report page), dùng cùng kỹ thuật
+  //         với DocumentCanvas.measurePages(): so sánh mép trên của từng trang
+  //         với một "đường tham chiếu" nằm gần đỉnh khung nhìn. ---
+  const updateCurrentPage = useCallback(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !numPages) return;
+    const viewerRect = viewer.getBoundingClientRect();
+    const viewportLine = viewerRect.top + viewerRect.height * 0.35;
+    let current = 1;
+    for (let p = 1; p <= numPages; p++) {
+      const el = pageContainerRefs.current.get(p);
+      if (!el) continue;
+      if (el.getBoundingClientRect().top <= viewportLine) current = p;
+    }
+    setCurrentPage((prev) => (prev === current ? prev : current));
+  }, [numPages]);
+
+  useEffect(() => {
+    if (!numPages) return;
+    const raf = requestAnimationFrame(updateCurrentPage);
+    return () => cancelAnimationFrame(raf);
+  }, [numPages, updateCurrentPage]);
+
+  // Cuộn mượt viewer nội bộ tới 1 trang cụ thể - thay cho việc đổi pageNumber
+  // để "nhảy trang" như trước, vì giờ mọi trang đều đã mount sẵn trong dải dài.
+  const scrollToPage = useCallback((page: number) => {
+    const el = pageContainerRefs.current.get(page);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  // --- 5. Cuộn tới trang chứa match khi activeMatchId đổi ---
   useEffect(() => {
     if (!activeMatchId) return;
     const targetPage = Object.entries(matchesByPage).find(([, ids]) => ids.includes(activeMatchId))?.[0];
-    if (targetPage) setPageNumber(Number(targetPage));
-  }, [activeMatchId, matchesByPage]);
+    if (targetPage) scrollToPage(Number(targetPage));
+  }, [activeMatchId, matchesByPage, scrollToPage]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
-    setPageNumber(1);
+    setCurrentPage(1);
     setLoadError(null);
   }
 
@@ -364,34 +455,49 @@ export function PlagiarismPdfViewer({
   const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
   const severityCounts = useMemo(() => {
     const counts: Record<Severity, number> = { high: 0, moderate: 0, low: 0 };
-    pageRects.forEach((r) => {
-      counts[r.severity] = (counts[r.severity] ?? 0) + 1;
+    Object.values(pageRects).forEach((rects) => {
+      rects.forEach((r) => {
+        counts[r.severity] = (counts[r.severity] ?? 0) + 1;
+      });
     });
     return counts;
   }, [pageRects]);
+  const hasHighlights = severityCounts.high + severityCounts.moderate + severityCounts.low > 0;
   const hoveredMatch = hoveredMatchId ? matchById.get(hoveredMatchId) : null;
-  const hoveredRect = hoveredMatchId ? pageRects.find((r) => r.matchId === hoveredMatchId) : null;
+  const hoveredLocation = useMemo(() => {
+    if (!hoveredMatchId) return null;
+    for (const [pageStr, rects] of Object.entries(pageRects)) {
+      const rect = rects.find((r) => r.matchId === hoveredMatchId);
+      if (rect) return { page: Number(pageStr), rect };
+    }
+    return null;
+  }, [hoveredMatchId, pageRects]);
+
+  const pageNumbers = useMemo(
+    () => (numPages ? Array.from({ length: numPages }, (_, i) => i + 1) : []),
+    [numPages],
+  );
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-surface-tint p-4">
+    <div className="flex h-full flex-col rounded-[var(--radius-card)] border border-line bg-surface-tint p-4">
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
-            disabled={pageNumber <= 1}
+            onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
+            disabled={currentPage <= 1}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
             aria-label="Trang trước"
           >
             <CaretLeft size={16} />
           </button>
           <span className="text-sm font-medium text-ink-700">
-            Trang {pageNumber} / {numPages ?? "..."}
+            Trang {currentPage} / {numPages ?? "..."}
             {analyzing && <span className="ml-2 text-xs text-ink-400">(đang quét trùng lặp...)</span>}
           </span>
           <button
-            onClick={() => setPageNumber((p) => Math.min(numPages ?? p, p + 1))}
-            disabled={!numPages || pageNumber >= numPages}
+            onClick={() => scrollToPage(Math.min(numPages ?? currentPage, currentPage + 1))}
+            disabled={!numPages || currentPage >= numPages}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
             aria-label="Trang sau"
           >
@@ -421,7 +527,7 @@ export function PlagiarismPdfViewer({
       </div>
 
       {/* Legend mức độ trùng lặp, kiểu Turnitin */}
-      {pageRects.length > 0 && (
+      {hasHighlights && (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-line bg-white px-3 py-2 text-xs">
           {(Object.keys(SEVERITY_LABEL) as Severity[]).map((sev) => (
             <div key={sev} className="flex items-center gap-1.5">
@@ -436,78 +542,105 @@ export function PlagiarismPdfViewer({
         </div>
       )}
 
-      {/* Viewer */}
-      <div className="flex justify-center overflow-auto rounded-lg bg-ink-100/40 p-4">
+      {/* Viewer - đây là "vùng riêng" của component này: overflow-y-auto tự
+          quản lý cuộn dải dài nhiều trang, KHÔNG đụng tới scroll của trang
+          Report bên ngoài (Report/index.tsx đã bọc component này trong 1 div
+          `relative flex-1 overflow-hidden`). */}
+      <div
+        ref={viewerRef}
+        onScroll={updateCurrentPage}
+        className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-ink-100/40 p-4"
+      >
         {!pdfUrl ? (
           <p
-            className={`py-12 text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}
+            className={`py-12 text-center text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}
           >
             {unavailableMessage ?? "Không có file PDF gốc để hiển thị preview."}
           </p>
         ) : bufferError ? (
-          <p className="py-12 text-sm font-medium text-severity-high">{bufferError}</p>
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{bufferError}</p>
         ) : loadError ? (
-          <p className="py-12 text-sm font-medium text-severity-high">{loadError}</p>
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{loadError}</p>
         ) : isPreparingFile ? (
-          <p className="py-12 text-sm text-ink-400">Đang chuẩn bị file...</p>
+          <p className="py-12 text-center text-sm text-ink-400">Đang chuẩn bị file...</p>
         ) : fileSource ? (
           <Document
             file={fileSource}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
-            loading={<p className="py-12 text-sm text-ink-400">Đang tải PDF...</p>}
+            loading={<p className="py-12 text-center text-sm text-ink-400">Đang tải PDF...</p>}
           >
-            <div ref={pageContainerRef} className="relative inline-block shadow-[var(--shadow-card)]">
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                renderAnnotationLayer={false}
-                renderTextLayer
-                onRenderTextLayerSuccess={measureCurrentPage}
-              />
-
-              {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
-              <div className="pointer-events-none absolute inset-0">
-                {pageRects.map((r, i) => {
-                  const isActive = activeMatchId === r.matchId;
-                  const isHovered = hoveredMatchId === r.matchId;
-                  const color = SEVERITY_COLOR[r.severity] ?? SEVERITY_COLOR.moderate;
-                  return (
-                    <div
-                      key={`${r.matchId}-${i}`}
-                      onClick={() => onMatchClick?.(r.matchId)}
-                      onMouseEnter={() => setHoveredMatchId(r.matchId)}
-                      onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
-                      className="pointer-events-auto absolute cursor-pointer rounded-[3px] transition-colors"
-                      style={{
-                        left: r.x,
-                        top: r.y,
-                        width: r.width,
-                        height: r.height,
-                        backgroundColor: isActive || isHovered ? color.fillActive : color.fill,
-                        boxShadow: `inset 0 0 0 1px ${color.border}`,
+            {/* Dải trang dài cuộn liên tục - mọi trang được mount cùng lúc,
+                xếp dọc, thay cho việc chỉ mount 1 <Page> theo pageNumber. */}
+            <div className="flex flex-col items-center gap-6">
+              {pageNumbers.map((p) => {
+                const rects = pageRects[p] ?? [];
+                return (
+                  <div
+                    key={p}
+                    ref={(el) => {
+                      if (el) pageContainerRefs.current.set(p, el);
+                      else pageContainerRefs.current.delete(p);
+                    }}
+                    data-page-number={p}
+                    className="relative inline-block shadow-[var(--shadow-card)]"
+                  >
+                    <Page
+                      pageNumber={p}
+                      scale={scale}
+                      renderAnnotationLayer={false}
+                      renderTextLayer
+                      onRenderTextLayerSuccess={() => {
+                        measurePage(p);
+                        updateCurrentPage();
                       }}
                     />
-                  );
-                })}
-              </div>
 
-              {/* Tooltip khi hover */}
-              {hoveredMatch && hoveredRect && (
-                <div
-                  className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
-                  style={{
-                    left: hoveredRect.x,
-                    top: Math.max(0, hoveredRect.y - 8),
-                    transform: "translateY(-100%)",
-                  }}
-                >
-                  <p className="font-semibold text-white">
-                    {SEVERITY_LABEL[hoveredMatch.severity]} · {hoveredMatch.matchPercent}%
-                  </p>
-                  <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
-                </div>
-              )}
+                    {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
+                    <div className="pointer-events-none absolute inset-0">
+                      {rects.map((r, i) => {
+                        const isActive = activeMatchId === r.matchId;
+                        const isHovered = hoveredMatchId === r.matchId;
+                        const color = SEVERITY_COLOR[r.severity] ?? SEVERITY_COLOR.moderate;
+                        return (
+                          <div
+                            key={`${r.matchId}-${i}`}
+                            onClick={() => onMatchClick?.(r.matchId)}
+                            onMouseEnter={() => setHoveredMatchId(r.matchId)}
+                            onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
+                            className="pointer-events-auto absolute cursor-pointer rounded-[3px] transition-colors"
+                            style={{
+                              left: r.x,
+                              top: r.y,
+                              width: r.width,
+                              height: r.height,
+                              backgroundColor: isActive || isHovered ? color.fillActive : color.fill,
+                              boxShadow: `inset 0 0 0 1px ${color.border}`,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Tooltip khi hover - chỉ render trên đúng trang chứa match đang hover */}
+                    {hoveredMatch && hoveredLocation && hoveredLocation.page === p && (
+                      <div
+                        className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
+                        style={{
+                          left: hoveredLocation.rect.x,
+                          top: Math.max(0, hoveredLocation.rect.y - 8),
+                          transform: "translateY(-100%)",
+                        }}
+                      >
+                        <p className="font-semibold text-white">
+                          {SEVERITY_LABEL[hoveredMatch.severity]} · {hoveredMatch.matchPercent}%
+                        </p>
+                        <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Document>
         ) : null}
@@ -522,9 +655,9 @@ export function PlagiarismPdfViewer({
             .map((p) => (
               <button
                 key={p}
-                onClick={() => setPageNumber(p)}
+                onClick={() => scrollToPage(p)}
                 className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                  p === pageNumber
+                  p === currentPage
                     ? "border-brand-400 bg-brand-100 text-brand-700"
                     : "border-line bg-white text-ink-500 hover:border-brand-300"
                 }`}

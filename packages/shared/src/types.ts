@@ -114,6 +114,12 @@ export interface DocPassage {
   page?: number;
   /** Grid contents, meaningful only when `blockType === "table"`. */
   tableRows?: string[][];
+  /** Supabase Storage URL for an extracted image, meaningful only when
+   * `blockType === "image"`. Undefined when extraction/upload failed, the
+   * source document had no image at this position, or the report predates
+   * image extraction — the Document view falls back to a placeholder box
+   * in that case (see DocumentCanvas's "image" case). */
+  imageUrl?: string;
 }
 
 export interface MatchedSource {

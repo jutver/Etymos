@@ -1,15 +1,20 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { FileDashed, ImageSquare } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
-import { chunkPassage, colorForIndex, type RenderedPassage } from "./highlights";
+import { chunkPassage, colorForIndex, type PassageSpan, type RenderedPassage } from "./highlights";
+import { PageRuler } from "./PageRuler";
 
 // US Letter at 96dpi, with 1" margins — the same proportions Word shows.
-// Only the width is still load-bearing: page HEIGHT used to be a constant
-// divisor faking page breaks (see the removed PAGE_CONTENT_HEIGHT); real
-// page breaks now come from each passage's own `page` field (or, absent
-// that, a synthetic paragraph-count bucket — see groupIntoPages below), so
-// a page's rendered height is however tall its content actually is.
+// Width is load-bearing for layout (sheet cap); height is a *minimum* only —
+// real page breaks come from each passage's own `page` field (or, absent
+// that, a synthetic paragraph-count bucket — see groupIntoPages below), so a
+// synthetic bucket that runs long is allowed to push a sheet taller than one
+// physical page rather than being re-measured/re-split.
 const PAGE_WIDTH = 816;
+const PAGE_HEIGHT = 1056;
+// 1" margin at 96dpi — mirrors the sheet's own lg:px-24/py-24 padding and is
+// what PageRuler shades to mark the printable area.
+const PAGE_MARGIN = 96;
 
 // Bucket size used ONLY when a document has no backend page metadata at
 // all (the pasted-text check path never assigns one — see
@@ -25,6 +30,10 @@ export type MatchColorIndex = Map<string, number>;
 interface DocumentBodyProps {
   rendered: RenderedPassage[];
   colorIndexByMatch: MatchColorIndex;
+  /** Character offset into the document's full text where the plan's word
+   * limit is first crossed. `Infinity` (or undefined) means the whole
+   * document is within the limit, so nothing renders muted. */
+  overLimitOffset: number | undefined;
 }
 
 /** One physical page's worth of passages, grouped for real (blank-gap)
@@ -113,31 +122,65 @@ function renderChunks(text: string, spans: RenderedPassage["spans"], colorIndexB
   });
 }
 
+/**
+ * A passage is "over the limit" once its own start sits at/past the
+ * document-wide boundary offset. Passages with no `startOffset` (historical
+ * rows, pasted-text passages) can never be placed relative to the boundary,
+ * so they're always treated as within-limit rather than guessed at. A
+ * passage whose span straddles the boundary is treated as a single unit —
+ * see the module-level note this mirrors in Report/index.tsx's
+ * `computeWordLimitOffset`.
+ */
+function isOverLimit(passage: RenderedPassage["passage"], overLimitOffset: number | undefined): boolean {
+  if (overLimitOffset == null || passage.startOffset == null) return false;
+  return passage.startOffset >= overLimitOffset;
+}
+
+/** Renders passage text, muting it (and dropping its highlight spans/score
+ * badge entirely) once the passage has crossed the word-limit boundary. The
+ * mute colour is applied to an inner <span> rather than the block element
+ * itself — the block's own colour (e.g. `[&_h1]:text-navy-900`) is a
+ * higher-specificity descendant-selector rule that a class on the h1/h2/h3
+ * element directly could never out-rank, but an explicit `color` on a child
+ * always wins over an inherited one regardless of the parent's rule. */
+function renderPassageText(
+  text: string,
+  spans: PassageSpan[],
+  colorIndexByMatch: MatchColorIndex,
+  muted: boolean,
+) {
+  const chunks = renderChunks(text, muted ? [] : spans, colorIndexByMatch);
+  if (!muted) return chunks;
+  return <span className="text-ink-300">{chunks}</span>;
+}
+
 /** Renders one structural block. List items are handled by the caller
  * (renderPageContent groups consecutive list items into a single <ul>/
  * <ol>) — this only ever emits the <li> itself for that case. */
-function renderBlock(item: RenderedPassage, colorIndexByMatch: MatchColorIndex) {
+function renderBlock(item: RenderedPassage, colorIndexByMatch: MatchColorIndex, overLimitOffset: number | undefined) {
   const { passage, spans } = item;
+  const muted = isOverLimit(passage, overLimitOffset);
+  const text = renderPassageText(passage.text, spans, colorIndexByMatch, muted);
 
   switch (passage.blockType) {
     case "title":
       return (
         <h1 key={passage.id} className="!mt-0">
-          {renderChunks(passage.text, spans, colorIndexByMatch)}
+          {text}
         </h1>
       );
     case "heading": {
       const level = passage.level ?? 2;
-      if (level === 1) return <h1 key={passage.id}>{renderChunks(passage.text, spans, colorIndexByMatch)}</h1>;
-      if (level === 3) return <h3 key={passage.id}>{renderChunks(passage.text, spans, colorIndexByMatch)}</h3>;
-      return <h2 key={passage.id}>{renderChunks(passage.text, spans, colorIndexByMatch)}</h2>;
+      if (level === 1) return <h1 key={passage.id}>{text}</h1>;
+      if (level === 3) return <h3 key={passage.id}>{text}</h3>;
+      return <h2 key={passage.id}>{text}</h2>;
     }
     case "list_item":
-      return <li key={passage.id}>{renderChunks(passage.text, spans, colorIndexByMatch)}</li>;
+      return <li key={passage.id}>{text}</li>;
     case "table": {
       const rows = passage.tableRows && passage.tableRows.length > 0 ? passage.tableRows : [[passage.text]];
       return (
-        <table key={passage.id} contentEditable={false}>
+        <table key={passage.id} contentEditable={false} className={cn(muted && "text-ink-300")}>
           <tbody>
             {rows.map((row, ri) => (
               <tr key={ri}>
@@ -150,7 +193,17 @@ function renderBlock(item: RenderedPassage, colorIndexByMatch: MatchColorIndex) 
         </table>
       );
     }
-    case "image":
+    case "image": {
+      // Defensive access: a concurrent task owns adding `imageUrl` to the
+      // shared DocPassage type, which may or may not have landed yet.
+      const imageUrl = (passage as { imageUrl?: string }).imageUrl;
+      if (imageUrl) {
+        return (
+          <div key={passage.id} contentEditable={false} className="my-5 flex justify-center">
+            <img src={imageUrl} alt="" className="max-w-full rounded-[2px]" />
+          </div>
+        );
+      }
       return (
         <div
           key={passage.id}
@@ -161,14 +214,19 @@ function renderBlock(item: RenderedPassage, colorIndexByMatch: MatchColorIndex) 
           <span className="max-w-sm text-xs">{passage.text || "Image (position preserved, not extracted)"}</span>
         </div>
       );
+    }
     default:
-      return <p key={passage.id}>{renderChunks(passage.text, spans, colorIndexByMatch)}</p>;
+      return <p key={passage.id}>{text}</p>;
   }
 }
 
 /** Walks one page's passages, wrapping consecutive list_item blocks of the
  * same list type into a single <ul>/<ol> instead of one per item. */
-function renderPageContent(passages: RenderedPassage[], colorIndexByMatch: MatchColorIndex) {
+function renderPageContent(
+  passages: RenderedPassage[],
+  colorIndexByMatch: MatchColorIndex,
+  overLimitOffset: number | undefined,
+) {
   const nodes: React.ReactNode[] = [];
   let i = 0;
 
@@ -188,12 +246,12 @@ function renderPageContent(passages: RenderedPassage[], colorIndexByMatch: Match
       const ListTag = listType === "number" ? "ol" : "ul";
       nodes.push(
         <ListTag key={`list-${group[0].passage.id}`}>
-          {group.map((g) => renderBlock(g, colorIndexByMatch))}
+          {group.map((g) => renderBlock(g, colorIndexByMatch, overLimitOffset))}
         </ListTag>,
       );
       continue;
     }
-    nodes.push(renderBlock(item, colorIndexByMatch));
+    nodes.push(renderBlock(item, colorIndexByMatch, overLimitOffset));
     i += 1;
   }
 
@@ -213,7 +271,7 @@ function renderPageContent(passages: RenderedPassage[], colorIndexByMatch: Match
  * `rendered` into PageGroups below), not something recomputed from layout
  * on every keystroke — see the module comment on groupIntoPages.
  */
-const DocumentBody = memo(function DocumentBody({ rendered, colorIndexByMatch }: DocumentBodyProps) {
+const DocumentBody = memo(function DocumentBody({ rendered, colorIndexByMatch, overLimitOffset }: DocumentBodyProps) {
   if (rendered.length === 0) {
     return (
       <div className="flex flex-col items-center py-16 text-center">
@@ -234,15 +292,22 @@ const DocumentBody = memo(function DocumentBody({ rendered, colorIndexByMatch }:
         <div
           key={page.key}
           data-page-sheet="true"
+          style={{ minHeight: PAGE_HEIGHT }}
           className={cn(
-            "relative min-h-[70vh] rounded-[2px] border border-line/70 bg-white px-8 py-12 shadow-[var(--shadow-card)] sm:px-14 sm:py-16 lg:px-24 lg:py-24",
-            // The blank space between pages IS the page break — a real
-            // gap in the layout, not a tick mark drawn over continuous
-            // text (the previous implementation).
-            pageIndex > 0 && "mt-10 sm:mt-14",
+            // A real US-Letter sheet: 816×1056px at 96dpi, ~1in margins on
+            // all sides (px-24/py-24 = 96px at the sheet's full width).
+            // min-height only — a synthetic docx bucket that overflows one
+            // page's worth of content is allowed to grow the sheet taller
+            // rather than being re-measured/re-split (see groupIntoPages).
+            "relative rounded-[2px] border border-line bg-white px-8 py-12 shadow-[var(--shadow-card-hover)] sm:px-14 sm:py-16 md:px-24 md:py-24",
+            // The blank space between pages IS the page break — a real,
+            // generous gap in the layout (not a soft transition) so each
+            // sheet reads as a distinct physical page, not a continuous
+            // scroll with tick marks drawn over it.
+            pageIndex > 0 && "mt-14 sm:mt-20",
           )}
         >
-          {renderPageContent(page.passages, colorIndexByMatch)}
+          {renderPageContent(page.passages, colorIndexByMatch, overLimitOffset)}
           <div
             contentEditable={false}
             className="pointer-events-none absolute inset-x-0 -bottom-7 select-none text-center text-[0.6875rem] font-medium tabular-nums text-ink-300"
@@ -266,6 +331,11 @@ export interface DocumentCanvasProps {
   /** Bumped by the parent to force a full re-mount (e.g. restoring a version). */
   resetKey: number;
   editorRef: React.RefObject<HTMLDivElement | null>;
+  /** Character offset into the document's full text where the plan's word
+   * limit is first crossed (see Report/index.tsx's `computeWordLimitOffset`).
+   * `Infinity` means the whole document is within the limit. Omitted
+   * entirely also means "nothing is over the limit". */
+  overLimitOffset?: number;
 }
 
 export function DocumentCanvas({
@@ -278,6 +348,7 @@ export function DocumentCanvas({
   onPageChange,
   resetKey,
   editorRef,
+  overLimitOffset,
 }: DocumentCanvasProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageCountRef = useRef(1);
@@ -363,9 +434,16 @@ export function DocumentCanvas({
     <div
       ref={scrollRef}
       onScroll={() => measurePages()}
-      className="relative flex-1 overflow-y-auto scrollbar-thin bg-surface-muted px-4 pb-32 pt-24"
+      className="relative flex-1 overflow-y-auto scrollbar-thin bg-surface-muted px-4 pb-32"
     >
       <div className="mx-auto w-full" style={sheetStyle}>
+        {/* Sticky within this scroll zone only (its containing block is
+            `scrollRef`, the nearest scrolling ancestor) — pinned below the
+            floating FormatToolbar overlay the same way a word processor
+            keeps its ruler in view while the page scrolls underneath. */}
+        <div className="sticky top-0 z-[5] overflow-x-auto bg-surface-muted pb-3 pt-24 scrollbar-thin">
+          <PageRuler width={PAGE_WIDTH} margin={PAGE_MARGIN} />
+        </div>
         <div
           key={resetKey}
           ref={editorRef}
@@ -389,13 +467,18 @@ export function DocumentCanvas({
             "[&_ul]:mb-5 [&_ul]:list-disc [&_ul]:pl-7 [&_ol]:mb-5 [&_ol]:list-decimal [&_ol]:pl-7",
             "[&_li]:mb-1.5",
             "[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_blockquote]:text-ink-700",
-            "[&_table]:mb-5 [&_table]:w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:text-sm",
+            // block + overflow-x-auto makes the table itself the scroll
+            // container for wide content (long cells, many columns) instead
+            // of letting it bleed past the sheet's edge — works whether the
+            // table came from renderBlock's extracted rows or was typed in
+            // directly via FormatToolbar's insertTable.
+            "[&_table]:mb-5 [&_table]:block [&_table]:w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:table-auto [&_table]:border-collapse [&_table]:text-sm",
             "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top",
             "[&_th]:border [&_th]:border-line [&_th]:bg-surface-muted [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold",
             locked && "cursor-default caret-transparent select-text",
           )}
         >
-          <DocumentBody rendered={rendered} colorIndexByMatch={colorIndexByMatch} />
+          <DocumentBody rendered={rendered} colorIndexByMatch={colorIndexByMatch} overLimitOffset={overLimitOffset} />
         </div>
       </div>
     </div>

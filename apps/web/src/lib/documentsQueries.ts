@@ -69,6 +69,17 @@ interface DocumentPassageRow {
   severity: DocPassage["severity"] | null;
   match_id: string | null;
   sort_order: number | null;
+  // Added by supabase/migrations/20260724020000_document_passage_structure.sql.
+  // All nullable — older rows (and reports saved before this shipped) have
+  // these as null, which maps to the corresponding DocPassage field being
+  // `undefined` (see the mapping below).
+  block_type: DocPassage["blockType"] | null;
+  level: DocPassage["level"] | null;
+  list_type: DocPassage["listType"] | null;
+  page: number | null;
+  table_rows: string[][] | null;
+  // Added by supabase/migrations/20260725000000_document_passage_image_url.sql.
+  image_url: string | null;
 }
 
 function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
@@ -152,6 +163,12 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     text: p.text ?? "",
     severity: p.severity ?? undefined,
     matchId: p.match_id ?? undefined,
+    blockType: p.block_type ?? undefined,
+    level: p.level ?? undefined,
+    listType: p.list_type ?? undefined,
+    page: p.page ?? undefined,
+    tableRows: p.table_rows ?? undefined,
+    imageUrl: p.image_url ?? undefined,
   }));
 
   return {

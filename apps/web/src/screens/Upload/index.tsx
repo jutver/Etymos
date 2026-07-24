@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitTextCheck, submitPdfCheck } from "../../lib/api";
 import {
@@ -52,6 +52,7 @@ export default function UploadPage() {
   const addCheckingEntry = useAppStore((s) => s.addCheckingEntry);
   const updateHistoryEntry = useAppStore((s) => s.updateHistoryEntry);
   const history = useAppStore((s) => s.history);
+  const fetchHistory = useAppStore((s) => s.fetchHistory);
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const requestCheck = useAppStore((s) => s.requestCheck);
@@ -76,6 +77,11 @@ export default function UploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [balanceDialogOpen, setBalanceDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void fetchHistory(user.id);
+  }, [user?.id, fetchHistory]);
 
   const wordCount = pastedText.trim() ? pastedText.trim().split(/\s+/).length : 0;
   const wordLimit = planWordLimit(plan);

@@ -1,6 +1,9 @@
 import fitz
+import logging
 import re
 from collections import Counter
+
+logger = logging.getLogger(__name__)
 
 
 ROMAN = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"}
@@ -686,6 +689,137 @@ def build_structured_blocks(section_lines, body_size):
     return blocks
 
 
+def extract_pdf_images(pdf_path):
+    """
+    Best-effort raster-image extraction per PDF page, for the Document
+    view's "image" blocks. Returns {page_number (1-based): [block, ...]}
+    where each block is {"type": "image", "level": None, "list_type":
+    None, "text": "", "page": N, "_image_bytes": bytes, "_image_ext": str}.
+
+    `_image_bytes` / `_image_ext` are an in-process-only carrier consumed
+    by report_store._extract_and_upload_images (turned into a Storage
+    `image_url` and stripped before the report is persisted/returned) —
+    they are never meant to reach a JSON response as-is.
+
+    Uses fitz.Pixmap per xref (page.get_images(full=True) returns xref
+    ids, not bytes) rather than page.get_image_info(), which only reports
+    geometry. Never raises: any page/xref PyMuPDF can't materialize is
+    skipped — image extraction is additive and must never break the core
+    text-extraction pipeline this module also implements.
+    """
+    images_by_page = {}
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:
+        logger.exception("Failed to open PDF for image extraction: %s", pdf_path)
+        return images_by_page
+
+    try:
+        for page_idx, page in enumerate(doc):
+            page_number = page_idx + 1
+            try:
+                image_list = page.get_images(full=True)
+            except Exception:
+                logger.exception("Failed to list images on PDF page %d", page_number)
+                continue
+
+            seen_xrefs = set()
+            for img in image_list:
+                xref = img[0]
+                if xref in seen_xrefs:
+                    continue
+                seen_xrefs.add(xref)
+
+                pixmap = None
+                try:
+                    pixmap = fitz.Pixmap(doc, xref)
+                    if pixmap.colorspace is None:
+                        # Stencil/mask image with no colour data of its own —
+                        # nothing meaningful to render standalone.
+                        continue
+                    if pixmap.n - pixmap.alpha >= 4:
+                        # CMYK (or similar) — PNG encoding needs RGB/gray.
+                        pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+                    image_bytes = pixmap.tobytes("png")
+                except Exception:
+                    logger.exception(
+                        "Failed to materialize PDF image xref=%s on page %d", xref, page_number
+                    )
+                    continue
+                finally:
+                    if pixmap is not None:
+                        pixmap = None
+
+                if not image_bytes:
+                    continue
+
+                images_by_page.setdefault(page_number, []).append({
+                    "type": "image", "level": None, "list_type": None,
+                    "text": "", "page": page_number,
+                    "_image_bytes": image_bytes, "_image_ext": "png",
+                })
+    finally:
+        doc.close()
+
+    return images_by_page
+
+
+def _insert_page_images(result_sections, images_by_page):
+    """
+    Splice extracted PDF images into `result_sections` (mutated in place),
+    each positioned right after the LAST block anywhere in the document
+    (walking sections in `result_sections`'s own iteration order, which
+    mirrors document_model.SECTION_ORDER — recognized sections in order,
+    then the "body" catch-all last) that shares its page number. This is
+    the same fidelity level PDF text extraction already has (per-block
+    page numbers, no finer in-page positioning) — see this module's and
+    document_model.py's module docstrings.
+
+    A page whose images have no matching text block anywhere (e.g. a page
+    that is entirely a figure, with no text PyMuPDF recognized as content)
+    falls back to the end of the "body" section, so the image is
+    surfaced rather than silently dropped.
+
+    Never raises: image placement is a display nicety layered on top of
+    already-extracted text, not something that should ever take down
+    extraction — see this module's docstring.
+    """
+    if not images_by_page:
+        return
+
+    try:
+        last_position = {}
+        for section_name, blocks in result_sections.items():
+            for index, block in enumerate(blocks):
+                page = block.get("page")
+                if page is not None:
+                    last_position[page] = (section_name, index)
+
+        # Group insertions per section, applied in descending index order
+        # so an earlier insert never shifts a later insertion's index.
+        insertions = {}
+        fallback_images = []
+
+        for page, images in images_by_page.items():
+            target = last_position.get(page)
+            if target is None:
+                fallback_images.extend(images)
+                continue
+            section_name, index = target
+            insertions.setdefault(section_name, []).append((index, images))
+
+        for section_name, items in insertions.items():
+            blocks = result_sections[section_name]
+            for index, images in sorted(items, key=lambda item: item[0], reverse=True):
+                blocks[index + 1:index + 1] = images
+
+        if fallback_images:
+            result_sections.setdefault(FALLBACK_SECTION, [])
+            result_sections[FALLBACK_SECTION].extend(fallback_images)
+    except Exception:
+        logger.exception("Failed to splice extracted PDF images into structured sections.")
+
+
 def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
     """
     Structure-preserving counterpart to extract_sections_from_pdf().
@@ -786,6 +920,12 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
     result_sections = {name: blocks for name, blocks in blocks_by_section.items() if blocks}
     if body_blocks:
         result_sections[FALLBACK_SECTION] = body_blocks
+
+    try:
+        images_by_page = extract_pdf_images(pdf_path)
+        _insert_page_images(result_sections, images_by_page)
+    except Exception:
+        logger.exception("PDF image extraction failed for %s; continuing without images.", pdf_path)
 
     return {
         "title": extract_title_from_lines(lines),

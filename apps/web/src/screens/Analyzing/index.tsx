@@ -109,7 +109,12 @@ function buildPassagesFromBlocks(
   return blocks
     .map((block, index) => {
       const text = inputText.slice(block.start, block.end).trim();
-      if (!text) return null;
+      // An "image" block is zero-length by construction (backend/
+      // document_model.py's _interleave_image_blocks — it has no text of
+      // its own, only a position in reading order), so it would otherwise
+      // be silently dropped by the empty-text check every other block
+      // type needs. Every other block type keeps the original behaviour.
+      if (!text && block.type !== "image") return null;
 
       const matchingMatch =
         matches.find(
@@ -140,6 +145,7 @@ function buildPassagesFromBlocks(
         listType,
         page: block.page,
         tableRows: block.rows,
+        imageUrl: block.image_url,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);

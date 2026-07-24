@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, forwardRef } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUUpLeft,
   ArrowUUpRight,
@@ -65,19 +66,18 @@ const TEXT_COLORS = [
   { label: "Violet", value: "#7c3aed" },
 ];
 
-function ToolButton({
-  label,
-  onAction,
-  children,
-  active = false,
-}: {
-  label: string;
-  onAction: () => void;
-  children: React.ReactNode;
-  active?: boolean;
-}) {
+const ToolButton = forwardRef<
+  HTMLButtonElement,
+  {
+    label: string;
+    onAction: () => void;
+    children: React.ReactNode;
+    active?: boolean;
+  }
+>(function ToolButton({ label, onAction, children, active = false }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       title={label}
       aria-label={label}
@@ -92,6 +92,91 @@ function ToolButton({
     >
       {children}
     </button>
+  );
+});
+
+/**
+ * Portal-based dropdown anchored to a trigger element's on-screen position.
+ *
+ * The toolbar's root container sets `overflow-x-auto` (for horizontal
+ * scrolling when it overflows the viewport), which per the CSS overflow
+ * spec forces the other axis to `overflow-y: auto` too — clipping any
+ * `absolute`-positioned descendant popup to the toolbar's own pill-shaped
+ * bounds. Rendering into `document.body` via a portal with `position:
+ * fixed` escapes that ancestor clipping entirely (same technique as
+ * `ui/ContextMenu.tsx`, but anchored to a trigger button's rect —
+ * horizontally centered underneath — rather than a cursor point, and
+ * self-measuring so it clamps against its own actual size instead of an
+ * assumed menu size).
+ */
+function ToolbarDropdown({
+  open,
+  onClose,
+  anchorRef,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; ready: boolean }>({
+    left: 0,
+    top: 0,
+    ready: false,
+  });
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos((p) => (p.ready ? { ...p, ready: false } : p));
+      return;
+    }
+    const anchor = anchorRef.current;
+    const panel = panelRef.current;
+    if (!anchor || !panel) return;
+    const anchorRect = anchor.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const center = anchorRect.left + anchorRect.width / 2;
+    const left = Math.min(
+      Math.max(8, center - panelRect.width / 2),
+      window.innerWidth - panelRect.width - 8,
+    );
+    const top = Math.min(anchorRect.bottom + 8, window.innerHeight - panelRect.height - 8);
+    setPos({ left, top, ready: true });
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open, onClose, anchorRef]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={{ position: "fixed", left: pos.left, top: pos.top, visibility: pos.ready ? "visible" : "hidden" }}
+      className="z-50"
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {children}
+    </div>,
+    document.body,
   );
 }
 
@@ -117,6 +202,8 @@ export function FormatToolbar({
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const colorButtonRef = useRef<HTMLButtonElement>(null);
+  const columnsButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
@@ -204,36 +291,32 @@ export function FormatToolbar({
               <TextStrikethrough size={16} />
             </ToolButton>
 
-            <div className="relative">
-              <ToolButton
-                label="Text colour"
-                active={colorOpen}
-                onAction={() => setColorOpen((v) => !v)}
-              >
-                <PaintBucket size={16} />
-              </ToolButton>
-              {colorOpen && (
-                <div
-                  className="absolute left-1/2 top-[calc(100%+8px)] z-20 flex -translate-x-1/2 gap-1 rounded-[var(--radius-input)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
-                  onMouseDown={(e) => e.preventDefault()}
-                >
-                  {TEXT_COLORS.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      title={c.label}
-                      aria-label={`Text colour ${c.label}`}
-                      onClick={() => {
-                        exec("foreColor", c.value);
-                        setColorOpen(false);
-                      }}
-                      className="size-6 rounded-full border border-line/70 transition-transform hover:scale-110"
-                      style={{ backgroundColor: c.value }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            <ToolButton
+              ref={colorButtonRef}
+              label="Text colour"
+              active={colorOpen}
+              onAction={() => setColorOpen((v) => !v)}
+            >
+              <PaintBucket size={16} />
+            </ToolButton>
+            <ToolbarDropdown open={colorOpen} onClose={() => setColorOpen(false)} anchorRef={colorButtonRef}>
+              <div className="flex gap-1 rounded-[var(--radius-input)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
+                {TEXT_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    title={c.label}
+                    aria-label={`Text colour ${c.label}`}
+                    onClick={() => {
+                      exec("foreColor", c.value);
+                      setColorOpen(false);
+                    }}
+                    className="size-6 rounded-full border border-line/70 transition-transform hover:scale-110"
+                    style={{ backgroundColor: c.value }}
+                  />
+                ))}
+              </div>
+            </ToolbarDropdown>
 
             <Divider />
 
@@ -265,42 +348,42 @@ export function FormatToolbar({
               <Table size={16} />
             </ToolButton>
 
-            <div className="relative">
-              <ToolButton
-                label="Columns"
-                active={columnsOpen}
-                onAction={() => setColumnsOpen((v) => !v)}
-              >
-                <Columns size={16} />
-              </ToolButton>
-              {columnsOpen && (
-                <div
-                  className="absolute left-1/2 top-[calc(100%+8px)] z-20 flex -translate-x-1/2 flex-col gap-0.5 rounded-[var(--radius-input)] border border-line bg-white p-1 shadow-[var(--shadow-pop)]"
-                  onMouseDown={(e) => e.preventDefault()}
+            <ToolButton
+              ref={columnsButtonRef}
+              label="Columns"
+              active={columnsOpen}
+              onAction={() => setColumnsOpen((v) => !v)}
+            >
+              <Columns size={16} />
+            </ToolButton>
+            <ToolbarDropdown
+              open={columnsOpen}
+              onClose={() => setColumnsOpen(false)}
+              anchorRef={columnsButtonRef}
+            >
+              <div className="flex flex-col gap-0.5 rounded-[var(--radius-input)] border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    insertColumns(2);
+                    setColumnsOpen(false);
+                  }}
+                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      insertColumns(2);
-                      setColumnsOpen(false);
-                    }}
-                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
-                  >
-                    Two columns
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      insertColumns(3);
-                      setColumnsOpen(false);
-                    }}
-                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
-                  >
-                    Three columns
-                  </button>
-                </div>
-              )}
-            </div>
+                  Two columns
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    insertColumns(3);
+                    setColumnsOpen(false);
+                  }}
+                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
+                >
+                  Three columns
+                </button>
+              </div>
+            </ToolbarDropdown>
           </>
         )}
       </div>

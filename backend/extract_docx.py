@@ -25,12 +25,16 @@ recovers headings/lists more reliably than the PDF path can.
 
 from __future__ import annotations
 
+import logging
+
 from docx import Document
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from extractor import clean_text, LIST_MARKER_RE, BULLET_MARKER_CHARS, FALLBACK_SECTION
+
+logger = logging.getLogger(__name__)
 
 HEADING_STYLE_LEVEL = {
     "title": 1,
@@ -143,6 +147,79 @@ def _paragraph_block(paragraph: Paragraph, page: int) -> dict | None:
     return {"type": "paragraph", "level": None, "list_type": None, "text": text, "page": page}
 
 
+# Maps the OOXML relationship part's content-type to a file extension for
+# the Storage upload key (see report_store._extract_and_upload_images).
+# Anything not listed falls back to "png" — a wrong extension on a rare
+# format is a cosmetic filename mismatch, not a data-loss risk, since the
+# bytes themselves (and the upload's explicit content-type) are unaffected.
+_IMAGE_EXT_BY_CONTENT_TYPE = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/gif": "gif",
+    "image/bmp": "bmp",
+    "image/tiff": "tiff",
+    "image/x-emf": "emf",
+    "image/x-wmf": "wmf",
+}
+
+
+def _paragraph_images(paragraph: Paragraph, document: Document, page: int) -> list[dict]:
+    """
+    Extract every inline picture embedded in `paragraph` as best-effort
+    "image" blocks carrying raw bytes (`_image_bytes`/`_image_ext`) for a
+    later upload step (report_store._extract_and_upload_images) to turn
+    into a Storage `image_url`. These two keys are an in-process-only
+    carrier — never JSON-serialized, always stripped before a report is
+    persisted or returned.
+
+    python-docx exposes an inline picture as a `<w:drawing>` run child
+    containing a `<pic:pic>` element whose `<a:blip r:embed="...">`
+    attribute is the relationship id; `document.part.related_parts[rId]`
+    resolves that id to the actual image part or raises KeyError for a
+    dangling relationship (rare, but not fatal here).
+
+    Never raises: any failure extracting one picture is logged and
+    skipped, exactly like the rest of this module's "one bad element
+    should never drop the whole document" posture — image extraction is
+    additive and must never break text extraction.
+    """
+    blocks: list[dict] = []
+    try:
+        pics = paragraph._p.xpath(".//pic:pic")
+    except Exception:
+        logger.exception("Failed to look up inline pictures in a docx paragraph.")
+        return blocks
+
+    seen_rids: set[str] = set()
+    for pic in pics:
+        try:
+            for blip in pic.xpath(".//a:blip"):
+                rid = blip.get(qn("r:embed"))
+                if not rid or rid in seen_rids:
+                    continue
+                seen_rids.add(rid)
+
+                part = document.part.related_parts.get(rid)
+                if part is None:
+                    continue
+                image_bytes = part.blob
+                if not image_bytes:
+                    continue
+
+                ext = _IMAGE_EXT_BY_CONTENT_TYPE.get(part.content_type, "png")
+                blocks.append({
+                    "type": "image", "level": None, "list_type": None,
+                    "text": "", "page": page,
+                    "_image_bytes": image_bytes, "_image_ext": ext,
+                })
+        except Exception:
+            logger.exception("Failed to extract an inline docx image; skipping it.")
+            continue
+
+    return blocks
+
+
 def _table_block(table: Table, page: int) -> dict | None:
     rows = []
     for row in table.rows:
@@ -199,6 +276,21 @@ def extract_structured_sections_from_docx(docx_path: str) -> dict:
         if block:
             blocks.append(block)
             blocks_on_page += 1
+
+        # Best-effort inline-image extraction. Runs regardless of whether
+        # the paragraph also had text (a figure often sits alone in its
+        # own paragraph, in which case `block` above is None) — appended
+        # right after the paragraph's own text block so an image lands
+        # next to whatever caption/text shares its paragraph, matching
+        # document order closely enough for the Document view.
+        try:
+            image_blocks = _paragraph_images(item, document, page)
+        except Exception:
+            image_blocks = []
+            logger.exception("Image extraction failed for a docx paragraph; continuing without its images.")
+        if image_blocks:
+            blocks.extend(image_blocks)
+            blocks_on_page += len(image_blocks)
 
         if _has_hard_page_break(item):
             page += 1

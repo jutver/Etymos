@@ -75,6 +75,10 @@ export interface BackendDocumentBlock {
   list_type?: string;
   page?: number;
   rows?: string[][];
+  /** Supabase Storage URL for an extracted image; present only on
+   * `type: "image"` blocks that were successfully uploaded (see
+   * backend/api/report_store.py's _extract_and_upload_images). */
+  image_url?: string;
 }
 
 export interface BackendDocument {

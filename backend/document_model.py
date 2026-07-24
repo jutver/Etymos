@@ -123,6 +123,81 @@ def _split_paragraphs(text: str, base: int) -> list[tuple[int, int]]:
     ]
 
 
+def _interleave_image_blocks(
+    section_blocks: list[dict],
+    struct_blocks: list[dict],
+    *,
+    name: str,
+    label: str,
+    section_start: int,
+) -> list[dict]:
+    """
+    Splice "image" hints from `struct_blocks` into `section_blocks` (the
+    already-built title/paragraph/list/table blocks, 1:1 aligned to the
+    section's non-image hints) at their original document position.
+
+    An image hint has no text, so it can't be a `_split_paragraphs` span
+    the way every other block type is (see build_document's docstring) —
+    instead its position is inferred from how many *text* hints precede
+    it in `struct_blocks`'s original document order: an image that
+    appeared after the Nth text hint (1-indexed) is inserted right after
+    `section_blocks[N-1]`; an image before any text hint is inserted at
+    the very start of the section.
+
+    The inserted block has zero-length span (`start == end`) at that
+    position — it has no characters of its own in the document text, only
+    a place in the reading order — and carries forward `page` plus the
+    raw-bytes carrier fields (`_image_bytes` / `_image_ext`) an upload
+    step downstream turns into `image_url` and then strips (never
+    JSON-serialized as-is; see report_store._extract_and_upload_images).
+    """
+    # anchor_index -> hints to insert right after section_blocks[anchor_index]
+    # (anchor_index == -1 means "before the first block").
+    insertions: dict[int, list[dict]] = {}
+    text_count = 0
+    for hint in struct_blocks:
+        if (hint or {}).get("type") == "image":
+            insertions.setdefault(text_count - 1, []).append(hint)
+        else:
+            text_count += 1
+
+    def make_image_block(hint: dict, position: int, image_index: int) -> dict:
+        block = {
+            "block_id": f"{name}_image_{image_index}",
+            "section": name,
+            "label": label,
+            "type": "image",
+            "index": image_index,
+            "start": position,
+            "end": position,
+        }
+        if hint.get("page") is not None:
+            block["page"] = hint["page"]
+        if hint.get("_image_bytes") is not None:
+            block["_image_bytes"] = hint["_image_bytes"]
+        if hint.get("_image_ext"):
+            block["_image_ext"] = hint["_image_ext"]
+        return block
+
+    merged: list[dict] = []
+    image_index = 0
+
+    for i, block in enumerate(section_blocks):
+        for hint in insertions.get(i - 1, []):
+            position = section_blocks[i - 1]["end"] if i > 0 else section_blocks[0]["start"]
+            merged.append(make_image_block(hint, position, image_index))
+            image_index += 1
+        merged.append(block)
+
+    # Images that came after the section's last text hint.
+    for hint in insertions.get(len(section_blocks) - 1, []):
+        position = section_blocks[-1]["end"] if section_blocks else section_start
+        merged.append(make_image_block(hint, position, image_index))
+        image_index += 1
+
+    return merged
+
+
 def build_document(sections: dict, structured_sections: dict | None = None) -> dict:
     """
     Build the canonical document from a `sections` dict (as returned by
@@ -141,6 +216,14 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
     counts ever mismatch (a caller passed sections that weren't built this
     way) we silently fall back to the plain "paragraph" typing below rather
     than mis-tag content — never crash on this being best-effort.
+
+    A block's `type` may also be "image": an extracted figure has no text
+    of its own, so it can't be one of the `_split_paragraphs` spans above.
+    Image hints are filtered out of the span-zipping step and interleaved
+    back in afterward by `_interleave_image_blocks`, positioned relative
+    to the surrounding text hints' original document order. An image
+    block therefore has a zero-length span (`start == end`) — it marks a
+    position in the reading order, not a range of document text.
 
     Returns:
         {
@@ -198,14 +281,26 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
 
         spans = _split_paragraphs(content, start)
         struct_blocks = structured_sections.get(name) or []
-        type_hints = struct_blocks if len(struct_blocks) == len(spans) else None
+        # Image hints carry no text (see extract_docx.py / extractor.py),
+        # so they never produced a span in `content` — flatten_structured_
+        # sections joins only non-empty `text` fields, which is exactly
+        # `text_hints` below. Splitting them out here is what keeps the
+        # non-image zip 1:1 (unchanged behaviour for documents without
+        # images) while still letting an image be positioned relative to
+        # its neighbouring text, via `_interleave_image_blocks` below.
+        text_hints = [h for h in struct_blocks if (h or {}).get("type") != "image"]
+        image_hints = [h for h in struct_blocks if (h or {}).get("type") == "image"]
+        type_hints = text_hints if len(text_hints) == len(spans) else None
+
+        section_label = SECTION_LABELS.get(name, name.replace("_", " ").title())
+        section_blocks: list[dict] = []
 
         for index, (p_start, p_end) in enumerate(spans):
             hint = type_hints[index] if type_hints else None
             block = {
                 "block_id": f"{name}_{index}",
                 "section": name,
-                "label": SECTION_LABELS.get(name, name.replace("_", " ").title()),
+                "label": section_label,
                 "type": "title" if name == "title" else (hint["type"] if hint else "paragraph"),
                 "index": index,
                 "start": p_start,
@@ -220,7 +315,19 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
                     block["rows"] = hint["rows"]
                 if hint.get("page") is not None:
                     block["page"] = hint["page"]
-            blocks.append(block)
+            section_blocks.append(block)
+
+        # Only interleave images when the text zip above was reliable
+        # (type_hints is not None) — on a counts-mismatch fallback we
+        # already can't trust hint alignment, so guessing image position
+        # would risk misplacing it worse than just dropping it.
+        if image_hints and type_hints is not None:
+            section_blocks = _interleave_image_blocks(
+                section_blocks, struct_blocks,
+                name=name, label=section_label, section_start=start,
+            )
+
+        blocks.extend(section_blocks)
 
     text = "".join(parts)
 
