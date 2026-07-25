@@ -389,11 +389,30 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
         # Best-effort debug/cache artifact only — not required for the API
         # response. Image blocks in document["blocks"] still carry raw
         # `_image_bytes`/`_image_ext` at this point (stripped later, in
-        # report_store.py's save_report()), which json.dump cannot
-        # serialize; a document with an extracted image must not crash the
-        # whole check over this write.
+        # report_store.py's save_report(), which the caller runs on this
+        # same `final_report` object to actually upload images to Supabase
+        # Storage) — so this write must strip them from a COPY, never the
+        # real object, or report_store.py would lose the bytes it needs to
+        # upload images. Copying lets this debug write actually succeed
+        # instead of always silently failing on every document that has an
+        # extracted image (i.e. most real documents now). The try/except
+        # stays as a final backstop so an unrelated write error still can't
+        # take down the whole check.
+        blocks = final_report.get("document", {}).get("blocks")
+        debug_report = final_report
+        if blocks:
+            debug_report = {
+                **final_report,
+                "document": {
+                    **final_report["document"],
+                    "blocks": [
+                        {k: v for k, v in b.items() if k not in ("_image_bytes", "_image_ext")}
+                        for b in blocks
+                    ],
+                },
+            }
         save_final_report(
-            final_report,
+            debug_report,
             str(PAPER_CACHE_DIR / "final_report.json")
         )
     except Exception:
