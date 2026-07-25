@@ -158,6 +158,15 @@ export interface MatchedSource {
    * web app holds, so they are informational only today. */
   sourceStartOffset?: number;
   sourceEndOffset?: number;
+  /** --- Citation metadata (optional) ---------------------------------------
+   * Populated for freshly-run checks (backend/paper_cache.py now carries
+   * these through); absent for matches restored from Supabase, whose
+   * `document_matches` rows predate these columns. The Copy Citation dialog
+   * degrades gracefully (same rule as backend/citations.py's
+   * format_reference) when any of these are missing. */
+  sourceYear?: string;
+  sourceUrl?: string;
+  sourceDoi?: string;
 }
 
 export interface CheckedDocument {
@@ -181,6 +190,9 @@ export type DocStatus = "clean" | "low" | "moderate" | "high";
 export interface HistoryEntry {
   id: string;
   title: string;
+  /** Original uploaded file name, when the check came from a file (not pasted
+   * text). Used to group multiple checks of "the same file" as versions. */
+  fileName?: string;
   date: string;
   similarityScore: number;
   status: DocStatus;

@@ -50,6 +50,13 @@ def load_candidate_chunks(cached_papers):
             chunk["source_title"] = paper.get("title", "")
             chunk["source_url"] = paper.get("url", "")
             chunk["source_pdf_url"] = paper.get("pdf_url", "")
+            # "web" vs "academic" (see search_paper/search_sources.py) plus
+            # enough real metadata (authors/year/doi) to eventually feed
+            # citations.py's format_reference() — see final_report_builder.py.
+            chunk["source_kind"] = paper.get("source_kind") or "academic"
+            chunk["source_authors"] = paper.get("authors") or []
+            chunk["source_year"] = paper.get("year") or ""
+            chunk["source_doi"] = paper.get("doi") or ""
 
         all_chunks.extend(chunks)
 
@@ -59,10 +66,30 @@ def load_candidate_chunks(cached_papers):
 def filter_chunks_by_section(input_section, candidate_chunks):
     allowed_sections = SECTION_MATCH.get(input_section, [input_section])
 
-    return [
-        chunk for chunk in candidate_chunks
-        if chunk.get("section") in allowed_sections
-    ]
+    filtered = []
+
+    for chunk in candidate_chunks:
+        section = chunk.get("section")
+
+        if section in allowed_sections:
+            filtered.append(chunk)
+            continue
+
+        # Non-PDF / non-downloadable candidates (most web results, plus any
+        # academic hit whose PDF failed to fetch) fall back to a single
+        # "abstract" chunk built from title+snippet
+        # (paper_cache.build_fallback_chunks_from_abstract) — they have no
+        # real method/experiment/conclusion structure for SECTION_MATCH to
+        # gate on, so the strict table above would otherwise exclude them
+        # from ever matching those input sections even though their text is
+        # exactly what a web source has to offer. Only relax this for
+        # web-sourced candidates; a genuine academic paper (source_kind ==
+        # "academic") that merely failed to download keeps the strict gating,
+        # since an abstract really isn't a stand-in for its method section.
+        if section == "abstract" and chunk.get("source_kind") == "web":
+            filtered.append(chunk)
+
+    return filtered
 
 
 def embed_input_chunk(chunk):
@@ -146,7 +173,11 @@ def match_chunks(
                     "source_text": source_text,
                     "source_url": source_chunk.get("source_url", ""),
                     "source_pdf_url": source_chunk.get("source_pdf_url", ""),
-                    
+                    "source_kind": source_chunk.get("source_kind", "academic"),
+                    "source_authors": source_chunk.get("source_authors", []),
+                    "source_year": source_chunk.get("source_year", ""),
+                    "source_doi": source_chunk.get("source_doi", ""),
+
                     "semantic_similarity": sim,
                     "word_overlap": word_overlap,
                     "char_ngram_overlap": char_overlap,

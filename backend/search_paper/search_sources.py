@@ -25,6 +25,16 @@ def deduplicate_papers(papers):
     return unique
 
 
+# Which of the four sources are "web" (open, non-academic-structured
+# results) vs "academic" (paper-search APIs). Used to tag every candidate
+# with `source_kind` so downstream code (similarity.py's title/abstract
+# length filter, plagiarism_matcher.py's SECTION_MATCH gating, and the
+# report_store.py Supabase rows) can treat web-sourced candidates
+# differently from genuine academic papers instead of the two being
+# indistinguishable.
+_WEB_SOURCES = {"DuckDuckGo"}
+
+
 def search_all_sources(queries, max_results_per_source=10):
     all_papers = []
 
@@ -35,7 +45,12 @@ def search_all_sources(queries, max_results_per_source=10):
             ("Semantic Scholar", search_semantic_scholar, query),
             ("OpenAlex", search_openalex, query),
             ("arXiv", search_arxiv, query),
-            ("DuckDuckGo", search_duckduckgo, f"{query} research paper")
+            # Previously suffixed with "research paper", which systematically
+            # biased DuckDuckGo (the one real open-web source in this list)
+            # toward academic-sounding pages and away from the general web
+            # results it's actually good at finding — the root cause behind
+            # "only checks paper, not web". Search the query verbatim.
+            ("DuckDuckGo", search_duckduckgo, query)
         ]
 
         for source_name, search_func, q in sources:
@@ -44,6 +59,10 @@ def search_all_sources(queries, max_results_per_source=10):
                     q,
                     max_results=max_results_per_source
                 )
+
+                source_kind = "web" if source_name in _WEB_SOURCES else "academic"
+                for result in results:
+                    result.setdefault("source_kind", source_kind)
 
                 print(f"{source_name}: {len(results)}")
                 all_papers.extend(results)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MagnifyingGlass, Trash } from "@phosphor-icons/react";
+import { CaretRight, ClockCounterClockwise, MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel, planLabel, PROJECTS } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
 import { formatDate } from "@etymos/shared";
@@ -14,6 +14,14 @@ import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
 const TODAY = new Date("2026-07-05T23:59:59");
+
+/** One source file's check history: every check that shares the same
+ * `fileName` (or `title`, for pasted-text checks with no file), newest first. */
+interface FileGroup {
+  key: string;
+  latest: HistoryEntryWithCheck;
+  versions: HistoryEntryWithCheck[];
+}
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -30,6 +38,7 @@ export default function HistoryPage() {
   const moveToTrash = useAppStore((s) => s.moveToTrash);
   const pushToast = useAppStore((s) => s.pushToast);
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user?.id) return;
@@ -55,6 +64,25 @@ export default function HistoryPage() {
 
   const filtered = visible.filter((h) => h.title.toLowerCase().includes(query.toLowerCase()));
 
+  /** Group checks by source file (falling back to title for pasted-text
+   * checks, which have no file) — this is check-history grouping, not exact
+   * content dedup. Groups sort by most-recent check descending; versions
+   * within a group sort newest-first. */
+  const groups = useMemo<FileGroup[]>(() => {
+    const byKey = new Map<string, HistoryEntryWithCheck[]>();
+    for (const h of filtered) {
+      const key = h.fileName?.trim() || h.title;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(h);
+    }
+    return [...byKey.entries()]
+      .map(([key, entries]) => {
+        const versions = [...entries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+        return { key, latest: versions[0], versions };
+      })
+      .sort((a, b) => (a.latest.date < b.latest.date ? 1 : a.latest.date > b.latest.date ? -1 : 0));
+  }, [filtered]);
+
   /** A check that hasn't finished has no report to show — send it back to the
    * progress view instead of an empty report. */
   function openEntry(entry: HistoryEntryWithCheck) {
@@ -63,6 +91,15 @@ export default function HistoryPage() {
       return;
     }
     navigate(`/report/${entry.id}`);
+  }
+
+  function toggleExpand(key: string) {
+    setExpanded((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   async function handleDelete(e: React.MouseEvent, id: string) {
@@ -119,85 +156,123 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
-              <th className="px-5 py-3 font-semibold">Document</th>
-              <th className="px-5 py-3 font-semibold">Date</th>
-              <th className="px-5 py-3 font-semibold">Similarity</th>
-              <th className="px-5 py-3 font-semibold">Status</th>
-              <th className="px-5 py-3 font-semibold">Project</th>
-              <th className="px-5 py-3 font-semibold" />
-            </tr>
-          </thead>
-          <tbody>
-            {historyLoading &&
-              filtered.length === 0 &&
-              Array.from({ length: 3 }).map((_, i) => (
-                <tr key={`skeleton-${i}`} className="border-b border-line last:border-0">
-                  <td colSpan={6} className="px-5 py-4">
-                    <div className="h-4 w-full animate-pulse motion-reduce:animate-none rounded bg-surface-muted" />
-                  </td>
-                </tr>
-              ))}
+        {historyLoading && filtered.length === 0 && (
+          <div className="divide-y divide-line">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={`skeleton-${i}`} className="px-5 py-4">
+                <div className="h-4 w-full animate-pulse motion-reduce:animate-none rounded bg-surface-muted" />
+              </div>
+            ))}
+          </div>
+        )}
 
-            {!historyLoading &&
-              filtered.map((h) => (
-                <tr
-                  key={h.id}
-                  onClick={() => openEntry(h)}
-                  className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-tint"
-                >
-                  <td className="max-w-xs truncate px-5 py-4 font-medium text-ink-900">
-                    <span className="flex items-center gap-2">
-                      {h.title}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-ink-500">{formatDate(h.date)}</td>
-                  <td className="px-5 py-4 font-semibold text-ink-700">
-                    {h.checkState === "completed" ? `${h.similarityScore}%` : "—"}
-                  </td>
-                  <td className="px-5 py-4">
-                    {h.checkState === "completed" ? (
-                      <StatusPill status={h.status} />
+        {!historyLoading && (
+          <div className="divide-y divide-line">
+            {groups.map((group) => {
+              const isOpen = expanded.has(group.key);
+              const hasVersions = group.versions.length > 1;
+              return (
+                <div key={group.key}>
+                  <div
+                    onClick={() => (hasVersions ? toggleExpand(group.key) : openEntry(group.latest))}
+                    className="flex cursor-pointer items-center gap-3 px-5 py-4 transition-colors hover:bg-surface-tint"
+                  >
+                    {hasVersions ? (
+                      <CaretRight
+                        size={13}
+                        weight="bold"
+                        className={cn("shrink-0 text-ink-400 transition-transform", isOpen && "rotate-90")}
+                      />
                     ) : (
-                      <CheckStatePill state={h.checkState} />
+                      <span className="inline-block size-[13px] shrink-0" />
                     )}
-                  </td>
-                  <td className="px-5 py-4 text-ink-500">{h.project ?? PROJECTS[0]}</td>
-                  <td className="px-5 py-4 text-right">
-                    <button
-                      onClick={(e) => handleDelete(e, h.id)}
-                      aria-label="Move to trash"
-                      className={cn(
-                        "inline-flex size-8 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high",
+                    <span className="min-w-0 flex-1 truncate font-medium text-ink-900">{group.latest.title}</span>
+                    {hasVersions && (
+                      <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
+                        <ClockCounterClockwise size={12} />
+                        {group.versions.length} checks
+                      </span>
+                    )}
+                    <span className="hidden shrink-0 whitespace-nowrap text-sm text-ink-500 sm:inline">
+                      {formatDate(group.latest.date)}
+                    </span>
+                    <span className="hidden w-14 shrink-0 text-right text-sm font-semibold text-ink-700 sm:inline">
+                      {group.latest.checkState === "completed" ? `${group.latest.similarityScore}%` : "—"}
+                    </span>
+                    <span className="shrink-0">
+                      {group.latest.checkState === "completed" ? (
+                        <StatusPill status={group.latest.status} />
+                      ) : (
+                        <CheckStatePill state={group.latest.checkState} />
                       )}
-                    >
-                      <Trash size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </span>
+                    <span className="hidden shrink-0 text-sm text-ink-500 sm:inline">
+                      {group.latest.project ?? PROJECTS[0]}
+                    </span>
+                    {!hasVersions && (
+                      <button
+                        onClick={(e) => handleDelete(e, group.latest.id)}
+                        aria-label="Move to trash"
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
+                      >
+                        <Trash size={15} />
+                      </button>
+                    )}
+                  </div>
 
-            {!historyLoading && !historyError && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-ink-400">
-                  {history.length === 0 ? "No documents yet." : "No documents match your search."}
-                </td>
-              </tr>
+                  {hasVersions && isOpen && (
+                    <div className="border-t border-line bg-surface-tint/50">
+                      {group.versions.map((v, i) => (
+                        <div
+                          key={v.id}
+                          onClick={() => openEntry(v)}
+                          className="flex cursor-pointer items-center gap-3 border-t border-line/60 py-3 pl-11 pr-5 text-left transition-colors first:border-t-0 hover:bg-white"
+                        >
+                          <span className="w-16 shrink-0 text-xs font-medium text-ink-400">
+                            {i === 0 ? "Latest" : `v${group.versions.length - i}`}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-ink-700">
+                            {formatDate(v.date)}
+                          </span>
+                          <span className="hidden shrink-0 text-xs font-semibold text-ink-700 sm:inline">
+                            {v.checkState === "completed" ? `${v.similarityScore}%` : "—"}
+                          </span>
+                          <span className="shrink-0">
+                            {v.checkState === "completed" ? (
+                              <StatusPill status={v.status} />
+                            ) : (
+                              <CheckStatePill state={v.checkState} />
+                            )}
+                          </span>
+                          <button
+                            onClick={(e) => handleDelete(e, v.id)}
+                            aria-label="Move to trash"
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
+                          >
+                            <Trash size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {!historyError && groups.length === 0 && (
+              <p className="px-5 py-12 text-center text-sm text-ink-400">
+                {history.length === 0 ? "No documents yet." : "No documents match your search."}
+              </p>
             )}
 
             {historyError && (
-              <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-severity-high">
-                  {historyError}
-                </td>
-              </tr>
+              <p className="px-5 py-12 text-center text-sm text-severity-high">{historyError}</p>
             )}
-          </tbody>
-        </table>
+          </div>
+        )}
+
         <p className="border-t border-line px-5 py-3 text-xs text-ink-400 sm:hidden">
-          Tip: tap the trash icon to delete a document.
+          Tip: tap a file with multiple checks to see its version history.
         </p>
       </div>
     </div>

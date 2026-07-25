@@ -377,6 +377,13 @@ def cache_candidate_papers(candidate_papers, top_k=10, build_text=True):
         result["title"] = result.get("title") or paper.get("title", "")
         result["url"] = result.get("url") or paper.get("url", "")
         result["pdf_url"] = result.get("pdf_url") or guess_pdf_url(paper)
+        # Carried through to load_candidate_chunks/match_chunks/final report
+        # so a match can be labeled "web" vs "academic" and (eventually)
+        # rendered as a real citation instead of a raw internal id.
+        result["source_kind"] = result.get("source_kind") or paper.get("source_kind") or "academic"
+        result["authors"] = paper.get("authors") or []
+        result["year"] = result.get("year") or paper.get("year") or ""
+        result["doi"] = result.get("doi") or paper.get("doi") or ""
 
         if build_text and result.get("downloaded") and result.get("pdf_path"):
             build_result = build_sections_and_chunks_for_paper(

@@ -4,15 +4,21 @@ import { FileMagnifyingGlass } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
 import { useAppStore, planWordLimit } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
-import { fetchCheckedDocument, renameDocument } from "../../lib/documentsQueries";
+import {
+  fetchCheckedDocument,
+  fetchDocumentVersions,
+  renameDocument,
+  saveDocumentVersion,
+} from "../../lib/documentsQueries";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { SourceComparisonModal } from "./SourceComparisonModal";
+import { CitationDialog } from "../../components/CitationDialog";
 import { RewritePanel } from "./RewritePanel";
 import { ReportTopBar } from "./ReportTopBar";
 import { FormatToolbar } from "./FormatToolbar";
-import { DocumentCanvas, type MatchColorIndex } from "./DocumentCanvas";
+import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
 import type { DocumentVersion } from "./VersionHistoryMenu";
@@ -143,10 +149,15 @@ export default function ReportPage() {
 
   // --- Editor state --------------------------------------------------------
   const editorRef = useRef<HTMLDivElement>(null);
+  // Lets FormatToolbar's "Insert table" button ask the canvas to add a
+  // structural block — no longer possible via `document.execCommand` now
+  // that the document is a real block array (see DocumentCanvas.tsx).
+  const canvasRef = useRef<DocumentCanvasHandle>(null);
   const baselineTextRef = useRef("");
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [comparisonMatch, setComparisonMatch] = useState<MatchedSource | null>(null);
+  const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
   const [rewriteMatch, setRewriteMatch] = useState<MatchedSource | null>(null);
   const [exporting, setExporting] = useState(false);
   const [locked, setLocked] = useState(true);
@@ -180,6 +191,28 @@ export default function ReportPage() {
     setStats({ words: countWords(text), characters: text.length });
     setDirty(false);
   }, [doc?.id, resetKey]);
+
+  // Load persisted edit-history snapshots for the Version History menu (see
+  // supabase/migrations/20260726000000_document_versions.sql). Best-effort:
+  // a fetch failure just leaves the menu empty rather than blocking the page.
+  useEffect(() => {
+    if (!id) {
+      setVersions([]);
+      return;
+    }
+    let cancelled = false;
+    fetchDocumentVersions(id).then(
+      (v) => {
+        if (!cancelled) setVersions(v);
+      },
+      () => {
+        if (!cancelled) setVersions([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const visibleMatches = useMemo(
     () =>
@@ -262,31 +295,26 @@ export default function ReportPage() {
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (!id) return;
     const text = editorRef.current?.innerText ?? "";
     const html = editorRef.current?.innerHTML ?? "";
     setSaving(true);
-    // STUB: there is no document-body write endpoint yet, so a save records a
-    // local snapshot and clears the dirty flag. Swap the timeout for the real
-    // mutation when the backend exposes one.
-    window.setTimeout(() => {
+    try {
+      const version = await saveDocumentVersion(id, {
+        label: `Version ${versions.length + 1}`,
+        html,
+        wordCount: countWords(text),
+      });
       baselineTextRef.current = text;
-      setVersions((prev) =>
-        [
-          {
-            id: `v-${Date.now()}`,
-            label: `Version ${prev.length + 1}`,
-            savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            wordCount: countWords(text),
-            html,
-          },
-          ...prev,
-        ].slice(0, 20),
-      );
-      setSaving(false);
+      setVersions((prev) => [version, ...prev].slice(0, 20));
       setDirty(false);
       pushToast({ kind: "success", title: "Draft saved", description: "A version was added to history." });
-    }, 500);
+    } catch {
+      pushToast({ kind: "error", title: "Could not save", description: "The version was not recorded." });
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleRestoreVersion(version: DocumentVersion) {
@@ -304,16 +332,7 @@ export default function ReportPage() {
   }
 
   function handleCite(match: MatchedSource) {
-    const citation = match.citation || `${match.sourceAuthor}. ${match.sourceTitle}.`;
-    navigator.clipboard?.writeText(citation).then(
-      () =>
-        pushToast({
-          kind: "success",
-          title: "Citation copied",
-          description: "Paste it where the passage appears.",
-        }),
-      () => pushToast({ kind: "error", title: "Could not copy citation" }),
-    );
+    setCitingMatch(match);
   }
 
   function handleExport() {
@@ -404,6 +423,7 @@ export default function ReportPage() {
             hasOriginal={hasOriginal}
             view={view}
             onViewChange={setView}
+            onInsertTable={() => canvasRef.current?.insertTable()}
           />
 
           {view === "original" ? (
@@ -421,6 +441,7 @@ export default function ReportPage() {
           ) : (
             <div className="relative flex min-h-0 flex-1 flex-col">
               <DocumentCanvas
+                ref={canvasRef}
                 rendered={rendered}
                 colorIndexByMatch={colorIndexByMatch}
                 activeMatchId={activeMatchId}
@@ -487,6 +508,11 @@ export default function ReportPage() {
         match={comparisonMatch}
         open={comparisonMatch !== null}
         onClose={() => setComparisonMatch(null)}
+      />
+      <CitationDialog
+        match={citingMatch}
+        open={citingMatch !== null}
+        onClose={() => setCitingMatch(null)}
       />
       <RewritePanel
         match={rewriteMatch}

@@ -39,3 +39,5 @@ diagrams/
 *.md
 !docs/**/*.md
 TEST_Documents/*
+BUG_Pics/*
+OLD_backend/*

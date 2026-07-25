@@ -22,17 +22,36 @@ REPORT_DIR = Path(os.getenv(
 _REPORTS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
 
-# label -> documents.status-style severity bucket, used per-match below.
-_LABEL_SEVERITY = {
-    "likely_plagiarism": "high",
-    "suspicious": "moderate",
-    "common_academic_definition": "low",
-}
+# Per-match severity thresholds on matchPercent (= semantic_similarity *
+# 100): Low <20, Moderate 20-60, High >60. Previously this was categorical
+# (a 3-value `label` -> severity dict) and never looked at the actual
+# score, so two matches with wildly different similarity but the same
+# label always rendered the same severity. This is intentionally
+# DIFFERENT from `_status_from_score` below (a whole-document aggregate
+# over `overall_score` with its own 30/10 thresholds) and the frontend's
+# Severity.tsx (15/30/50) — those are a separate metric, left as-is.
+_SEVERITY_HIGH_THRESHOLD = 60
+_SEVERITY_MODERATE_THRESHOLD = 20
+
+
+def _severity_from_percent(percent: float) -> str:
+    if percent > _SEVERITY_HIGH_THRESHOLD:
+        return "high"
+    if percent >= _SEVERITY_MODERATE_THRESHOLD:
+        return "moderate"
+    return "low"
+
 
 # Cap how many individual sentence matches we normalize into
 # `document_matches` per report, to keep the write bounded/cheap. The full
 # match list always remains available in the local/in-memory report cache.
-_MAX_PERSISTED_MATCHES = 50
+# Previously 50, which silently dropped every match past the first 50 on
+# the Supabase-reload path (a reopened/reloaded report) even though the
+# live, same-session Analyzing view showed them all. Raised substantially;
+# a cap is kept at all (rather than removed outright) only to protect
+# against a truly pathological document generating an unbounded number of
+# rows in one write.
+_MAX_PERSISTED_MATCHES = 500
 
 # Same bucket/path convention as `_upload_pdf` in api/app.py (`{user_id}/
 # {report_id}.pdf`), extended with an `images/{n}.{ext}` suffix — this
@@ -184,18 +203,35 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
         rows = []
         for m in matches[:_MAX_PERSISTED_MATCHES]:
             semantic_similarity = float(m.get("semantic_similarity", 0.0) or 0.0)
+            match_percent = round(semantic_similarity * 100, 2)
+            source_authors = m.get("source_authors") or []
+            if isinstance(source_authors, list):
+                source_author = ", ".join(str(a) for a in source_authors if str(a).strip()) or None
+            else:
+                source_author = str(source_authors).strip() or None
+            # source_kind's check constraint only allows 'web'/'academic' —
+            # final_report_builder.py now attaches this on every match
+            # (default "academic" when the source couldn't be classified),
+            # so this is never actually None in practice, but the fallback
+            # keeps this insert valid for any pre-existing report shape.
+            source_kind = m.get("source_kind") or "academic"
             rows.append({
                 "document_id": report_id,
-                "severity": _LABEL_SEVERITY.get(m.get("label"), "low"),
+                "severity": _severity_from_percent(match_percent),
                 "detection_type": "semantic",
-                "match_percent": round(semantic_similarity * 100, 2),
+                "match_percent": match_percent,
                 "source_title": m.get("source_title") or None,
-                "source_author": None,
-                "source_kind": None,
+                "source_author": source_author,
+                "source_kind": source_kind,
                 "citation": None,
                 "user_snippet": m.get("input_sentence") or None,
                 "source_snippet": m.get("source_sentence") or None,
-                "explanation": (
+                # Real per-match explanation from final_report_builder.py
+                # when present (references this match's own similarity
+                # score/source/excerpt); fall back to the old word/char
+                # overlap summary only for reports built before that field
+                # existed.
+                "explanation": m.get("explanation") or (
                     f"word overlap {m.get('word_overlap', 0):.2f}, "
                     f"char n-gram overlap {m.get('char_ngram_overlap', 0):.2f}"
                     if m.get("word_overlap") is not None else None
@@ -257,7 +293,12 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             passage_rows.append({
                 "document_id": report_id,
                 "text": text,
-                "severity": _LABEL_SEVERITY.get(matched.get("label"), "low") if matched else None,
+                "severity": (
+                    _severity_from_percent(
+                        round(float(matched.get("semantic_similarity", 0.0) or 0.0) * 100, 2)
+                    )
+                    if matched else None
+                ),
                 # Left null: matches are re-inserted with freshly generated
                 # ids on every save, and correlating this heuristic match
                 # back to its post-insert row id isn't worth the added

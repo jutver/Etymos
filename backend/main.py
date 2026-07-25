@@ -193,10 +193,10 @@ def check_docx_plagiarism(docx_path, progress_callback=None):
         # First ~800 chars of body stands in for an abstract — .docx
         # documents don't have one, but extract_all_section_metadata's
         # prompt for "title_abstract" is the only bucket worth spending an
-        # LLM call on for a generic document; the other four target
-        # sections (introduction/related_work/method/experiment) are left
-        # empty and short-circuit to normalize_metadata({}) with no crash
-        # (see llm_metadata.extract_section_metadata_with_llm).
+        # LLM call on for a generic document; the other four *academic*
+        # target sections (introduction/related_work/method/experiment)
+        # are left empty and short-circuit to normalize_metadata({}) with
+        # no crash (see llm_metadata.extract_section_metadata_with_llm).
         "title_abstract": (title + "\n" + body[:800]).strip(),
     }
 
@@ -204,6 +204,29 @@ def check_docx_plagiarism(docx_path, progress_callback=None):
         "title_abstract": {"text": title + "\n" + body[:800], "weight": 1.0},
         "body": {"text": body, "weight": 0.8},
     }
+
+    # A .docx document has no method/experiment/related-work structure to
+    # bucket into, so title_abstract alone was every query this pipeline
+    # ever generated for it — 4 of 5 query-generating LLM calls did
+    # nothing, and a long document's middle/end content never contributed
+    # a single search query regardless of how much it differed from the
+    # opening 800 chars. Split the remaining body into thirds and give
+    # each a metadata-extraction + query-building bucket of its own.
+    # llm_metadata.extract_all_section_metadata[_gemini] and
+    # build_queries_from_section_metadata both process any extra keys
+    # beyond the standard academic five, so these just ride along the
+    # existing pipeline. Named "body_partN" (not standard section names)
+    # so they're unambiguously "extra" there.
+    body_len = len(body)
+    third = body_len // 3
+    body_parts = [body[:third], body[third:2 * third], body[2 * third:]] if third > 0 else [body]
+
+    for index, part in enumerate(body_parts):
+        if len(part.strip()) < 50:
+            continue
+        key = f"body_part{index + 1}"
+        section_texts[key] = part
+        weighted_sections[key] = {"text": part, "weight": 0.6}
 
     document = build_document(sections, structured_sections=structured["sections"])
     input_text = document["text"]
@@ -281,8 +304,15 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
 
     print("\nCaching candidate papers...")
     cached_papers = cache_candidate_papers(
+        # Was top_k=10: only the top 10 ranked candidates ever got
+        # chunked/matched at all, which was a major contributor to sparse
+        # matches ("only checks paper, not web") — most DuckDuckGo web
+        # results never survived to the matching stage regardless of how
+        # relevant they were. Raised to 25 to catch more sources without
+        # the runtime blowing up (each extra candidate is at most one PDF
+        # download + a handful of embeddings, not a new search round).
         results,
-        top_k=10
+        top_k=25
       )
 
     input_chunks = build_chunks_from_sections(
@@ -297,8 +327,39 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
         input_chunks=input_chunks,
         candidate_chunks=candidate_chunks,
         top_k=3,
-        similarity_threshold=0.82
+        # Was 0.82 — a strict cosine threshold that was very likely the
+        # single biggest cause of "sometimes catch very less source": a
+        # genuinely paraphrased or partially-copied passage often scores
+        # well below 0.82 on semantic similarity alone even though
+        # word/char n-gram overlap (checked downstream in classify_match)
+        # would flag it. Lowered to 0.75; classify_match's own higher
+        # semantic+overlap thresholds (0.86/0.90) still gate what actually
+        # counts as "suspicious"/"likely_plagiarism", so this only widens
+        # the candidate pool considered, not the final labeling.
+        similarity_threshold=0.75
     )
+
+    # sentence_matcher.verify_all_matches() (not owned by this task) only
+    # forwards source_paper_id/source_title onto each verified-match item,
+    # dropping the richer per-source metadata match_chunks() just attached
+    # above (source_url/source_kind/source_authors/source_year/source_doi).
+    # Build a paper_id -> metadata lookup from `matches` (this function's
+    # own output, before it goes through verify_all_matches) so
+    # final_report_builder.build_final_report can still attach real
+    # author/year/url data to every match record without needing changes
+    # to sentence_matcher.py.
+    source_metadata_by_paper_id = {}
+    for m in matches:
+        paper_id = m.get("source_paper_id")
+        if paper_id and paper_id not in source_metadata_by_paper_id:
+            source_metadata_by_paper_id[paper_id] = {
+                "source_url": m.get("source_url", ""),
+                "source_pdf_url": m.get("source_pdf_url", ""),
+                "source_kind": m.get("source_kind", "academic"),
+                "source_authors": m.get("source_authors", []),
+                "source_year": m.get("source_year", ""),
+                "source_doi": m.get("source_doi", ""),
+            }
 
     save_matches(
         matches,
@@ -321,12 +382,23 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
         input_chunks=input_chunks,
         input_text=input_text,
         document=document,
+        source_metadata=source_metadata_by_paper_id,
     )
 
-    save_final_report(
-        final_report,
-        str(PAPER_CACHE_DIR / "final_report.json")
-    )
+    try:
+        # Best-effort debug/cache artifact only — not required for the API
+        # response. Image blocks in document["blocks"] still carry raw
+        # `_image_bytes`/`_image_ext` at this point (stripped later, in
+        # report_store.py's save_report()), which json.dump cannot
+        # serialize; a document with an extracted image must not crash the
+        # whole check over this write.
+        save_final_report(
+            final_report,
+            str(PAPER_CACHE_DIR / "final_report.json")
+        )
+    except Exception:
+        import traceback
+        traceback.print_exc()
 
     print_final_report(final_report, top_k=10)
 

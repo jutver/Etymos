@@ -370,6 +370,12 @@ def extract_all_section_metadata(section_texts):
     Recommended local-model function.
     Calls the local LLM once per section, producing reliable JSON for each
     section. Slower than one-call, but much more stable for small local LLMs.
+
+    Processes the standard academic five plus any extra buckets a caller
+    supplies beyond them (e.g. check_docx_plagiarism's body_part1/2/3 for
+    non-academic documents that have no real introduction/method/experiment
+    structure to bucket into) — this is what lets a long .docx get more
+    than one query's worth of search coverage.
     """
     section_metadata = {}
 
@@ -380,8 +386,9 @@ def extract_all_section_metadata(section_texts):
         "method",
         "experiment"
     ]
+    extra_sections = [s for s in section_texts if s not in target_sections]
 
-    for section_name in target_sections:
+    for section_name in target_sections + extra_sections:
         text = section_texts.get(section_name, "")
 
         print(f"\nExtracting metadata for section: {section_name}")
@@ -553,7 +560,8 @@ def extract_all_section_metadata_gemini(section_texts):
     """
     Gemini-API equivalent of extract_all_section_metadata. Same output
     shape: a dict keyed by section name, each value a normalized metadata
-    dict.
+    dict. Also processes any extra section buckets beyond the standard
+    five, same as the local-model version above.
     """
     section_metadata = {}
 
@@ -564,8 +572,9 @@ def extract_all_section_metadata_gemini(section_texts):
         "method",
         "experiment"
     ]
+    extra_sections = [s for s in section_texts if s not in target_sections]
 
-    for section_name in target_sections:
+    for section_name in target_sections + extra_sections:
         text = section_texts.get(section_name, "")
 
         print(f"\nExtracting metadata for section (Gemini): {section_name}")
@@ -682,6 +691,11 @@ def build_queries_from_section_metadata(section_metadata):
     """
     Build queries from multiple section metadata objects.
     Useful after extracting metadata for title_abstract, method, experiment, etc.
+
+    Also picks up any extra section buckets beyond the standard five (see
+    extract_all_section_metadata) so non-academic documents that were
+    split into extra buckets (e.g. body_part1/2/3) still contribute a
+    query per bucket instead of only ever searching on title_abstract.
     """
     queries = []
 
@@ -692,8 +706,9 @@ def build_queries_from_section_metadata(section_metadata):
         "introduction",
         "related_work"
     ]
+    extra_sections = [s for s in section_metadata if s not in priority_sections]
 
-    for section in priority_sections:
+    for section in priority_sections + extra_sections:
         metadata = section_metadata.get(section, {})
         section_queries = build_queries_from_metadata(metadata)
 

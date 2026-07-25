@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import {
   ArrowUUpLeft,
   ArrowUUpRight,
-  Columns,
+  Eraser,
   FileText,
+  LinkSimple,
   ListBullets,
   ListNumbers,
   LockSimple,
@@ -33,28 +34,18 @@ function exec(command: string, value?: string) {
   document.execCommand(command, false, value);
 }
 
-/**
- * Table/column insertion goes through `insertHTML` rather than a dedicated
- * execCommand (browsers don't have one) — DocumentCanvas's `[&_table]`/
- * `[&_td]` descendant selectors style whatever lands here, so no inline
- * styling is needed on the inserted markup itself.
- */
-function insertTable(rows: number, cols: number) {
-  const cells = Array.from({ length: cols }, () => "<td><br></td>").join("");
-  const body = Array.from({ length: rows }, () => `<tr>${cells}</tr>`).join("");
-  exec("insertHTML", `<table><tbody>${body}</tbody></table><p><br></p>`);
-}
-
-/** Inserts an empty CSS-columns section for 2- or 3-column layout — manual
- * authoring, not automatic detection: the backend does not attempt to infer
- * multi-column layout from an uploaded PDF (see extractor.py), so this is
- * the toolbar's own way to add one, matching what a user could do in
- * Google Docs' "Columns" menu. */
-function insertColumns(count: 2 | 3) {
-  exec(
-    "insertHTML",
-    `<div style="column-count:${count};column-gap:2rem;" class="my-5"><p>Column text…</p></div><p><br></p>`,
-  );
+/** Inserts a hyperlink around the current selection, or unlinks if the
+ * selection is already inside one — a bare `window.prompt` is the simplest
+ * dependency-free way to collect the URL without a whole popover component. */
+function toggleLink() {
+  const selection = window.getSelection();
+  const anchor = selection?.anchorNode?.parentElement?.closest("a");
+  if (anchor) {
+    exec("unlink");
+    return;
+  }
+  const url = window.prompt("Link URL");
+  if (url) exec("createLink", url);
 }
 
 const TEXT_COLORS = [
@@ -191,6 +182,11 @@ export interface FormatToolbarProps {
   hasOriginal: boolean;
   view: "document" | "original";
   onViewChange: (view: "document" | "original") => void;
+  /** Inserts a new table block after the currently-focused block — a
+   * structural document edit, so it goes through the canvas's imperative
+   * handle rather than `document.execCommand` (see DocumentCanvas.tsx's
+   * `DocumentCanvasHandle`). */
+  onInsertTable: () => void;
 }
 
 export function FormatToolbar({
@@ -199,11 +195,10 @@ export function FormatToolbar({
   hasOriginal,
   view,
   onViewChange,
+  onInsertTable,
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
-  const [columnsOpen, setColumnsOpen] = useState(false);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
-  const columnsButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
@@ -344,46 +339,18 @@ export function FormatToolbar({
 
             <Divider />
 
-            <ToolButton label="Insert table" onAction={() => insertTable(3, 3)}>
-              <Table size={16} />
+            <ToolButton label="Insert link" onAction={toggleLink}>
+              <LinkSimple size={16} />
+            </ToolButton>
+            <ToolButton label="Clear formatting" onAction={() => exec("removeFormat")}>
+              <Eraser size={16} />
             </ToolButton>
 
-            <ToolButton
-              ref={columnsButtonRef}
-              label="Columns"
-              active={columnsOpen}
-              onAction={() => setColumnsOpen((v) => !v)}
-            >
-              <Columns size={16} />
+            <Divider />
+
+            <ToolButton label="Insert table" onAction={onInsertTable}>
+              <Table size={16} />
             </ToolButton>
-            <ToolbarDropdown
-              open={columnsOpen}
-              onClose={() => setColumnsOpen(false)}
-              anchorRef={columnsButtonRef}
-            >
-              <div className="flex flex-col gap-0.5 rounded-[var(--radius-input)] border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    insertColumns(2);
-                    setColumnsOpen(false);
-                  }}
-                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
-                >
-                  Two columns
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    insertColumns(3);
-                    setColumnsOpen(false);
-                  }}
-                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-xs font-medium text-ink-700 hover:bg-surface-muted"
-                >
-                  Three columns
-                </button>
-              </div>
-            </ToolbarDropdown>
           </>
         )}
       </div>

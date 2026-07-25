@@ -12,7 +12,39 @@ from document_model import (
 SCORING_VERSION = 2
 
 
-def build_final_report(verified_matches, input_chunks, input_text=None, document=None):
+def _truncate(text, max_len=160):
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
+
+
+def _build_explanation(label, semantic_similarity, source_title, source_sentence):
+    """
+    Per-match, parameterized explanation string. Deliberately not another
+    LLM call (none is cheaply available at this point in the pipeline,
+    and the numbers already say something concrete) — but it must not be
+    byte-identical across matches sharing a label the way the old
+    frontend template (`Matched ${label}.`) was, so it always references
+    this match's own similarity score, source, and excerpt.
+    """
+    label_text = (label or "match").replace("_", " ")
+    similarity_pct = round((semantic_similarity or 0.0) * 100)
+    title = (source_title or "").strip()
+    excerpt = _truncate(source_sentence, 140)
+
+    sentence = f"{similarity_pct}% semantic similarity"
+    if title:
+        sentence += f' to "{title}"'
+    sentence += f" — classified as {label_text}."
+    if excerpt:
+        sentence += f' Matched source text: "{excerpt}"'
+
+    return sentence
+
+
+def build_final_report(verified_matches, input_chunks, input_text=None, document=None,
+                        source_metadata=None):
     """
     Assemble the final report.
 
@@ -52,7 +84,20 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
       Expect reported percentages to MOVE, usually DOWN, for documents
       with many overlapping matches. See report["scoring"] for both
       numbers on every report.
+
+    `source_metadata` (optional): dict keyed by source_paper_id ->
+    {source_url, source_pdf_url, source_kind, source_authors, source_year,
+    source_doi}. sentence_matcher.verify_all_matches() (not owned by this
+    module) only forwards source_paper_id/source_title onto each
+    `verified_matches` item, dropping the richer metadata match_chunks()
+    attached to its own output — the caller (main.py) builds this lookup
+    from that earlier `matches` list (keyed by source_paper_id) and passes
+    it through here so every match record can still carry real
+    author/year/url data for a later citation-formatting task
+    (citations.py's format_reference()) without this module needing to
+    reach into sentence_matcher's internals.
     """
+    source_metadata = source_metadata or {}
     if input_text is None:
         if document is not None:
             input_text = document.get("text", "")
@@ -124,11 +169,14 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             if doc_start is not None and doc_end is not None:
                 coverage_intervals.append((doc_start, doc_end, weight))
 
+            source_title = item.get("source_title", "")
+            meta = source_metadata.get(source_id) or {}
+
             record = {
                 "label": label,
                 "input_section": item["input_section"],
                 "source_paper_id": source_id,
-                "source_title": item.get("source_title", ""),
+                "source_title": source_title,
                 "source_section": item["source_section"],
                 "input_chunk_id": item["input_chunk_id"],
                 "source_chunk_id": item["source_chunk_id"],
@@ -136,7 +184,23 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
                 "source_sentence": sm["source_sentence"],
                 "semantic_similarity": sm["semantic_similarity"],
                 "word_overlap": sm["word_overlap"],
-                "char_ngram_overlap": sm["char_ngram_overlap"]
+                "char_ngram_overlap": sm["char_ngram_overlap"],
+                # Per-match, parameterized text — see _build_explanation's
+                # docstring for why this replaced a hardcoded
+                # label-only template.
+                "explanation": _build_explanation(
+                    label, sm["semantic_similarity"], source_title, sm["source_sentence"]
+                ),
+                # Real source metadata (when known), enough to feed
+                # citations.py's format_reference() later: {authors, year,
+                # title, url}. Never built into an actual citation string
+                # here — that UI/formatting is a separate, later task.
+                "source_url": meta.get("source_url", ""),
+                "source_pdf_url": meta.get("source_pdf_url", ""),
+                "source_kind": meta.get("source_kind", "academic"),
+                "source_authors": meta.get("source_authors", []),
+                "source_year": meta.get("source_year", ""),
+                "source_doi": meta.get("source_doi", "")
             }
 
             if doc_start is not None and doc_end is not None:

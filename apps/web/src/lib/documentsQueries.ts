@@ -8,6 +8,7 @@
 // explicit scoping keeps intent clear and avoids relying on RLS alone.
 import { supabase } from "@etymos/shared";
 import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSource } from "@etymos/shared";
+import type { DocumentVersion } from "../screens/Report/VersionHistoryMenu";
 
 interface DocumentRow {
   id: string;
@@ -86,6 +87,7 @@ function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
   return {
     id: row.id,
     title: row.title ?? "Untitled document",
+    fileName: row.file_name ?? undefined,
     date: row.uploaded_at.slice(0, 10),
     similarityScore: row.similarity_score != null ? Number(row.similarity_score) : 0,
     status: row.status ?? "clean",
@@ -398,4 +400,56 @@ export async function clearProjectFromDocuments(userId: string, project: string)
 export async function renameDocument(id: string, title: string): Promise<void> {
   const { error } = await supabase.from("documents").update({ title }).eq("id", id);
   if (error) throw error;
+}
+
+interface DocumentVersionRow {
+  id: string;
+  document_id: string;
+  label: string;
+  html: string;
+  word_count: number;
+  created_at: string;
+}
+
+function toDocumentVersion(row: DocumentVersionRow): DocumentVersion {
+  return {
+    id: row.id,
+    label: row.label,
+    savedAt: new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    wordCount: row.word_count,
+    html: row.html,
+  };
+}
+
+/** Edit-history snapshots for the Report page's Version History menu — see
+ * supabase/migrations/20260726000000_document_versions.sql. Distinct from
+ * document_passages/document_matches, which hold the *check* result, not
+ * user edits made afterward. */
+export async function fetchDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+  const { data, error } = await supabase
+    .from("document_versions")
+    .select("*")
+    .eq("document_id", documentId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map(toDocumentVersion);
+}
+
+export async function saveDocumentVersion(
+  documentId: string,
+  version: { label: string; html: string; wordCount: number },
+): Promise<DocumentVersion> {
+  const { data, error } = await supabase
+    .from("document_versions")
+    .insert({
+      document_id: documentId,
+      label: version.label,
+      html: version.html,
+      word_count: version.wordCount,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return toDocumentVersion(data);
 }

@@ -27,6 +27,19 @@ interface LocationState {
 
 const TOTAL_DURATION = 10000;
 
+/** Per-match severity thresholds on matchPercent (= semantic_similarity *
+ * 100): Low <20, Moderate 20-60, High >60. Intentionally DIFFERENT from
+ * the whole-document aggregate in components/Severity.tsx's
+ * `statusFromScore` (thresholds 15/30/50, over `overall_score`) — that is
+ * a separate metric, out of scope here. Mirrors
+ * backend/api/report_store.py's `_severity_from_percent`, which the
+ * Supabase-reload path uses for the same field. */
+function severityFromMatchPercent(matchPercent: number): Severity {
+  if (matchPercent > 60) return "high";
+  if (matchPercent >= 20) return "moderate";
+  return "low";
+}
+
 /** A passage plus where it sits in the report's `input_text`.
  *
  * The offsets matter: the backend reports match positions as absolute
@@ -265,38 +278,61 @@ export default function AnalyzingPage() {
             ? docLabels[0].replace(/\.(pdf|docx?|txt)$/i, "")
             : "Backend analysis";
 
-          const matches: MatchedSource[] = (report.matches ?? []).map((match: any, index: number) => ({
-            id: `${docId}-match-${index}`,
-            severity: (match.label === "likely_plagiarism" ? "high" : match.label === "suspicious" ? "moderate" : "low") as Severity,
-            detectionType: "traditional",
-            matchPercent: Math.round(Math.max(0, Math.min(100, match.semantic_similarity * 100))),
-            sourceTitle: match.source_title ?? match.source_paper_id,
-            sourceAuthor: "",
-            sourceKind: "academic",
-            citation: match.source_paper_id,
-            userSnippet: match.input_sentence,
-            sourceSnippet: match.source_sentence,
-            explanation: `Matched ${match.label.replace(/_/g, " ")}.`,
-            rewriteSuggestions: [],
-            // `input_offset` is omitted (never zeroed) when the backend could
-            // not localise the sentence, so its presence is the capability
-            // check. Spreading conditionally keeps the fields genuinely
-            // absent rather than `undefined`-but-present.
-            ...(match.input_offset
-              ? {
-                  startOffset: match.input_offset.start,
-                  endOffset: match.input_offset.end,
-                  blockId: match.input_offset.block_id ?? undefined,
-                  sectionId: match.input_offset.section ?? undefined,
-                }
-              : {}),
-            ...(match.source_offset
-              ? {
-                  sourceStartOffset: match.source_offset.chunk_start ?? undefined,
-                  sourceEndOffset: match.source_offset.chunk_end ?? undefined,
-                }
-              : {}),
-          }));
+          const matches: MatchedSource[] = (report.matches ?? []).map((match: any, index: number) => {
+            const matchPercent = Math.round(Math.max(0, Math.min(100, match.semantic_similarity * 100)));
+            const sourceAuthors: string[] = Array.isArray(match.source_authors) ? match.source_authors : [];
+
+            return {
+              id: `${docId}-match-${index}`,
+              // Severity is now purely a function of matchPercent (Low <20,
+              // Moderate 20-60, High >60) — NOT the categorical `label`,
+              // which previously meant two matches sharing a label always
+              // rendered the same severity regardless of how similar they
+              // actually were. See severityFromMatchPercent below.
+              severity: severityFromMatchPercent(matchPercent),
+              detectionType: "traditional",
+              matchPercent,
+              sourceTitle: match.source_title ?? match.source_paper_id,
+              sourceAuthor: sourceAuthors.filter((a) => a && a.trim()).join(", "),
+              // Backend now tags every candidate "web" or "academic" (see
+              // backend/search_paper/search_sources.py) instead of this
+              // always being hardcoded "academic".
+              sourceKind: match.source_kind === "web" ? "web" : "academic",
+              citation: match.source_paper_id,
+              sourceYear: match.source_year || undefined,
+              sourceUrl: match.source_url || match.source_pdf_url || undefined,
+              sourceDoi: match.source_doi || undefined,
+              userSnippet: match.input_sentence,
+              sourceSnippet: match.source_sentence,
+              // Real per-match explanation from the backend
+              // (final_report_builder.py's _build_explanation) when
+              // present — references this match's own similarity score,
+              // source title, and excerpt, so two matches sharing a label
+              // no longer render byte-identical text. Falls back to the
+              // old template only for reports built before this field
+              // existed.
+              explanation: match.explanation ?? `Matched ${match.label.replace(/_/g, " ")}.`,
+              rewriteSuggestions: [],
+              // `input_offset` is omitted (never zeroed) when the backend could
+              // not localise the sentence, so its presence is the capability
+              // check. Spreading conditionally keeps the fields genuinely
+              // absent rather than `undefined`-but-present.
+              ...(match.input_offset
+                ? {
+                    startOffset: match.input_offset.start,
+                    endOffset: match.input_offset.end,
+                    blockId: match.input_offset.block_id ?? undefined,
+                    sectionId: match.input_offset.section ?? undefined,
+                  }
+                : {}),
+              ...(match.source_offset
+                ? {
+                    sourceStartOffset: match.source_offset.chunk_start ?? undefined,
+                    sourceEndOffset: match.source_offset.chunk_end ?? undefined,
+                  }
+                : {}),
+            };
+          });
 
           // Prefer the backend's structural blocks (real headings/lists/
           // tables/page numbers) over re-splitting the flat text; only
@@ -351,7 +387,9 @@ export default function AnalyzingPage() {
             passages: passages.length > 0 ? passages : report.matches.slice(0, 5).map((match: any, index: number) => ({
               id: `${docId}-passage-${index}`,
               text: match.input_sentence,
-              severity: match.label === "likely_plagiarism" ? "high" : match.label === "suspicious" ? "moderate" : "low",
+              severity: severityFromMatchPercent(
+                Math.round(Math.max(0, Math.min(100, match.semantic_similarity * 100))),
+              ),
               matchId: `${docId}-match-${index}`,
             })),
             matches,

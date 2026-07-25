@@ -161,7 +161,7 @@ export function MatchCard({
               iconLeft={<Quotes size={14} />}
               className="h-8 px-2.5 text-xs"
             >
-              Cite
+              Copy Citation
             </Button>
           )}
           <Button

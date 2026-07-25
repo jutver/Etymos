@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { CaretRight, GraduationCap, ShieldCheck, Sidebar } from "@phosphor-icons/react";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
@@ -35,6 +36,16 @@ export function SourcesSidebar({
   open,
   onToggle,
 }: SourcesSidebarProps) {
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Clicking a highlight on the document/PDF sets activeMatchId, but the
+  // matching card can be scrolled off-screen in this panel — without this,
+  // the click had no visible effect.
+  useEffect(() => {
+    if (!activeMatchId) return;
+    cardRefs.current.get(activeMatchId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeMatchId]);
+
   if (!open) {
     return (
       <button
@@ -93,19 +104,26 @@ export function SourcesSidebar({
         ) : (
           <div className="flex flex-col gap-2.5">
             {matches.map((m, i) => (
-              <MatchCard
+              <div
                 key={m.id}
-                match={m}
-                index={i}
-                locked={explanationLocked}
-                rewriteLocked={rewriteLocked}
-                selected={activeMatchId === m.id}
-                resolved={resolvedIds.has(m.id)}
-                onSelect={onSelect}
-                onViewComparison={onViewComparison}
-                onRewrite={onRewrite}
-                onCite={onCite}
-              />
+                ref={(el) => {
+                  if (el) cardRefs.current.set(m.id, el);
+                  else cardRefs.current.delete(m.id);
+                }}
+              >
+                <MatchCard
+                  match={m}
+                  index={i}
+                  locked={explanationLocked}
+                  rewriteLocked={rewriteLocked}
+                  selected={activeMatchId === m.id}
+                  resolved={resolvedIds.has(m.id)}
+                  onSelect={onSelect}
+                  onViewComparison={onViewComparison}
+                  onRewrite={onRewrite}
+                  onCite={onCite}
+                />
+              </div>
             ))}
           </div>
         )}

@@ -1,278 +1,140 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
-import { FileDashed, ImageSquare } from "@phosphor-icons/react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type FocusEvent,
+  type MouseEvent,
+} from "react";
+import { FileDashed } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
-import { chunkPassage, colorForIndex, type PassageSpan, type RenderedPassage } from "./highlights";
-import { PageRuler } from "./PageRuler";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { BlockItem } from "./BlockItem";
+import { blocksFromRendered, newTableBlock, type DocBlock, type MatchColorIndex, type TableData } from "./blocks";
+import type { RenderedPassage } from "./highlights";
 
-// US Letter at 96dpi, with 1" margins — the same proportions Word shows.
-// Width is load-bearing for layout (sheet cap); height is a *minimum* only —
-// real page breaks come from each passage's own `page` field (or, absent
-// that, a synthetic paragraph-count bucket — see groupIntoPages below), so a
-// synthetic bucket that runs long is allowed to push a sheet taller than one
-// physical page rather than being re-measured/re-split.
-const PAGE_WIDTH = 816;
-const PAGE_HEIGHT = 1056;
-// 1" margin at 96dpi — mirrors the sheet's own lg:px-24/py-24 padding and is
-// what PageRuler shades to mark the printable area.
-const PAGE_MARGIN = 96;
+export type { MatchColorIndex } from "./blocks";
 
-// Bucket size used ONLY when a document has no backend page metadata at
-// all (the pasted-text check path never assigns one — see
-// screens/Analyzing's buildPassagesFromBlocks). Purely cosmetic: it keeps
-// the "real blank-space gaps between pages, not one long strip" promise
-// even for inputs the backend can't paginate, rather than falling back to
-// the old single-strip layout for that case.
-const SYNTHETIC_PAGE_PASSAGES = 10;
+/** Imperative surface exposed to `FormatToolbar`'s "Insert table" button —
+ * structural edits (adding a whole new block) can't go through
+ * `document.execCommand` any more now that the document is a real block
+ * array, so the toolbar asks the canvas to do it directly. */
+export interface DocumentCanvasHandle {
+  insertTable: () => void;
+}
 
-/** Stable colour index per match, derived from sidebar ordering. */
-export type MatchColorIndex = Map<string, number>;
-
-interface DocumentBodyProps {
+interface DocumentEditorProps {
   rendered: RenderedPassage[];
   colorIndexByMatch: MatchColorIndex;
-  /** Character offset into the document's full text where the plan's word
-   * limit is first crossed. `Infinity` (or undefined) means the whole
-   * document is within the limit, so nothing renders muted. */
+  activeMatchId: string | null;
+  onSelectMatch: (matchId: string) => void;
+  locked: boolean;
+  onInput: (text: string) => void;
   overLimitOffset: number | undefined;
-}
-
-/** One physical page's worth of passages, grouped for real (blank-gap)
- * page breaks. `pageNumber` is null when the document carries no page
- * metadata at all — every passage in that document falls into synthetic
- * buckets instead. */
-interface PageGroup {
-  key: string;
-  pageNumber: number | null;
-  passages: RenderedPassage[];
-}
-
-function groupIntoPages(rendered: RenderedPassage[]): PageGroup[] {
-  if (rendered.length === 0) return [];
-
-  const hasPageMetadata = rendered.some((r) => r.passage.page != null);
-
-  if (!hasPageMetadata) {
-    const groups: PageGroup[] = [];
-    for (let i = 0; i < rendered.length; i += SYNTHETIC_PAGE_PASSAGES) {
-      groups.push({
-        key: `synthetic-${i}`,
-        pageNumber: null,
-        passages: rendered.slice(i, i + SYNTHETIC_PAGE_PASSAGES),
-      });
-    }
-    return groups;
-  }
-
-  const groups: PageGroup[] = [];
-  let current: PageGroup | null = null;
-
-  for (const item of rendered) {
-    const page: number = item.passage.page ?? current?.pageNumber ?? 1;
-    if (!current || current.pageNumber !== page) {
-      current = { key: `page-${page}-${groups.length}`, pageNumber: page, passages: [] };
-      groups.push(current);
-    }
-    current.passages.push(item);
-  }
-
-  return groups;
-}
-
-/** Renders one passage's text as alternating plain / highlighted spans —
- * the same `<mark>` markup every block type (paragraph, heading, list
- * item) shares. Tables render their own cell text directly instead
- * (see renderBlock's "table" case) since a match's offsets point into the
- * flattened `input_text`, not into any one cell. */
-function renderChunks(text: string, spans: RenderedPassage["spans"], colorIndexByMatch: MatchColorIndex) {
-  return chunkPassage(text, spans).map((chunk, i) => {
-    if (!chunk.matchId) return <span key={i}>{chunk.text}</span>;
-    const colorIdx = colorIndexByMatch.get(chunk.matchId) ?? 0;
-    const color = colorForIndex(colorIdx);
-    return (
-      <mark
-        key={i}
-        data-match-id={chunk.matchId}
-        // Non-colour signal #1: every highlight is underlined, so it
-        // survives greyscale and colour-blind viewing. Dotted means we
-        // know the exact span (backend offsets, or an exact snippet
-        // hit); dashed means we could only approximate it.
-        //
-        // These two must be mutually exclusive, not layered: `cn` is
-        // plain clsx with no tailwind-merge, and Tailwind emits
-        // `decoration-dashed` *before* `decoration-dotted`, so passing
-        // both would let dotted win on CSS order and silently render
-        // approximate matches as precise.
-        className={cn(
-          "cursor-pointer rounded-[3px] px-[1px] underline decoration-2 underline-offset-[3px] transition-shadow",
-          chunk.approximate ? "decoration-dashed" : "decoration-dotted",
-          color.mark,
-        )}
-      >
-        {chunk.text}
-        {/* Non-colour signal #2: the index badge ties this highlight to
-            the numbered card in the sources sidebar. */}
-        <sup
-          contentEditable={false}
-          className="ml-0.5 select-none text-[0.625rem] font-bold tabular-nums opacity-70"
-        >
-          {colorIdx + 1}
-        </sup>
-      </mark>
-    );
-  });
+  editorRef: React.RefObject<HTMLDivElement | null>;
 }
 
 /**
- * A passage is "over the limit" once its own start sits at/past the
- * document-wide boundary offset. Passages with no `startOffset` (historical
- * rows, pasted-text passages) can never be placed relative to the boundary,
- * so they're always treated as within-limit rather than guessed at. A
- * passage whose span straddles the boundary is treated as a single unit —
- * see the module-level note this mirrors in Report/index.tsx's
- * `computeWordLimitOffset`.
+ * The actual editable block list. Kept separate from `DocumentCanvas` below
+ * so the parent can force a full reset (fresh block state derived from
+ * `rendered`) by remounting this component via `key={resetKey}` — the same
+ * remount-based-reset trick the old single-blob editor used, just applied to
+ * a component with real state now instead of raw DOM content.
  */
-function isOverLimit(passage: RenderedPassage["passage"], overLimitOffset: number | undefined): boolean {
-  if (overLimitOffset == null || passage.startOffset == null) return false;
-  return passage.startOffset >= overLimitOffset;
-}
-
-/** Renders passage text, muting it (and dropping its highlight spans/score
- * badge entirely) once the passage has crossed the word-limit boundary. The
- * mute colour is applied to an inner <span> rather than the block element
- * itself — the block's own colour (e.g. `[&_h1]:text-navy-900`) is a
- * higher-specificity descendant-selector rule that a class on the h1/h2/h3
- * element directly could never out-rank, but an explicit `color` on a child
- * always wins over an inherited one regardless of the parent's rule. */
-function renderPassageText(
-  text: string,
-  spans: PassageSpan[],
-  colorIndexByMatch: MatchColorIndex,
-  muted: boolean,
+const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(function DocumentEditor(
+  { rendered, colorIndexByMatch, activeMatchId, onSelectMatch, locked, onInput, overLimitOffset, editorRef },
+  ref,
 ) {
-  const chunks = renderChunks(text, muted ? [] : spans, colorIndexByMatch);
-  if (!muted) return chunks;
-  return <span className="text-ink-300">{chunks}</span>;
-}
+  const [blocks, setBlocks] = useState<DocBlock[]>(() => blocksFromRendered(rendered));
+  // Tracks whichever block currently holds focus, without triggering a
+  // re-render on every focus change — only "Insert table" ever reads it, and
+  // only at the moment the user clicks the toolbar button.
+  const focusedBlockIdRef = useRef<string | null>(null);
 
-/** Renders one structural block. List items are handled by the caller
- * (renderPageContent groups consecutive list items into a single <ul>/
- * <ol>) — this only ever emits the <li> itself for that case. */
-function renderBlock(item: RenderedPassage, colorIndexByMatch: MatchColorIndex, overLimitOffset: number | undefined) {
-  const { passage, spans } = item;
-  const muted = isOverLimit(passage, overLimitOffset);
-  const text = renderPassageText(passage.text, spans, colorIndexByMatch, muted);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
-  switch (passage.blockType) {
-    case "title":
-      return (
-        <h1 key={passage.id} className="!mt-0">
-          {text}
-        </h1>
-      );
-    case "heading": {
-      const level = passage.level ?? 2;
-      if (level === 1) return <h1 key={passage.id}>{text}</h1>;
-      if (level === 3) return <h3 key={passage.id}>{text}</h3>;
-      return <h2 key={passage.id}>{text}</h2>;
-    }
-    case "list_item":
-      return <li key={passage.id}>{text}</li>;
-    case "table": {
-      const rows = passage.tableRows && passage.tableRows.length > 0 ? passage.tableRows : [[passage.text]];
-      return (
-        <table key={passage.id} contentEditable={false} className={cn(muted && "text-ink-300")}>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri}>
-                {row.map((cell, ci) => (
-                  <td key={ci}>{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
-    }
-    case "image": {
-      // Defensive access: a concurrent task owns adding `imageUrl` to the
-      // shared DocPassage type, which may or may not have landed yet.
-      const imageUrl = (passage as { imageUrl?: string }).imageUrl;
-      if (imageUrl) {
-        return (
-          <div key={passage.id} contentEditable={false} className="my-5 flex justify-center">
-            <img src={imageUrl} alt="" className="max-w-full rounded-[2px]" />
-          </div>
-        );
-      }
-      return (
-        <div
-          key={passage.id}
-          contentEditable={false}
-          className="my-5 flex flex-col items-center gap-2 rounded-[var(--radius-control)] border border-dashed border-line bg-surface-muted px-4 py-10 text-center text-ink-400"
-        >
-          <ImageSquare size={28} />
-          <span className="max-w-sm text-xs">{passage.text || "Image (position preserved, not extracted)"}</span>
-        </div>
-      );
-    }
-    default:
-      return <p key={passage.id}>{text}</p>;
-  }
-}
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setBlocks((prev) => {
+      const oldIndex = prev.findIndex((b) => b.id === active.id);
+      const newIndex = prev.findIndex((b) => b.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }, []);
 
-/** Walks one page's passages, wrapping consecutive list_item blocks of the
- * same list type into a single <ul>/<ol> instead of one per item. */
-function renderPageContent(
-  passages: RenderedPassage[],
-  colorIndexByMatch: MatchColorIndex,
-  overLimitOffset: number | undefined,
-) {
-  const nodes: React.ReactNode[] = [];
-  let i = 0;
+  // Stable regardless of `blocks` (functional setState) so it never forces
+  // every BlockItem to re-render just because this identity changed.
+  const handleTableChange = useCallback((blockId: string, updater: (table: TableData) => TableData) => {
+    setBlocks((prev) => prev.map((b) => (b.id === blockId && b.table ? { ...b, table: updater(b.table) } : b)));
+  }, []);
 
-  while (i < passages.length) {
-    const item = passages[i];
-    if (item.passage.blockType === "list_item") {
-      const listType = item.passage.listType ?? "bullet";
-      const group: RenderedPassage[] = [];
-      while (
-        i < passages.length &&
-        passages[i].passage.blockType === "list_item" &&
-        (passages[i].passage.listType ?? "bullet") === listType
-      ) {
-        group.push(passages[i]);
-        i += 1;
-      }
-      const ListTag = listType === "number" ? "ol" : "ul";
-      nodes.push(
-        <ListTag key={`list-${group[0].passage.id}`}>
-          {group.map((g) => renderBlock(g, colorIndexByMatch, overLimitOffset))}
-        </ListTag>,
-      );
-      continue;
-    }
-    nodes.push(renderBlock(item, colorIndexByMatch, overLimitOffset));
-    i += 1;
-  }
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertTable: () => {
+        setBlocks((prev) => {
+          const focusedIndex = focusedBlockIdRef.current
+            ? prev.findIndex((b) => b.id === focusedBlockIdRef.current)
+            : -1;
+          const insertAt = focusedIndex === -1 ? prev.length : focusedIndex + 1;
+          const next = [...prev];
+          next.splice(insertAt, 0, newTableBlock());
+          return next;
+        });
+      },
+    }),
+    [],
+  );
 
-  return nodes;
-}
+  const handleFocusCapture = useCallback((e: FocusEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-block-id]");
+    if (el?.dataset.blockId) focusedBlockIdRef.current = el.dataset.blockId;
+  }, []);
 
-/**
- * The passage markup itself.
- *
- * Deliberately memoised on data-only props: once the user unlocks editing they
- * are typing directly into this DOM, and any React re-render of this subtree
- * would reconcile their typing away. Everything that changes at interaction
- * speed (which match is active, whether editing is locked) is therefore applied
- * imperatively by the parent — never through these props.
- *
- * Real page breaks are part of this same one-shot render (grouping
- * `rendered` into PageGroups below), not something recomputed from layout
- * on every keystroke — see the module comment on groupIntoPages.
- */
-const DocumentBody = memo(function DocumentBody({ rendered, colorIndexByMatch, overLimitOffset }: DocumentBodyProps) {
-  if (rendered.length === 0) {
+  const handleClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-match-id]");
+      if (mark?.dataset.matchId) onSelectMatch(mark.dataset.matchId);
+    },
+    [onSelectMatch],
+  );
+
+  // Active-match emphasis, applied imperatively so selecting a source from
+  // the sidebar never re-renders (and therefore never clobbers) whatever the
+  // user is mid-typing — same technique the old single-blob editor used.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const marks = editor.querySelectorAll<HTMLElement>("mark[data-match-id]");
+    marks.forEach((mark) => {
+      const isActive = mark.dataset.matchId === activeMatchId;
+      mark.classList.toggle("ring-2", isActive);
+      mark.classList.toggle("ring-navy-900/40", isActive);
+      mark.classList.toggle("ring-offset-1", isActive);
+      mark.classList.toggle("decoration-solid", isActive);
+    });
+    if (!activeMatchId) return;
+    const target = editor.querySelector<HTMLElement>(`mark[data-match-id="${CSS.escape(activeMatchId)}"]`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeMatchId, editorRef]);
+
+  if (blocks.length === 0) {
     return (
       <div className="flex flex-col items-center py-16 text-center">
         <FileDashed size={30} className="text-ink-300" />
@@ -284,39 +146,43 @@ const DocumentBody = memo(function DocumentBody({ rendered, colorIndexByMatch, o
     );
   }
 
-  const pages = groupIntoPages(rendered);
-
   return (
-    <>
-      {pages.map((page, pageIndex) => (
-        <div
-          key={page.key}
-          data-page-sheet="true"
-          style={{ minHeight: PAGE_HEIGHT }}
-          className={cn(
-            // A real US-Letter sheet: 816×1056px at 96dpi, ~1in margins on
-            // all sides (px-24/py-24 = 96px at the sheet's full width).
-            // min-height only — a synthetic docx bucket that overflows one
-            // page's worth of content is allowed to grow the sheet taller
-            // rather than being re-measured/re-split (see groupIntoPages).
-            "relative rounded-[2px] border border-line bg-white px-8 py-12 shadow-[var(--shadow-card-hover)] sm:px-14 sm:py-16 md:px-24 md:py-24",
-            // The blank space between pages IS the page break — a real,
-            // generous gap in the layout (not a soft transition) so each
-            // sheet reads as a distinct physical page, not a continuous
-            // scroll with tick marks drawn over it.
-            pageIndex > 0 && "mt-14 sm:mt-20",
-          )}
-        >
-          {renderPageContent(page.passages, colorIndexByMatch, overLimitOffset)}
-          <div
-            contentEditable={false}
-            className="pointer-events-none absolute inset-x-0 -bottom-7 select-none text-center text-[0.6875rem] font-medium tabular-nums text-ink-300"
-          >
-            Page {pageIndex + 1} of {pages.length}
-          </div>
-        </div>
-      ))}
-    </>
+    <div
+      ref={editorRef}
+      id="report-document-editor"
+      role="textbox"
+      aria-multiline="true"
+      aria-readonly={locked}
+      aria-label="Document text"
+      onFocusCapture={handleFocusCapture}
+      onClick={handleClick}
+      onInput={(e) => onInput((e.currentTarget as HTMLDivElement).innerText)}
+      className={cn(
+        "relative pl-8 text-[1.0625rem] leading-[1.85] text-ink-900 outline-none sm:pl-10",
+        "[&_p]:mb-5 [&_p:last-child]:mb-0",
+        "[&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-h2 [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:text-navy-900",
+        "[&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-h3 [&_h2]:font-bold [&_h2]:leading-tight [&_h2]:text-navy-900",
+        "[&_h3]:mb-2.5 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:leading-tight [&_h3]:text-navy-900",
+        "[&_ul]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-7 [&_ol]:mb-1.5 [&_ol]:list-decimal [&_ol]:pl-7",
+        "[&_li]:mb-0",
+        locked && "cursor-default caret-transparent select-text",
+      )}
+    >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+          {blocks.map((block) => (
+            <BlockItem
+              key={block.id}
+              block={block}
+              colorIndexByMatch={colorIndexByMatch}
+              overLimitOffset={overLimitOffset}
+              locked={locked}
+              onTableChange={handleTableChange}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 });
 
@@ -338,149 +204,48 @@ export interface DocumentCanvasProps {
   overLimitOffset?: number;
 }
 
-export function DocumentCanvas({
-  rendered,
-  colorIndexByMatch,
-  activeMatchId,
-  onSelectMatch,
-  locked,
-  onInput,
-  onPageChange,
-  resetKey,
-  editorRef,
-  overLimitOffset,
-}: DocumentCanvasProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const pageCountRef = useRef(1);
-  const lastReported = useRef("");
+/**
+ * The Document view's canvas — one continuous, unpaged white surface
+ * (Grammarly-style), not a stack of Letter-size page sheets. No ruler, no
+ * page-break chrome, no CSS-columns layout: see PLAN.md item 8 for why the
+ * previous page-sheet model was replaced.
+ *
+ * Structure/order (which blocks exist, what order they're in, each table's
+ * shape) is real React state living in `DocumentEditor`; a block's own text
+ * is still edited via per-block `contentEditable`, which is the normal,
+ * expected way to build a rich-text block editor — only the *document*, not
+ * each paragraph's keystrokes, needs to be React-owned.
+ */
+export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasProps>(function DocumentCanvas(
+  { rendered, colorIndexByMatch, activeMatchId, onSelectMatch, locked, onInput, onPageChange, resetKey, editorRef, overLimitOffset },
+  ref,
+) {
+  const innerRef = useRef<DocumentCanvasHandle>(null);
+  useImperativeHandle(ref, () => ({ insertTable: () => innerRef.current?.insertTable() }), []);
 
-  // --- Page metering -------------------------------------------------------
-  // Pages are now real DOM regions (one `[data-page-sheet]` per PageGroup
-  // from DocumentBody, above) rather than a pixel-height divisor, so
-  // "which page am I on" is measured against their actual bounding boxes.
-  const measurePages = useCallback(() => {
-    const editor = editorRef.current;
-    const scroller = scrollRef.current;
-    if (!editor || !scroller) return;
-
-    const sheets = Array.from(editor.querySelectorAll<HTMLElement>("[data-page-sheet]"));
-    const total = Math.max(1, sheets.length);
-    if (total !== pageCountRef.current) {
-      pageCountRef.current = total;
-    }
-
-    if (sheets.length === 0) {
-      const signature = `1/${total}`;
-      if (signature !== lastReported.current) {
-        lastReported.current = signature;
-        onPageChange(1, total);
-      }
-      return;
-    }
-
-    const scrollerRect = scroller.getBoundingClientRect();
-    const viewportLine = scrollerRect.top + scrollerRect.height * 0.35;
-    let current = 1;
-    for (let i = 0; i < sheets.length; i += 1) {
-      if (sheets[i].getBoundingClientRect().top <= viewportLine) current = i + 1;
-    }
-
-    const signature = `${current}/${total}`;
-    if (signature === lastReported.current) return;
-    lastReported.current = signature;
-    onPageChange(current, total);
-  }, [editorRef, onPageChange]);
-
+  // There are no pages any more — reported once so the status pill's
+  // "Page X of Y" reads as the single continuous surface it now is, rather
+  // than being fed stale data from the old per-sheet IntersectionObserver.
   useEffect(() => {
-    measurePages();
-    const editor = editorRef.current;
-    if (!editor || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => measurePages());
-    ro.observe(editor);
-    return () => ro.disconnect();
-  }, [measurePages, editorRef, resetKey]);
-
-  // --- Active-match emphasis ----------------------------------------------
-  // Applied imperatively so selecting a source never re-renders (and therefore
-  // never clobbers) text the user is editing.
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const marks = editor.querySelectorAll<HTMLElement>("mark[data-match-id]");
-    marks.forEach((mark) => {
-      const isActive = mark.dataset.matchId === activeMatchId;
-      mark.classList.toggle("ring-2", isActive);
-      mark.classList.toggle("ring-navy-900/40", isActive);
-      mark.classList.toggle("ring-offset-1", isActive);
-      // Non-colour signal #3: the active match is the only one drawn solid.
-      mark.classList.toggle("decoration-solid", isActive);
-    });
-    if (!activeMatchId) return;
-    const target = editor.querySelector<HTMLElement>(`mark[data-match-id="${CSS.escape(activeMatchId)}"]`);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeMatchId, editorRef, resetKey, rendered]);
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-match-id]");
-      if (mark?.dataset.matchId) onSelectMatch(mark.dataset.matchId);
-    },
-    [onSelectMatch],
-  );
-
-  const sheetStyle = useMemo(() => ({ maxWidth: PAGE_WIDTH }), []);
+    onPageChange(1, 1);
+  }, [onPageChange, resetKey]);
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={() => measurePages()}
-      className="relative flex-1 overflow-y-auto scrollbar-thin bg-surface-muted px-4 pb-32"
-    >
-      <div className="mx-auto w-full" style={sheetStyle}>
-        {/* Sticky within this scroll zone only (its containing block is
-            `scrollRef`, the nearest scrolling ancestor) — pinned below the
-            floating FormatToolbar overlay the same way a word processor
-            keeps its ruler in view while the page scrolls underneath. */}
-        <div className="sticky top-0 z-[5] overflow-x-auto bg-surface-muted pb-3 pt-24 scrollbar-thin">
-          <PageRuler width={PAGE_WIDTH} margin={PAGE_MARGIN} />
-        </div>
-        <div
+    <div className="relative flex-1 overflow-y-auto scrollbar-thin bg-white px-4 pb-32">
+      <div className="mx-auto w-full max-w-[52rem] pt-24">
+        <DocumentEditor
           key={resetKey}
-          ref={editorRef}
-          id="report-document-editor"
-          role="textbox"
-          aria-multiline="true"
-          aria-readonly={locked}
-          aria-label="Document text"
-          tabIndex={0}
-          contentEditable={!locked}
-          suppressContentEditableWarning
-          spellCheck={!locked}
-          onClick={handleClick}
-          onInput={(e) => onInput((e.currentTarget as HTMLDivElement).innerText)}
-          className={cn(
-            "text-[1.0625rem] leading-[1.85] text-ink-900 outline-none",
-            "[&_p]:mb-5 [&_p:last-child]:mb-0",
-            "[&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-h2 [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:text-navy-900",
-            "[&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-h3 [&_h2]:font-bold [&_h2]:leading-tight [&_h2]:text-navy-900",
-            "[&_h3]:mb-2.5 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:leading-tight [&_h3]:text-navy-900",
-            "[&_ul]:mb-5 [&_ul]:list-disc [&_ul]:pl-7 [&_ol]:mb-5 [&_ol]:list-decimal [&_ol]:pl-7",
-            "[&_li]:mb-1.5",
-            "[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-4 [&_blockquote]:text-ink-700",
-            // block + overflow-x-auto makes the table itself the scroll
-            // container for wide content (long cells, many columns) instead
-            // of letting it bleed past the sheet's edge — works whether the
-            // table came from renderBlock's extracted rows or was typed in
-            // directly via FormatToolbar's insertTable.
-            "[&_table]:mb-5 [&_table]:block [&_table]:w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:table-auto [&_table]:border-collapse [&_table]:text-sm",
-            "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top",
-            "[&_th]:border [&_th]:border-line [&_th]:bg-surface-muted [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold",
-            locked && "cursor-default caret-transparent select-text",
-          )}
-        >
-          <DocumentBody rendered={rendered} colorIndexByMatch={colorIndexByMatch} overLimitOffset={overLimitOffset} />
-        </div>
+          ref={innerRef}
+          rendered={rendered}
+          colorIndexByMatch={colorIndexByMatch}
+          activeMatchId={activeMatchId}
+          onSelectMatch={onSelectMatch}
+          locked={locked}
+          onInput={onInput}
+          overLimitOffset={overLimitOffset}
+          editorRef={editorRef}
+        />
       </div>
     </div>
   );
-}
+});
