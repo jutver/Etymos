@@ -1,11 +1,12 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { PublicShell } from "./components/layout/PublicShell";
 import { AppShell } from "./components/layout/AppShell";
 import { AuthShell } from "./components/layout/AuthShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
-import { DemoNoticeModal } from "./components/DemoNoticeModal";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
+import { PageLoader } from "./components/ui/PageLoader";
+import { useAuth } from "./lib/auth";
 // Screens are lazy-loaded so each route is its own chunk — this roughly halves
 // the initial payload. The Suspense fallbacks live inside the layout shells,
 // so nav/footer stay mounted across a route transition.
@@ -32,9 +33,11 @@ import {
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
 
+/** Where a signed-in user belongs whenever the URL doesn't name a real screen. */
+const APP_HOME = "/upload";
+
 // Thin wrappers so the banner sits above PublicShell/AppShell's own nav
-// without editing those components (out of scope for this change) — mirrors
-// how DemoNoticeModal is mounted globally below, just scoped to these routes.
+// without editing those components (out of scope for this change).
 function PublicShellWithBanner() {
   return (
     <>
@@ -51,6 +54,46 @@ function AppShellWithBanner() {
       <AppShell />
     </>
   );
+}
+
+/**
+ * `/` is the marketing landing page for visitors, but a signed-in user typing
+ * the bare domain (or trimming `/upload` off the address bar) expects to land
+ * back in the app — not on a public page whose nav offers "Log in / Sign up",
+ * which reads as having been logged out even though the Supabase session is
+ * still in localStorage the whole time.
+ *
+ * We must wait for `loading` before deciding: AuthProvider resolves the
+ * persisted session asynchronously, so rendering on the first pass would show
+ * the landing page to everyone and only then bounce signed-in users away.
+ * PageLoader's own 150ms delay means a session that resolves quickly — the
+ * normal case, since it is read from localStorage — shows no spinner at all.
+ */
+function HomeRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+  if (user) return <Navigate to={APP_HOME} replace />;
+
+  return (
+    <>
+      <ClosedBetaModal />
+      <LandingPage />
+    </>
+  );
+}
+
+/**
+ * Catch-all for any path no route claims. Without it React Router matches
+ * nothing and renders a blank page, so a partially-deleted URL (`/uploa`,
+ * `/up`) looks like the site is broken. Signed-in users go back to the app,
+ * visitors to the landing page — where HomeRoute takes over.
+ */
+function NotFoundRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+  return <Navigate to={user ? APP_HOME : "/"} replace />;
 }
 
 function ScrollToTop() {
@@ -72,18 +115,9 @@ function App() {
   return (
     <>
       <ScrollToTop />
-      <DemoNoticeModal />
       <Routes>
         <Route element={<PublicShellWithBanner />}>
-          <Route
-            path="/"
-            element={
-              <>
-                <ClosedBetaModal />
-                <LandingPage />
-              </>
-            }
-          />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/pricing" element={<PricingPage />} />
         </Route>
 
@@ -114,6 +148,8 @@ function App() {
             <Route path="/verify-student" element={<VerifyStudentPage />} />
           </Route>
         </Route>
+
+        <Route path="*" element={<NotFoundRoute />} />
       </Routes>
     </>
   );
