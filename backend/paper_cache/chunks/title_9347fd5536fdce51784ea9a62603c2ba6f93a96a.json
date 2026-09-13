@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_9347fd5536fdce51784ea9a62603c2ba6f93a96a",
+    "section": "abstract",
+    "chunk_id": "title_9347fd5536fdce51784ea9a62603c2ba6f93a96a_abstract_0",
+    "start_char": 0,
+    "end_char": 261,
+    "text": "PhoBERT-CNN Hybrid\nThis approach is designed for high-accuracy hate speech detection (HSD) in the Vietnamese language, addressing distinctive challenges found in social media text such as orthographic noise, morphological complexity, and severe class imbalance."
+  }
+]

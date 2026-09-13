@@ -255,6 +255,10 @@ def is_table_or_equation_like(text):
 
 def is_probable_title_or_author(line, body_size):
     text = line["text"]
+    lower = text.strip().lower()
+
+    if lower == "abstract" or lower.startswith("abstract "):
+        return False
 
     if line["page"] == 1 and line["size"] > body_size + 2:
         return True
@@ -265,7 +269,7 @@ def is_probable_title_or_author(line, body_size):
     if line["page"] == 1 and line["words"] <= 5 and line["size"] >= body_size:
         first = text.split()[0] if text.split() else ""
 
-        if not is_major_marker(first) and text.lower() != "abstract":
+        if not is_major_marker(first) and lower != "abstract":
             return True
 
     return False
@@ -461,6 +465,7 @@ def build_heading_candidates(lines):
                 section = section_from_heading(combined) or "unknown"
                 candidate = {
                     "index": i,
+                    "second_index": i + 1,
                     "text": combined,
                     "section": section,
                     "inline_content": "",
@@ -564,6 +569,7 @@ def classify_heading_candidates(candidates, heading_labels=None):
 
         classified.append({
             "index": c["index"],
+            "second_index": c.get("second_index"),
             "text": c["text"],
             "section": section,
             "inline_content": c.get("inline_content", "")
@@ -821,36 +827,7 @@ def _insert_page_images(result_sections, images_by_page):
 
 
 def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
-    """
-    Structure-preserving counterpart to extract_sections_from_pdf().
-
-    Fixes the "system unable to extract all the text, or none in the worst
-    case" bug: the previous extract_sections_from_pdf only ever wrote to
-    `sections[section]` when a heading matching the fixed 7-bucket academic
-    taxonomy (abstract/introduction/related_work/method/experiment/
-    conclusion/references) was recognized. Any document organized any other
-    way — most non-academic reports, most .docx-authored documents — fell
-    through with only the title captured, or nothing at all (verified on
-    TEST_Documents: a 7297-word Vietnamese report extracted to 15 words).
-
-    Every line PyMuPDF extracts now ends up in exactly one of: a recognized
-    section's blocks, the "body" catch-all section, or is discarded only
-    because is_heavy_math_line() flagged it as equation/junk. Nothing is
-    silently dropped for lack of a matching heading anymore.
-
-    Returns:
-        {
-          "title": str,
-          "sections": {
-            section_name: [
-              {"type": "heading"|"list_item"|"paragraph",
-               "level": 1|2|3|None, "list_type": "bullet"|"number"|None,
-               "text": str, "page": int},
-              ...
-            ]
-          }
-        }
-    """
+    
     lines = extract_lines_from_pdf(pdf_path)
     body_size = get_body_font_size(lines)
     candidates = build_heading_candidates(lines)
@@ -873,7 +850,15 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
             continue
 
         claimed.add(heading["index"])
-        start = heading["index"] + 1
+
+
+        second_index = heading.get("second_index")
+        if second_index is not None:
+            claimed.add(second_index)
+            start = second_index + 1
+        else:
+            start = heading["index"] + 1
+
         end = headings[idx + 1]["index"] if idx + 1 < len(headings) else len(lines)
 
         inline_content = heading.get("inline_content", "")
@@ -902,14 +887,10 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
 
         blocks_by_section[section].extend(build_structured_blocks(survivors, body_size))
 
-    # --- Body fallback -----------------------------------------------------
-    # Everything not claimed above, in original extraction order. For a
-    # document with zero recognized headings this is the ENTIRE document
-    # (the previously-catastrophic case). For a partially structured
-    # document it recovers whatever fell outside the known 6-bucket
-    # taxonomy (including a references list whose heading wasn't
-    # recognized) instead of vanishing.
     heading_indices = {h["index"] for h in headings}
+
+    heading_indices |= {h["second_index"] for h in headings if h.get("second_index") is not None}
+
     unclaimed = [
         lines[i] for i in range(len(lines))
         if i not in claimed and i not in heading_indices

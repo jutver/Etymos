@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c44b55b45f4410e03908185367ed838fe231b94d",
+    "section": "abstract",
+    "chunk_id": "doi_c44b55b45f4410e03908185367ed838fe231b94d_abstract_0",
+    "start_char": 0,
+    "end_char": 572,
+    "text": "Developing an online hate classifier for multiple social media platforms\nAbstract The proliferation of social media enables people to express their opinions widely online. However, at the same time, this has resulted in the emergence of conflict and hate, making online environments uninviting for users. Although researchers have found that hate is a problem across multiple platforms, there is a lack of models for online hate detection using multi-platform data. To address this research gap, we collect a total of 197,566 comments from four platforms: YouTube, Reddit,"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_06bdcedb798178f5c60b24408f8728a6a2d065a1",
+    "section": "abstract",
+    "chunk_id": "doi_06bdcedb798178f5c60b24408f8728a6a2d065a1_abstract_0",
+    "start_char": 0,
+    "end_char": 617,
+    "text": "Enhancing Hate Speech Detection in the Digital Age: A Novel Model Fusion Approach Leveraging a Comprehensive Dataset\nIn the era of digital communication, social media platforms have experienced exponential growth, becoming primary channels for information exchange. However, this surge has also amplified the rapid spread of hate speech, prompting extensive research efforts for effective mitigation. These efforts have prominently featured advanced natural language processing techniques, particularly emphasizing deep learning methods that have shown promising outcomes. This article presents a novel approach to ad"
+  }
+]

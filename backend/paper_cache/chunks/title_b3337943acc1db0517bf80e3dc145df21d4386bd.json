@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_b3337943acc1db0517bf80e3dc145df21d4386bd",
+    "section": "abstract",
+    "chunk_id": "title_b3337943acc1db0517bf80e3dc145df21d4386bd_abstract_0",
+    "start_char": 0,
+    "end_char": 302,
+    "text": "Figure 5: ROC curve for hate speech detection using CNN for the...\nRecent advancements in hate speech detection (HSD) in Vietnamese have made significant progress, primarily attributed to the emergence of transformer-based pre-trained language models, particularly those built on the BERT architecture."
+  }
+]

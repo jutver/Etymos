@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_a220b9c61751f24fe65b0cf07619694ec68e35be",
+    "section": "abstract",
+    "chunk_id": "doi_a220b9c61751f24fe65b0cf07619694ec68e35be_abstract_0",
+    "start_char": 0,
+    "end_char": 552,
+    "text": "Challenges of Hate Speech Detection in Social Media\nAbstract The detection of hate speech in social media is a crucial task. The uncontrolled spread of hate has the potential to gravely damage our society, and severely harm marginalized people or groups. A major arena for spreading hate speech online is social media. This significantly contributes to the difficulty of automatic detection, as social media posts include paralinguistic signals (e.g. emoticons, and hashtags), and their linguistic content contains plenty of poorly written text. Anothe"
+  }
+]

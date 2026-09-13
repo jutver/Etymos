@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_ac33f307f97fe5a3d7fcbf92c1e9eb0e31628e55",
+    "section": "abstract",
+    "chunk_id": "title_ac33f307f97fe5a3d7fcbf92c1e9eb0e31628e55_abstract_0",
+    "start_char": 0,
+    "end_char": 253,
+    "text": "tarudesu/VOZ-HSD · Datasets at Hugging Face\nThis is the official repository for the VOZ-HSD dataset from the paper ViHateT5: Enhancing Hate Speech Detection in Vietnamese with A Unified Text-to-Text Transformer Model, which was accepted at the ACL'2024."
+  }
+]

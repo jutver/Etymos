@@ -25,7 +25,7 @@ import os
 import threading
 import time
 
-from supabase_client import get_client
+from api.supabase_client import get_client
 
 logger = logging.getLogger(__name__)
 

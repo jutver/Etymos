@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_0f3fbfe1de648fadefd96a1e515df17c341bb3c5",
+    "section": "abstract",
+    "chunk_id": "doi_0f3fbfe1de648fadefd96a1e515df17c341bb3c5_abstract_0",
+    "start_char": 0,
+    "end_char": 616,
+    "text": "Multi-class hate speech detection in the Norwegian language using FAST-RNN and multilingual fine-tuned transformers\nAbstract The growth of social networks has provided a platform for individuals with prejudiced views, allowing them to spread hate speech and target others based on their gender, ethnicity, religion, or sexual orientation. While positive interactions within diverse communities can considerably enhance confidence, it is critical to recognize that negative comments can hurt people’s reputations and well-being. This emergence emphasizes the need for more diligent monitoring and robust policies on t"
+  }
+]

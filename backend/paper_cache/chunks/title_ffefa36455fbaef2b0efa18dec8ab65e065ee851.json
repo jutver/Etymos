@@ -1,0 +1,130 @@
+[
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "abstract",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "This paper addresses the challenge of Vietnamese Hate Speech Detection (HSD) on social media, where non-standard and noisy text reduces model effectiveness by obscuring meaning. We explore the use of large language models for text restoration and correction (standardization), employing few-shot prompting with Gemini 2.0-Flash and Qwen3 in the context of Vietnamese HSD. The experiments demonstrate that LLM-based standardization, particularly with Gemini 2.0-Flash, improves downstream model performance by increasing the Macro-F1 score from 66.66% on non-standardized data to as high as 68.30%. This result reveals a prominent aspect of LLM-driven standardization as a practical and effective direction for advancing Vietnamese HSD. [image] This is a preview of subscription content, log in via an institution to check access.\n\nAccess this chapter\n\nLog in via an institution\n\nSubscribe and save\n\nS"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "abstract",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_abstract_1",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "s a preview of subscription content, log in via an institution to check access.\n\nAccess this chapter\n\nLog in via an institution\n\nSubscribe and save\n\nSpringer+ from €37.37 /Month\n\nStarting from 10 chapters or articles per month\n\nAccess and download chapters and articles from more than 300k\n\nbooks and 2,500 journals\n\nCancel anytime\n\nView plans\n\nBuy Now\n\nChapter Price includes VAT (Vietnam) Buy Chapter\n\nAvailable as PDF\n\nRead on any device\n\nInstant download\n\nOwn it forever\n\neBook Price includes VAT (Vietnam) Buy eBook\n\nAvailable as EPUB and PDF\n\nRead on any device\n\nInstant download\n\nOwn it forever\n\nSoftcover Book Price excludes VAT (Vietnam) Buy Softcover Book\n\nCompact, lightweight edition\n\nFree shipping worldwide - view details\n\nTax calculation will be finalised at checkout Purchases are for personal use only Institutional subscriptions\n\nSimilar content being viewed by others\n\n[image]\n\nAn"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "abstract",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_abstract_2",
+    "start_char": 1500,
+    "end_char": 2314,
+    "text": "on will be finalised at checkout Purchases are for personal use only Institutional subscriptions\n\nSimilar content being viewed by others\n\n[image]\n\nAn In-Depth Investigation into Vietnamese Text\n\nNormalization on Social Media\n\nChapter © 2027 [image]\n\nLLMs Against Digital Deviance: Scalable Hate Speech\n\nDetection in Low-Resource and Code-Mixed Social Media\n\nChapter © 2026 [image]\n\nViTHSD: exploiting hatred by targets for hate speech\n\ndetection on Vietnamese social media texts\n\nArticle 08 February 2025\n\nExplore related subjects\n\nDiscover the latest articles, books and news in related subjects, suggested using machine learning.\n\nAsian Languages\n\nLanguage Change\n\nMachine Translation\n\nMinority Languages\n\nApplied Linguistics\n\nComputational Linguistics\n\nNotes\n\nhttps://github.com/AnhHoang0529/vn-nsw-dictionary ."
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_3",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Skip to main content Advertisement [image] Log in Menu Find a journal Publish with us Track your research Search Saved research Cart\n\nHome\n\nRecent Challenges in Intelligent information and Database\n\nSystems\n\nConference paper\n\nExploring Large Language\n\nModels’ Ability in Text Correction\n\nand Restoration for Vietnamese\n\nHate Speech Detection\n\nConference paper\n\nFirst Online: 01 June 2026\n\nCite this conference paper\n\nSave conference paper View saved research [image] Recent Challenges in Intelligent information and Database Systems (ACIIDS 2026)\n\nHoang-Quan Tran\n\nORCID: Part of the book series: Communications in Computer and Information Science ((CCIS,volume 2964)) Included in the following conference series:\n\nAsian Conference on Intelligent Information and Database\n\nSystems • 257 Accesses\n\nBanerjee, S., Lavie, A.: METEOR: an automatic metric for MT\n\nevaluation with improved correlation with"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_4",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ormation and Database\n\nSystems • 257 Accesses\n\nBanerjee, S., Lavie, A.: METEOR: an automatic metric for MT\n\nevaluation with improved correlation with human judgments. In: Goldstein, J., Lavie, A., Lin, C.Y., Voss, C. (eds.) Proceedings of the ACL Workshop on Intrinsic and Extrinsic Evaluation Measures for Machine Translation and/or Summarization, pp. 65–72. Association for Computational Linguistics, Ann Arbor (2005). https://aclanthology.org/W05-0909/\n\nDaniel Han, M.H., team, U.: Unsloth (2023). http://github.com/\n\nunslothai/unsloth\n\nDettmers, T., Pagnoni, A., Holtzman, A., Zettlemoyer, L.: QLoRA:\n\nefficient finetuning of quantized LLMs. Adv. Neural Inf. Process. Syst. 36 , 10088–10115 (2023). https://proceedings.neurips.cc/ paper_files/paper/2023/ hash/1feb87871436031bdc0f2beaa62a049b-Abstract- Conference.html\n\nGemini, T.: Gemini: a family of highly capable multimodal models\n\nHee, M.S.,"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_5",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "er/2023/ hash/1feb87871436031bdc0f2beaa62a049b-Abstract- Conference.html\n\nGemini, T.: Gemini: a family of highly capable multimodal models\n\nHee, M.S., et al.: Recent advances in online hate speech\n\nmoderation: multimodality and the role of large models. In: Al- Onaizan, Y., Bansal, M., Chen, Y.N. (eds.) Findings of the Association for Computational Linguistics: EMNLP 2024, pp. 4407–4419. Association for Computational Linguistics, Miami https://aclanthology.org/2024.findings-emnlp.254/\n\nLupu, Y., et al.: Offline events and online hate. PLOS ONE 18 (1),\n\nhttps://journals.plos.org/plosone/article?id=10.1371/ journal.pone.0278511\n\nLuu, S.T., Nguyen, K.V., Nguyen, N.L.-T.: A large-scale dataset for\n\nhate speech detection on vietnamese social media texts. In: Fujita, H., Selamat, A., Lin, J.C.-W., Ali, M. (eds.) IEA/AIE 2021. LNCS Chapter Google Scholar\n\nNguyen, A.T.H., Nguyen, D.H., Nguyen, K"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_6",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ia texts. In: Fujita, H., Selamat, A., Lin, J.C.-W., Ali, M. (eds.) IEA/AIE 2021. LNCS Chapter Google Scholar\n\nNguyen, A.T.H., Nguyen, D.H., Nguyen, K.V.: ViSoLex: an open-\n\nsource repository for Vietnamese social media lexical normalization. In: Rambow, O., et al. (eds.) Proceedings of the 31st International Conference on Computational Linguistics: System Demonstrations, pp. 183–188. Association for Computational Linguistics, Abu Dhabi (2025). https:// aclanthology.org/2025.coling-demos.18/\n\nNguyen, A.T.H., Nguyen, D.H., Nguyen, N.T., Ho, K.T.D., Nguyen,\n\nK.V.: Automatic textual normalization for hate speech detection. In: Abraham, A., Bajaj, A., Hanne, T., Siarry, P. (eds.) Intelligent Systems Design and Applications, pp. 1–12. Springer, Cham\n\nNguyen, D.Q., Nguyen, D.Q., Vu, T., Dras, M., Johnson, M.: A fast\n\nand accurate Vietnamese word segmenter. In: Calzolari, N., et al. (eds.) Proc"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_7",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "Cham\n\nNguyen, D.Q., Nguyen, D.Q., Vu, T., Dras, M., Johnson, M.: A fast\n\nand accurate Vietnamese word segmenter. In: Calzolari, N., et al. (eds.) Proceedings of the Eleventh International Conference on Language Resources and Evaluation (LREC 2018). European Language Resources Association (ELRA), Miyazaki (2018). https:// aclanthology.org/L18-1410/\n\nNguyen, D.Q., Tuan Nguyen, A.: PhoBERT: pre-trained language\n\nmodels for Vietnamese. In: Cohn, T., He, Y., Liu, Y. (eds.) Findings of the Association for Computational Linguistics: EMNLP 2020, pp. 1037–1042. Association for Computational Linguistics, Online aclanthology.org/2020.findings-emnlp.92/\n\nNguyen, D.H., Nguyen, A.T.H., Van Nguyen, K.: A weakly\n\nsupervised data labeling framework for machine lexical normalization in Vietnamese social media. Cogn. Comput. 17 (1),\n\nNguyen, N., Phan, T., Nguyen, D.V., Nguyen, K.: ViSoBERT: a\n\npre-trained"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_8",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "ine lexical normalization in Vietnamese social media. Cogn. Comput. 17 (1),\n\nNguyen, N., Phan, T., Nguyen, D.V., Nguyen, K.: ViSoBERT: a\n\npre-trained language model for Vietnamese social media text processing. In: Bouamor, H., Pino, J., Bali, K. (eds.) Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, pp. 5191–5207. Association for Computational Linguistics, Singapore (2023). https://doi.org/10.18653/ v1/2023.emnlp-main.315 . https://aclanthology.org/2023.emnlp-\n\nNguyen, T.N., Le, T.P., Nguyen, K.: ViLexNorm: a lexical\n\nnormalization corpus for Vietnamese social media text. In: Graham, Y., Purver, M. (eds.) Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics, vol. 1: Long Papers, pp. 1421–1437. Association for Computational Linguistics, St. Julian’s (2024). https:// aclanthology.org/2024.eacl-lo"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_9",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "inguistics, vol. 1: Long Papers, pp. 1421–1437. Association for Computational Linguistics, St. Julian’s (2024). https:// aclanthology.org/2024.eacl-long.85/\n\nPapineni, K., Roukos, S., Ward, T., Zhu, W.J.: Bleu: a method for\n\nautomatic evaluation of machine translation. In: Isabelle, P., Charniak, E., Lin, D. (eds.) Proceedings of the 40th Annual Meeting of the Association for Computational Linguistics, pp. 311–\n\nAssociation for Computational Linguistics, Philadelphia,\n\nPennsylvania, USA (2002). https://\n\nSingh, S., et al.: Global MMLU: understanding and addressing\n\ncultural and linguistic biases in multilingual evaluation (2025).\n\nThanh Nguyen, L.: ViHateT5: enhancing hate speech detection in\n\nVietnamese with a unified text-to-text transformer model. In: Ku, L.W., Martins, A., Srikumar, V. (eds.) Findings of the Association for Computational Linguistics: ACL 2024, pp. 5948–5961. Associat"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_10",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "mer model. In: Ku, L.W., Martins, A., Srikumar, V. (eds.) Findings of the Association for Computational Linguistics: ACL 2024, pp. 5948–5961. Association for Computational Linguistics, Bangkok (2024). https:// aclanthology.org/2024.findings-acl.355/\n\nTran, N.L., Le, D., Nguyen, D.Q.: BARTpho: pre-trained sequence-\n\nto-sequence models for Vietnamese. In: Interspeech 2022, pp. Interspeech.2022-10177 . https://www.isca-archive.org/ interspeech_2022/tran22b_interspeech.html\n\nVaswani, A., et al.: Attention is all you need. In: Advances in\n\nNeural Information Processing Systems, vol. 30. Curran Associates, Inc. (2017). https://proceedings.neurips.cc/paper_files/ Abstract.html\n\nYang, A., et al.: Qwen3 Technical Report (2025). https://\n\nZhao, W.X., et al.: A survey of large language models (2025).\n\nDownload references\n\nAuthor information\n\nAuthors and Affiliations\n\nFaculty of Information Technolo"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_11",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "et al.: A survey of large language models (2025).\n\nDownload references\n\nAuthor information\n\nAuthors and Affiliations\n\nFaculty of Information Technology, University of Science, Ho Chi\n\nMinh City, Ho Chi Minh City, Vietnam Hoang-Quan Tran & Thanh-Duc Chau\n\nVietnam National University, Ho Chi Minh City, Vietnam\n\nHoang-Quan Tran & Thanh-Duc Chau Authors\n\nHoang-Quan Tran\n\nView author publications Search author on: PubMed Google Scholar\n\nThanh-Duc Chau\n\nView author publications Search author on: PubMed Google Scholar\n\nCorresponding author\n\nCorrespondence to Hoang-Quan Tran .\n\nEditor information\n\nEditors and Affiliations\n\nWrocław University of Science and Technology, Wrocław, Poland\n\nNgoc Thanh Nguyen\n\nNational Cheng Kung University, Tainan, Taiwan\n\nChun-Hao Chen\n\nIwate Prefectural University, Takizawa, Japan\n\nHamido Fujita\n\nNational University of Kaohsiung, Kaohsiung, Taiwan\n\nTzung-Pei Hong"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_12",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "an\n\nChun-Hao Chen\n\nIwate Prefectural University, Takizawa, Japan\n\nHamido Fujita\n\nNational University of Kaohsiung, Kaohsiung, Taiwan\n\nTzung-Pei Hong\n\nOpen University of Cyprus, Latsia, Greece\n\nYannis Manolopoulos\n\nWrocław University of Science and Technology, Wrocław, Poland\n\nKrystian Wojtkiewicz\n\nEthics declarations\n\nDisclosure of Interests\n\nThe authors have no competing interests to declare that are relevant to the content of this article.\n\nAppendices\n\nA Appendix: Few-Shot Instruction for Gemini 2.0-Flash\n\n[image]\n\nB Appendix: Finetune Instruction Template for Qwen3\n\n[image]\n\nRights and permissions\n\nReprints and permissions\n\nCopyright information\n\n© 2026 The Author(s), under exclusive license to Springer Nature Singapore Pte Ltd.\n\nAbout this paper\n\n[image]\n\nCite this paper\n\nTran, HQ., Chau, TD. (2026). Exploring Large Language Models’ Ability in Text Correction and Restoration for Viet"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_13",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "his paper\n\n[image]\n\nCite this paper\n\nTran, HQ., Chau, TD. (2026). Exploring Large Language Models’ Ability in Text Correction and Restoration for Vietnamese Hate Speech Detection. In: Nguyen, N.T., Chen, CH., Fujita, H., Hong, TP., Manolopoulos, Y., Wojtkiewicz, K. (eds) Recent Challenges in Intelligent information and Database Systems. ACIIDS 2026. Communications in Computer and Information Science, vol 2964. Springer, Singapore.\n\nDownload citation\n\n.RIS\n\n.ENW\n\n.BIB\n\nPublished: 01 June 2026\n\nPublisher Name: Springer, Singapore\n\neBook Packages: Artificial Intelligence (R0)Springer Nature\n\nProceedings excluding Computer Science\n\nKeywords\n\nText Restoration and Correction\n\nText Standardization\n\nVietnamese Hate Speech Detection\n\nLarge Language Models\n\nPublish with us\n\nPolicies and ethics\n\nProfiles\n\nHoang-Quan Tran\n\nView author profile\n\nAccess this chapter\n\nLog in via an institution\n\nSubscrib"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_14",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "Models\n\nPublish with us\n\nPolicies and ethics\n\nProfiles\n\nHoang-Quan Tran\n\nView author profile\n\nAccess this chapter\n\nLog in via an institution\n\nSubscribe and save\n\nSpringer+ from €37.37 /Month\n\nStarting from 10 chapters or articles per month\n\nAccess and download chapters and articles from more than 300k\n\nbooks and 2,500 journals\n\nCancel anytime\n\nView plans\n\nBuy Now\n\nChapter Price includes VAT (Vietnam) Buy Chapter\n\nAvailable as PDF\n\nRead on any device\n\nInstant download\n\nOwn it forever\n\neBook Price includes VAT (Vietnam) Buy eBook\n\nAvailable as EPUB and PDF\n\nRead on any device\n\nInstant download\n\nOwn it forever\n\nSoftcover Book Price excludes VAT (Vietnam) Buy Softcover Book\n\nCompact, lightweight edition\n\nFree shipping worldwide - view details\n\nTax calculation will be finalised at checkout Purchases are for personal use only Institutional subscriptions\n\nSearch\n\nSearch by keyword or author Sea"
+  },
+  {
+    "paper_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851",
+    "section": "body",
+    "chunk_id": "title_ffefa36455fbaef2b0efa18dec8ab65e065ee851_body_15",
+    "start_char": 9000,
+    "end_char": 9816,
+    "text": "Tax calculation will be finalised at checkout Purchases are for personal use only Institutional subscriptions\n\nSearch\n\nSearch by keyword or author Search\n\nNavigation\n\nFind a journal\n\nPublish with us\n\nTrack your research\n\nFooter Navigation\n\nDiscover content\n\nJournals A-Z\n\nBooks A-Z\n\nSubjects A-Z\n\nPublish with us\n\nJournal finder\n\nPublish your research\n\nLanguage editing\n\nOpen access publishing\n\nProducts and services\n\nOur products\n\nLibrarians\n\nSocieties\n\nPartners and advertisers\n\nOur brands\n\nSpringer\n\nNature Portfolio\n\nBMC\n\nPalgrave Macmillan\n\nApress\n\nDiscover\n\nCorporate Navigation\n\nYour privacy choices/Manage cookies\n\nYour US state privacy rights\n\nAccessibility statement\n\nTerms and conditions\n\nPrivacy policy\n\nHelp and support\n\nLegal notice\n\nCancel contracts here\n\nNot affiliated [image] © 2026 Springer Nature"
+  }
+]

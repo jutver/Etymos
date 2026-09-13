@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_cb8d371a5c90faa9c39c04b92c5c893bbf57b8d5",
+    "section": "abstract",
+    "chunk_id": "doi_cb8d371a5c90faa9c39c04b92c5c893bbf57b8d5_abstract_0",
+    "start_char": 0,
+    "end_char": 583,
+    "text": "ViSoBERT: A Pre-Trained Language Model for Vietnamese Social Media Text Processing\nEnglish and Chinese, known as resource-rich languages, have witnessed the strong development of transformer-based language models for natural language processing tasks.Although Vietnam has approximately 100M people speaking Vietnamese, several pre-trained models, e.g., PhoBERT, ViBERT, and vELEC-TRA, performed well on general Vietnamese NLP tasks, including POS tagging and named entity recognition.These pre-trained language models are still limited to Vietnamese social media tasks.In this paper,"
+  }
+]

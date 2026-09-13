@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_387a8c963647576f4060071fb6bd2f81017f1675",
+    "section": "abstract",
+    "chunk_id": "doi_387a8c963647576f4060071fb6bd2f81017f1675_abstract_0",
+    "start_char": 0,
+    "end_char": 596,
+    "text": "Benchmarking Transformer Models for Fine-Grained Assamese Hate Speech Detection in Social Media\nHate speech detection in low-resource languages is a critical challenge in natural language processing, particularly for languages like Assamese that lack large-scale annotated datasets. This paper investigates the performance of transformerbased models for fine-grained, multi-class hate speech detection in Assamese social media text. We leverage an existing multi-class Assamese hate speech corpus containing $\\mathbf{5, 0 0 1}$ social media comments labeled across categories such as religionbase"
+  }
+]

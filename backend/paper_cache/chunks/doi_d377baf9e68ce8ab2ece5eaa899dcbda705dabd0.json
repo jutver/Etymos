@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_d377baf9e68ce8ab2ece5eaa899dcbda705dabd0",
+    "section": "abstract",
+    "chunk_id": "doi_d377baf9e68ce8ab2ece5eaa899dcbda705dabd0_abstract_0",
+    "start_char": 0,
+    "end_char": 585,
+    "text": "HM-HSD: HIERARCHICAL MULTI-TASK DUAL-TRANSFORMER FRAMEWORK FOR HATE SPEECH DETECTION\nOnline social media has facilitated the spread of communication across continents and seas, and yet it has also allowed destructive speech, such as hate speech that results in psychological damage, polarization, hatred, and violence offline. The automation of hate speech detection is crucial because manual moderation does not scale with the volume and variety of user-generated content. However, existing methods remain limited in terms of accuracy and generalization, especially concerning sarcasm"
+  }
+]

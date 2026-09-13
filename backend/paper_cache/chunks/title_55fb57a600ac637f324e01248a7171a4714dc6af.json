@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_55fb57a600ac637f324e01248a7171a4714dc6af",
+    "section": "abstract",
+    "chunk_id": "title_55fb57a600ac637f324e01248a7171a4714dc6af_abstract_0",
+    "start_char": 0,
+    "end_char": 182,
+    "text": "Vihsd\nSecondly, a novel hate speech detection (HSD) model, which is the combination of a pre-trained PhoBERT model and a Text-CNN model, was proposed for solving tasks in Vietnamese."
+  }
+]

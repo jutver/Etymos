@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_b1cd8d135bb2a532b65b5242ea7182b324541c27",
+    "section": "abstract",
+    "chunk_id": "doi_b1cd8d135bb2a532b65b5242ea7182b324541c27_abstract_0",
+    "start_char": 0,
+    "end_char": 592,
+    "text": "UA-HSD-2025: Multi-Lingual Hate Speech Detection from Tweets Using Pre-Trained Transformers\nThe rise in social media has improved communication but also amplified the spread of hate speech, creating serious societal risks. Automated detection remains difficult due to subjectivity, linguistic diversity, and implicit language. While prior research focuses on high-resource languages, this study addresses the underexplored multilingual challenges of Arabic and Urdu hate speech through a comprehensive approach. To achieve this objective, this study makes four different key contributions. Fi"
+  }
+]

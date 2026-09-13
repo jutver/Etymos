@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_abc3aad253ed8717d7fe4c8b2eabed3a2753f336",
+    "section": "abstract",
+    "chunk_id": "title_abc3aad253ed8717d7fe4c8b2eabed3a2753f336_abstract_0",
+    "start_char": 0,
+    "end_char": 403,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in VietnameseWith a Unified Text-to-Text Transformer Model\nThe proposed ViHateT5 model is specifically designed to handle various hate speech detection tasks in the Vietnamese language. Trained on a substantial auto-labeled dataset VOZ-HSD, as discussed in Section 3.1, the collected data undergoes meticulous preprocessing to eliminate all user identities, ..."
+  }
+]

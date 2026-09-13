@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_04e3d3191714162107d6584799bd9b1f4e098d55",
+    "section": "abstract",
+    "chunk_id": "doi_04e3d3191714162107d6584799bd9b1f4e098d55_abstract_0",
+    "start_char": 0,
+    "end_char": 602,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With a Unified Text-to-Text Transformer Model\nRecent advancements in hate speech detection (HSD) in Vietnamese have made significant progress, primarily attributed to the emergence of transformer-based pre-trained language models, particularly those built on the BERT architecture.However, the necessity for specialized fine-tuned models has resulted in the complexity and fragmentation of developing a multitasking HSD system.Moreover, most current methodologies focus on fine-tuning general pre-trained models, primarily trained on formal textu"
+  }
+]

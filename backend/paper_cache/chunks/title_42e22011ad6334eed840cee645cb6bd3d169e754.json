@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_42e22011ad6334eed840cee645cb6bd3d169e754",
+    "section": "abstract",
+    "chunk_id": "title_42e22011ad6334eed840cee645cb6bd3d169e754_abstract_0",
+    "start_char": 0,
+    "end_char": 315,
+    "text": "GitHub - tarudesu/ViHateT5: Repository for the paper...\nIntroduction. ViHateT5. Recent advancements in hate speech detection (HSD) in Vietnamese have made significant progress, primarily attributed to the emergence of transformer-based pre-trained language models, particularly those built on the BERT architecture."
+  }
+]

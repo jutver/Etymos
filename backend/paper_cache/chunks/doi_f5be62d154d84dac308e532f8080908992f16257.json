@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_f5be62d154d84dac308e532f8080908992f16257",
+    "section": "abstract",
+    "chunk_id": "doi_f5be62d154d84dac308e532f8080908992f16257_abstract_0",
+    "start_char": 0,
+    "end_char": 589,
+    "text": "Hate Speech Detection on Vietnamese Social Media Text using the Bidirectional-LSTM Model\nIn this paper, we describe our system which participates in the shared task of Hate Speech Detection on Social Networks of VLSP 2019 evaluation campaign. We are provided with the pre-labeled dataset and an unlabeled dataset for social media comments or posts. Our mission is to pre-process and build machine learning models to classify comments/posts. In this report, we use Bidirectional Long Short-Term Memory to build the model that can predict labels for social media text according to Clean, Off"
+  }
+]

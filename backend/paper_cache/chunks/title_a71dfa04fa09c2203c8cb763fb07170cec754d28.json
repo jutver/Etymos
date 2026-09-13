@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_a71dfa04fa09c2203c8cb763fb07170cec754d28",
+    "section": "abstract",
+    "chunk_id": "title_a71dfa04fa09c2203c8cb763fb07170cec754d28_abstract_0",
+    "start_char": 0,
+    "end_char": 302,
+    "text": "ViTHSD: exploiting hatred by targets for hate speech detection on...\nWe first introduce the ViTHSD - a targeted hate speech detection dataset for Vietnamese Social Media Texts. The dataset contains 10K comments, each comment is labeled to specific targets with three levels: clean, offensive, and hate."
+  }
+]

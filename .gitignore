@@ -15,6 +15,13 @@ dist-ssr
 # Python virtualenvs (e.g. backend/.venv, used by `npm test`'s backend leg)
 .venv
 venv
+# Isolated venv for marker-pdf (backend/marker_preview.py) — kept separate
+# from the main venv on purpose (see docs/SETUP_MARKER.md), never committed.
+backend/marker_env
+# Per-report marker-pdf HTML/docx output (local disk only, see
+# marker_preview_store.py's docstring) — same tier as the existing
+# storage/processed_pdfs local PDF fallback.
+backend/storage/marker_previews
 
 # Editor directories and files
 **/__pycache__/

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_93ef3a40e48d3566c598cfd6805b613a3c552091",
+    "section": "abstract",
+    "chunk_id": "doi_93ef3a40e48d3566c598cfd6805b613a3c552091_abstract_0",
+    "start_char": 0,
+    "end_char": 588,
+    "text": "Cross-Lingual Few-Shot Hate Speech and Offensive Language Detection Using Meta Learning\nAutomatic detection of abusive online content such as hate speech, offensive language, threats, etc. has become prevalent in social media, with multiple efforts dedicated to detecting this phenomenon in English. However, detecting hatred and abuse in low-resource languages is a non-trivial challenge. The lack of sufficient labeled data in low-resource languages and inconsistent generalization ability of transformer-based multilingual pre-trained language models for typologically diverse language"
+  }
+]

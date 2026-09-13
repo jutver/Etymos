@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_75407bb1f378ac5f236b798661b23e3fa33d62aa",
+    "section": "abstract",
+    "chunk_id": "title_75407bb1f378ac5f236b798661b23e3fa33d62aa_abstract_0",
+    "start_char": 0,
+    "end_char": 339,
+    "text": "GitHub - uitxmic/Vietnamese-Hate-Speech-Detection: Vietnamese...\nVietnamese social media hate speech detection. Original labels: 0, 1, 2; preprocessing maps 0 -> Clean and 1, 2 -> Toxic. 33,400 samples.Vietnamese NLP project for hate speech detection using text preprocessing, feature extraction, and machine learning/deep learning models."
+  }
+]

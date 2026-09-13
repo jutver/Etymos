@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_9a2b6628154e6d2ec522a2a7407b6afe28642fea",
+    "section": "abstract",
+    "chunk_id": "doi_9a2b6628154e6d2ec522a2a7407b6afe28642fea_abstract_0",
+    "start_char": 0,
+    "end_char": 585,
+    "text": "Leveraging Domain-Specific Word Embedding and Hate Concepts in Hate Speech Detection\nMalicious spreading of hate speech on social media hinders the construction of a harmonious online environment, so efficient automatic hate detection become crucial. However, due to the short text form in which most hate speech exists, the semantic features of these texts are relatively sparse, making it difficult for models to learn enough knowledge for classification. Additionally, an increasing number of hate speech tends to use abbreviated and misspelled hate words to evade detection, making"
+  }
+]

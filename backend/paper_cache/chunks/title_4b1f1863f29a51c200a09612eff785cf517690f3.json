@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_4b1f1863f29a51c200a09612eff785cf517690f3",
+    "section": "abstract",
+    "chunk_id": "title_4b1f1863f29a51c200a09612eff785cf517690f3_abstract_0",
+    "start_char": 0,
+    "end_char": 469,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With a Unified Text-to-Text Transformer Model\nMay 24, 2024 - Moreover, most current methodologies focus on fine-tuning general pre-trained models, primarily trained on formal textual datasets like Wikipedia, which may not accurately capture human behavior on online platforms. In this research, we introduce ViHateT5, a T5-based model pre-trained on our proposed large-scale domain-specific dataset named VOZ-HSD."
+  }
+]

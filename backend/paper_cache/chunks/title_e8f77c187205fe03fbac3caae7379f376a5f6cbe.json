@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_e8f77c187205fe03fbac3caae7379f376a5f6cbe",
+    "section": "abstract",
+    "chunk_id": "title_e8f77c187205fe03fbac3caae7379f376a5f6cbe_abstract_0",
+    "start_char": 0,
+    "end_char": 205,
+    "text": "visolex/sphobert-hsd · Hugging Face\nSPhoBERT: Hate Speech Detection for Vietnamese Text.Dataset: ViHSD (Vietnamese Hate Speech Detection Dataset). Fine-tuning Framework: HuggingFace Transformers + PyTorch."
+  }
+]

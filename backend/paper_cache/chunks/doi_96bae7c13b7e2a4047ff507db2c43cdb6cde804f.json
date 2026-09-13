@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_96bae7c13b7e2a4047ff507db2c43cdb6cde804f",
+    "section": "abstract",
+    "chunk_id": "doi_96bae7c13b7e2a4047ff507db2c43cdb6cde804f_abstract_0",
+    "start_char": 0,
+    "end_char": 593,
+    "text": "Enhanced Task-based Knowledge for Lexicon-based Approach in Vietnamese Hate Speech Detection\nThe explosion of free-text content on social media has brought the exponential propagation of hate speech. The definition of hate speech is well-defined in the community guidelines of many popular platforms such as Facebook, Tiktok, and Twitter, where any communication judges towards the minor, protected groups are considered hateful content. This paper first points out the sophisticated word-play of malicious users in a Vietnamese Hate Speech (VHS) Dataset. The Center Loss in the training proce"
+  }
+]

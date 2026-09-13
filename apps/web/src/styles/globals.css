@@ -173,3 +173,67 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Minimal typography for marker-pdf's reflowed HTML (see
+   components/MarkerDocumentViewer.tsx) — no @tailwindcss/typography plugin
+   is installed in this project, so this hand-rolled set of descendant rules
+   stands in for it, scoped to just this one viewer. */
+.marker-document-preview {
+  line-height: 1.6;
+  color: var(--color-ink-900);
+}
+
+.marker-document-preview h1,
+.marker-document-preview h2,
+.marker-document-preview h3,
+.marker-document-preview h4 {
+  font-weight: 700;
+  color: var(--color-navy-900);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.marker-document-preview h1 { font-size: 1.5rem; }
+.marker-document-preview h2 { font-size: 1.25rem; }
+.marker-document-preview h3 { font-size: 1.1rem; }
+.marker-document-preview h4 { font-size: 1rem; }
+
+.marker-document-preview p,
+.marker-document-preview ul,
+.marker-document-preview ol {
+  margin-bottom: 1em;
+}
+
+.marker-document-preview ul,
+.marker-document-preview ol {
+  padding-left: 1.5em;
+}
+
+.marker-document-preview img {
+  max-width: 100%;
+  height: auto;
+  margin: 1em 0;
+}
+
+.marker-document-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.875rem;
+}
+
+.marker-document-preview th,
+.marker-document-preview td {
+  border: 1px solid var(--color-line);
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+
+.marker-document-preview a {
+  color: var(--color-brand-600);
+  text-decoration: underline;
+}
+
+.marker-document-preview mark {
+  color: inherit;
+}

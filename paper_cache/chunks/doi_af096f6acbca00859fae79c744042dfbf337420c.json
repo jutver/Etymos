@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_af096f6acbca00859fae79c744042dfbf337420c",
+    "section": "abstract",
+    "chunk_id": "doi_af096f6acbca00859fae79c744042dfbf337420c_abstract_0",
+    "start_char": 0,
+    "end_char": 618,
+    "text": "Comparison Between Traditional Machine Learning Models And Neural Network Models For Vietnamese Hate Speech Detection\nHate-speech detection on social network language has become one of the main researching fields recently due to the spreading of social networks like Facebook and Twitter. In Vietnam, the threat of offensive and harassment cause bad impacts for online user. The VLSP - Shared task about Hate Speech Detection on social networks showed many proposed approaches for detecting whatever comment is clean or not. However, this problem still needs further researching. Consequently, we compare traditional m"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_57f7183ef16ef330ad8d5fa1591abe68d7f83fa0",
+    "section": "abstract",
+    "chunk_id": "doi_57f7183ef16ef330ad8d5fa1591abe68d7f83fa0_abstract_0",
+    "start_char": 0,
+    "end_char": 566,
+    "text": "MetaHate: A Dataset for Unifying Efforts on Hate Speech Detection\nHate speech represents a pervasive and detrimental form of online discourse, often manifested through an array of slurs, from hateful tweets to defamatory posts. As such speech proliferates, it connects people globally and poses significant social, psychological, and occasionally physical threats to targeted individuals and communities. Current computational linguistic approaches for tackling this phenomenon rely on labelled social media datasets for training. For unifying efforts, our study adv"
+  }
+]

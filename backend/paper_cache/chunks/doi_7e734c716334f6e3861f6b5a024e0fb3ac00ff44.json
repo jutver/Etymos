@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_7e734c716334f6e3861f6b5a024e0fb3ac00ff44",
+    "section": "abstract",
+    "chunk_id": "doi_7e734c716334f6e3861f6b5a024e0fb3ac00ff44_abstract_0",
+    "start_char": 0,
+    "end_char": 582,
+    "text": "Cross-Domain Hate Speech Detection for Content Moderation in Greek Social Networks\nHate speech has plagued the available content on all social networks, regardless of focus or primary language, with effective detection being the hardest obstacle towards moderation. In this work we focus on the wider issue of cross-domain hate speech detection. We introduce a state-of-the-art model for Greek hate speech detection, and compare it against LLMs in in-domain and out-of-domain hate speech detection, on data collected from three social networks. To facilitate this we introduce a new"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_3413785a2136430b2a84424aece1173e99edd67b",
+    "section": "abstract",
+    "chunk_id": "doi_3413785a2136430b2a84424aece1173e99edd67b_abstract_0",
+    "start_char": 0,
+    "end_char": 572,
+    "text": "Assessing the Impact of Contextual Information in Hate Speech Detection\nIn recent years, hate speech has gained relevance in social networks and other virtual media because of its intensity and its relationship with violent acts against members of protected groups. Due to the huge amounts of user-generated contents, a great effort has been made to develop automatic tools to aid the analysis and moderation of this speech, at least in its most threatening forms. One of the limitations of current approaches to automatic hate speech detection is the lack of context; mos"
+  }
+]

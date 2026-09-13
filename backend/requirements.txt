@@ -48,3 +48,11 @@ supabase==2.31.0
 
 # --- Testing (backend/tests/) ---
 pytest==8.3.3
+
+# --- Marker-pdf preview rendering (marker_preview.py) ---
+# Only for rendering the marker-pdf-produced Markdown into HTML for the
+# Report page's Original view. Tiny, dependency-light, no torch/transformers
+# pin of its own — carries none of the version-conflict risk that keeps the
+# actual marker-pdf tool itself out of this venv (see backend/marker_env/ +
+# README_MARKER.md, run as an isolated subprocess instead).
+Markdown==3.7

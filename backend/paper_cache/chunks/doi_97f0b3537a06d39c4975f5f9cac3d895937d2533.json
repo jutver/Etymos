@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_97f0b3537a06d39c4975f5f9cac3d895937d2533",
+    "section": "abstract",
+    "chunk_id": "doi_97f0b3537a06d39c4975f5f9cac3d895937d2533_abstract_0",
+    "start_char": 0,
+    "end_char": 559,
+    "text": "Transfer learning for hate speech detection in social media\nAbstract Today, the internet is an integral part of our daily lives, enabling people to be more connected than ever before. However, this greater connectivity and access to information increase exposure to harmful content, such as cyber-bullying and cyber-hatred. Models based on machine learning and natural language offer a way to make online platforms safer by identifying hate speech in web text autonomously. However, the main difficulty is annotating a sufficiently large number of examples to"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_b286e1358b362cc7ef983b13d34bb9da6c368243",
+    "section": "abstract",
+    "chunk_id": "doi_b286e1358b362cc7ef983b13d34bb9da6c368243_abstract_0",
+    "start_char": 0,
+    "end_char": 586,
+    "text": "A Multi-Task Learning Approach to Hate Speech Detection Leveraging Sentiment Analysis\nThe rise of social media platforms has significantly changed the way our world communicates, and part of those changes includes a rise in inappropriate behaviors, such as the use of aggressive and hateful language online. Detecting such content is crucial to filtering or blocking inappropriate content on the Web. However, due to the huge amount of data posted every day, automatic methods are essential for identifying this type of content. Seeking to address this issue, the Natural Language Proce"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_074a3225cbecb72fa29a7c67e77b373c99adf68f",
+    "section": "abstract",
+    "chunk_id": "doi_074a3225cbecb72fa29a7c67e77b373c99adf68f_abstract_0",
+    "start_char": 0,
+    "end_char": 564,
+    "text": "RESEARCH ON MACHINE LEARNING MODELS FOR TOXIC CONTENT DETECTION\nThe rapid growth of digital communication and the proliferation of online platforms have intensified the need to address the problem of detecting toxic content, including hate speech, cyberbullying, threats, and discriminatory statements. Such manifestations negatively affect both individual users and the broader information environment, undermining trust in digital services and contributing to the spread of social bias. Given the impracticality of large-scale manual moderation, automated method"
+  }
+]

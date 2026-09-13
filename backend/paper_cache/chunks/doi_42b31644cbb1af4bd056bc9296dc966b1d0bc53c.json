@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_42b31644cbb1af4bd056bc9296dc966b1d0bc53c",
+    "section": "abstract",
+    "chunk_id": "doi_42b31644cbb1af4bd056bc9296dc966b1d0bc53c_abstract_0",
+    "start_char": 0,
+    "end_char": 574,
+    "text": "Cross-lingual hate speech detection using domain-specific word embeddings\nTHIS ARTICLE USES WORDS OR LANGUAGE THAT IS CONSIDERED PROFANE, VULGAR, OR OFFENSIVE BY SOME READERS. Hate speech detection in online social networks is a multidimensional problem, dependent on language and cultural factors. Most supervised learning resources for this task, such as labeled datasets and Natural Language Processing (NLP) tools, have been specifically tailored for English. However, a large portion of web users around the world speak different languages, creating an important need f"
+  }
+]

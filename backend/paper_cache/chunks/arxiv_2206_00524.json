@@ -1,0 +1,922 @@
+[
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "abstract",
+    "chunk_id": "arxiv_2206_00524_abstract_0",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Society needs to develop a system to detect hate and offense to build a healthy and safe environment. However, current research in this field still faces four major shortcomings, including deficient pre-processing techniques, indifference to data imbalance issues, modest performance models, and lacking practical applications. This paper focused on devel- oping an intelligent system capable of addressing these shortcomings. Firstly, we proposed an efficient pre-processing technique to clean com- ments collected from Vietnamese social media. Secondly, a novel hate speech detection (HSD) model, which is the combination of a pre- trained PhoBERT model and a Text-CNN model, was proposed for solving tasks in Vietnamese. Thirdly, EDA techniques are applied to deal with imbalanced data to improve the performance of classifica- tion models. Besides, various experiments were conducted as baselines"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "abstract",
+    "chunk_id": "arxiv_2206_00524_abstract_1",
+    "start_char": 750,
+    "end_char": 1416,
+    "text": "e applied to deal with imbalanced data to improve the performance of classifica- tion models. Besides, various experiments were conducted as baselines to compare and investigate the proposed model’s performance against posed PhoBERT-CNN model outperforms SOTA methods and achieves an F1-score of 67,46% and 98,45% on two benchmark datasets, ViHSD and HSD-VLSP, respectively. Finally, we also built a streaming HSD application to demonstrate the practicality of our proposed system. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Keywords: Hate speech detection, Sentiment analysis, Transformer, Streaming data"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_2",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Along with the advances in technology of the Fourth Industrial Revolution, the rapid rise of social networks has been astoundingly altering our daily life. In that situation, safety in cyberspace is an issue that directly affects the user’s life, especially objects such as children or vulnerable people. According to Mohan et al. reports [ 1 ], the social media environment in which many harmful contents such as hateful comments, fake news, contents that violate community standards influence not only on the large proportion of users but also on online moderators. Hate speech is typically described as any communication that disparages a person or group based on any attribute such as race, color, ethnicity, gender, sexual orientation, nationality, religion, or other trait. The following are some examples of hateful and offensive comments posted on Vietnamese social media 1 : cứphải chửi cho"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_3",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ty, religion, or other trait. The following are some examples of hateful and offensive comments posted on Vietnamese social media 1 : cứphải chửi cho mới chịu im :))) you only shut your mouth until I swear at you :)))) ; lũ chó đói those hungry dogs ; hài vcl so fucking funny However, censoring hate and offensive comments on social media faces many challenges because of their enormous volume and variety in both magnitude and topics. According to Suha Abu et al., research [ 2 ], 293,000 posts are posted every 60 seconds on the billion-user social networking platform, Facebook, and over 510,000 comments are written there. Moreover, according to the prestigious statistics reporting site, Statista [ 3 ], Facebook had to remove more than 11.3 million pieces of offensive and hateful content globally in 2018. In 2019, YouTube also removed over 1.800 million comments that violated community stan"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_4",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "llion pieces of offensive and hateful content globally in 2018. In 2019, YouTube also removed over 1.800 million comments that violated community standards, and these statistics have risen dramatically on both platforms. In 2020, Facebook must remove more than 81 million hateful and offensive posts, a seven times increase from 2018. While YouTube must remove over 4,800 million comments in 2020, this tripled the figures in 2019. The above results are the efforts of the two most prominent social networking platforms to stop hate and offense in their platforms globally. According to a report from the Wall Street Journal [ 4 ], up to 2018, Facebook had to spend hundreds of millions of dollars on their content moderation teams. Besides, the major American technology information site - The Verge, reports that Google also has a team consisting of nearly 10,000 people responsible for the same ta"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_5",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "r American technology information site - The Verge, reports that Google also has a team consisting of nearly 10,000 people responsible for the same task. However, this team still has many shortcomings. Firstly, despite the fact that Facebook is available in over 100 languages [ 4 ], but only slightly more than half of them have dedicated content censorship teams. Meanwhile, Southeast Asia (including Vietnam) is a significant market for Facebook but still lacks human resources with advanced language skills. 1 The several examples in this article are given to demonstrate the seriousness of the hate speech problem. They are based on actual online data and do not reflect the authors’ opinions. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data In addition, the social network environment in Vietnam is extremely toxic, according to a survey"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_6",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "nsive Detection using PhoBERT-CNN and Streaming Data In addition, the social network environment in Vietnam is extremely toxic, according to a survey by Microsoft [ 5 ]. Secondly, even though content censorship teams have been trained and informed about extremely hateful content, they need to deal with its con- sequences. Many of them have psychological disorders, and some even face Post-traumatic Stress Disorder (PTSD) [ 6 ], which is prevalent after witnessing a heinous crime, and many are reported that they will never fully recover. Thirdly, the large corporations that own these social networks and research laboratories have allocated resources to develop systems using Artificial Intel- ligence to solve this dilemma, but they are still impractical. These systems utilize rich and quality data sources that originated from their social network- ing platforms. They possess leading-edge me"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_7",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "mpractical. These systems utilize rich and quality data sources that originated from their social network- ing platforms. They possess leading-edge methods that can be applied across multilingual [ 7 ], making powerful systems that quickly classify hate and offen- sive content. However, it is difficult for these systems to recognize the content that lacks context, specialized culture native, and are slow to keep up with the continuously improving development in hateful content. Furthermore, these systems have not been studied extensively and deeply enough in Vietnamese due to Limitations remaining in building the systems which result in being unusable to solve this task. Therefore, our research contributes to HSD task in Vietnamese. Our research proposes a novel system that applies advanced natural language processing techniques to classify the hate and offensive comments on social netwo"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "introduction",
+    "chunk_id": "arxiv_2206_00524_introduction_8",
+    "start_char": 4500,
+    "end_char": 4907,
+    "text": "earch proposes a novel system that applies advanced natural language processing techniques to classify the hate and offensive comments on social networks towards a healthier, safer online space. Our research can handle issues as small as single comments to as vast as continuously processing enormous amounts of data in real-time. The main scientific contributions of our research are summarized as follows."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_9",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "comments collected from social networking sites. These techniques enhance the data quality and significantly improve extracting information before training the model.\n\nA novel HSD model is proposed to improve the performance of the task\n\nin Vietnamese. To this end, the various experiments were conducted with ing approaches, transfer learning approaches, and combined approach. approaches aid in developing the baseline models.\n\nWe applied EDA techniques to the ViHSD dataset and the HSD-VLSP\n\ndataset to deal with imbalanced data and verify the effectiveness and necessity of data augmentation for the task of Vietnamese HSD.\n\nTo demonstrate the usefulness of the proposed system, we built an applica-\n\ntion that continuously streams data from the massive data source of social media platforms to detect hate and offensive comments. Our proposed system can be applied to online newspapers or websit"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_10",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "massive data source of social media platforms to detect hate and offensive comments. Our proposed system can be applied to online newspapers or websites having small comments quantity but require strict censorship, as well as huge social Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data networks or forums. The system helps to improve the comprehensive censorship of offensive and hateful comments on cyberspace in Vietnam. We contribute to building a positive, civilized environment or satisfying the need to orient and protect vulnerable subjects such as the elderly and children. Moreover, the application is also a basis for agencies and organizations to evaluate and control management, psychological research, and education behaviors. The rest of the paper is organized as follows. In Section 2 , we survey and describe an overview of the"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_11",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "chological research, and education behaviors. The rest of the paper is organized as follows. In Section 2 , we survey and describe an overview of the fundamentals of the HSD task and relevant studies. Our proposed approach is presented in detail through Section 3 . Section 4 is our experimental results on the given datasets, contribution of each module in the PhoBERT-CNN model, and instructions and actual performance of the HSD application with streaming data. Finally, Section 5 is Conclusion and Future works.\n\n2 Fundamental of Hate Speech Detection on\n\nStreaming Data\n\n2.1 A brief introduction to hate speech detection task\n\nHSD and sentiment analysis have been inextricably linked [ 8 ], and these tasks have recently become popular topics in Natural Language Processing. In this section, we summarize the Vietnamese HSD task [ 9 , 10 ]. This task aims to detect whether a comment on social m"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_12",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "Natural Language Processing. In this section, we summarize the Vietnamese HSD task [ 9 , 10 ]. This task aims to detect whether a comment on social media is HATE, OFFENSIVE, or CLEAN. Formally, the task is described as follows. Input : Given Vietnamese comments on the social networks sites. Output : One of three different labels is predicted by classifiers.\n\nHate speech (HATE) contains abusive language, which regularly bears\n\nthe aim of insulting individuals or groups and might include hate speech, derogatory and offensive language. An item (post or comment) is identified as HATE if it (1) targets individuals or groups based on their characteristics; (2) demonstrates a transparent intention to incite harm or to market hatred; (3) may or might not use offensive or profane words.\n\nOffensive but not hate speech (OFFENSIVE) is an item that\n\ncould contain offensive words, but it does not tar"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_13",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "ght not use offensive or profane words.\n\nOffensive but not hate speech (OFFENSIVE) is an item that\n\ncould contain offensive words, but it does not target individuals.\n\nNeither offensive nor hate speech (CLEAN) is a normal item. It\n\nis conversation, and expresses emotions normally, and it does not contain offensive language or hate speech is a normal item. Fig. 1 : An overview of existing approach for hate speech detection. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n2.2 Data pre-processing in HSD\n\nData pre-processing techniques always play an essential role in data classi- fication tasks from Vietnamese social networks in general and hate speech detection tasks in particular [ 11 ]. Khang et al. [ 12 ] investigated the impact of pre-processing on datasets collected from Vietnamese social networks. Accord- ing to the findings of"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_14",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "]. Khang et al. [ 12 ] investigated the impact of pre-processing on datasets collected from Vietnamese social networks. Accord- ing to the findings of this study, pre-processing has a significant impact on extracting information from data. Vietnamese comments on social media fre- quently contain characters and words associated with emotional undertones presenting in various ways, making it difficult to identify, differentiate, and extract information. Khang et al. [ 12 ] also succeeded in using initial data pre- processing to improve results by 4.66%. This is a success compared to earlier work on the same datasets and evaluation metrics. However, current studies on both the ViHSD and the HSD-VLSP datasets have not used modern and effective data pre-processing techniques to improve the performance of classification models. Only simple pre-processing tech- niques, such as word-segmenting t"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_15",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "data pre-processing techniques to improve the performance of classification models. Only simple pre-processing tech- niques, such as word-segmenting texts into words, lower case text, removing or anonymizing sensitive information, and removing URLs and non-alphabetic characters, were utilized in previous studies. In our study, we inherit the advan- tages of previous studies and implement novel and specific pre-processing techniques to handle some of the most difficult challenges with social network data, such as SOTA Vietnamese word segmentation using VnCoreNLP [ 13 ], De–teencode, and stopwords removal (see Subsection 3.2 ). These techniques enhance the performance of models.\n\n2.3 Existing HSD models\n\nSome surveys on hate speech and machine learning for HSD give the research information on the current state of this field. They not only provide a structured overview of previous approache"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_16",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "e learning for HSD give the research information on the current state of this field. They not only provide a structured overview of previous approaches [ 14 ] but also describe key sub-areas that have been explored to recognize these types of utterances automatically [ 8 ]. In (NLP) technique that is used in the automatic detection of the hate speech on the Online social networks [ 15 ]. This motivates other researchers, namely Waseem et al. [ 16 ], Chen et al. [ 17 ], and Davidson et al. [ 18 ], to apply the HSD system with the purpose of solving the real-life problem of hate speech on social network like Twitter. On the other hand, we conducted a survey on the related works serving the task of classifying comments on social networks in Vietnamese, especially the Vietnamese Hate Speech Detection task is still modest [ 9 , 10 , 19 – 24 ]. Specifically, the current studies revolve only ba"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_17",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "etnamese, especially the Vietnamese Hate Speech Detection task is still modest [ 9 , 10 , 19 – 24 ]. Specifically, the current studies revolve only based on two typical datasets by their outstanding high quality and large quantity of data points: ViHSD [ 10 ] and HSD-VLSP [ 9 ] datasets. Methods for solving HSD problems are numerous, with machine learning models being the most fundamental. Support Vector Machine and Random Forest models applied in the study of Davidson et al.[ 18 ] and Martins et Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data al.[ 25 ] are the best approaches across their studies, and the results serve as the foundation for future development of other methods. In recent years, SOTA solutions with exceptional performance have emerged, such as the development of single models for multi-language such as BERT [ 26 ], R"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_18",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "nt years, SOTA solutions with exceptional performance have emerged, such as the development of single models for multi-language such as BERT [ 26 ], RoBERTa [ 27 ], XLM-R [ 28 ], and combinations to create more superior models such as provide opportunities for HSD performance increase. As inspired by the success of combining variant BERT with the CNN model [ 29 – 31 ], the PhoBERT-CNN combined model is implemented in this work to investigate its efficacy in the task of Vietnamese HSD. CNN is used instead of other typical deep neural networks such as LSTM [ 32 ], Bi-LSTM [ 33 ], and GRU [ 34 ] since it is currently the most successful model for addressing short text classification tasks [ 35 ]. The convolution and pooling techniques of CNN aid in the extraction of the main concepts and keywords of the text as features, resulting in a significant improvement in the performance of the class"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_19",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "id in the extraction of the main concepts and keywords of the text as features, resulting in a significant improvement in the performance of the classification model. To address this limitation, the large-scale monolingual language model pre-trained for Vietnamese PhoBERT is the appropriate combination due to the fact that the PhoBERT has a duty on extracting features from sentences for the input of the Text-CNN model. PhoBERT, the first large-scale monolingual pre-trained language model for Vietnamese, was introduced by Nguyen et al. in 2020 [ 36 ]. PhoBERT was trained on about 20GB of data, including approximately 1 GB from the Vietnamese Wikipedia corpus and the rest of 19 GB from the Vietnamese news corpus. The architecture of PhoBERT is similar to the RoBERTa model developed by Liu et al. at Facebook [ 27 ] (the model is optimized from the BERT model with a large amount of data trai"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_20",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "s similar to the RoBERTa model developed by Liu et al. at Facebook [ 27 ] (the model is optimized from the BERT model with a large amount of data training data up to 160GB and a 10x increase over BERT). Furthermore, when it comes to Vietnamese, PhoBERT has been demonstrated to perform and produce better results than the current best multilingual model [ 36 ], namely the XLM-R model [ 28 ].\n\n2.4 Hate speech detection with streaming data\n\nBesides new datasets and methodologies, numerous applications and systems for real-time data processing are also introduced. Some typical projects can be mentioned, such as data streaming process of Nagarajan et al. [ 37 ], and real-time tweets processing on Twitter, which uses Spark Streaming [ 38 ]. Some real-life applications have been introduced in the last decade, in 2015, Burnap et al. [ 39 ] successfully provided Application Program ming Interfaces"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_21",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "eal-life applications have been introduced in the last decade, in 2015, Burnap et al. [ 39 ] successfully provided Application Program ming Interfaces (APIs) based on website services such as CrowdFlower or Amazon Mechanical Turk which can be integrated into a data pipeline in order to classify hate speech text. Then in 2018, Anagnostou et al. also presented a web application for actively reporting YouTube [ 40 ]. However, to the best of our knowledge, current research on HSD for Viet- namese is still at the theoretical analysis stage, and no practical application solutions have been introduced. Therefore, we need a highly scalable, reliable, and fault-tolerant data streaming engine for real-time HSD. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data We also overcome the remaining restrictions on the ViHSD and HSD-VLSP datasets in pre"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_22",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "ate and Offensive Detection using PhoBERT-CNN and Streaming Data We also overcome the remaining restrictions on the ViHSD and HSD-VLSP datasets in previous studies [ 9 , 10 , 19 – 24 ] by proposing a two-phase data pre- processing techniques. Furthermore, we inherit the advantages of each study, such as the ability to conduct the experiment with deep learning, transfer learning models, and combined models. In particular, we combine a robust monolingual pre-trained model for Vietnamese, PhoBERT and a deep learning model, Text-CNN. At the end of the experiment, an HSD application with streaming data was deployed to demonstrate the effectiveness and contribution of our proposed system.\n\n3 Proposed Hate Speech Detection System for\n\nSocial Media Streaming Data\n\n3.1 Proposed System Architecture\n\nThis section proposes our efficient and straightforward approach for the Viet- namese hate speech d"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_23",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "Streaming Data\n\n3.1 Proposed System Architecture\n\nThis section proposes our efficient and straightforward approach for the Viet- namese hate speech detection task. We focus on perfecting the combined techniques. Figure 2 shows the overview of the system using four essential com- ponents: the pre-processing techniques, the data augumentation techniques, the core method PhoBERT-CNN, and the Hate speech detection application with streaming data. Fig. 2 : Our proposed approach for Vietnamese hate speech detection.\n\n3.2 Data pre-processing\n\nWe use two datasets: ViHSD [ 10 ] and HSD-VLSP [ 9 ] which contain 33,400 and 20,345 comments, respectively. Because the ViHSD and HSD-VLSP datasets are collected from social networking sites, they contain highly complex and diverse comments. Especially, abundant comments in both datasets contain, non- unicode standard characters, teen code, acronyms, and"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_24",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "ighly complex and diverse comments. Especially, abundant comments in both datasets contain, non- unicode standard characters, teen code, acronyms, and words with repeating characters. Therefore, we proceed to build a data pre-processing process to improve the quality of the datasets to extract valuable features before using Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data them for training the classification models. Figure 3 depicts an overview of the two-phase data pre-processing procedure. Fig. 3 : Data preparation steps. Lowercase Sentences : All the characters of all the comments in the datasets are lowercase. We do this to avoid Python seeing two exact words as separate because of their capital letters. Delete Redundant Space : Users on social media unwittingly or wittingly type multiple spaces on their comments. Therefore, we h"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_25",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "their capital letters. Delete Redundant Space : Users on social media unwittingly or wittingly type multiple spaces on their comments. Therefore, we have decided to remove those redundant spaces. Delete Links : We believe that website in comments do not affect the sentiment of the comment. As a result, we have also decided to remove them all. Normalize Unicode : We also see a lot of Vietnamese words in the dataset that are the same, but Python detects them as separate because of their Unicode. The reason is there are many Unicode Transformation Formats (UTF) such as to UTF-8. Delete Redundant Characters : We remove redundant characters that the users intentionally make. Fig. 4 : An example of a comment which generally means “If have nothing to say, have a call to see each other is happy enough. So fucking simple” and deleted redundant characters version of it. Figure 4 above is an instan"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_26",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "to say, have a call to see each other is happy enough. So fucking simple” and deleted redundant characters version of it. Figure 4 above is an instance of the process of Deleting Redundant Charac- ters. The word “vuiiii”, which means happy, and the word “vlllll”, which is an offensive teen code in Vietnamese but does not have a clear meaning in Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data English, both after removing redundant characters, they become “vui” and “vl”. However, the duplicated characters in the word “kk”, which is also a teen code for the action of laughing - kaka, and “call” are “k” and “l”, respectively, are not removed. Indeed, the word “call” will become “cal”, which has no meaning, and the word “kk” will become “k”, which is a different teen code meaning no in English. Normalize Accented Letters : Because of th"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_27",
+    "start_char": 13500,
+    "end_char": 14400,
+    "text": "ch has no meaning, and the word “kk” will become “k”, which is a different teen code meaning no in English. Normalize Accented Letters : Because of the inconsistency in placing diacritical marks, we decide to normalize them in comments by followings rules:\n\nIf there is one vowel, the diacritical mark(s) will be on that vowel. For\n\nexample: má (mom), lá (leaf), mê (love).\n\nIf there are two vowels, the diacritical marks will be on the first one. For\n\nexample: lóa (shinny), qùa (gift). If three vowels or two vowels follow with a consonant, the diacritical marks will be on the second vowel, for example: khuỷu (elbow), quán (store).\n\n“ê” and “ơ” are exceptional because the diacritical marks are always on\n\nthem, for example: khuyển (dog), quở(reproachfully). Table 1 : Number of changes on the datasets after the Phase 1. Datasets Lowercase Redundant Inconsistent Link Spaces Characters Unicode A"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_28",
+    "start_char": 14250,
+    "end_char": 15150,
+    "text": "roachfully). Table 1 : Number of changes on the datasets after the Phase 1. Datasets Lowercase Redundant Inconsistent Link Spaces Characters Unicode Accented words ViHSD HSD-VLSP All the above steps in Phase 1 are conducted in the same order. The output of this Phase 1 is fed directly to the next Phase 2. Word tokenize : The input sentence is split into words or meaningful word phrases. In order to do this, we used Word Segmenter of VnCoreNLP [ 13 ] for the PhoBERT model and NLTK [ 41 ] for the other models. Because the comments in both datasets, ViHSD [ 10 ] and HSD-VLSP [ 9 ], are raw text data, word segmentation is required to prepare the data for PhoBERT model training [ 36 ]. Moreover, PhoBERT used the VnCoreNLP RDRSegmenter [ 13 ] to pre- process the pre-training data [ 36 ] (including Vietnamese word and sentence segmentation), it is recommended that the same word segmenter must b"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_29",
+    "start_char": 15000,
+    "end_char": 15900,
+    "text": "pre- process the pre-training data [ 36 ] (including Vietnamese word and sentence segmentation), it is recommended that the same word segmenter must be used for PhoBERT downstream applications in relation to the input raw texts. On the other hand, the other models could learn from text data at the token level without requiring word segmentation, as the PhoBERT model does. As a result, we decided to tokenize the pre-training data using NLTK [ 41 ]. De–teencode : In social networks, people usually spend a significant amount of their time to chit chat and also often use the short form of words to type faster. Some are used to trick the systems when they are swearing. Moreover, those abbreviations also have their name in Vietnam, teen codes. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data As a result, to help our models better understan"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_30",
+    "start_char": 15750,
+    "end_char": 16650,
+    "text": "ringer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data As a result, to help our models better understand the input sentences, we had to map those teen codes into their original words. Furthermore, the process of mapping teen codes, we named it De–teencode, and the following Table 2 shows some instances of them. Table 2 : Examples of teencodes and their expansions. No. Teencode De-Teencode Vietnamese sentences English meanings đc đấy được đấy nice ko không no cc con c*c d*ck Remove stopwords : We also removed stopwords from the comments because of their meaninglessness. In our experiments, we used the Vietnamese stopword dictionary [ 42 ] to remove stop words in the sentence. In Phase 2, the data are tokenized, De-teencode, and removed stopwords. Phase is in that order since the output of Word tokenizers is a list of words, word phrases, and"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_31",
+    "start_char": 16500,
+    "end_char": 17400,
+    "text": "a are tokenized, De-teencode, and removed stopwords. Phase is in that order since the output of Word tokenizers is a list of words, word phrases, and characters that are separate from the others by space. Those characters then are checked if they are teen code and will be De–teencode in the next step. Therefore, the De–teencode step following after the Word tokenize step is a wise decision. Finally, after the De–teencode step, we remove all stopwords, and the reason we remove stopwords after De–teencode step is that those teencodes possibly are also stopwords. Table 3 presents basic statistics about teencode and stopword words in two datasets, ViHSD and HSD-VLSP. From the statistics, we can observe that the relatively high proportions of the terms teencode and stopword in the two data sets indicate the use of several acronyms and abbreviations by social media users. Table 3 : The number"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_32",
+    "start_char": 17250,
+    "end_char": 18150,
+    "text": "e terms teencode and stopword in the two data sets indicate the use of several acronyms and abbreviations by social media users. Table 3 : The number of teencodes and stopwords of the datasets. Datasets Teencodes Stopwords #Words Frequency Percentage Frequency Percentage ViHSD HSD-VLSP\n\n3.3 Dealing with imbalanced data\n\nMore and more effective solutions for the HSD task based on pre-trained language models have recently been proposed. The development of various large-scale data sources. One of the most important priorities in this context is the distribution of data samples, particularly the data balance, which has a significant impact on model evaluation performance [ 43 ]. However, there Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data is a significant difference in the number of CLEAN comments compared to OFFICIAL and HATE comment"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_33",
+    "start_char": 18000,
+    "end_char": 18900,
+    "text": "nsive Detection using PhoBERT-CNN and Streaming Data is a significant difference in the number of CLEAN comments compared to OFFICIAL and HATE comments in many real-world situations, particularly in the two experimental datasets, ViHSD and HSD-VLSP, resulting in a skewed sample distribution. Learning algorithms will be biased toward the majority group due to the above problem, making this a challenging and exciting task to deal with in this paper. Meanwhile, the minority classes, such as HATE and OFFENSIVE, are typically more beneficial in terms of information mining, as they contain crucial information for the task of HSD despite its quite rare. To address this challenge, we focused on developing an intelligent system that used efficient data preprocessing techniques, suitable data augmentation, and a robust classification model to overcome bias. This is known as learning from imbalance"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_34",
+    "start_char": 18750,
+    "end_char": 19650,
+    "text": "ata preprocessing techniques, suitable data augmentation, and a robust classification model to overcome bias. This is known as learning from imbalanced data [ 44 ]. As a result, inspired by the study of Wei et al. [ 45 ], we intend to apply EDA techniques with four operations: synonym substitution, random insertion, random swap, and random deletion to deal with imbalanced data. These techniques are applied to the ViHSD training set and the HSD-VLSP dataset in this paper with the percentage of replacement word in the sentence ( α ) equal to 0.15. Table 4 : The ViHSD training set and HSD-VLSP dataset overview statistics before and after data augmentation. Dataset Label Original dataset Augmented dataset Num. Comments Avg. Word length Vocab. size Num. Comments Avg. Word length Vocab. size ViHSD training set CLEAN OFFENSIVE HATE HSD-VLSP CLEAN OFFENSIVE HATE We first applied the EDA techniqu"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_35",
+    "start_char": 19500,
+    "end_char": 20400,
+    "text": "ize Num. Comments Avg. Word length Vocab. size ViHSD training set CLEAN OFFENSIVE HATE HSD-VLSP CLEAN OFFENSIVE HATE We first applied the EDA techniques on the ViHSD training set and the entire original HSD-VLSP dataset to enhance the data on HATE and OFFENSIVE labels. Table 4 describes the information about the HSD-VLSP dataset after making data augmentation.\n\nViHSD training set.\n\nHSD-VLSP dataset.\n\nFig. 5 : The labels distribution in the ViHSD training set and the HSD-VLSP dataset before and after augmentation. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Table 4 shows that after applying EDA techniques, the number of data and vocabulary size on the HATE and OFFENSIVE labels grew dramatically. Figure 5 depicts the label distribution in the ViHSD training set and the HSD- VLSP dataset before and after augmentation. Compared with"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_36",
+    "start_char": 20250,
+    "end_char": 21150,
+    "text": "dramatically. Figure 5 depicts the label distribution in the ViHSD training set and the HSD- VLSP dataset before and after augmentation. Compared with the original dataset, the data on augmented dataset are well-distributed after utilizing EDA methods.\n\n3.4 Proposed PhoBERT-CNN model for HSD\n\nVariant BERT and CNN combined models have recently been widely used to classify short text collected from social networks, particularly to classify hate and offensive comments that achieve promising results [ 29 – 31 ]. As a result, in this work, the PhoBERT and CNN combined model is deployed to evaluate their efficacy in classifying hate and offensive comments for Vietnamese. The combined PhoBERT-CNN model is expected to significantly improve the classification performance thanks to the resonance mechanism of the two single models, reducing errors between the predicted labels and the actual labels."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_37",
+    "start_char": 21000,
+    "end_char": 21900,
+    "text": "sification performance thanks to the resonance mechanism of the two single models, reducing errors between the predicted labels and the actual labels. Both of the two single models, PhoBERT and Text-CNN, outperformed other models on the tasks of classifying Vietnamese text, particularly on the ViHSD and HSD-VLSP datasets [ 9 , 10 , 19 – 24 ]. Figure 6 presents the architecture of our approach for Vietnamese HSD. Fig. 6 : An overview of our Vietnamese HSD system using PhoBERT-CNN. Firstly, we present the architecture of PhoBERT [ 36 ] and how the PhoBERT model is adapted to perform as a word embedding layer to extract information from data. The PhoBERT model was chosen because it outperforms previous monolingual and multilingual pre-trained language model approaches, achieving Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data including"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_38",
+    "start_char": 21750,
+    "end_char": 22650,
+    "text": "language model approaches, achieving Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data including Vietnamese Hate Speech Detection [ 9 , 10 , 19 – 24 ]. The architecture of the PhoBERT model is a multilayer architecture comprised of multiple layers of Bidirectional Transformer encoder. It takes the representation of a text sentence composed of a string by the contextualized words as input. The input representation of the PhoBERT model is built by summing those tokens with the segment vectors and the corresponding positions of the words in the sequence. Fig. 7 : The process of representing the input of PhoBERT model.\n\nWe use Positional Embeddings with a maximum sentence length of 20 words.\n\nThe first word for each string defaults to the special word [CLS] . The output\n\nof the final hidden state corresponding word [CLS] will be used to r"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_39",
+    "start_char": 22500,
+    "end_char": 23400,
+    "text": "The first word for each string defaults to the special word [CLS] . The output\n\nof the final hidden state corresponding word [CLS] will be used to represent the whole sentence in the classification.\n\nWhen a string only comprises a single sentence, the embedding segment can\n\nbe applied directly to that sentence.\n\nIn case the string contains more than two-sentence, we distinguish sentences\n\nin two steps: separate sentences by a special word called [SEP] and we add independent segment embedding for each statement. Next, the Fully-connected layer at the end of the pre-trained PhoBERT model is replaced with a CNN network architecture [ 46 ]. Because CNN is currently the most successful model for solving short text classification tasks [ 35 ], it is utilized instead of other typical deep neural networks such as LSTM, Bi-LSTM, and GRU [ 47 – 49 ]. In this research, we construct the layers of"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_40",
+    "start_char": 23250,
+    "end_char": 24150,
+    "text": "it is utilized instead of other typical deep neural networks such as LSTM, Bi-LSTM, and GRU [ 47 – 49 ]. In this research, we construct the layers of the CNN model as follows:\n\nINPUT : The input layer is used to initialize the input object from a matrix\n\nof vectors. The input and output objects of this layer have dimensions equal to the number of dimensions of the vector matrices.\n\nCONV1D : We build four convolution layers using the Conv1D layer to\n\nextract features from a matrix of vectors. For each Conv1D, we all use a filter of a particular size, set kernel size values, and use the ReLU activation function to enhance convergence.\n\nPOOLING : We perform maximal pooling (Max Pooling) using the Max-\n\nPool1D function. The output of this layer is a matrix of features that have Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data been reduce"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_41",
+    "start_char": 24000,
+    "end_char": 24900,
+    "text": "is a matrix of features that have Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data been reduced in size but still retain the features extracted from the previous Conv1D layer.\n\nDROPOUT : Before constructing the dropout layer, we use the torch.cat()\n\nfunction to concatenate the feature matrices that have been Pooled from the previous layer. Then, we set dropout values to remove random notes from each hidden layer.\n\nFC : In this layer, we construct a loss function and an optimized function to\n\nconnect input data from the dropout layer to the classification classes. We utilize the Adam optimization algorithm and the CrossEntropy loss function (Equation 1 ) for optimization: − M X y o,c log( p o,c ) where M is the number of classes (CLEAN, OFFENSIVE, HATE), log is the natural log, y is binary indicator (0 or 1) if class label c is the c"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_42",
+    "start_char": 24750,
+    "end_char": 25650,
+    "text": "g( p o,c ) where M is the number of classes (CLEAN, OFFENSIVE, HATE), log is the natural log, y is binary indicator (0 or 1) if class label c is the correct classification for observation o , p is predicted probability observation o is of class c . The convolution and pooling techniques of CNN aids in the extraction of the main concepts and keywords of the text as features, resulting in a significant improvement in the performance of the classification model. However, the CNN network has a significant limitation which is not suitable for sequence-level text [ 35 , 46 ]. To address this limitation, the large-scale monolingual language model pre-trained for Vietnamese PhoBERT is the appropriate combination due to the fact that the PhoBERT has a duty on extracting features from sentences for the input of the Text-CNN model. Following that, a contextualized word embedding of comments from Ph"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_43",
+    "start_char": 25500,
+    "end_char": 26400,
+    "text": "a duty on extracting features from sentences for the input of the Text-CNN model. Following that, a contextualized word embedding of comments from PhoBERT is fed into the Text-CNN model to get the feature maps. Finally, the prediction labels are given through a softmax layer. The combined PhoBERT-CNN model will significantly improve the clas- sification performance thanks to the resonance mechanism of the two single models, reducing errors between the predicted labels and the actual labels (see Subsection 4.6.5 ).\n\n3.5 Integrating HSD Model to Streaming Processing\n\nSystem\n\nOne of the top-priority requirements is an advanced method for handling hate and offensive comments in big data environments such as social networks. This helps social networks in general and social networks in Vietnam, identify hate and offensive comments better, and also reduce the workload of moderators. Furthermor"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_44",
+    "start_char": 26250,
+    "end_char": 27150,
+    "text": "etworks in general and social networks in Vietnam, identify hate and offensive comments better, and also reduce the workload of moderators. Furthermore, the media agencies need an automatic moderator tool to more precisely monitor the comments that are permitted to be displayed. We built an application for comment analysis capable of continuously collecting content from social networking sites to analyze comment nuances Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data to meet these needs. These platforms will provide an API to send processing comments requests to the classification application.\n\n3.5.1 Streaming Data Ingestion\n\nData streaming is the process of collecting data continuously in real-time from multiple data sources that are often put into stream processing applications to get essential insights. Data streaming is critical"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_45",
+    "start_char": 27000,
+    "end_char": 27900,
+    "text": "y in real-time from multiple data sources that are often put into stream processing applications to get essential insights. Data streaming is critical for dealing with enormous amounts of live data. Such data can come from various sources, especially social networking sites like Facebook, Youtube, and Twitter. Several real-time data streaming approaches are available, including Apache Kafka, Spark Streaming, and Apache Flume. In this paper, we will implement data streaming using Spark Streaming [ 50 ]. This section presents an end-to-end architecture on how to stream data from social media platforms, clean them, and apply the combined PhoBERT- CNN model to detect the hate or offense of each data. Figure 8 depicts an overview of the Vietnamese hate speech detection with a streaming system based on the PhoBERT-CNN model. Input data: Live data collected through streaming API. Main model: Da"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_46",
+    "start_char": 27750,
+    "end_char": 28650,
+    "text": "se hate speech detection with a streaming system based on the PhoBERT-CNN model. Input data: Live data collected through streaming API. Main model: Data pre-processing and hate speech detection on the collected data. Output: A parquet file with all the data and their hate speech prediction. Fig. 8 : An overview of our Vietnamese HSD streaming system.\n\n3.5.2 Instructions Streaming Processing for HSD\n\nWe successfully constructed a system capable of handling large amounts of data in real-time from social networking platforms, especially from YouTube comments, by conducting surveys and experiments on processing streaming data [ 37 – 40 ]. This section presents the instructions of the system in practice. Part 1 - Send comments from the Youtube Data API: In this part, we authenticate and connect to the Youtube Data API using our developer credentials. First, we need to set up the essential inf"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_47",
+    "start_char": 28500,
+    "end_char": 29400,
+    "text": "ata API: In this part, we authenticate and connect to the Youtube Data API using our developer credentials. First, we need to set up the essential information to log in and utilize the Youtube Data API, such as DEVELOPER_KEY, YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION. Next, Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data in the QUERY section, we change the URL to query the video that needs to be processed. In addition, parameters such as textFormat to set the format of return comments, maxResults to set the number of comments are limited to each session. We also build a TCP socket between the Youtube Data API and Spark [ 50 ], which waits for the Spark Streaming call and delivers data. Part 2 - Data pre-processing and hate speech detection: Comment data collected and stored through Youtube Data API will be trans- mitted to the p"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_48",
+    "start_char": 29250,
+    "end_char": 30150,
+    "text": "ata. Part 2 - Data pre-processing and hate speech detection: Comment data collected and stored through Youtube Data API will be trans- mitted to the primary system to perform pre-processing according to the process described in Section 3.2 . After pre-processing, the normalized and high-quality data are used to predict their labels using the combined PhoBERT-CNN model. We use Spark- SQL to query and visualize how Spark Streaming [ 50 ] organizes and presents predictions relative to comments. The prediction results in 0.0, 1.0, and 2.0 are corresponding to the CLEAN, OFFENSIVE, and HATE labels , which indicate the polarity of nuance provided by the comments. Finally, the query results are converted to DataFrame format so that the administrator can observe and monitor it more efficiently and are stored in a parquet file. These findings will be used to assist administrators in deciding whet"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "method",
+    "chunk_id": "arxiv_2206_00524_method_49",
+    "start_char": 30000,
+    "end_char": 30738,
+    "text": "or can observe and monitor it more efficiently and are stored in a parquet file. These findings will be used to assist administrators in deciding whether to delete comments containing hate or offensive content or not. Fig. 9 : The end-to-end architecture of our system using Spark Streaming.\n\n3.5.3 Reproducibility of the Proposed HSD System\n\nWe also provide a solution constructed in PyTorch for reproducibility to make it easy to apply our novel proposed system for Vietnamese HSD. The code for our trained models and streaming application is publicly available for research purposes at https://github.com/khanhtran0412/ViSoMeCens . Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_50",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "4.1 Experimental Procedure\n\nThis section provides an outline of how we conducted experiments in order to propose a new and efficient HSD system for Vietnamese. Firstly, the hate speech data is collected from social media, especially the two datasets ViHSD and HSD-VLSP will be cleaned using the data pre-processing process as described in Subsection 3.2 . Accordingly, the data after cleaning and quality assurance is used to train our baselines and proposed model. With each HSD model conducted, we fine-tune the hyperparameters to find the optimal hyperparameters and help improve the performance of the model. We also apply data augmentation techniques to the ViHSD training set and HSD- VLSP dataset to address the challenging problem of data imbalance. Next, we evaluated the performance of the models we conducted using the F1-macro and Accuracy metrics. The model evaluation results are descri"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_51",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "alance. Next, we evaluated the performance of the models we conducted using the F1-macro and Accuracy metrics. The model evaluation results are described in detail in Subsection 4.6 . Based on the achieved results in the F1-score, we choose the model with the best performance to conduct an error analysis on the wrong predictions discovered in our system. In addition, comparisons with previous studies were made to assess the development of our study. Besides, an ablation analysis was carried out to investigate the effectiveness and contribution of our proposed PhoBERT-CNN approach. At the end of the experiment, a pilot experiment was performed to evaluate the actual performance of the proposed system when dealing with hate speech detection from data streaming in which our system was deployed to a social network, especially Youtube. Figure 10 presents an overview of the experimental proced"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_52",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": "rom data streaming in which our system was deployed to a social network, especially Youtube. Figure 10 presents an overview of the experimental procedure in this paper. Fig. 10 : Overview of the experimental procedure for Vietnamese HSD. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.2 Baseline models for HSD performance comparison\n\n4.2.1 Machine learning approach\n\nMultinomial Naive Bayes: This algorithm predicts and classifies data based on observable data and statistics, using the Bayes theorem of probability Multinomial Naive Bayes is a supervised learning algorithm that is com- monly used in machine learning because it is relatively easy to train and achieve high performance. Logistic Regression: Logistic regression is a binary classification algo- rithm, it is a simple, well-known, and important method in the discipline of"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_53",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "ogistic Regression: Logistic regression is a binary classification algo- rithm, it is a simple, well-known, and important method in the discipline of machine learning. In addition, this algorithm is also used in a machine learning application to classify incoming data based on previous data. By analyzing the relationship between all of the existing independent variables, the Logistic Regression model predicts a dependent data variable. In natural language processing, this method requires manual features extracted from data for text classification [ 18 , 22 , 54 , 55 ]. Decision Tree: Decision tree is a supervised learning algorithm, it is the most powerful and popular method for classification [ 56 – 58 ]. Decision tree algorithm is also known as a structure tree, where each node represents a test on an attribute, each branch is an outcome of the test, and each leaf node is a class label"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_54",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "own as a structure tree, where each node represents a test on an attribute, each branch is an outcome of the test, and each leaf node is a class label. This approach used basic rules from training data to predict the class or value of the target variable. Specifically, the record started from the root of the tree and compared the attribute with the node attribute at each branch in the decision tree before predicting a final class label in the leaf node. Random Forest: Random Forest is a Supervised learning method used to solve classification and regression tasks. It is built on multiple sets of Decision Tree and the output of this algorithm is based on the aggregate decision on the decision trees it generates with the voting method. However, we cannot understand how this algorithm works due to the complicated structure of this model and this is one of the Black Box methods.\n\n4.2.2 Deep l"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_55",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": ", we cannot understand how this algorithm works due to the complicated structure of this model and this is one of the Black Box methods.\n\n4.2.2 Deep learning approach\n\nConvolutional Neural Network (Text-CNN) : A convolutional neural network (CNN) is a multistage Neural network architecture developed for classification [ 46 ]. By using convolutional layers, it can detect combination features. Our experiments employ four convolutional layers with 32 filters for each layer. Finally, the softmax function uses the result to predict the label for the text. [ 33 ] is a famous variant of RNN [ 62 ]. The Bidirectional Long Short Term Memory can be trained using all available input information within the past and way forward for a selected timeframe. This method is robust in classification Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data probl"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_56",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "This method is robust in classification Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data problems, and most of its achieved high-performance classification results. Therefore, we plan to choose it to compare with other classification models during this task.\n\n4.2.3 Transfer learning approach\n\nThe transfer learning model has attracted increasing attention from NLP researchers worldwide for its outstanding performance. One of the SOTA lan- guage models as BERT, which stands for Bidirectional Encoder representations from transformers, is published by Devlin et al. [ 26 ]. BERT and its variations (BERTology) [ 63 – 65 ] such as RoBERTa [ 27 ], XLM-R [ 28 ], PhoBERT [ 36 ] have almost dominated and asserted their strength on natural language process- ing tasks, even for Vietnamese hate speech detection tasks [ 10 , 21 , 22 ]. For the afo"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_57",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "ated and asserted their strength on natural language process- ing tasks, even for Vietnamese hate speech detection tasks [ 10 , 21 , 22 ]. For the aforementioned reasons, we decided to use BERT and its variants to find the optimal solution with good performance and contribute to the successful construction of our proposed solution. BERT [ 26 ] : is a contextualized word representation model pre-trained using bidirectional transformers and based on a masked language model. In this work, we use the train set to fine-tune the pre-trained BERT model before classifying comments or posts from websites or social networks. Robustly optimized BERT approach (RoBERTa) [ 27 ] : is trained with dynamic masking, wherein the system learns to predict intentionally hidden sections of text within otherwise unannotated language examples. RoBERTa, implemented in PyTorch, modifies key hyperparameters in BERT"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_58",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "tionally hidden sections of text within otherwise unannotated language examples. RoBERTa, implemented in PyTorch, modifies key hyperparameters in BERT, including removing BERT’s next-sentence pretraining objective and training with much larger mini-batches and learning rates. XLM-RoBERTa (XLM-R) [ 28 ] : is a multilingual model trained using over two terabytes of cleaned and filtered CommonCrawl data. Upsampling low-resource languages during training and vocabulary generation, generating a more extensive shared vocabulary, and raising the overall model capacity to 550 million parameters are all important contributions of XLM-R. PhoBERT [ 36 ]: For Vietnamese, the SOTA method was first released and called PhoBERT by Nguyen et al. [ 36 ] for solving Vietnamese NLP problems. PhoBERT is a pre-trained model, which has the same idea as RoBERTa, a replication study of BERT is released by Liu et"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_59",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "solving Vietnamese NLP problems. PhoBERT is a pre-trained model, which has the same idea as RoBERTa, a replication study of BERT is released by Liu et al. [ 27 ], and there are modifications to suit Vietnamese.\n\n4.2.4 Combined approach\n\nBERT and CNN combined models have recently been widely used to classify short text collected from social networks, particularly to classify hate and offensive comments and achieves promising results [ 29 – 31 ]. In this paper, variant BERT and CNN combined models are deployed to evaluate the efficiency of the combined models in classifying hate and offensive comments for Vietnamese. models, our proposed PhoBERT-CNN model provides an insight into the effect of monolingual and multilingual pre-trained language models on this task. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.3 HSD Performance Eva"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_60",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "models on this task. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.3 HSD Performance Evaluation Metric\n\nThis section explain the evaluation metrics used in this paper. Accuracy and average macro F1-score are the popular and widely used metric for classification tasks in general and identifying hate and offensive comments in particular [ 9 , 10 , 19 – 24 ]. However, due to the significantly unbalanced classes in the given datasets, the average macro F1-score, which is the harmonic mean of Precision and Recall, is the most suitable metric for this task [ 66 , 67 ]. As a result, when evaluating model performance, we opted to utilize the average macro F1-score (%) as the primary metric and the Accuracy (%) to provide additional information. Equation 2 to equation 5 presents the measures for multi-class classification for multi cla"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_61",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "ic and the Accuracy (%) to provide additional information. Equation 2 to equation 5 presents the measures for multi-class classification for multi classes C i , i ∈ {1, 2, 3} (denoted by CLEAN, OFFENSIVE and HATE, respectively). Where tp i are true positive for C i , and fp i – false positive, fn i – false negative, and tn i – true negative counts respectively. M indices represent macro-averaging. Accuracy = P 3 tp i + tn i Precision M = P 3 tp i tp i + fp i Recall M = P 3 tp i tp i + fn i F 1 = 2 ∗ Precision M * Recall M Precision M + Recall M\n\n4.4 Vietnamese Hate Speech Detection Datasets\n\nWe use the ViHSD dataset published by Luu et al. [ 10 ] as the primary dataset to build the classification models. The ViHSD dataset [ 10 ] consists of 33,400 comments collected from popular social networking sites in Vietnam such as Facebook and Youtube. This dataset is divided into training, develo"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_62",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "33,400 comments collected from popular social networking sites in Vietnam such as Facebook and Youtube. This dataset is divided into training, development, test sets corresponding to a ratio of 7:1:2. In addition, to illustrate the solution applicability and efficacy on the social media data domain, we also evaluate our solution on the HSD-VLSP dataset published by Vu et al. [ 9 ]. HSD-VLSP is a Vietnamese Hate Speech Detection dataset on social-network comments provided by VSLP 2019 shared-task [ 9 ]. This dataset contains 20,345 comments and posts on social networks. Each comment in both datasets is assigned one of three labels: CLEAN, OFFENSIVE, or HATE. Table 5 shows overview statistics of the datasets. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data According to the statistics, there is a significant difference in the number o"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_63",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "plate Hate and Offensive Detection using PhoBERT-CNN and Streaming Data According to the statistics, there is a significant difference in the number of CLEAN comments compared to OFFENSIVE and HATE comments. Table 5 : Overview statistics of the two Vietnamese HSD datasets. Dataset Labels Percentage (%) Example CLEAN link đâu thằng kia ( English: where is the link, man) ViHSD OFFENSIVE vkl. ( English: cuss.) HATE thầy đ*t mẹgiảtạo vl =)) ( English: the teacher is so f*cking fake =)) CLEAN cho xíu nhạc đi ( English: some music please) HSD-VLSP OFFENSIVE đ*o lấy vk nữa đâu ( English: no more f*cking married) HATE thằng già ch* ch*t ( English: f*ck that old man) The distribution of comment lengths in the ViHSD and HSD-VLSP datasets is depicted in Figure 11 . In the two datasets, ViHSD and HSD-VLSP, we can observe that the average length of the comments is 11.51 and 21.31 words, and the lengt"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_64",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "in Figure 11 . In the two datasets, ViHSD and HSD-VLSP, we can observe that the average length of the comments is 11.51 and 21.31 words, and the length of the comments is in the range (1; 25) and (1; 58.5), respectively. Besides, we found that comments are often short because users tend to be brief and use many acronyms. As demonstrated in Section 3.2.2 and the statistics in Table 3 , one of the reasons for the relatively short average length of comments in the two datasets is the inclination of users to overuse acronyms, teen-codes to save time and type faster.\n\nViHSD dataset.\n\nHSD-VLSP dataset.\n\nFig. 11 : Distribution of the comments length in the two Vietnamese HSD datasets. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.5 Experimental Settings\n\nAs we described in Section 3 , we experimented on the given datasets with four ap"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_65",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "ion using PhoBERT-CNN and Streaming Data\n\n4.5 Experimental Settings\n\nAs we described in Section 3 , we experimented on the given datasets with four approaches: traditional machine learning, deep learning, transfer learning, and the combined approach. Following the study of Son et al. [ 10 ], all findings from the ViHSD dataset are presented on the test set, while the development set is utilized for hyper-parameter tuning. Furthermore, due to the secrecy of HSD-VLSP, we employ KFoldCrossvalidation (k=5) for training and testing our models as a solution for the lack of a test set [ 9 , 21 , 22 ]. Sections 4.5.1 and 4.5.2 provide the optimal hyper-parameters that we grid- searched for Machine Learning and Deep Learning models, respectively. On the other hand, we use an Adam optimizer with a fixed learning rate of 2e-5 and a batch size of 64 to fine-tune the hyperparameters of the PhoBERT-CN"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_66",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "the other hand, we use an Adam optimizer with a fixed learning rate of 2e-5 and a batch size of 64 to fine-tune the hyperparameters of the PhoBERT-CNN model and the other baseline models.\n\n4.5.1 Machine Learning approach:\n\nIn this paper, we implement several machine learning models such as Multino- mial Naive Bayes, Logistic Regression, Decision Tree, and Random Forest. In addition, we use the TF-IDF technique with parameter ngram_range is (1,2) for feature extraction. Besides, we also use the class-weigh algorithm to solve the imbalance between three labels, but we do not get any better results.\n\nMultinomial Naive Bayes: We use MutinomialNB with “alpha” =\n\nLogistic Regression: This model is implemented with the parameters\n\nDecision Tree: Model parameters include n_estimators = 108, ran-\n\nmin_samples_leaf = 3.\n\nRandom Forest: We implement a Random Forest Classifier model with\n\n4.5.2 Dee"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_67",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "Model parameters include n_estimators = 108, ran-\n\nmin_samples_leaf = 3.\n\nRandom Forest: We implement a Random Forest Classifier model with\n\n4.5.2 Deep Learning approach:\n\nThis paper uses these two models: Text-CNN and Bi-LSTM. Otherwise, we also fine-tune those models with novel pre-trained word embeddings, which are Vietnamese word embedding ETNLP [ 68 ] and 300 dimensions with character n-grams PhoW2V: the word embedding used for Vietnamese and pre-trained Word2vec syllable [ 69 ].\n\nText-CNN: we set up four conv2D layers with 32 filters at sizes 1, 2, 3,\n\n5 and used softmax for activation. In addition, we set batch size equal to 64, max sequence length is 40, and dropout is 0.4 for this model.\n\nBi-LSTM: the structure of this model has a bidirectional layer followed\n\nby a max-pooling 1D, a dense layer has 50 in size for both activation and softmax activation. We set batch size equal to"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_68",
+    "start_char": 13500,
+    "end_char": 14400,
+    "text": "bidirectional layer followed\n\nby a max-pooling 1D, a dense layer has 50 in size for both activation and softmax activation. We set batch size equal to 64, max sequence length is 68, and dropout is 0.4. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.5.3 Transfer Learning approach:\n\nWe implement BERT large cased [ 26 ], RoBERTa large [ 27 ], XLM-R large [ 28 ], and PhoBERT large [ 36 ] for this approach. They runs with their max sequence length is 60, batch size is 64, learning rate is at 2e-5, accumulation steps are 5, learning rate decay steps are 70.\n\n4.5.4 Proposed approach (PhoBERT-CNN)\n\nIn this approach, we combine the PhoBERT large pre-trained model [ 36 ] from HuggingFace with the Text-CNN model. The output of PhoBERT large pre- trained is used as embedding input for the Text-CNN.\n\nThe PhoBERT large pre-trained is initiali"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_69",
+    "start_char": 14250,
+    "end_char": 15150,
+    "text": "h the Text-CNN model. The output of PhoBERT large pre- trained is used as embedding input for the Text-CNN.\n\nThe PhoBERT large pre-trained is initialized with a max length is 20.\n\nThe Text-CNN is built with four layers of conv1D with filter size is 32\n\nand size 1, 2, 3, 5, respectively.\n\n4.6 Analysis and Discussion of Experimental Results\n\n4.6.1 Verifying the performance of the proposed\n\nPhoBERT-CNN model\n\nTable 6 shows our results from the experiments conducted. Experiment results show that the PhoBERT-CNN model outperforms traditional machine learning models on two benchmark datasets, ViHSD and HSD-VLSP, respectively, approach, the Text-CNN model outperforms the Bi-LSTM model for the short text classification tasks in general and the HSD problem in particular. Among our single models, PhoBERT archives the highest results on the ViHSD [ 10 ] and HSD-VLSP [ 9 ] datasets. PhoBERT can perf"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_70",
+    "start_char": 15000,
+    "end_char": 15900,
+    "text": "problem in particular. Among our single models, PhoBERT archives the highest results on the ViHSD [ 10 ] and HSD-VLSP [ 9 ] datasets. PhoBERT can perform parallel computations for words, reduce vanishing gradients, and help the model learn better. Our combined PhoBERT-CNN model outperforms the baseline models on the respectively. Besides, the proposed approach also demonstrates its efficacy in the Vietnamese social network data domain. On the HSD-VLSP dataset, PhoBERT-CNN achieves the best results, with a macro F1-score of 90.89% and an Accuracy of 98.26%. On the other hand, the monolingual pre-trained language model for Viet- namese, particularly PhoBERT, outperforms the multilingual models on the task of Vietnamese HSD. Furthermore, combining the BERT and its variants such as PhoBERT, RoBERTa, and XLM-R with the CNN improves their per- formance by up to 0.98% and 4.21% macro F1-score i"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_71",
+    "start_char": 15750,
+    "end_char": 16650,
+    "text": "ning the BERT and its variants such as PhoBERT, RoBERTa, and XLM-R with the CNN improves their per- formance by up to 0.98% and 4.21% macro F1-score in the two datasets ViHSD and HSD-VLSP, respectively.\n\n4.6.2 Error analysis and Disscusion\n\nThe confusion matrix of our best-performance model, PhoBERT-CNN, is used for error analysis to analyze the errors encountered in our system. The confusion matrices of our best model when making predictions on the test set are shown Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Table 6 : Evaluation results on the two Vietnamese HSD datasets. Models ViHSD HSD-VLSP F1-score Accuracy F1-score Accuracy Multinomial Naive Bayes Logistic Regression Desion Tree Random Forest Text-CNN + fastText Text-CNN + PhoW 2 V syllable Text-CNN + PhoW 2 V word Bi-LSTM + fastText Bi-LSTM + PhoW 2 V syllable Bi-LSTM +"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_72",
+    "start_char": 16500,
+    "end_char": 17400,
+    "text": "Tree Random Forest Text-CNN + fastText Text-CNN + PhoW 2 V syllable Text-CNN + PhoW 2 V word Bi-LSTM + fastText Bi-LSTM + PhoW 2 V syllable Bi-LSTM + PhoW 2 V word BERT RoBERTa XLM-R PhoBERT BERT - CNN RoBERTa - CNN XLMR - CNN PhoBERT-CNN in Figure 12 . As a result of the data imbalance, we observe that ability of our system to predict on the CLEAN label is better than the OFFENSIVE and HATE labels.\n\nViHSD dataset.\n\nHSD-VLSP dataset.\n\nFig. 12 : Confusion matrix of our proposed system for Vietnamese HSD. There are still some comments with misclassification in the dataset due to the ambiguity in identifying the labels. As described in Section 3.4 , the combination of the PhoBERT and the CNN contributes to improvement of the Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data performance of the classifier by extracting the features relate"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_73",
+    "start_char": 17250,
+    "end_char": 18150,
+    "text": "021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data performance of the classifier by extracting the features related to the keywords representing the main idea of the sentence. However, CNN’s extraction and learning of these keywords are sometimes too sensitive and subjective, leading to confusion in detecting the corresponding label of the comments. We can see that many misclassified comments are affected by the decision keywords, such as in the label CLEAN but are misclassified with the topic HATE due to the keyword “lon big/pussy ”, “nham miss/bullshit ”, “đm fuck/fate ”. In addition, the HATE label and OFFENSIVE label is often confused with the CLEAN label because they contain racist or insinuating content that makes them challenging to predict [ 10 , 18 ]. Table 7 : Several examples of classification error on the given datasets. Comment Label Predi"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_74",
+    "start_char": 18000,
+    "end_char": 18900,
+    "text": "tent that makes them challenging to predict [ 10 , 18 ]. Table 7 : Several examples of classification error on the given datasets. Comment Label Prediction Đừng cốbiện minh =)))) choi lon ( English: Do not try to make excuses, play big) CLEAN HATE Lắm tiền mà chảcó nổi ý thức của loài người :)) ( English: Money can not buy human consciousness :))) CLEAN HATE con này hết thuốc chữa rồi ( English: I am done with this dumb ass) HATE CLEAN Nham ( English: Bullshit) OFFENSIVE HATE\n\n4.6.3 Augumentation data results\n\nOne of the challenging problems in our task, as described in Section 4.4 , is data imbalance, which has a negative impact on classification model performance. As a result, inspired by the work of Wei and Zou [ 45 ], we intend to apply EDA techniques to the ViHSD dataset and the HSD-VLSP dataset in this paper to deal with imbalanced data and improve the performance of classification"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_75",
+    "start_char": 18750,
+    "end_char": 19650,
+    "text": "EDA techniques to the ViHSD dataset and the HSD-VLSP dataset in this paper to deal with imbalanced data and improve the performance of classification models. We used the data divided into training, development, and test sets by Luu et al. [ 10 ] for the ViHSD dataset. The training set was used to implement EDA techniques, the development set to fine-tune classifier hyper-parameters, and the test set to evaluate our models. For training and testing our models on the HSD-VLSP dataset, we employed five-fold cross-validation. Following the same approach as in the previous study [ 22 , 43 ], we preserve the test set and augment the training set with EDA techniques for each fold. Table 8 presents the results of a comparison of model performance with and without data augmentation techniques. The results indicate that using data augmentation approaches improves models performance by up to 9.34%"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_76",
+    "start_char": 19500,
+    "end_char": 20400,
+    "text": "with and without data augmentation techniques. The results indicate that using data augmentation approaches improves models performance by up to 9.34% and 24.87% macro F1-score in the two datasets, ViHSD and HSD-VLSP, respectively. Our proposed PhoBERT-CNN model, on the other hand, outperforms the the results, we conclude that using appropriate data augmentation techniques Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data can significantly improve the performance of models. However, in some cases, data augmentation techniques could decrease model accuracy. As a result, it is critical to investigate if applying data augmentation techniques to a certain situation is appropriate. Table 8 : The results compare the performance of two datasets, ViHSD and HSD-VLSP, for data augmentation techniques. “W” and “W/o” denote that the results are e"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_77",
+    "start_char": 20250,
+    "end_char": 21150,
+    "text": "The results compare the performance of two datasets, ViHSD and HSD-VLSP, for data augmentation techniques. “W” and “W/o” denote that the results are evaluated with data augmentation techniques and without data augmentation techniques. Model ViHSD HSD-VLSP F1-score Accuracy F1-score Accuracy W/o W W/o W W/o W W/o W Multinomial Naive Bayes Logistic Regression Decision Tree Random Forest TextCNN + fastText TextCNN + PhoW 2 V syllable TextCNN + PhoW 2 V word BiLSTM + fastText BiLSTM + PhoW 2 V syllable BiLSTM + PhoW 2 V word BERT RoBERTa XLM-R PhoBERT BERT-CNN RoBERTa-CNN XLMR-CNN PhoBERT-CNN\n\n4.6.4 Comparison with Previous Studies\n\nWe conducted experiments that compare the performance of our proposed data pre-processing techniques against the previous pre-processing, including comparing it against the Luu et al. [ 10 ] and Huynh et al. [ 21 ] studies. We choose to compare with the studies o"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_78",
+    "start_char": 21000,
+    "end_char": 21900,
+    "text": "previous pre-processing, including comparing it against the Luu et al. [ 10 ] and Huynh et al. [ 21 ] studies. We choose to compare with the studies of Luu et al., and Huynh et al. [ 21 ] because these are the works that implement effective pre-processing techniques and achieve more positive results than previous studies on the same dataset and evaluation measure [ 10 , 21 ]. The experimental results are presented in Table 9 . The results show that our proposed pre-processing techniques significantly improve the performance of the PhoBERT-CNN model (increase by 4.80% and 9.70% macro F1-score on two datasets, ViHSD and HSD-VLSP). Moreover, our proposed pre-processing techniques improve the performance of the baseline and HSD-VLSP, respectively. As a result, we conclude that the proposed pre- processing techniques are efficient in Vietnamese hate speech detection on social media. Our appro"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_79",
+    "start_char": 21750,
+    "end_char": 22650,
+    "text": "ly. As a result, we conclude that the proposed pre- processing techniques are efficient in Vietnamese hate speech detection on social media. Our approach outperforms previous studies on the ViHSD and HSD-VLSP datasets. The same evaluation metrics as previous studies are used to make fair comparisons. We utilize the average macro F1 (%), Accuracy (%) for ViHSD dataset [ 10 ] and the average macro F1 score (%) for HSD-VLSP dataset [ 9 ]. The Table 10 and Table 11 show the best results we achieved compared to Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Table 9 : The comparison with previous pre-processing techniques on ViHSD test set and HSD-VLSP dataset. \"LT,\" \"HT,\" and \"OT\" refer to Luu et al. [ 10 ], Huynh et al. [ 21 ], and our proposed pre-processing techniques, respectively. Model ViHSD HSD-VLSP F1-score Accuracy F1-score Acc"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_80",
+    "start_char": 22500,
+    "end_char": 23400,
+    "text": "Luu et al. [ 10 ], Huynh et al. [ 21 ], and our proposed pre-processing techniques, respectively. Model ViHSD HSD-VLSP F1-score Accuracy F1-score Accuracy LT OT LT OT HT OT HT OT Multinomial Naive Bayes Logistic Regression Decision Tree Random Forest TextCNN + Fasttext TextCNN + Pho2Vec_syllable TextCNN + Pho2Vec_word BiLSTM + Fasttext BiLSTM + Pho2Vec_syllable BiLSTM + Pho2Vec_word BERT RoBERTa XLMR PhoBERT BERT - CNN RoBERTa - CNN XLMR - CNN PhoBERT - CNN previous studies. Our combined PhoBERT-CNN model outperforms baseline models of Luu et al. [ 10 ] on the ViHSD dataset by 5.88 ± 1.11% macro F1-score and 1.615 ± 0.735% Accuracy, respectively. Furthermore, PhoBERT-CNN also achieves the best results, with a macro F1-score of 98.45% on the HSD-VLSP dataset. Table 10 : The comparison with previous studies on ViHSD dataset. Model F1-score Accuracy GRU + fastText [ 10 ] Text-CNN + fastTex"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_81",
+    "start_char": 23250,
+    "end_char": 24150,
+    "text": "e HSD-VLSP dataset. Table 10 : The comparison with previous studies on ViHSD dataset. Model F1-score Accuracy GRU + fastText [ 10 ] Text-CNN + fastText [ 10 ] DistilBERT [ 10 ] BERT [ 10 ] Our approach (PhoBERT-CNN) Table 11 : The comparison with previous studies on HSD-VLSP dataset. ∗ Indicates that the result is evaluated on a test set of the VLSP shared task the study. Model F1-score Bi-LSTM ∗ [ 19 ] DCNN, Text-CNN, LSTM, LSTMCNN, SARNN ∗ [ 23 ] Logistic regression + Random Forest + Extra Tree ∗ [ 24 ] Logistic regression ∗ [ 20 ] Text-CNN [ 22 ] Our approach (PhoBERT-CNN) Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.6.5 Ablation Analysis of Proposed Method\n\nOur proposed approach is significantly more straightforward and efficient than most existing Vietnamese hate speech detection approaches (see Subsection 4.6.4 ). An abl"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_82",
+    "start_char": 24000,
+    "end_char": 24900,
+    "text": "ach is significantly more straightforward and efficient than most existing Vietnamese hate speech detection approaches (see Subsection 4.6.4 ). An ablation analysis was performed on the proposed approach to demonstrate the efficacy and alignment of the modules. Table 12 shows that each module contributes to the overall performance of our approach. Without the pre-trained PhoBERT model, our method only achieved 63.54% and 98.19% macro F1-score on the ViHSD and HSD-VLSP datasets, respectively. Likewise, the inclusion of a combined model contributes to a significant improvement in approach performance up to 11.77% in macro F1-score. We have also compared our proposed pre-processing techniques with the pre-processing techniques of previous works [ 21 ]. The Easy Data Augmentation (EDA) techniques [ 45 ] was chosen since it is one of the novel solutions and has been shown to be successful whe"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_83",
+    "start_char": 24750,
+    "end_char": 25650,
+    "text": "s [ 21 ]. The Easy Data Augmentation (EDA) techniques [ 45 ] was chosen since it is one of the novel solutions and has been shown to be successful when applied to sentiment analysis tasks, including the Vietnamese HSD task [ 43 ]. The results show that the EDA techniques significantly improve the performance of the PhoBERT-CNN model (increase by 6.01% and 13.84% macro F1-score in the two datasets, ViHSD and HSD- VLSP). These results verify the need for data augmentation for the Vietnamese HSD problem. CNN models reduces performance dramatically. The results demonstrate the importance of data pre-processing in general, as well as the effectiveness of the pre-processing techniques we applied to identify Vietnamese HSD in particular. Combined models, especially pre-trained models combined with deep learning networks, could yield promising outcomes for improving performance in further study."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_84",
+    "start_char": 25500,
+    "end_char": 26400,
+    "text": "models, especially pre-trained models combined with deep learning networks, could yield promising outcomes for improving performance in further study. As a result, we conclude that all proposed modules are crucial in Vietnamese hate speech detection on social media. Table 12 : Ablation test on our proposed approach. “OP”, “DA”, “PB”, and “TC” denote the use of our proposed pre-processing, the data augumentation techniques, the pre-trained PhoBERT large model, and the Text-CNN model, respectively. OP DA PB TC ViHSD HSD-VLSP F1-score Accuracy F1-score Accuracy \u0013 \u0013 \u0013 \u0013 \u0013 \u0013 \u0013 \u0017 \u0013 \u0013 \u0017 \u0013 \u0013 \u0017 \u0013 \u0013 \u0013 \u0017 \u0013 \u0017 \u0013 \u0017 \u0017 \u0013 \u0017 \u0013 \u0013 \u0013 \u0017 \u0013 \u0013 \u0017 \u0017 \u0013 \u0017 \u0013 \u0017 \u0017 \u0013 \u0013 \u0017 \u0017 \u0013 \u0017 \u0017 \u0017 \u0017 \u0013 Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data\n\n4.6.6 Hate speech detection application with streaming data\n\nThis section runs a pilot experiment on a system with a NVIDIA GEFORCE GT"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_85",
+    "start_char": 26250,
+    "end_char": 27150,
+    "text": "Streaming Data\n\n4.6.6 Hate speech detection application with streaming data\n\nThis section runs a pilot experiment on a system with a NVIDIA GEFORCE GTX 1650Ti GPU, an Intel i7-9750H CPU, and 16 GB of RAM. This experi- ment is conducted to analyze the effectiveness of our proposed system when deployed to handle streaming for a social networking platform in practice. We chose Youtube to conduct the pilot experiment because it is one of the largest social networking sites in Vietnam currently [ 70 ]. Besides, Youtube is the primary data source for constructing both the ViHSD [ 10 ] and HSD-VLSP [ 9 ] datasets. The successful construction and application of the system to the Youtube platform demonstrates the value of our study. Furthermore, our pro- posed system lays the groundwork for future research into HSD application systems for social networks. At the online stage, the results are eval"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_86",
+    "start_char": 27000,
+    "end_char": 27900,
+    "text": "pro- posed system lays the groundwork for future research into HSD application systems for social networks. At the online stage, the results are evaluated by verifying the prediction results returned by the system. Firstly, we randomly collect 500 comments with real-time access from Youtube via Youtube Data API. The collected comments will be stored in JSON format. Collected comments have many attributes and mainly include user-based and comment-based properties. However, we only focus on the comment-based description to classify the polarity labels that the comment conveys. Next, we hired three annotators with extensive experience constructing NLP datasets for Vietnamese, particularly ViHSD datasets, to annotate the collected comments. Three annotators independently label 500 comments with an inter-annotator agreement score of Cohen Kappa [ 71 ] at K = 0.64. Figure 13 shows an overview"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_87",
+    "start_char": 27750,
+    "end_char": 28650,
+    "text": "ree annotators independently label 500 comments with an inter-annotator agreement score of Cohen Kappa [ 71 ] at K = 0.64. Figure 13 shows an overview of statistics and the user interface of our application. Fig. 13 : The interface of the HSD application with streaming data. Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data The results of our Hate speech detection application with streaming data are depicted as follows. The F1-score macro and Accuracy metrics are used to evaluate the accuracy of the system. With 500 test data points, our proposed system achieves an F1-score and Accuracy of 58.19% and 82.02%, respectively. We use Apache Spark Structured Streaming 3.1.1 2 [ 50 ] in this article. This version includes Continuity Processing for Structured Streaming, which can provide low-latency responses on the order of 1ms, as opposed t"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_88",
+    "start_char": 28500,
+    "end_char": 29400,
+    "text": "ticle. This version includes Continuity Processing for Structured Streaming, which can provide low-latency responses on the order of 1ms, as opposed to the 1000ms that could receive with micro-batching in previous versions or similar frame- works. According to measurement findings, the proposed system processes and classifies a comment in an average of 1.56 seconds. However, due to limited hardware resources, our system’s response time is still modest. Briefly, these research findings could serve as the foundation for further development and comparison with proposed solutions in the field.\n\n5 Conclusion and Future Works\n\ntask. We introduced a new data processing process with two phases to clean the given dataset well. The results show that our proposed pre-processing techniques significantly improve the performance of the PhoBERT-CNN model (increase by 4.80% and 9.70% macro F1-score on t"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_89",
+    "start_char": 29250,
+    "end_char": 30150,
+    "text": "our proposed pre-processing techniques significantly improve the performance of the PhoBERT-CNN model (increase by 4.80% and 9.70% macro F1-score on two datasets, ViHSD and HSD-VLSP). Moreover, our proposed pre-processing techniques improve the performance of the baseline models 3.58 ± 3.38% and 10.16 ± 10.14% macro F1-score on two datasets, ViHSD and HSD-VLSP, respectively. We were also successful in addressing the problems of data imbalance by applying the EDA techniques. Meanwhile, an efficient and straightforward approach for Vietnamese hate speech detection based on the combined model PhoBERT- CNN was proposed. The proposed combined model outperformed the baseline models and previous studies on the same dataset and evaluation measure. We achieved F1-score results on the ViHSD and HSD-VLSP datasets of 67.46% and 98.45%, respectively. Furthermore, we have successfully built a real-tim"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_90",
+    "start_char": 30000,
+    "end_char": 30900,
+    "text": "We achieved F1-score results on the ViHSD and HSD-VLSP datasets of 67.46% and 98.45%, respectively. Furthermore, we have successfully built a real-time hate speech detection system for Vietnamese using Spark streaming. The results obtained are pretty optimistic and reliable for solving the task, helping to reduce the occurrence of hate or offensive comments, and building a healthy and safe environment. Although the proposed system is still in its early phases, its application reach is vast. The proposed system can be applied to online newspapers or websites with low comment volume but need high censoring, as well as large social networks or forums. It creates a positive, civilized environment or satisfies the need to orient and safeguard vulnerable subjects such as the elderly and children. The application also serves as a foundation for agencies and organizations to review and monitor f"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_91",
+    "start_char": 30750,
+    "end_char": 31648,
+    "text": "lnerable subjects such as the elderly and children. The application also serves as a foundation for agencies and organizations to review and monitor for management, psychological research, teaching, and other purposes. 2 https://spark.apache.org/docs/3.1.1 Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Inspired by the success of Mozafari et al. [ 72 ], we intend to implement more Vietnamese pre-trained language models to find a better model that achieves better performance in the Hate Speech Detection task. Moreover, our research lays the groundwork for future research in areas such as: (1) detecting multiple aspects and human rationales of hate speech [ 73 ]; (2) detecting hate and offensive spans at the word and phrase levels [ 74 ].\n\nDeclarations\n\nConflict of interest The authors declare that they have no conflict of interest."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "experiment",
+    "chunk_id": "arxiv_2206_00524_experiment_92",
+    "start_char": 31500,
+    "end_char": 31648,
+    "text": "ffensive spans at the word and phrase levels [ 74 ].\n\nDeclarations\n\nConflict of interest The authors declare that they have no conflict of interest."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_93",
+    "start_char": 0,
+    "end_char": 900,
+    "text": "Springer Nature 2021 L A TEX template\n\nVietnamese Hate and Offensive Detection\n\nusing PhoBERT-CNN and Social Media\n\nStreaming Data\n\nKhanh Q. Tran 1,2* , An T. Nguyen 1,2 , Phu Gia Hoang 1,2 , Canh\n\nDuc Luu 1,2 , Trong-Hop Do 1,2 and Kiet Van Nguyen 1,2\n\n1* University of Information Technology, Ho Chi Minh City,\n\nVietnam.\n\n2* Vietnam National University, Ho Chi Minh City, Vietnam.\n\n*Corresponding author(s). E-mail(s): 18520908@gm.uit.edu.vn ;\n\nContributing authors: 18520434@gm.uit.edu.vn ;\n\nhopdt@uit.edu.vn ; kietnv@uit.edu.vn ;\n\n[1] Mohan, S., Guha, A., Harris, M., Popowich, F., Schuster, A., Priebe, C.: The impact of toxic language on the health of reddit communities. In: Canadian Conference on Artificial Intelligence, pp. 51–56 (2017). Springer [2] Abu-Ghazaleh, S., Hassona, Y., Hattar, S.: Dental trauma in social media analysis of facebook content and public engagement. Dental [3] Sta"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_94",
+    "start_char": 750,
+    "end_char": 1650,
+    "text": "ringer [2] Abu-Ghazaleh, S., Hassona, Y., Hattar, S.: Dental trauma in social media analysis of facebook content and public engagement. Dental [3] Statista: Global number of hate speech-containing content removed by Facebook from 4th quarter 2017 to 2nd quarter 2021 (2018). https: eletion-quarter [4] Seetharaman, D.: Facebook Throws More Money at Wiping Out Hate Speech and Bad Actors (2018). https://www.wsj.com/articles/facebook-th [5] Microsoft: Global number of hate speech-containing content removed by Facebook from 4th quarter 2017 to 2nd quarter 2021 (2020). https: [6] Keane, T.M., Fisher, L.M., Krinsley, K.E., Niles, B.L.: Posttraumatic stress disorder, 237–260 (1994) [7] Malmasi, S., Zampieri, M.: Detecting hate speech in social media. In: Proceedings of the International Conference Recent Advances in Natural Language Processing, pp. 467–472. INCOMA Ltd., Varna, Bulgaria (2017). [8"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_95",
+    "start_char": 1500,
+    "end_char": 2400,
+    "text": ". In: Proceedings of the International Conference Recent Advances in Natural Language Processing, pp. 467–472. INCOMA Ltd., Varna, Bulgaria (2017). [8] Schmidt, A., Wiegand, M.: A survey on hate speech detection using natural language processing. In: Proceedings of the Fifth International Workshop on Natural Language Processing for Social Media, pp. 1–10 (2017) Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data task in vlsp campaign 2019: Hate speech detection for social good. arXiv [10] Luu, S.T., Nguyen, K.V., Nguyen, N.L.-T.: A large-scale dataset for hate speech detection on vietnamese social media texts. In: Fujita, H., Selamat, A., Lin, J.C.-W., Ali, M. (eds.) Advances and Trends in Artificial Intelligence. Artificial Intelligence Practices, pp. 415–426. Springer, Cham [11] Naseem, U., Razzak, I., Eklund, P.W.: A survey of pre-pr"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_96",
+    "start_char": 2250,
+    "end_char": 3150,
+    "text": "Artificial Intelligence. Artificial Intelligence Practices, pp. 415–426. Springer, Cham [11] Naseem, U., Razzak, I., Eklund, P.W.: A survey of pre-processing tech- niques to improve short-text quality: a case study on hate speech detection on twitter. Multimedia Tools and Applications 80 (28), 35239–35266 (2021) [12] Nguyen, K.P.-Q., Van Nguyen, K.: Exploiting vietnamese social media characteristics for textual emotion recognition in vietnamese. In: 2020 International Conference on Asian Language Processing (IALP), pp. 276– [13] Vu, T., Nguyen, D.Q., Nguyen, D.Q., Dras, M., Johnson, M.: VnCoreNLP: A Vietnamese natural language processing toolkit. In: Proceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Demonstrations, pp. 56–60. Association for Computational Linguistics, New Orleans, Louisiana (2018). https: [14] Fortuna, P.,"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_97",
+    "start_char": 3000,
+    "end_char": 3900,
+    "text": "mputational Linguistics: Demonstrations, pp. 56–60. Association for Computational Linguistics, New Orleans, Louisiana (2018). https: [14] Fortuna, P., Nunes, S.: A survey on automatic detection of hate speech in text. ACM Computing Surveys (CSUR) 51 (4), 1–30 (2018) [15] Alrehili, A.: Automatic hate speech detection on social media: A brief survey. In: 2019 IEEE/ACS 16th International Conference on Computer Systems and Applications (AICCSA), pp. 1–6 (2019). IEEE [16] Waseem, Z., Hovy, D.: Hateful symbols or hateful people? predictive features for hate speech detection on twitter. In: Proceedings of the NAACL Student Research Workshop, pp. 88–93 (2016) [17] Chen, J., Yan, S., Wong, K.-C.: Verbal aggression detection on twitter comments: Convolutional neural network for short-text sentiment analysis. Neural Computing and Applications, 1–10 (2018) [18] Davidson, T., Warmsley, D., Macy, M.,"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_98",
+    "start_char": 3750,
+    "end_char": 4650,
+    "text": "olutional neural network for short-text sentiment analysis. Neural Computing and Applications, 1–10 (2018) [18] Davidson, T., Warmsley, D., Macy, M., Weber, I.: Automated hate speech detection and the problem of offensive language. In: Proceedings of the International AAAI Conference on Web and Social Media, vol. 11 (2017) [19] Do, H.T.-T., Huynh, H.D., Van Nguyen, K., Nguyen, N.L.-T., Nguyen, A.G.-T.: Hate speech detection on vietnamese social media text using the Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data bidirectional-lstm model. arXiv preprint arXiv:1911.03648 (2019) [20] Huu, Q.P., Trung, S.N., Pham, H.A.: Automated hate speech detection on vietnamese social networks. Technical report, EasyChair (2019) [21] Huynh, H.D., Do, H.T.-T., Nguyen, K.V., Nguyen, N.T.-L.: A simple and efficient ensemble classifier combining multipl"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_99",
+    "start_char": 4500,
+    "end_char": 5400,
+    "text": "al report, EasyChair (2019) [21] Huynh, H.D., Do, H.T.-T., Nguyen, K.V., Nguyen, N.T.-L.: A simple and efficient ensemble classifier combining multiple neural network models on social media datasets in Vietnamese. In: Proceedings of the 34th Pacific Asia Conference on Language, Information and Computation, pp. 420–429. Association for Computational Linguistics, Hanoi, Vietnam (2020) [22] Luu, S.T., Nguyen, H.P., Van Nguyen, K., Nguyen, N.L.-T.: Comparison between traditional machine learning models and neural network models for vietnamese hate speech detection. In: 2020 RIVF International Conference on Computing and Communication Technologies (RIVF), pp. 1–6 (2020). IEEE [23] Nguyen, T.B., Nguyen, Q.M., Nguyen, T.H., Pham, N.P., Nguyen, T.L., Do, Q.T.: Vais hate speech detection system: A deep learning based approach for system combination. arXiv preprint arXiv:1910.05608 (2019) [24] Van"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_100",
+    "start_char": 5250,
+    "end_char": 6150,
+    "text": "., Do, Q.T.: Vais hate speech detection system: A deep learning based approach for system combination. arXiv preprint arXiv:1910.05608 (2019) [24] Van Thin, D., Le, L.S., Nguyen, N.L.-T.: Nlp@ uit: Exploring feature engineer and ensemble model for hate speech detection at vlsp 2019. [25] Martins, R., Gomes, M., Almeida, J.J., Novais, P., Henriques, P.: Hate speech classification in social media using emotional analysis. In: 2018 7th Brazilian Conference on Intelligent Systems (BRACIS), pp. 61–66 (2018). IEEE [26] Devlin, J., Chang, M.-W., Lee, K., Toutanova, K.: BERT: Pre-training of deep bidirectional transformers for language understanding. In: Pro- ceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technolo- gies, Volume 1 (Long and Short Papers), pp. 4171–4186. Association for Computational Linguistics, Minne"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_101",
+    "start_char": 6000,
+    "end_char": 6900,
+    "text": "tational Linguistics: Human Language Technolo- gies, Volume 1 (Long and Short Papers), pp. 4171–4186. Association for Computational Linguistics, Minneapolis, Minnesota (2019). https: [27] Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., Levy, O., Lewis, M., Zettlemoyer, L., Stoyanov, V.: Roberta: A robustly optimized bert pretraining approach. arXiv preprint arXiv:1907.11692 (2019) [28] Conneau, A., Khandelwal, K., Goyal, N., Chaudhary, V., Wenzek, G., Guzmán, F., Grave, E., Ott, M., Zettlemoyer, L., Stoyanov, V.: Unsuper- vised cross-lingual representation learning at scale. In: Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics, pp. 8440–8451. Association for Computational Linguistics, Online (2020). Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data [29] Safaya, A., Abdullatif, M., Yuret"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_102",
+    "start_char": 6750,
+    "end_char": 7650,
+    "text": "(2020). Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data [29] Safaya, A., Abdullatif, M., Yuret, D.: Kuisail at semeval-2020 task 12: Bert- cnn for offensive speech identification in social media. In: Proceedings of the Fourteenth Workshop on Semantic Evaluation, pp. 2054–2059 (2020) [30] Liu, Y., Liu, H., Wong, L.-P., Lee, L.-K., Zhang, H., Hao, T.: A hybrid neural network rbert-c based on pre-trained roberta and cnn for user intent classification. In: International Conference on Neural Computing for Advanced Applications, pp. 306–319 (2020). Springer [31] Saha, D., Paharia, N., Chakraborty, D., Saha, P., Mukherjee, A.: Hate-alert@DravidianLangTech-EACL2021: Ensembling strategies for transformer-based offensive language detection. In: Proceedings of the First Workshop on Speech and Language Technologies for Dravidian Lan- guages, pp"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_103",
+    "start_char": 7500,
+    "end_char": 8400,
+    "text": "ransformer-based offensive language detection. In: Proceedings of the First Workshop on Speech and Language Technologies for Dravidian Lan- guages, pp. 270–276. Association for Computational Linguistics, Kyiv [32] Hochreiter, S., Schmidhuber, J.: Long short-term memory. Neural [33] Schuster, M., Paliwal, K.K.: Bidirectional recurrent neural networks. IEEE transactions on Signal Processing 45 (11), 2673–2681 (1997) [34] Chung, J., Gulcehre, C., Cho, K., Bengio, Y.: Empirical evaluation of gated recurrent neural networks on sequence modeling. arXiv preprint [35] He, C., Chen, S., Huang, S., Zhang, J., Song, X.: Using convolutional neural network with bert for intent determination. In: 2019 International Conference on Asian Language Processing (IALP), pp. 65–70 (2019). IEEE [36] Nguyen, D.Q., Tuan Nguyen, A.: PhoBERT: Pre-trained language models for Vietnamese. In: Findings of the Associati"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_104",
+    "start_char": 8250,
+    "end_char": 9150,
+    "text": "(IALP), pp. 65–70 (2019). IEEE [36] Nguyen, D.Q., Tuan Nguyen, A.: PhoBERT: Pre-trained language models for Vietnamese. In: Findings of the Association for Computational Lin- guistics: EMNLP 2020, pp. 1037–1042. Association for Computational Linguistics, Online (2020). https://doi.org/10.18653/v1/2020.findings-em nlp.92 [37] Nagarajan, S.M., Gandhi, U.D.: Classifying streaming of twitter data based on sentiment analysis using hybridization. Neural Computing and [38] Zaki, N.D., Hashim, N.Y., Mohialden, Y.M., Mohammed, M.A., Sutikno, T., Ali, A.H.: A real-time big data sentiment analysis for iraqi tweets using spark streaming. Bulletin of Electrical Engineering and Informatics Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data [39] Burnap, P., Williams, M.L.: Cyber hate speech on twitter: An application of machine classification and st"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_105",
+    "start_char": 9000,
+    "end_char": 9900,
+    "text": "on using PhoBERT-CNN and Streaming Data [39] Burnap, P., Williams, M.L.: Cyber hate speech on twitter: An application of machine classification and statistical modeling for policy and decision making. Policy & internet 7 (2), 223–242 (2015) [40] Anagnostou, A., Mollas, I., Tsoumakas, G.: Hatebusters: A web application for actively reporting youtube hate speech. In: IJCAI, pp. 5796–5798 [41] Bird, S.: Nltk: the natural language toolkit. In: Proceedings of the COLING/ACL 2006 Interactive Presentation Sessions, pp. 69–72 (2006) [42] Le, V.-D.: stopwords: Vietnamese. GitHub (2017) [43] Luu, S., Nguyen, K., Nguyen, N.: Empirical study of text augmentation on social media text in Vietnamese. In: Proceedings of the 34th Pacific Asia Conference on Language, Information and Computation, pp. 462–470. Association for Computational Linguistics, Hanoi, Vietnam (2020) [44] Japkowicz, N., Stephen, S.:"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_106",
+    "start_char": 9750,
+    "end_char": 10650,
+    "text": "Language, Information and Computation, pp. 462–470. Association for Computational Linguistics, Hanoi, Vietnam (2020) [44] Japkowicz, N., Stephen, S.: The class imbalance problem: A systematic [45] Wei, J., Zou, K.: EDA: Easy data augmentation techniques for boosting performance on text classification tasks. In: Proceedings of the 2019 Con- ference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP- IJCNLP), pp. 6382–6388. Association for Computational Linguistics, Hong [46] Kim, Y.: Convolutional neural networks for sentence classification. In: Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP), pp. 1746–1751. Association for Compu- tational Linguistics, Doha, Qatar (2014). https://doi.org/10.3115/v1/D14 with tweets’ pretrained model and noisy student training met"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_107",
+    "start_char": 10500,
+    "end_char": 11400,
+    "text": "ation for Compu- tational Linguistics, Doha, Qatar (2014). https://doi.org/10.3115/v1/D14 with tweets’ pretrained model and noisy student training method. In: Proceedings of the Fourteenth Workshop on Semantic Evaluation, pp. [48] Li, X., Bing, L., Zhang, W., Lam, W.: Exploiting BERT for end-to-end aspect-based sentiment analysis. In: Proceedings of the 5th Workshop on Noisy User-generated Text (W-NUT 2019), pp. 34–41. Association for Computational Linguistics, Hong Kong, China (2019). https://doi.org/10 [49] Yi, R., Hu, W.: Pre-trained bert-gru model for relation extraction. In: Proceedings of the 2019 8th International Conference on Computing and Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Pattern Recognition, pp. 453–457 (2019) [50] Zaharia, M., Xin, R.S., Wendell, P., Das, T., Armbrust, M., Dave, A., Meng, X., Rosen, J., Ven"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_108",
+    "start_char": 11250,
+    "end_char": 12150,
+    "text": "aming Data Pattern Recognition, pp. 453–457 (2019) [50] Zaharia, M., Xin, R.S., Wendell, P., Das, T., Armbrust, M., Dave, A., Meng, X., Rosen, J., Venkataraman, S., Franklin, M.J., et al. : Apache spark: a unified engine for big data processing. Communications of the [51] Rish, I., et al. : An empirical study of the naive bayes classifier. In: IJCAI 2001 Workshop on Empirical Methods in Artificial Intelligence, vol. 3, pp. ing naive bayes text classifiers. In: Pacific Rim International Conference on Artificial Intelligence, pp. 414–423 (2002). Springer [53] Liu, S., Forss, T.: Combining n-gram based similarity analysis with sen- timent analysis in web content classification. In: KDIR, pp. 530–537 [54] Genkin, A., Lewis, D.D., Madigan, D.: Large-scale bayesian logistic regression for text categorization. technometrics 49 (3), 291–304 (2007) [55] Hosmer Jr, D.W., Lemeshow, S., Sturdivant,"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_109",
+    "start_char": 12000,
+    "end_char": 12900,
+    "text": "arge-scale bayesian logistic regression for text categorization. technometrics 49 (3), 291–304 (2007) [55] Hosmer Jr, D.W., Lemeshow, S., Sturdivant, R.X.: Applied Logistic Regression vol. 398. John Wiley & Sons, ??? (2013) [56] Pranckeviˇcius, T., Marcinkeviˇcius, V.: Comparison of naive bayes, random forest, decision tree, support vector machines, and logistic regression clas- sifiers for text reviews classification. Baltic Journal of Modern Computing [57] Ikonomakis, M., Kotsiantis, S., Tampakas, V.: Text classification using machine learning techniques. WSEAS transactions on computers 4 (8), [58] Burnap, P., Williams, M.L.: Us and them: identifying cyber hate on twitter across multiple protected characteristics. EPJ Data science 5 , 1–15 (2016) [59] Liaw, A., Wiener, M., et al. : Classification and regression by randomforest. [60] Islam, M.Z., Liu, J., Li, J., Liu, L., Kang, W.: A se"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_110",
+    "start_char": 12750,
+    "end_char": 13650,
+    "text": "5 (2016) [59] Liaw, A., Wiener, M., et al. : Classification and regression by randomforest. [60] Islam, M.Z., Liu, J., Li, J., Liu, L., Kang, W.: A semantics aware random forest for text classification. In: Proceedings of the 28th ACM International Conference on Information and Knowledge Management, pp. 1061–1070 [61] Badjatiya, P., Gupta, S., Gupta, M., Varma, V.: Deep learning for hate speech detection in tweets. In: Proceedings of the 26th International Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data Conference on World Wide Web Companion, pp. 759–760 (2017) [62] Medsker, L., Jain, L.C.: Recurrent Neural Networks: Design and Applica- tions. CRC press, ??? (1999) [63] Tenney, I., Das, D., Pavlick, E.: BERT rediscovers the classical NLP pipeline. In: Proceedings of the 57th Annual Meeting of the Association for Computational Lingui"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_111",
+    "start_char": 13500,
+    "end_char": 14400,
+    "text": ", D., Pavlick, E.: BERT rediscovers the classical NLP pipeline. In: Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, pp. 4593–4601. Association for Computational Linguistics, Florence, Italy (2019). https://doi.org/10.18653/v1/P19-1452 [64] Michel, P., Levy, O., Neubig, G.: Are sixteen heads really better than one? In: Wallach, H., Larochelle, H., Beygelzimer, A., d ' Alché-Buc, F., Fox, E., Garnett, R. (eds.) Advances in Neural Information Processing Systems, vol. 32. Curran Associates, Inc., ??? (2019) [65] Rogers, A., Kovaleva, O., Rumshisky, A.: A primer in bertology: What we know about how bert works. Transactions of the Association for Computational Linguistics 8 , 842–866 (2020) [66] Sigurbergsson, G.I., Derczynski, L.: Offensive language and hate speech detection for danish. arXiv preprint arXiv:1908.04531 (2019) [67] Chicco, D., Jurman, G."
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_112",
+    "start_char": 14250,
+    "end_char": 15150,
+    "text": "son, G.I., Derczynski, L.: Offensive language and hate speech detection for danish. arXiv preprint arXiv:1908.04531 (2019) [67] Chicco, D., Jurman, G.: The advantages of the matthews correlation coef- ficient (mcc) over f1 score and accuracy in binary classification evaluation. [68] Vu Xuan, S., Vu, T., Tran, S., Jiang, L.: ETNLP: A visual-aided systematic approach to select pre-trained embeddings for a downstream task. In: Proceedings of the International Conference on Recent Advances in Natural Language Processing (RANLP 2019), pp. 1285–1294. INCOMA Ltd., [69] Nguyen, A.T., Dao, M.H., Nguyen, D.Q.: A Pilot Study of Text-to-SQL Semantic Parsing for Vietnamese. In: Findings of the Association for Computational Linguistics: EMNLP 2020, pp. 4079–4085 (2020) [70] Datareportal: Digital 2021: Vietnam (2021). https://datareportal.com/r eports/digital-2021-vietnam [71] Cohen, J.: A coefficient"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_113",
+    "start_char": 15000,
+    "end_char": 15900,
+    "text": "079–4085 (2020) [70] Datareportal: Digital 2021: Vietnam (2021). https://datareportal.com/r eports/digital-2021-vietnam [71] Cohen, J.: A coefficient of agreement for nominal scales. Educational and psychological measurement 20 (1), 37–46 (1960) [72] Mozafari, M., Farahbakhsh, R., Crespi, N.: A bert-based transfer learning approach for hate speech detection in online social media. In: International Conference on Complex Networks and Their Applications, pp. 928–940 (2019). Springer Springer Nature 2021 L A TEX template Hate and Offensive Detection using PhoBERT-CNN and Streaming Data [73] Mathew, B., Saha, P., Yimam, S.M., Biemann, C., Goyal, P., Mukherjee, A.: Hatexplain: A benchmark dataset for explainable hate speech detection. Proceedings of the AAAI Conference on Artificial Intelligence 35 (17), [74] Pavlopoulos, J., Sorensen, J., Laugier, L., Androutsopoulos, I.: Semeval- 2021 task"
+  },
+  {
+    "paper_id": "arxiv_2206_00524",
+    "section": "body",
+    "chunk_id": "arxiv_2206_00524_body_114",
+    "start_char": 15750,
+    "end_char": 16032,
+    "text": "s of the AAAI Conference on Artificial Intelligence 35 (17), [74] Pavlopoulos, J., Sorensen, J., Laugier, L., Androutsopoulos, I.: Semeval- 2021 task 5: Toxic spans detection. In: Proceedings of the 15th International Workshop on Semantic Evaluation (SemEval-2021), pp. 59–69 (2021)"
+  }
+]

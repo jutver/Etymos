@@ -4,6 +4,7 @@ import { CaretLeft, CaretRight, MagnifyingGlassMinus, MagnifyingGlassPlus } from
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import type { MatchedSource, Severity } from "../lib/types";
+import { extractWordTokens, findFuzzyMatch, normalize, normalizeWithMap } from "../lib/textMatch";
 
 // Ép nó load chính xác version đang dùng qua mạng
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -66,126 +67,6 @@ const SEVERITY_LABEL: Record<Severity, string> = {
 };
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 3, moderate: 2, low: 1 };
-
-function normalize(text: string) {
-  return text
-    .toLowerCase()
-    // Dehyphenate line-wrap artifacts ("exam-\nple" / "exam- ple" -> "example")
-    // BEFORE collapsing whitespace, so a hyphen followed by any run of
-    // whitespace (space, newline, tab) is treated as a PDF line break, not a
-    // real hyphenated word.
-    .replace(/-\s+/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/[""'']/g, '"')
-    .trim();
-}
-
-// Chuẩn hoá text NHƯNG giữ bảng ánh xạ 1-1 từ mỗi ký tự trong chuỗi đã
-// chuẩn hoá về đúng vị trí ký tự tương ứng trong chuỗi gốc.
-//
-// Cũng dehyphenate ngay tại đây: một dấu "-" đứng ngay sau 1 ký tự chữ và
-// theo sau là khoảng trắng gần như luôn là dấu ngắt dòng do PDF tự chèn
-// (VD "context-\nual"), không phải dấu gạch nối thật - nên bỏ luôn cả "-" và
-// khoảng trắng theo sau để khớp lại thành "contextual", giống hệt cách
-// `normalize()` xử lý snippet gốc phía trên.
-function normalizeWithMap(raw: string): { normalized: string; map: number[] } {
-  let normalized = "";
-  const map: number[] = [];
-  let lastWasSpace = false;
-
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-
-    if (ch === "-" && /\s/.test(raw[i + 1] ?? "")) {
-      let j = i + 1;
-      while (j < raw.length && /\s/.test(raw[j])) j++;
-      i = j - 1; // vòng lặp ngoài sẽ tự i++ để nhảy qua hết khoảng trắng
-      continue;
-    }
-
-    let ch2 = ch;
-    if (ch2 === "“" || ch2 === "”" || ch2 === "‘" || ch2 === "’") ch2 = '"';
-    const lower = ch2.toLowerCase();
-
-    if (/\s/.test(lower)) {
-      if (lastWasSpace) continue;
-      normalized += " ";
-      map.push(i);
-      lastWasSpace = true;
-    } else {
-      normalized += lower;
-      map.push(i);
-      lastWasSpace = false;
-    }
-  }
-
-  return { normalized, map };
-}
-
-// Tách text thành các "từ" (chuỗi không-khoảng-trắng liên tục) kèm vị trí ký
-// tự bắt đầu/kết thúc trong chuỗi gốc - dùng làm đơn vị so khớp cho fallback
-// mờ (fuzzy) bên dưới.
-function extractWordTokens(text: string): { word: string; start: number; end: number }[] {
-  const tokens: { word: string; start: number; end: number }[] = [];
-  const re = /\S+/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    tokens.push({ word: m[0], start: m.index, end: m.index + m[0].length - 1 });
-  }
-  return tokens;
-}
-
-// Fallback "mờ" (fuzzy) khi indexOf khớp tuyệt đối thất bại: trích xuất PDF
-// (pdf.js) thường lệch so với snippet gốc lưu ở backend (dấu gạch nối ngắt
-// dòng còn sót, ligature, khoảng trắng thừa/thiếu do layout nhiều cột...).
-// Đây KHÔNG phải một thư viện fuzzy-match đầy đủ - chỉ là so khớp theo cửa sổ
-// trượt trên danh sách từ, đủ khoan dung để một match thật hiếm khi bị bỏ
-// sót hoàn toàn. Neo (anchor) vào 1 trong 3 từ đầu của snippet để tránh quét
-// O(số từ trang × kích thước cửa sổ) trên toàn bộ trang - chỉ thử các cửa sổ
-// bắt đầu gần nơi thực sự xuất hiện 1 trong các từ neo đó.
-function findFuzzyMatch(
-  pageTokens: { word: string; start: number; end: number }[],
-  snippetWords: string[],
-): { start: number; end: number } | null {
-  const target = snippetWords.length;
-  if (target < 3 || pageTokens.length === 0) return null;
-
-  const minWindow = Math.max(1, target - 2);
-  const maxWindow = target + 4;
-
-  const anchorWords = snippetWords.slice(0, 3);
-  const anchorStarts = new Set<number>();
-  pageTokens.forEach((t, i) => {
-    if (anchorWords.includes(t.word)) anchorStarts.add(i);
-  });
-  if (anchorStarts.size === 0) return null;
-
-  let best: { start: number; end: number; score: number } | null = null;
-  for (const anchor of anchorStarts) {
-    const winStart = Math.max(0, anchor - 2);
-    for (let win = minWindow; win <= maxWindow; win++) {
-      const end = winStart + win;
-      if (end > pageTokens.length) break;
-      const used = new Array(win).fill(false);
-      let matchedCount = 0;
-      for (const sw of snippetWords) {
-        for (let k = 0; k < win; k++) {
-          if (!used[k] && pageTokens[winStart + k].word === sw) {
-            used[k] = true;
-            matchedCount++;
-            break;
-          }
-        }
-      }
-      const score = matchedCount / target;
-      if (score >= 0.7 && (!best || score > best.score)) {
-        best = { start: pageTokens[winStart].start, end: pageTokens[end - 1].end, score };
-      }
-    }
-  }
-
-  return best ? { start: best.start, end: best.end } : null;
-}
 
 // Khi nhiều match (khác nguồn) cùng trùng vào 1 vùng chữ, tránh tô chồng
 // nhiều lớp màu lên nhau (nhìn rối mắt) — chỉ giữ lại box có mức độ nghiêm

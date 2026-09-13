@@ -12,7 +12,7 @@ import {
 } from "../../lib/documentsQueries";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
-import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
+import { MarkerDocumentViewer } from "../../components/MarkerDocumentViewer";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { CitationDialog } from "../../components/CitationDialog";
 import { RewritePanel } from "./RewritePanel";
@@ -171,7 +171,6 @@ export default function ReportPage() {
   const [view, setView] = useState<"document" | "original">("original");
   const [stats, setStats] = useState({ words: 0, characters: 0 });
   const [pageState, setPageState] = useState({ page: 1, pageCount: 1 });
-  const [originalPageState, setOriginalPageState] = useState({ page: 1, pageCount: 1 });
   const [fileName, setFileName] = useState("");
 
   useEffect(() => {
@@ -248,9 +247,6 @@ export default function ReportPage() {
     setPageState({ page, pageCount });
   }, []);
 
-  const handleOriginalPageChange = useCallback((page: number, pageCount: number) => {
-    setOriginalPageState({ page, pageCount });
-  }, []);
 
   // The Original view isn't editable, so its word/character counts come
   // straight off the document's stored metadata rather than a live DOM read.
@@ -428,14 +424,12 @@ export default function ReportPage() {
 
           {view === "original" ? (
             <div className="relative flex-1 overflow-hidden pt-16">
-              <PlagiarismPdfViewer
-                pdfUrl={effectivePdfUrl ?? ""}
-                unavailableMessage={pdfFetchError ?? undefined}
+              <MarkerDocumentViewer
+                reportId={id!}
                 matches={visibleMatches}
                 activeMatchId={activeMatchId}
                 onMatchClick={setActiveMatchId}
-                onPageChange={handleOriginalPageChange}
-                overLimitOffset={overLimitOffset}
+                fileNameForDownload={fileName || doc.fileName || "document"}
               />
             </div>
           ) : (
@@ -469,8 +463,8 @@ export default function ReportPage() {
             <WordCountPill
               words={originalStats.words}
               characters={originalStats.characters}
-              page={originalPageState.page}
-              pageCount={originalPageState.pageCount}
+              page={1}
+              pageCount={1}
               dirty={false}
               locked
             />

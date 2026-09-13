@@ -1,0 +1,18 @@
+[
+  {
+    "paper_id": "title_589a934ed23eb820bb5da69513d252573e9d0a8e",
+    "section": "abstract",
+    "chunk_id": "title_589a934ed23eb820bb5da69513d252573e9d0a8e_abstract_0",
+    "start_char": 0,
+    "end_char": 818,
+    "text": "GitHub - phusroyal/ViHOS: Repository for the paper \"ViHOS ...ViHOS: Hate Speech Spans Detection for VietnameseViHOS: Hate Speech Spans Detection for VietnameseViHOS: Hate Speech Spans Detection for VietnameseVihos: Hate Speech Spans Detection For Vietnamese | PDF ...README.md · phusroyal/ViHOS at main - Hugging Face\nThis repository contains official implementation of the paper ViHOS: Vietnamese Hate and Offensive Spans Detection accepted at the EACL 2023 Main Conference. Disclaimer: This project contains real comments that could be considered profane, offensive, or abusive. See full list on github.com The rise in hateful and offensive language directed at other users is one of the adverse side effects of the increased use of social networking platforms. This could make it difficult for human moderators to r"
+  },
+  {
+    "paper_id": "title_589a934ed23eb820bb5da69513d252573e9d0a8e",
+    "section": "abstract",
+    "chunk_id": "title_589a934ed23eb820bb5da69513d252573e9d0a8e_abstract_1",
+    "start_char": 750,
+    "end_char": 818,
+    "text": "ng platforms. This could make it difficult for human moderators to r"
+  }
+]

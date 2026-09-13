@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_d4d06adae194cab7bea3572f87439391985e9f4c",
+    "section": "abstract",
+    "chunk_id": "title_d4d06adae194cab7bea3572f87439391985e9f4c_abstract_0",
+    "start_char": 0,
+    "end_char": 307,
+    "text": "V I H ATE T5: Enhancing Hate Speech Detection in Vietnamese\n[HATE]Ngu vcl[HATE]! Figure 1: An overview of the unified HSD-multitask VIHATET5 model incorporating various prefix tasks tailored for hate speech detection in Vietnamese. separate fine-tuning for specific tasks, resulting in system fragmentation."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_9847f80cd3f4b808d0f7ace64a25e78d184358c9",
+    "section": "abstract",
+    "chunk_id": "doi_9847f80cd3f4b808d0f7ace64a25e78d184358c9_abstract_0",
+    "start_char": 0,
+    "end_char": 607,
+    "text": "From Universal Language Model to Downstream Task: Improving RoBERTa-Based Vietnamese Hate Speech Detection\nNatural language processing (NLP) is a fast-growing field of artificial intelligence. Since the Transformer [32] was introduced by Google in 2017, a large number of language models such as BERT, GPT, and ELMo have been inspired by this architecture. These models were trained on huge datasets and achieved state-of-the-art results on natural language understanding. However, fine-tuning a pre-trained language model on much smaller datasets for downstream tasks requires a carefully-designed pipeline"
+  }
+]

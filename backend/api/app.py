@@ -31,6 +31,14 @@ from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
 from usage import ensure_quota_available, record_check_used
+import marker_preview
+from marker_preview_store import (
+    get_marker_preview,
+    has_docx_ready,
+    init_marker_preview,
+    mark_marker_preview_failed,
+    mark_marker_preview_ready,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +131,14 @@ DOCUMENTS_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "documents")
 # not local disk.
 LOCAL_PDF_FALLBACK_DIR = Path(os.getenv("LOCAL_PDF_FALLBACK_DIR", "./storage/processed_pdfs"))
 LOCAL_PDF_FALLBACK_DIR.mkdir(parents=True, exist_ok=True)
+
+# Where marker-pdf's per-report HTML/docx preview output lives (see
+# marker_preview.py + run_marker_preview_job below). Local disk only — like
+# job_manager.py's in-memory job table, this is a nicer-to-have display
+# layer, not the check result itself, so losing it on a process restart is
+# an acceptable tradeoff (see marker_preview_store.py's module docstring).
+MARKER_PREVIEW_DIR = Path(os.getenv("MARKER_PREVIEW_DIR", "./storage/marker_previews"))
+MARKER_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _storage_path(user_id: str, report_id: str) -> str:
@@ -230,6 +246,36 @@ def health():
     return {"status": "ok", "service": "plagiarism-checker"}
 
 
+def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
+    """
+    Best-effort and fully separate from run_pdf_job: converts the
+    just-checked PDF into an HTML/docx preview via marker-pdf
+    (marker_preview.py), for the Report page's Original view
+    (PlagiarismPdfViewer's replacement). Runs in its own daemon thread,
+    started only after the real check has already succeeded, and never
+    raises past this function — a failure here only ever means "no nicer
+    preview today"; it must never fail or retry the underlying check.
+    """
+    init_marker_preview(report_id)
+    work_dir = MARKER_PREVIEW_DIR / report_id
+    try:
+        result = marker_preview.build_marker_preview(pdf_path, work_dir)
+        mark_marker_preview_ready(
+            report_id, html=result["html"], docx_local_path=str(result["docx_path"])
+        )
+    except marker_preview.MarkerUnavailable as exc:
+        logger.warning("marker-pdf preview unavailable for report_id=%s: %s", report_id, exc)
+        mark_marker_preview_failed(report_id, error=str(exc))
+    except Exception as exc:
+        logger.exception("marker-pdf preview failed unexpectedly for report_id=%s", report_id)
+        mark_marker_preview_failed(report_id, error=str(exc))
+    finally:
+        try:
+            pdf_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
                  balance_source: BalanceSource, input_type: Literal["pdf", "docx"] = "pdf") -> None:
     """
@@ -240,10 +286,11 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
 
     Original-PDF Storage upload (`_upload_pdf`) only happens for actual
     PDFs: a .docx has no PDF rendering to show in the Report page's
-    Original view (owned by PlagiarismPdfViewer.tsx), so that view simply
-    has nothing to switch to for a docx-sourced report — the Document view
-    is the only view, which is the correct degraded behaviour rather than
-    uploading the wrong bytes under a `.pdf`-suffixed Storage key.
+    Original view (owned by MarkerDocumentViewer.tsx, via the marker-pdf
+    preview kicked off right below), so that view simply has nothing to
+    switch to for a docx-sourced report — the Document view is the only
+    view, which is the correct degraded behaviour rather than uploading the
+    wrong bytes under a `.pdf`-suffixed Storage key.
     """
     callback = make_progress_callback(job_id)
 
@@ -261,6 +308,19 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
 
         if user_id is not None and input_type == "pdf":
             _upload_pdf(user_id, report_id, Path(pdf_path))
+            try:
+                marker_input_copy = MARKER_PREVIEW_DIR / report_id / "input.pdf"
+                marker_input_copy.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(pdf_path, marker_input_copy)
+                threading.Thread(
+                    target=run_marker_preview_job,
+                    kwargs={"report_id": report_id, "pdf_path": marker_input_copy},
+                    daemon=True,
+                ).start()
+            except Exception:
+                logger.exception(
+                    "Failed to start marker-pdf preview job for report_id=%s", report_id
+                )
 
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
@@ -418,6 +478,48 @@ def get_source_pdf(report_id: str, user: AuthedUser = Depends(verify_supabase_jw
     return FileResponse(path=fallback_path, media_type="application/pdf", filename=f"{report_id}.pdf")
 
 
+@app.get("/api/reports/{report_id}/marker-preview")
+def read_marker_preview(report_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Status/result of the marker-pdf conversion started by run_pdf_job right
+    after this report's check completed (see run_marker_preview_job above).
+    The frontend polls this the way pollJob() polls /api/jobs/{id} — see
+    apps/web/src/components/MarkerDocumentViewer.tsx.
+
+    `{"status": "unavailable", ...}` (not a 404) covers every case where no
+    preview will ever show up: a .docx-sourced report (no source PDF to
+    convert), a report checked before this feature shipped, or a process
+    restart that dropped the in-memory entry — the frontend treats all of
+    these the same way, as "no preview today", not an error to retry.
+    """
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+
+    preview = get_marker_preview(report_id)
+    if preview is None:
+        return {"status": "unavailable", "html": None, "docx_ready": False, "error": None}
+    return preview
+
+
+@app.get("/api/reports/{report_id}/marker-preview/docx")
+def download_marker_preview_docx(report_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+
+    docx_path = has_docx_ready(report_id)
+    if not docx_path or not Path(docx_path).exists():
+        raise HTTPException(status_code=404, detail="The .docx preview isn't ready yet.")
+    return FileResponse(
+        path=docx_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=f"{report_id}.docx",
+    )
+
+
 @app.post("/api/ai/rewrite")
 @limiter.limit(RATE_LIMIT_AI_REWRITE)
 def rewrite_text_with_ai(request: Request, body: RewriteRequest,
@@ -499,6 +601,7 @@ def remove_report(report_id: str, user: AuthedUser = Depends(verify_supabase_jwt
     if not delete_report(report_id):
         raise HTTPException(status_code=404, detail="Report not found.")
     _delete_pdf(report.get("user_id"), report_id)
+    shutil.rmtree(MARKER_PREVIEW_DIR / report_id, ignore_errors=True)
     return {"deleted": True, "report_id": report_id}
 
 

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_cae57947cf60ab1ace0a8fc2867b949f9037c876",
+    "section": "abstract",
+    "chunk_id": "title_cae57947cf60ab1ace0a8fc2867b949f9037c876_abstract_0",
+    "start_char": 0,
+    "end_char": 324,
+    "text": "GitHub - tarudesu/ViHateT5: Repository for the paper \"ViHateT5: Enhancing Hate Speech Detection in Vietnamese with A Unified Text-to-Text Transformer Model\" (ACL'2024 - Findings)\nThe VOZ-HSD dataset consists of 10.7M+ AI-annotated comments with two labels HATE (1) and CLEAN (0) from Vietnamese users' comments on VOZ Forum."
+  }
+]

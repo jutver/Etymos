@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_0f2d94bd7fc4df10a1d220e2d9ef8888f7511424",
+    "section": "abstract",
+    "chunk_id": "doi_0f2d94bd7fc4df10a1d220e2d9ef8888f7511424_abstract_0",
+    "start_char": 0,
+    "end_char": 583,
+    "text": "Detection of Hate Speech using BERT and Hate Speech Word Embedding with Deep Model\nThere is an increased demand for detecting online hate speech, especially with the recent changing policies of hate content and free-of-speech right of online social media platforms. Detecting hate speech will reduce its negative impact on social media users. A lot of effort in the Natural Language Processing (NLP) field aimed to detect hate speech in general or detect specific hate speech such as religion, race, gender, or sexual orientation. Hate communities tend to use abbreviations, intentio"
+  }
+]

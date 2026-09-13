@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c38e9a3c01fb2a6b1381acf2ebf19b5d7bf0f573",
+    "section": "abstract",
+    "chunk_id": "doi_c38e9a3c01fb2a6b1381acf2ebf19b5d7bf0f573_abstract_0",
+    "start_char": 0,
+    "end_char": 595,
+    "text": "Multi-domain Hate Speech Detection Using Dual Contrastive Learning and Paralinguistic Features\nSocial networks have become venues where people can share and spread hate speech, especially when the platforms allow users to remain anonymous. Hate speech can have significant social and cultural effects, especially when it targets specific groups of people in terms of religion, race, ethnicity, culture or a specific social situation such as immigrants and refugees. In this study, we propose a hate speech detection model, BERTurk-DualCL, using a mixed objective with contrastive learning loss t"
+  }
+]

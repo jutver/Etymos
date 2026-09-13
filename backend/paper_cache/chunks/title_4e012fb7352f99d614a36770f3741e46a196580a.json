@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_4e012fb7352f99d614a36770f3741e46a196580a",
+    "section": "abstract",
+    "chunk_id": "title_4e012fb7352f99d614a36770f3741e46a196580a_abstract_0",
+    "start_char": 0,
+    "end_char": 296,
+    "text": "README.md · tarudesu/VOZ-HSD at main\n@inproceedings{thanh-nguyen-2024-vihatet5, title = \"{V}i{H}ate{T}5: Enhancing Hate Speech Detection in {V}ietnamese With a Unified Text-to-Text Transformer Model\", author = \"Thanh Nguyen, Luan\", editor = \"Ku, Lun-Wei and Martins, Andre and Srikumar, Vivek\"..."
+  }
+]

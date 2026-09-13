@@ -244,6 +244,73 @@ export async function deleteOwnAccount(): Promise<DeleteAccountResponse> {
   return requestJson<DeleteAccountResponse>("/api/account", { method: "DELETE" });
 }
 
+export type MarkerPreviewStatus = "pending" | "ready" | "failed" | "unavailable";
+
+/** Status/result of the marker-pdf conversion (backend/marker_preview.py)
+ * that replaces the raw-PDF preview in the Report page's Original view —
+ * see components/MarkerDocumentViewer.tsx. `html` is only present once
+ * `status === "ready"`; `docx_ready` gates showing the "Download .docx"
+ * button. `"unavailable"` (as opposed to "failed") covers every case where
+ * no preview will ever show up for this report (a .docx-sourced check, one
+ * predating this feature, or a backend restart that dropped the in-memory
+ * entry) — the frontend treats it the same as "failed", just without
+ * implying a retry would help. */
+export interface MarkerPreview {
+  status: MarkerPreviewStatus;
+  html: string | null;
+  docx_ready: boolean;
+  error?: string | null;
+}
+
+export async function getMarkerPreview(reportId: string): Promise<MarkerPreview> {
+  return requestJson<MarkerPreview>(`/api/reports/${reportId}/marker-preview`);
+}
+
+/** Polls like pollJob() until the marker-pdf conversion settles one way or
+ * another. Stops on "ready", "failed", AND "unavailable" — none of those
+ * three will ever change on their own without a fresh check. */
+export async function pollMarkerPreview(
+  reportId: string,
+  onProgress?: (preview: MarkerPreview) => void,
+): Promise<MarkerPreview> {
+  let preview = await getMarkerPreview(reportId);
+  onProgress?.(preview);
+
+  while (preview.status === "pending") {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    preview = await getMarkerPreview(reportId);
+    onProgress?.(preview);
+  }
+
+  return preview;
+}
+
+/** Downloads the real .docx marker-pdf produced (backend Pandoc step) and
+ * saves it client-side. A plain `<a href>` can't carry the auth header this
+ * endpoint requires, so this fetches the bytes and triggers the save via a
+ * throwaway blob URL instead. */
+export async function downloadMarkerPreviewDocx(reportId: string, fileName: string): Promise<void> {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(buildUrl(`/api/reports/${reportId}/marker-preview/docx`), {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    throw new ApiError(await errorMessageFromResponse(response), response.status);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName.endsWith(".docx") ? fileName : `${fileName}.docx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function pollJob(jobId: string, onProgress?: (job: BackendJob) => void): Promise<BackendJob> {
   let job = await getJob(jobId);
   onProgress?.(job);

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_bd6eadd27bcb9e72f881fe1f70201599a07ec659",
+    "section": "abstract",
+    "chunk_id": "doi_bd6eadd27bcb9e72f881fe1f70201599a07ec659_abstract_0",
+    "start_char": 0,
+    "end_char": 617,
+    "text": "An approach of data augmentation to improve the performance of BERTology models for Vietnamese hate speech detection\nHate speech detection on social media networks is the classification task that automatically detects harmful comments from users and prevents the appearance of those toxic comments on social sites. The profit of the hate speech detection task is preventing harassment and toxicity content on the social networks site to protect the users that join the social media networks. Many attempts to solve the problem of hate speech detection in Vietnamese social texts have been proposed and achieved optima"
+  }
+]
