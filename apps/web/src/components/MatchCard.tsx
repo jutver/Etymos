@@ -12,7 +12,7 @@ import {
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { severityConfig } from "./Severity";
-import { colorForIndex } from "../screens/Report/highlights";
+import { colorForMatch } from "../screens/Report/highlights";
 import { Button } from "./ui/Button";
 
 interface MatchCardProps {
@@ -23,6 +23,9 @@ interface MatchCardProps {
   rewriteLocked?: boolean;
   selected?: boolean;
   resolved?: boolean;
+  /** True when this match has no highlight anywhere in the document view, so
+   * selecting it can't jump to a place. Surfaced instead of a silent no-op. */
+  notLocated?: boolean;
   onSelect?: (matchId: string) => void;
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
@@ -44,6 +47,7 @@ export function MatchCard({
   rewriteLocked = locked,
   selected = false,
   resolved = false,
+  notLocated = false,
   onSelect,
   onViewComparison,
   onRewrite,
@@ -51,7 +55,7 @@ export function MatchCard({
 }: MatchCardProps) {
   const [explanationOpen, setExplanationOpen] = useState(false);
   const severity = severityConfig[match.severity];
-  const color = colorForIndex(index);
+  const color = colorForMatch(match, index);
   const explanationId = `match-explanation-${match.id}`;
 
   return (
@@ -103,14 +107,28 @@ export function MatchCard({
       </button>
 
       <div className="px-4 pb-3.5">
+        {/* Extends the click target below the header: clicking the quoted text
+            selects the match too. Pointer-only convenience — the header button
+            above stays the single keyboard/screen-reader control. Dragging to
+            select text to copy it must not count as a click, hence the guard. */}
         <blockquote
+          onClick={() => {
+            if (window.getSelection()?.toString()) return;
+            onSelect?.(match.id);
+          }}
           className={cn(
-            "rounded-lg px-3 py-2 text-xs leading-relaxed",
+            "cursor-pointer rounded-lg px-3 py-2 text-xs leading-relaxed transition-[filter] hover:brightness-95",
             color.mark,
           )}
         >
           {match.userSnippet}
         </blockquote>
+
+        {selected && notLocated && (
+          <p role="status" className="mt-2 text-xs leading-relaxed text-ink-500">
+            Couldn't find this passage in the document text, so there's nothing to highlight.
+          </p>
+        )}
 
         {locked ? (
           <p className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-brand-600">

@@ -4,6 +4,8 @@ import {
   ArrowUUpLeft,
   ArrowUUpRight,
   Eraser,
+  Eye,
+  EyeSlash,
   FileText,
   LinkSimple,
   ListBullets,
@@ -19,6 +21,7 @@ import {
   TextItalic,
   TextStrikethrough,
   TextUnderline,
+  X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 
@@ -182,6 +185,15 @@ export interface FormatToolbarProps {
   hasOriginal: boolean;
   view: "document" | "original";
   onViewChange: (view: "document" | "original") => void;
+  /** Plagiarism highlights on/off in the Document view. The switch only
+   * renders when `onToggleHighlights` is provided and the Document view is
+   * showing (the Original view has its own highlight layer). */
+  showHighlights?: boolean;
+  onToggleHighlights?: () => void;
+  /** A single source is focused (only its highlight is shown). Renders a
+   * "Show all" button that calls `onClearFocus`. */
+  focusActive?: boolean;
+  onClearFocus?: () => void;
   /** Inserts a new table block after the currently-focused block — a
    * structural document edit, so it goes through the canvas's imperative
    * handle rather than `document.execCommand` (see DocumentCanvas.tsx's
@@ -195,6 +207,10 @@ export function FormatToolbar({
   hasOriginal,
   view,
   onViewChange,
+  showHighlights = true,
+  onToggleHighlights,
+  focusActive = false,
+  onClearFocus,
   onInsertTable,
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
@@ -226,6 +242,39 @@ export function FormatToolbar({
                 </button>
               ))}
             </div>
+            <Divider />
+          </>
+        )}
+
+        {view === "document" && onToggleHighlights && (
+          <>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showHighlights}
+              onClick={onToggleHighlights}
+              title={showHighlights ? "Hide plagiarism highlights" : "Show plagiarism highlights"}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                showHighlights
+                  ? "bg-severity-high-bg text-severity-high hover:brightness-95"
+                  : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
+              )}
+            >
+              {showHighlights ? <Eye size={14} weight="bold" /> : <EyeSlash size={14} weight="bold" />}
+              Plagiarism
+            </button>
+            {focusActive && onClearFocus && (
+              <button
+                type="button"
+                onClick={onClearFocus}
+                title="Show every highlight again (Esc)"
+                className="ml-0.5 flex shrink-0 items-center gap-1 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
+              >
+                Showing 1 source · Show all
+                <X size={12} weight="bold" />
+              </button>
+            )}
             <Divider />
           </>
         )}

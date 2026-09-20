@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -23,6 +24,7 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSo
 import { BlockItem } from "./BlockItem";
 import { blocksFromRendered, newTableBlock, type DocBlock, type MatchColorIndex, type TableData } from "./blocks";
 import type { RenderedPassage } from "./highlights";
+import { replaceMarkWithText } from "./replaceMatch";
 
 export type { MatchColorIndex } from "./blocks";
 
@@ -32,13 +34,22 @@ export type { MatchColorIndex } from "./blocks";
  * array, so the toolbar asks the canvas to do it directly. */
 export interface DocumentCanvasHandle {
   insertTable: () => void;
+  /** Swaps the highlighted passage for `matchId` with `newText` ("Accept &
+   * replace"). Returns false — changing nothing — unless the highlight still
+   * reads exactly `expectedSnippet`. */
+  replaceMatchText: (matchId: string, newText: string, expectedSnippet: string) => boolean;
 }
 
 interface DocumentEditorProps {
   rendered: RenderedPassage[];
   colorIndexByMatch: MatchColorIndex;
   activeMatchId: string | null;
+  /** Bumped on every selection so re-selecting the same match scrolls again. */
+  focusTick: number;
+  showHighlights: boolean;
   onSelectMatch: (matchId: string) => void;
+  /** Called when the reader clicks away from the focused highlight. */
+  onClearSelection: () => void;
   locked: boolean;
   onInput: (text: string) => void;
   overLimitOffset: number | undefined;
@@ -53,7 +64,7 @@ interface DocumentEditorProps {
  * a component with real state now instead of raw DOM content.
  */
 const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(function DocumentEditor(
-  { rendered, colorIndexByMatch, activeMatchId, onSelectMatch, locked, onInput, overLimitOffset, editorRef },
+  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, overLimitOffset, editorRef },
   ref,
 ) {
   const [blocks, setBlocks] = useState<DocBlock[]>(() => blocksFromRendered(rendered));
@@ -98,8 +109,16 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
           return next;
         });
       },
+      replaceMatchText: (matchId, newText, expectedSnippet) => {
+        const editor = editorRef.current;
+        if (!editor || !replaceMarkWithText(editor, matchId, newText, expectedSnippet)) return false;
+        // Same signal a keystroke sends, so word count and the "unsaved
+        // changes" state pick the replacement up.
+        onInput(editor.innerText);
+        return true;
+      },
     }),
-    [],
+    [editorRef, onInput],
   );
 
   const handleFocusCapture = useCallback((e: FocusEvent<HTMLDivElement>) => {
@@ -110,20 +129,39 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
   const handleClick = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
       const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-match-id]");
+
+      // A source is focused: only its highlight is visible, everything else
+      // reads as plain text. Clicking the focused highlight itself keeps the
+      // focus; clicking anywhere else brings all the highlights back.
+      if (activeMatchId) {
+        if (mark?.dataset.active !== "true") onClearSelection();
+        return;
+      }
+
+      // With highlights hidden the marks are plain text — clicking them must
+      // not select a source (it would pop a highlight into view mid-read).
+      if (!showHighlights) return;
       if (mark?.dataset.matchId) onSelectMatch(mark.dataset.matchId);
     },
-    [onSelectMatch],
+    [activeMatchId, onClearSelection, onSelectMatch, showHighlights],
   );
 
   // Active-match emphasis, applied imperatively so selecting a source from
   // the sidebar never re-renders (and therefore never clobbers) whatever the
   // user is mid-typing — same technique the old single-blob editor used.
-  useEffect(() => {
+  // `data-active` is what lets the CSS in globals.css keep exactly this one
+  // mark visible while the rest are hidden (focus mode, or highlights off), so
+  // picking a source always shows its spot. It is a layout effect so the
+  // hidden/visible swap lands in the same frame as the `data-focus` change —
+  // otherwise every mark would flash hidden for a frame before the active one
+  // appeared. `focusTick` is a dependency so re-selecting scrolls again.
+  useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
     const marks = editor.querySelectorAll<HTMLElement>("mark[data-match-id]");
     marks.forEach((mark) => {
       const isActive = mark.dataset.matchId === activeMatchId;
+      mark.dataset.active = isActive ? "true" : "false";
       mark.classList.toggle("ring-2", isActive);
       mark.classList.toggle("ring-navy-900/40", isActive);
       mark.classList.toggle("ring-offset-1", isActive);
@@ -132,7 +170,7 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
     if (!activeMatchId) return;
     const target = editor.querySelector<HTMLElement>(`mark[data-match-id="${CSS.escape(activeMatchId)}"]`);
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeMatchId, editorRef]);
+  }, [activeMatchId, focusTick, editorRef]);
 
   if (blocks.length === 0) {
     return (
@@ -150,6 +188,8 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
     <div
       ref={editorRef}
       id="report-document-editor"
+      data-highlights={showHighlights ? "on" : "off"}
+      data-focus={activeMatchId ? "on" : "off"}
       role="textbox"
       aria-multiline="true"
       aria-readonly={locked}
@@ -189,8 +229,16 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
 export interface DocumentCanvasProps {
   rendered: RenderedPassage[];
   colorIndexByMatch: MatchColorIndex;
+  /** The highlighted match to emphasise and scroll to (already resolved to a
+   * match that actually has a highlight — see `buildMatchFocusMap`). */
   activeMatchId: string | null;
+  focusTick: number;
+  /** Show or hide plagiarism highlights. Purely presentational (CSS on the
+   * editor root), so toggling never remounts the editor or drops edits. */
+  showHighlights: boolean;
   onSelectMatch: (matchId: string) => void;
+  /** Called when the reader clicks away from the focused highlight. */
+  onClearSelection: () => void;
   locked: boolean;
   onInput: (text: string) => void;
   onPageChange: (current: number, total: number) => void;
@@ -217,11 +265,19 @@ export interface DocumentCanvasProps {
  * each paragraph's keystrokes, needs to be React-owned.
  */
 export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasProps>(function DocumentCanvas(
-  { rendered, colorIndexByMatch, activeMatchId, onSelectMatch, locked, onInput, onPageChange, resetKey, editorRef, overLimitOffset },
+  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, onPageChange, resetKey, editorRef, overLimitOffset },
   ref,
 ) {
   const innerRef = useRef<DocumentCanvasHandle>(null);
-  useImperativeHandle(ref, () => ({ insertTable: () => innerRef.current?.insertTable() }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertTable: () => innerRef.current?.insertTable(),
+      replaceMatchText: (matchId, newText, expectedSnippet) =>
+        innerRef.current?.replaceMatchText(matchId, newText, expectedSnippet) ?? false,
+    }),
+    [],
+  );
 
   // There are no pages any more — reported once so the status pill's
   // "Page X of Y" reads as the single continuous surface it now is, rather
@@ -239,7 +295,10 @@ export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasPro
           rendered={rendered}
           colorIndexByMatch={colorIndexByMatch}
           activeMatchId={activeMatchId}
+          focusTick={focusTick}
+          showHighlights={showHighlights}
           onSelectMatch={onSelectMatch}
+          onClearSelection={onClearSelection}
           locked={locked}
           onInput={onInput}
           overLimitOffset={overLimitOffset}

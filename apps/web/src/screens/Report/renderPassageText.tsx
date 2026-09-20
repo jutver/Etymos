@@ -1,6 +1,6 @@
 import type { DocPassage } from "@etymos/shared";
 import { cn } from "@etymos/shared";
-import { chunkPassage, colorForIndex, type PassageSpan } from "./highlights";
+import { chunkPassage, colorForIndex, LIGHT_HIGHLIGHT, type PassageSpan } from "./highlights";
 import type { MatchColorIndex } from "./blocks";
 
 /** Renders one passage's text as alternating plain / highlighted spans — the
@@ -12,7 +12,7 @@ export function renderChunks(text: string, spans: PassageSpan[], colorIndexByMat
   return chunkPassage(text, spans).map((chunk, i) => {
     if (!chunk.matchId) return <span key={i}>{chunk.text}</span>;
     const colorIdx = colorIndexByMatch.get(chunk.matchId) ?? 0;
-    const color = colorForIndex(colorIdx);
+    const color = chunk.tone === "light" ? LIGHT_HIGHLIGHT : colorForIndex(colorIdx);
     return (
       <mark
         key={i}

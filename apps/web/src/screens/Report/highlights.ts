@@ -68,9 +68,47 @@ export function colorForIndex(index: number): HighlightColor {
   return HIGHLIGHT_COLORS[index % HIGHLIGHT_COLORS.length];
 }
 
+/**
+ * How strongly a match is flagged. "heavy" matches keep the rotating identity
+ * palette above; "light" ones (high similarity, but short of a near-verbatim
+ * copy) share a single pale pink so they read as secondary.
+ */
+export type MatchTone = "heavy" | "light";
+
+/**
+ * Similarity (`matchPercent`, 0-100) at which a match counts as heavy. Below
+ * this the sentence is still clearly similar — the backend only reports
+ * sentences from ~0.87 up — but reads as a close paraphrase rather than a
+ * near-verbatim copy. Driven by `matchPercent` (not the backend label) because
+ * that is what Supabase persists, so reports restored from history tint the
+ * same way as freshly-run ones.
+ */
+export const HEAVY_MATCH_PERCENT = 95;
+
+export function matchTone(match: Pick<MatchedSource, "matchPercent">): MatchTone {
+  return match.matchPercent >= HEAVY_MATCH_PERCENT ? "heavy" : "light";
+}
+
+export const LIGHT_HIGHLIGHT: HighlightColor = {
+  key: "blush",
+  label: "Light pink",
+  mark: "bg-[#fdeef2] text-[#7f1d3a] decoration-[#f4a9bd] dark:bg-[#4a1826] dark:text-[#fde0e4] dark:decoration-[#fb9db4]",
+  chip: "bg-[#f4a9bd]",
+};
+
+/** Colour for a match's highlight and its sidebar swatch (they must agree). */
+export function colorForMatch(match: Pick<MatchedSource, "matchPercent">, index: number): HighlightColor {
+  return matchTone(match) === "light" ? LIGHT_HIGHLIGHT : colorForIndex(index);
+}
+
 /** One resolved highlight range inside a single passage's text. */
 export interface PassageSpan {
   matchId: string;
+  tone: MatchTone;
+  /** Other matches that cover the same words but lost to this one, so they
+   *  have no highlight of their own. Kept so selecting one of their sidebar
+   *  cards can still jump to (and emphasise) this span. */
+  mergedIds?: string[];
   /** Character offset into `passage.text`, inclusive. */
   start: number;
   /** Character offset into `passage.text`, exclusive. */
@@ -210,24 +248,132 @@ function offsetsWithinPassage(
  * what makes the renderer draw a dashed rather than dotted underline.
  */
 function resolveSpan(passage: DocPassage, match: MatchedSource): PassageSpan {
+  const tone = matchTone(match);
   const precise = offsetsWithinPassage(passage, match);
   if (precise) {
-    return { matchId: match.id, start: precise.start, end: precise.end, approximate: false };
+    return { matchId: match.id, tone, start: precise.start, end: precise.end, approximate: false };
   }
 
   const located = locateSnippetInPassage(passage.text, match.userSnippet);
   if (located) {
-    return { matchId: match.id, start: located.start, end: located.end, approximate: false };
+    return { matchId: match.id, tone, start: located.start, end: located.end, approximate: false };
   }
 
-  return { matchId: match.id, start: 0, end: passage.text.length, approximate: true };
+  return { matchId: match.id, tone, start: 0, end: passage.text.length, approximate: true };
+}
+
+/** Exact, then whitespace-insensitive, snippet search — no anchor/whole-passage
+ * fallback, because a wrong guess for a *secondary* match would highlight text
+ * that isn't actually matched. */
+function locateSnippetLoose(passageText: string, snippet: string): { start: number; end: number } | null {
+  const trimmed = snippet.trim();
+  if (!trimmed) return null;
+
+  const exact = passageText.indexOf(trimmed);
+  if (exact !== -1) return { start: exact, end: exact + trimmed.length };
+
+  const loose = whitespaceInsensitivePattern(trimmed);
+  const hit = loose?.exec(passageText);
+  return hit ? { start: hit.index, end: hit.index + hit[0].length } : null;
+}
+
+/**
+ * Range of `match` inside `passage`, for matches beyond the passage's primary
+ * one. Returns null when the match doesn't belong to this passage.
+ *
+ * Backend offsets are trusted only if they still slice out the snippet (a
+ * passage whose text was trimmed would shift them); otherwise the snippet is
+ * re-anchored by text search. Matches that have offsets but sit outside this
+ * passage are skipped outright rather than text-searched, so a sentence quoted
+ * twice in the document can't light up in the wrong place.
+ */
+function locateSecondarySpan(passage: DocPassage, match: MatchedSource): PassageSpan | null {
+  const tone = matchTone(match);
+  const hasOffsets =
+    match.startOffset != null &&
+    match.endOffset != null &&
+    passage.startOffset != null &&
+    passage.endOffset != null;
+
+  if (hasOffsets) {
+    const precise = offsetsWithinPassage(passage, match);
+    if (!precise) return null;
+    if (passage.text.slice(precise.start, precise.end).trim() === match.userSnippet.trim()) {
+      return { matchId: match.id, tone, start: precise.start, end: precise.end, approximate: false };
+    }
+    const reanchored = locateSnippetLoose(passage.text, match.userSnippet);
+    return reanchored ? { matchId: match.id, tone, ...reanchored, approximate: false } : null;
+  }
+
+  const located = locateSnippetLoose(passage.text, match.userSnippet);
+  return located ? { matchId: match.id, tone, ...located, approximate: false } : null;
+}
+
+interface SpanCandidate {
+  span: PassageSpan;
+  percent: number;
+  primary: boolean;
+}
+
+/** Higher wins when two candidates overlap: an exactly-located span beats a
+ * whole-passage guess, a heavy match beats a light one, then the passage's own
+ * primary match, then the higher similarity. */
+function candidateRank({ span, primary }: SpanCandidate): number {
+  return (span.approximate ? 0 : 4) + (span.tone === "heavy" ? 2 : 0) + (primary ? 1 : 0);
+}
+
+function pickNonOverlapping(candidates: SpanCandidate[]): PassageSpan[] {
+  const ordered = [...candidates].sort(
+    (a, b) => candidateRank(b) - candidateRank(a) || b.percent - a.percent || a.span.start - b.span.start,
+  );
+
+  const accepted: PassageSpan[] = [];
+  for (const { span } of ordered) {
+    if (span.end <= span.start) continue;
+    const covering = accepted.find((kept) => span.start < kept.end && kept.start < span.end);
+    if (covering) {
+      // Not drawn — but it points at the same words, so remember it.
+      (covering.mergedIds ??= []).push(span.matchId);
+      continue;
+    }
+    accepted.push(span);
+  }
+  return accepted.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Which highlighted match each match should focus in the document.
+ *
+ * A match with its own highlight maps to itself; one that was merged into a
+ * stronger overlapping highlight maps to that highlight. A match absent from
+ * the result has nowhere to point (couldn't be located, or sits past the word
+ * limit), which callers use to tell the user instead of silently doing nothing.
+ */
+export function buildMatchFocusMap(rendered: RenderedPassage[]): Map<string, string> {
+  const focus = new Map<string, string>();
+  for (const { spans } of rendered) {
+    for (const span of spans) focus.set(span.matchId, span.matchId);
+  }
+  for (const { spans } of rendered) {
+    for (const span of spans) {
+      for (const id of span.mergedIds ?? []) {
+        if (!focus.has(id)) focus.set(id, span.matchId);
+      }
+    }
+  }
+  return focus;
 }
 
 /**
  * Pairs each passage with the highlight ranges that belong to it.
  *
- * `visibleMatches` is already plan-filtered by the caller, so a passage whose
- * match is locked behind a paid tier simply renders with no highlight.
+ * A passage can carry many matched sentences (a whole paragraph is one
+ * passage), so every visible match that lands inside it gets a span — not just
+ * the one `passage.matchId` points at. Overlapping matches on the same words
+ * collapse to the strongest one (see `candidateRank`).
+ *
+ * `visibleMatches` is already plan-filtered by the caller, so a match locked
+ * behind a paid tier simply renders with no highlight.
  */
 export function buildRenderedPassages(
   passages: DocPassage[],
@@ -236,10 +382,22 @@ export function buildRenderedPassages(
   const byId = new Map(visibleMatches.map((m) => [m.id, m]));
 
   return passages.map((passage) => {
-    const match = passage.matchId ? byId.get(passage.matchId) : undefined;
-    if (!match) return { passage, spans: [] };
+    const primary = passage.matchId ? byId.get(passage.matchId) : undefined;
+    const candidates: SpanCandidate[] = [];
 
-    return { passage, spans: [resolveSpan(passage, match)] };
+    if (primary) {
+      candidates.push({ span: resolveSpan(passage, primary), percent: primary.matchPercent, primary: true });
+    }
+
+    if (passage.text) {
+      for (const match of visibleMatches) {
+        if (match === primary) continue;
+        const span = locateSecondarySpan(passage, match);
+        if (span) candidates.push({ span, percent: match.matchPercent, primary: false });
+      }
+    }
+
+    return { passage, spans: pickNonOverlapping(candidates) };
   });
 }
 
@@ -248,10 +406,12 @@ export interface TextChunk {
   text: string;
   matchId: string | null;
   approximate: boolean;
+  /** Only meaningful when `matchId` is set. */
+  tone: MatchTone;
 }
 
 export function chunkPassage(text: string, spans: PassageSpan[]): TextChunk[] {
-  if (spans.length === 0) return [{ text, matchId: null, approximate: false }];
+  if (spans.length === 0) return [{ text, matchId: null, approximate: false, tone: "heavy" }];
 
   const ordered = [...spans].sort((a, b) => a.start - b.start);
   const chunks: TextChunk[] = [];
@@ -261,16 +421,21 @@ export function chunkPassage(text: string, spans: PassageSpan[]): TextChunk[] {
     const start = Math.max(cursor, Math.min(span.start, text.length));
     const end = Math.max(start, Math.min(span.end, text.length));
     if (start > cursor) {
-      chunks.push({ text: text.slice(cursor, start), matchId: null, approximate: false });
+      chunks.push({ text: text.slice(cursor, start), matchId: null, approximate: false, tone: "heavy" });
     }
     if (end > start) {
-      chunks.push({ text: text.slice(start, end), matchId: span.matchId, approximate: span.approximate });
+      chunks.push({
+        text: text.slice(start, end),
+        matchId: span.matchId,
+        approximate: span.approximate,
+        tone: span.tone,
+      });
     }
     cursor = end;
   }
 
   if (cursor < text.length) {
-    chunks.push({ text: text.slice(cursor), matchId: null, approximate: false });
+    chunks.push({ text: text.slice(cursor), matchId: null, approximate: false, tone: "heavy" });
   }
   return chunks;
 }

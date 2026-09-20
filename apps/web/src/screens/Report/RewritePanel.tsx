@@ -17,9 +17,14 @@ export function RewritePanel({
   match: MatchedSource | null;
   open: boolean;
   onClose: () => void;
-  onAccept: (matchId: string) => void;
+  /** Receives the rewrite that was on screen, so the caller can put it into the
+   * document. Return `false` to refuse (e.g. reading mode): the panel then stays
+   * open so the rewrite can still be copied. */
+  onAccept: (match: MatchedSource, rewrittenText: string) => boolean | void;
 }) {
   const [variant, setVariant] = useState<string>("");
+  // Kept apart from `variant` so an error message can never be accepted into the document as if it were a rewrite.
+  const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
@@ -37,14 +42,16 @@ export function RewritePanel({
     
     setRegenerating(true);
     setCopied(false);
-    
+    setFailed(false);
+
     try {
       // Gọi API Rewrite mới tạo ở Backend
       const data = await rewriteText(match.userSnippet, match.sourceSnippet);
       setVariant(data.rewritten_text);
     } catch (err) {
       console.error("Rewrite error:", err);
-      setVariant("Đã có lỗi xảy ra khi gọi AI. Vui lòng thử lại.");
+      setVariant("Something went wrong while contacting the AI. Please try again.");
+      setFailed(true);
     } finally {
       setRegenerating(false);
     }
@@ -64,7 +71,7 @@ export function RewritePanel({
         </div>
         <div>
           <h2 className="text-lg font-bold text-navy-900">AI Rewrite Assistant</h2>
-          <p className="text-xs text-ink-500">Academic tone · Vietnamese</p>
+          <p className="text-xs text-ink-500">Academic tone · English</p>
         </div>
         <ModalCloseButton onClose={onClose} />
       </div>
@@ -115,13 +122,19 @@ export function RewritePanel({
       </div>
 
       <div className="flex items-center gap-3 border-t border-line px-6 py-5">
-        <Button variant="outline" onClick={handleCopy} iconLeft={copied ? <Check size={16} /> : <Copy size={16} />}>
+        <Button
+          variant="outline"
+          onClick={handleCopy}
+          disabled={regenerating || failed || !variant}
+          iconLeft={copied ? <Check size={16} /> : <Copy size={16} />}
+        >
           {copied ? "Copied" : "Copy"}
         </Button>
         <Button
           fullWidth
+          disabled={regenerating || failed || !variant.trim()}
           onClick={() => {
-            onAccept(match.id);
+            if (onAccept(match, variant.trim()) === false) return;
             onClose();
           }}
         >

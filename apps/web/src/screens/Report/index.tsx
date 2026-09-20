@@ -12,7 +12,7 @@ import {
 } from "../../lib/documentsQueries";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
-import { MarkerDocumentViewer } from "../../components/MarkerDocumentViewer";
+import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { CitationDialog } from "../../components/CitationDialog";
 import { RewritePanel } from "./RewritePanel";
@@ -22,7 +22,9 @@ import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from 
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
 import type { DocumentVersion } from "./VersionHistoryMenu";
-import { buildRenderedPassages, countWords } from "./highlights";
+import { buildMatchFocusMap, buildRenderedPassages, countWords } from "./highlights";
+import { isOverLimit } from "./renderPassageText";
+import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 
@@ -155,6 +157,10 @@ export default function ReportPage() {
   const canvasRef = useRef<DocumentCanvasHandle>(null);
   const baselineTextRef = useRef("");
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  // Bumped on every selection so picking the same source again scrolls again.
+  const [focusTick, setFocusTick] = useState(0);
+  // Plagiarism highlights on/off in the Document view (presentational only).
+  const [showHighlights, setShowHighlights] = useState(true);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [comparisonMatch, setComparisonMatch] = useState<MatchedSource | null>(null);
   const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
@@ -171,6 +177,7 @@ export default function ReportPage() {
   const [view, setView] = useState<"document" | "original">("original");
   const [stats, setStats] = useState({ words: 0, characters: 0 });
   const [pageState, setPageState] = useState({ page: 1, pageCount: 1 });
+  const [originalPageState, setOriginalPageState] = useState({ page: 1, pageCount: 1 });
   const [fileName, setFileName] = useState("");
 
   useEffect(() => {
@@ -247,6 +254,9 @@ export default function ReportPage() {
     setPageState({ page, pageCount });
   }, []);
 
+  const handleOriginalPageChange = useCallback((page: number, pageCount: number) => {
+    setOriginalPageState({ page, pageCount });
+  }, []);
 
   // The Original view isn't editable, so its word/character counts come
   // straight off the document's stored metadata rather than a live DOM read.
@@ -267,14 +277,120 @@ export default function ReportPage() {
     [doc?.passages, wordLimit],
   );
 
-  function handleAcceptRewrite(matchId: string) {
-    setResolvedIds((prev) => new Set(prev).add(matchId));
+  // Which highlight each match should jump to. Passages past the word limit
+  // are drawn muted with no highlights (renderPassageText), so they can't be a
+  // target. A match missing from this map has nowhere to point in the Document
+  // view — the sidebar says so rather than silently doing nothing.
+  const focusMap = useMemo(
+    () => buildMatchFocusMap(rendered.filter((r) => !isOverLimit(r.passage, overLimitOffset))),
+    [rendered, overLimitOffset],
+  );
+  const focusMatchId = activeMatchId ? (focusMap.get(activeMatchId) ?? null) : null;
+  const locatedIds = useMemo(() => new Set(focusMap.keys()), [focusMap]);
+
+  // Picking a source focuses it: the Document view then shows only that
+  // source's highlight. Picking the one already focused lets go again, so the
+  // same click that focused it also brings every highlight back.
+  const handleSelectMatch = useCallback((matchId: string) => {
+    setActiveMatchId((current) => (current === matchId ? null : matchId));
+    setFocusTick((t) => t + 1);
+  }, []);
+  const clearSelection = useCallback(() => setActiveMatchId(null), []);
+
+  // Escape also lets go of the focused source (unless the key is meant for a
+  // text field or an already-handled dialog).
+  useEffect(() => {
+    if (!activeMatchId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      setActiveMatchId(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [activeMatchId]);
+
+  // "Accept & replace" (only reachable outside reading mode — see
+  // notifyReadingMode): put the AI rewrite into the document in place of the
+  // flagged sentence. Only counts as fixed (Fixed badge, lower score) if the
+  // text really was replaced — this used to just mark the card and show a
+  // "Passage replaced" toast without touching the document at all.
+  function replaceFlaggedPassage(match: MatchedSource, rewritten: string) {
+    // The highlight that covers this match — its own, or the stronger one it was merged into.
+    const targetId = focusMap.get(match.id);
+    const target = targetId ? visibleMatches.find((m) => m.id === targetId) : undefined;
+
+    // A merged match's highlight may span different words than this match's
+    // sentence; replacing it with a rewrite of *this* sentence would then
+    // rewrite the wrong text, so only proceed when they are the same words.
+    const sameWords =
+      target !== undefined && normalizeWhitespace(target.userSnippet) === normalizeWhitespace(match.userSnippet);
+
+    const replaced =
+      targetId !== undefined &&
+      sameWords &&
+      (canvasRef.current?.replaceMatchText(targetId, rewritten, match.userSnippet) ?? false);
+
+    if (!replaced) {
+      pushToast({
+        kind: "error",
+        title: "Couldn't replace the passage",
+        description: "It no longer matches the document text exactly. Use Copy and paste the rewrite in yourself.",
+      });
+      return;
+    }
+
+    setResolvedIds((prev) => new Set(prev).add(match.id));
+    // Its highlight is gone; a lingering selection would hide every other one.
+    setActiveMatchId(null);
     pushToast({
       kind: "success",
       title: "Passage replaced",
-      description: "Your similarity score has been recalculated.",
+      description: "The flagged sentence now reads as your rewrite. Save to keep this version.",
     });
   }
+
+  // The Original view has no editable text, so accepting from there switches to
+  // the Document view first and applies the rewrite once the editor is mounted.
+  const pendingRewriteRef = useRef<{ match: MatchedSource; rewritten: string } | null>(null);
+
+  // Reading mode is a deliberate "don't change my document" lock, so neither
+  // opening a rewrite nor accepting one may edit through it: tell the user what
+  // to do instead. (The Original view has no lock control of its own — the
+  // lock lives on the Document view's toolbar — so the hint differs there.)
+  function notifyReadingMode() {
+    pushToast({
+      kind: "warning",
+      title: "You're in reading mode",
+      description:
+        view === "original"
+          ? "The document can't be edited in reading mode. Switch to the Document tab and choose \"Reading mode — unlock to edit\", then try again."
+          : "The document can't be edited in reading mode. Choose \"Reading mode — unlock to edit\" in the toolbar to switch modes, then continue rewriting.",
+    });
+  }
+
+  /** Returns false when the rewrite was refused (reading mode), so the panel can stay open and the text isn't lost. */
+  function handleAcceptRewrite(match: MatchedSource, rewritten: string): boolean {
+    if (locked) {
+      notifyReadingMode();
+      return false;
+    }
+    if (view !== "document") {
+      pendingRewriteRef.current = { match, rewritten };
+      setView("document");
+      return true;
+    }
+    replaceFlaggedPassage(match, rewritten);
+    return true;
+  }
+
+  useEffect(() => {
+    if (view !== "document" || !pendingRewriteRef.current) return;
+    const { match, rewritten } = pendingRewriteRef.current;
+    pendingRewriteRef.current = null;
+    replaceFlaggedPassage(match, rewritten);
+  });
 
   async function handleRename(next: string) {
     if (!id) return;
@@ -419,17 +535,28 @@ export default function ReportPage() {
             hasOriginal={hasOriginal}
             view={view}
             onViewChange={setView}
+            showHighlights={showHighlights}
+            onToggleHighlights={() => {
+              setShowHighlights((v) => !v);
+              // Flipping the switch is an explicit "show all / hide all", so it
+              // also drops any focused source rather than fighting it.
+              setActiveMatchId(null);
+            }}
+            focusActive={view === "document" && focusMatchId !== null}
+            onClearFocus={clearSelection}
             onInsertTable={() => canvasRef.current?.insertTable()}
           />
 
           {view === "original" ? (
             <div className="relative flex-1 overflow-hidden pt-16">
-              <MarkerDocumentViewer
-                reportId={id!}
+              <PlagiarismPdfViewer
+                pdfUrl={effectivePdfUrl ?? ""}
+                unavailableMessage={pdfFetchError ?? undefined}
                 matches={visibleMatches}
                 activeMatchId={activeMatchId}
                 onMatchClick={setActiveMatchId}
-                fileNameForDownload={fileName || doc.fileName || "document"}
+                onPageChange={handleOriginalPageChange}
+                overLimitOffset={overLimitOffset}
               />
             </div>
           ) : (
@@ -438,8 +565,11 @@ export default function ReportPage() {
                 ref={canvasRef}
                 rendered={rendered}
                 colorIndexByMatch={colorIndexByMatch}
-                activeMatchId={activeMatchId}
-                onSelectMatch={setActiveMatchId}
+                activeMatchId={focusMatchId}
+                focusTick={focusTick}
+                showHighlights={showHighlights}
+                onSelectMatch={handleSelectMatch}
+                onClearSelection={clearSelection}
                 locked={locked}
                 onInput={handleInput}
                 onPageChange={handlePageChange}
@@ -463,8 +593,8 @@ export default function ReportPage() {
             <WordCountPill
               words={originalStats.words}
               characters={originalStats.characters}
-              page={1}
-              pageCount={1}
+              page={originalPageState.page}
+              pageCount={originalPageState.pageCount}
               dirty={false}
               locked
             />
@@ -475,10 +605,11 @@ export default function ReportPage() {
           matches={visibleMatches}
           lockedCount={lockedMatches.length}
           activeMatchId={activeMatchId}
+          locatedIds={view === "document" ? locatedIds : undefined}
           resolvedIds={resolvedIds}
           explanationLocked={isFree}
           rewriteLocked={plan !== "professional"}
-          onSelect={setActiveMatchId}
+          onSelect={handleSelectMatch}
           onViewComparison={setComparisonMatch}
           onRewrite={(match) => {
             if (isFree) {
@@ -487,6 +618,11 @@ export default function ReportPage() {
             }
             if (plan !== "professional") {
               navigate("/pricing");
+              return;
+            }
+            // Don't spend an AI call on a rewrite that can't be applied.
+            if (locked) {
+              notifyReadingMode();
               return;
             }
             setRewriteMatch(match);

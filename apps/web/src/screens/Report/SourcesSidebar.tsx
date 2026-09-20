@@ -1,14 +1,18 @@
-import { useEffect, useRef } from "react";
-import { CaretRight, GraduationCap, ShieldCheck, Sidebar } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CaretRight, GraduationCap, MagnifyingGlass, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
+import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
 
 export interface SourcesSidebarProps {
   matches: MatchedSource[];
   lockedCount: number;
   activeMatchId: string | null;
+  /** Ids of matches that have a highlight to jump to in the document view.
+   * Omit to skip the "couldn't locate" hint (e.g. when viewing the PDF). */
+  locatedIds?: Set<string>;
   resolvedIds: Set<string>;
   explanationLocked: boolean;
   rewriteLocked: boolean;
@@ -25,6 +29,7 @@ export function SourcesSidebar({
   matches,
   lockedCount,
   activeMatchId,
+  locatedIds,
   resolvedIds,
   explanationLocked,
   rewriteLocked,
@@ -37,6 +42,15 @@ export function SourcesSidebar({
   onToggle,
 }: SourcesSidebarProps) {
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [query, setQuery] = useState("");
+
+  // Haystacks are built once per match list; each keystroke is then just a
+  // handful of `includes` calls, which matters with hundreds of matches.
+  const searchIndex = useMemo(() => buildSearchIndex(matches), [matches]);
+  // Positions in `matches`, not copies: a card's position is also its badge
+  // number and highlight colour, which must not change while filtering.
+  const shownIndexes = useMemo(() => filterMatchIndexes(searchIndex, query), [searchIndex, query]);
+  const isFiltering = query.trim().length > 0;
 
   // Clicking a highlight on the document/PDF sets activeMatchId, but the
   // matching card can be scrolled off-screen in this panel — without this,
@@ -73,7 +87,8 @@ export function SourcesSidebar({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-navy-900">
-            {matches.length} matched source{matches.length === 1 ? "" : "s"}
+            {isFiltering ? `${shownIndexes.length} of ${matches.length}` : matches.length} matched source
+            {(isFiltering ? shownIndexes.length : matches.length) === 1 ? "" : "s"}
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
             Each colour matches a highlight in your document.
@@ -92,6 +107,43 @@ export function SourcesSidebar({
         </button>
       </div>
 
+      {matches.length > 0 && (
+        <div className="shrink-0 border-b border-line px-3 py-2.5">
+          <label className="relative block">
+            <span className="sr-only">Search matched sources</span>
+            <MagnifyingGlass
+              size={14}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-500"
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && query) {
+                  e.preventDefault();
+                  setQuery("");
+                }
+              }}
+              placeholder="Search title, author or text…"
+              autoComplete="off"
+              className="h-9 w-full rounded-[var(--radius-input)] border border-line bg-white pl-8 pr-8 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </label>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
         {matches.length === 0 ? (
           <div className="flex flex-col items-center px-4 py-14 text-center">
@@ -101,30 +153,45 @@ export function SourcesSidebar({
               Nothing in this document overlapped the sources we scanned.
             </p>
           </div>
+        ) : shownIndexes.length === 0 ? (
+          <div className="flex flex-col items-center px-4 py-12 text-center">
+            <MagnifyingGlass size={26} className="text-ink-300" />
+            <p className="mt-3 text-sm font-semibold text-navy-900">No sources match</p>
+            <p className="mt-1 break-words text-xs leading-relaxed text-ink-500">
+              Nothing matched "{query.trim()}". Try a different word from the title, author or text.
+            </p>
+            <Button size="sm" variant="outline" className="mt-3 h-8 px-3 text-xs" onClick={() => setQuery("")}>
+              Clear search
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-col gap-2.5">
-            {matches.map((m, i) => (
-              <div
-                key={m.id}
-                ref={(el) => {
-                  if (el) cardRefs.current.set(m.id, el);
-                  else cardRefs.current.delete(m.id);
-                }}
-              >
-                <MatchCard
-                  match={m}
-                  index={i}
-                  locked={explanationLocked}
-                  rewriteLocked={rewriteLocked}
-                  selected={activeMatchId === m.id}
-                  resolved={resolvedIds.has(m.id)}
-                  onSelect={onSelect}
-                  onViewComparison={onViewComparison}
-                  onRewrite={onRewrite}
-                  onCite={onCite}
-                />
-              </div>
-            ))}
+            {shownIndexes.map((i) => {
+              const m = matches[i];
+              return (
+                <div
+                  key={m.id}
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(m.id, el);
+                    else cardRefs.current.delete(m.id);
+                  }}
+                >
+                  <MatchCard
+                    match={m}
+                    index={i}
+                    locked={explanationLocked}
+                    rewriteLocked={rewriteLocked}
+                    selected={activeMatchId === m.id}
+                    resolved={resolvedIds.has(m.id)}
+                    notLocated={locatedIds ? !locatedIds.has(m.id) : false}
+                    onSelect={onSelect}
+                    onViewComparison={onViewComparison}
+                    onRewrite={onRewrite}
+                    onCite={onCite}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
 
