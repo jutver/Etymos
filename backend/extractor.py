@@ -30,18 +30,33 @@ def is_heavy_math_line(text):
         return True
 
     # 2. Tập hợp các ký hiệu toán học phổ biến (bao gồm cả dấu ⊕ trong bài của bro)
-    math_symbols = set("=+-×÷±∈∉∑∏∫≈≠≤≥∝∞∇∂⊕⊗")
+    # Dấu gạch nối ASCII "-" cố ý KHÔNG nằm trong tập này: trong văn xuôi nó là
+    # gạch nối từ ghép ("text-to-text", "state-of-the-art") hoặc dấu ngắt dòng
+    # ("architec-"). Tính nó là ký hiệu toán khiến 1 dòng chữ thường có 3 gạch nối
+    # bị coi là phương trình và bị vứt cả dòng (mất chữ giữa câu). Dấu trừ thật
+    # là "−" (Unicode) hoặc " - " đứng riêng giữa hai toán hạng.
+    math_symbols = set("=+×÷±∈∉∑∏∫≈≠≤≥∝∞∇∂⊕⊗−")
     symbol_count = sum(1 for c in text if c in math_symbols)
+    symbol_count += len(re.findall(r"(?<=\s)-(?=\s)", text))
 
     # Nếu 1 dòng ngắn hoặc vừa mà có từ 3-4 ký hiệu toán học trở lên -> Chắc chắn là phương trình
     if symbol_count >= 3:
         return True
+
+    # Đuôi trích dẫn bị ngắt dòng ("et al. , 2022 ).") ít chữ cái nhưng là văn xuôi,
+    # vứt nó làm hỏng câu chứa trích dẫn.
+    if re.search(r"\bet\s+al\b", text, re.IGNORECASE):
+        return False
 
     # 3. Heuristic dựa trên tỷ lệ chữ cái
     # Dòng text bình thường sẽ có mật độ chữ cái (a-z) rất cao.
     # Công thức toán thường chứa nhiều khoảng trắng, ngoặc, số, và ký tự rời rạc.
     alpha_count = sum(1 for c in text if c.isalpha())
     total_chars = len(text.replace(" ", ""))
+
+    # Dòng không có chữ cái nào ("-", "1", "( )") là ký tự lạc/số trang, không phải văn xuôi.
+    if alpha_count == 0:
+        return True
 
     if total_chars > 0:
         # Nếu chưa tới 50% số ký tự là chữ cái, và có chứa toán học/số -> Loại bỏ
