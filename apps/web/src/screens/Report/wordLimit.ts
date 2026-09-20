@@ -48,3 +48,4 @@ export function computeWordLimitOffset(passages: DocPassage[], limit: number): n
 
   return Infinity;
 }
+
