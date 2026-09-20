@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_46f3399939b83185e302d3ed7200b22a01d3f799",
+    "section": "abstract",
+    "chunk_id": "doi_46f3399939b83185e302d3ed7200b22a01d3f799_abstract_0",
+    "start_char": 0,
+    "end_char": 564,
+    "text": "A Deep Learning Framework for the Detection of Malay Hate Speech\nAlthough social media can efficiently disseminate information, they also facilitate the dissemination of online abuse, harassment, and hate speech. In 2019, United Nations Secretary-General introduced the United Nations Strategy and Plan of Action on Hate Speech in response to the alarming global trend of rising hate speech. It is crucial to prevent hate speech because it can have severe negative effects on both individuals and society. While much research has been conducted on detecting online"
+  }
+]

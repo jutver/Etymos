@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_5eac95bdee6499a08776f95d74805e207e46ccb5_abstract_0",
     "start_char": 0,
-    "end_char": 290,
-    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With...\nThis research paper focuses on advancements in hate speech detection (HSD) for the Vietnamese language. The researchers introduce ViHateT5, a T5-based model pre-trained on a large-scale, domain-specific dataset called VOZ-HSD."
+    "end_char": 304,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With ...\nRecent advancements in hate speech detec-tion (HSD) in Vietnamese have made signifi-cant progress, primarily attributed to the emer-gence of transformer-based pre-trained lan-guage models, particularly those built on the BERT architecture."
   }
 ]

@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_7879811e756263c4110cb03e3253b8db5d3e881a_abstract_0",
     "start_char": 0,
-    "end_char": 325,
-    "text": "ViHateT5: Enhancing Hate Speech Detection in VietnameseWith...\nFigure 2: The process of creating VOZ-HSD by the automated data labeling approach.Data Pre-processing. Given that the raw data comprises social media content, it includes noise and undesirable elements like user identities, URLs, or references to other comments."
+    "end_char": 270,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in VietnameseWith...\n3.1 Automated Pre-training Data Creation. Vietnamese is a low-resource language, which results in a need for more extensive datasets for training targeted language models, particularly in specific NLP tasks."
   }
 ]

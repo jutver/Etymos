@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_b789a484327bc1a7d4b4fdc19650950b68f731e0",
+    "section": "abstract",
+    "chunk_id": "doi_b789a484327bc1a7d4b4fdc19650950b68f731e0_abstract_0",
+    "start_char": 0,
+    "end_char": 586,
+    "text": "Hate Speech Detection on Vietnamese Social Media Text using the Bi-GRU-LSTM-CNN Model\nIn recent years, Hate Speech Detection has become one of the interesting fields in natural language processing or computational linguistics. In this paper, we present the description of our system to solve this problem at the VLSP shared task 2019: Hate Speech Detection on Social Networks with the corpus which contains 20,345 human-labeled comments/posts for training and 5,086 for public-testing. We implement a deep learning method based on the Bi-GRU-LSTM-CNN classifier into this task. Our resu"
+  }
+]

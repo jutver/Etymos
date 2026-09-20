@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_2c5dd8af21cbfa3d5e958bb49ef62c71fdd3fb2b",
+    "section": "abstract",
+    "chunk_id": "title_2c5dd8af21cbfa3d5e958bb49ef62c71fdd3fb2b_abstract_0",
+    "start_char": 0,
+    "end_char": 277,
+    "text": "Paper page - Vietnamese Hate and Offensive Detection using...\nAbstract. A system combining PhoBERT and Text-CNN models addresses pre-processing, data imbalance, and performance issues in Vietnamese hate speech detection, achieving superior results compared to existing methods."
+  }
+]

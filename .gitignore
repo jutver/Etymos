@@ -38,6 +38,7 @@ backend/storage/marker_previews
 .codex
 .impeccable
 .env*
+!.env.backend.example
 .venv*
 .vercel
 .npm-cache

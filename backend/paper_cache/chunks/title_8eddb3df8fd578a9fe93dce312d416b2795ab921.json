@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_8eddb3df8fd578a9fe93dce312d416b2795ab921",
+    "section": "abstract",
+    "chunk_id": "title_8eddb3df8fd578a9fe93dce312d416b2795ab921_abstract_0",
+    "start_char": 0,
+    "end_char": 418,
+    "text": "Vietnamese hate and offensive detection using PhoBERT-CNN and social media streaming data | Request PDF\nSeptember 17, 2022 - Firstly, we proposed an efficient pre-processing technique to clean comments collected from Vietnamese social media. Secondly, a novel hate speech detection (HSD) model, which is the combination of a pre-trained PhoBERT model and a Text-CNN model, was proposed for solving tasks in Vietnamese."
+  }
+]

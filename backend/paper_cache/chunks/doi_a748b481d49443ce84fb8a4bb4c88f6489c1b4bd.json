@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_a748b481d49443ce84fb8a4bb4c88f6489c1b4bd",
+    "section": "abstract",
+    "chunk_id": "doi_a748b481d49443ce84fb8a4bb4c88f6489c1b4bd_abstract_0",
+    "start_char": 0,
+    "end_char": 574,
+    "text": "A Literature Review of Textual Hate Speech Detection Methods and Datasets\nOnline toxic discourses could result in conflicts between groups or harm to online communities. Hate speech is complex and multifaceted harmful or offensive content targeting individuals or groups. Existing literature reviews have generally focused on a particular category of hate speech, and to the best of our knowledge, no review has been dedicated to hate speech datasets. This paper systematically reviews textual hate speech detection systems and highlights their primary datasets, textual fea"
+  }
+]

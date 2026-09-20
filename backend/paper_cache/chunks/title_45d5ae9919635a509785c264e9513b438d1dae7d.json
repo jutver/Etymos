@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_45d5ae9919635a509785c264e9513b438d1dae7d",
+    "section": "abstract",
+    "chunk_id": "title_45d5ae9919635a509785c264e9513b438d1dae7d_abstract_0",
+    "start_char": 0,
+    "end_char": 246,
+    "text": "An approach of data augmentation to improve the performance of...\nIn this paper, we investigate the effect of text pre-processing methods to the BERTology models on the two Vietnamese hate speech detection datasets - the ViHSD and the UIT-ViCTSD."
+  }
+]

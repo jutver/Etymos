@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_fdd28d9afdd2e8fd3317149ce5ca521ee94985d5",
+    "section": "abstract",
+    "chunk_id": "doi_fdd28d9afdd2e8fd3317149ce5ca521ee94985d5_abstract_0",
+    "start_char": 0,
+    "end_char": 550,
+    "text": "ViHOS: Hate Speech Spans Detection for Vietnamese\nThe rise in hateful and offensive language directed at other users is one of the adverse side effects of the increased use of social networking platforms. This could make it difficult for human moderators to review tagged comments filtered by classification systems. To help address this issue, we present the ViHOS (Vietnamese Hate and Offensive Spans) dataset, the first human-annotated corpus containing 26k spans on 11k comments. We also provide definitions of hateful and offensive spans in Viet"
+  }
+]

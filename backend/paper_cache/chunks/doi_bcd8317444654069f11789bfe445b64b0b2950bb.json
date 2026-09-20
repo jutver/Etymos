@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_bcd8317444654069f11789bfe445b64b0b2950bb",
+    "section": "abstract",
+    "chunk_id": "doi_bcd8317444654069f11789bfe445b64b0b2950bb_abstract_0",
+    "start_char": 0,
+    "end_char": 633,
+    "text": "SocialHaterBERT: A dichotomous approach for automatically detecting hate speech on Twitter through textual analysis and user profiles\nSocial media platforms have evolved into an online representation of our social interactions. We may use the resources they provide to analyze phenomena that occur within them, such as the development and viralization of offensive and hostile content. In today’s polarized world, the escalating nature of this behavior is cause for concern in modern society. This research includes an in-depth examination of previous efforts and strategies for detecting and preventing hateful content on the social"
+  }
+]

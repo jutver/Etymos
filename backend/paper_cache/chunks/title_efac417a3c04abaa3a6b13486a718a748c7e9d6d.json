@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_efac417a3c04abaa3a6b13486a718a748c7e9d6d",
+    "section": "abstract",
+    "chunk_id": "title_efac417a3c04abaa3a6b13486a718a748c7e9d6d_abstract_0",
+    "start_char": 0,
+    "end_char": 287,
+    "text": "From Universal Language Model to Downstream Task: Improving...\nVietnamese Hate Speech Detection. KSE 2020 4 / 14. Introduction Motivation and objective.Vietnamese version PhoBERT by VinAI2: Trained on 20GB texts (1GB Wikipedia, 19GB news). Masked language modeling: ll-in-the-blank task."
+  }
+]

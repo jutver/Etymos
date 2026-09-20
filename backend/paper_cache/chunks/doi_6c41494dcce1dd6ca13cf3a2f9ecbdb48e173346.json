@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_6c41494dcce1dd6ca13cf3a2f9ecbdb48e173346",
+    "section": "abstract",
+    "chunk_id": "doi_6c41494dcce1dd6ca13cf3a2f9ecbdb48e173346_abstract_0",
+    "start_char": 0,
+    "end_char": 582,
+    "text": "Metadata Integration for Spam Reviews Detection on Vietnamese E-Commerce Websites\nThe problem of detecting spam reviews (opinions) has received significant attention in recent years, especially with the rapid development of e-commerce. Spam reviews are often classified based on comment content, but in some cases, it is insufficient for models to accurately determine the review label. In this work, we introduce the ViSpamReviews v2 dataset, which includes metadata of reviews with the objective of integrating supplementary attributes for spam review classification. We propose a"
+  }
+]

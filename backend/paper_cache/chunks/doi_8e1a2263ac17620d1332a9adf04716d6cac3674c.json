@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_8e1a2263ac17620d1332a9adf04716d6cac3674c",
+    "section": "abstract",
+    "chunk_id": "doi_8e1a2263ac17620d1332a9adf04716d6cac3674c_abstract_0",
+    "start_char": 0,
+    "end_char": 590,
+    "text": "Vietnamese Hate and Offensive Detection using PhoBERT-CNN and Social Media Streaming Data\nSociety needs to develop a system to detect hate and offense to build a healthy and safe environment. However, current research in this field still faces four major shortcomings, including deficient pre-processing techniques, indifference to data imbalance issues, modest performance models, and lacking practical applications. This paper focused on developing an intelligent system capable of addressing these shortcomings. Firstly, we proposed an efficient pre-processing technique to clean comment"
+  }
+]
