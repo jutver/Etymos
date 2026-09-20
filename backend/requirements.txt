@@ -1,26 +1,14 @@
-# Consolidated backend requirements (pipeline + API). Previously split
-# across root requirements.txt / backend/requirements.txt (identical
-# pipeline pins) and backend/api/requirements_api.txt (API-only pins) — now
-# a single file covering every import across backend/**/*.py.
-#
-# Install: pip install -r backend/requirements.txt
-#
-# NOTE on torch: the VPS target has a GPU (see PLAN.md). PyPI's Linux
-# x86_64 wheels for torch bundle CUDA support directly (no
-# --extra-index-url needed) as long as the host has a compatible NVIDIA
-# driver installed.
+--extra-index-url https://download.pytorch.org/whl/cu124
 
 # --- Pipeline (PDF/DOCX extraction, embeddings, search, quantized local LLM) ---
-PyMuPDF==1.28.0
-# .docx INPUT parsing (extract_docx.py) — unrelated to any docx *output*
-# generation library; python-docx only reads/writes the OOXML format.
+PyMuPDF>=1.28.0
 python-docx==1.1.2
 sentence_transformers==5.6.0
 requests==2.32.4
-numpy==2.0.2
+numpy>=2.1.0
 ddgs==9.14.4
-bitsandbytes==0.49.2
-torch==2.5.1
+bitsandbytes>=0.49.2
+torch>=2.5.1
 transformers==4.46.3
 
 # --- Gemini API metadata-extraction / rewrite path ---
@@ -30,19 +18,14 @@ google-generativeai==0.8.3
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 python-multipart==0.0.20
-pydantic==2.11.7
+pydantic>=2.11.7
 
 # --- Local Qwen metadata-extraction model (llm_metadata.py) ---
-# AutoModelForCausalLM.from_pretrained(device_map="auto", low_cpu_mem_usage=True)
-# requires this; without it every check that hits the local-model path
-# (gemini_metadata_extraction flag off) crashes at the metadata_extraction step.
 accelerate==1.11.0
 
 # --- Auth, rate limiting, Supabase integration ---
 PyJWT==2.12.0
-# Required by PyJWT for ES256/RS256 verification (asymmetric Supabase JWT
-# signing keys, the current project default — see backend/api/auth.py).
-cryptography==49.0.0
+cryptography>=49.0.0
 slowapi==0.1.9
 supabase==2.31.0
 
@@ -50,9 +33,4 @@ supabase==2.31.0
 pytest==8.3.3
 
 # --- Marker-pdf preview rendering (marker_preview.py) ---
-# Only for rendering the marker-pdf-produced Markdown into HTML for the
-# Report page's Original view. Tiny, dependency-light, no torch/transformers
-# pin of its own — carries none of the version-conflict risk that keeps the
-# actual marker-pdf tool itself out of this venv (see backend/marker_env/ +
-# README_MARKER.md, run as an isolated subprocess instead).
 Markdown==3.7

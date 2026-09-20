@@ -1,0 +1,36 @@
+# CPU-only deployment (no NVIDIA GPU). Run from the repo root:
+#   docker compose -f docker-compose.cpu.yml up -d --build
+# GPU hosts use docker-compose.yml instead.
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+    image: etymos-api:cpu
+    container_name: etymos-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    # Backend-only secrets. NOT the repo-root `.env` (that one is written by the
+    # Vercel CLI for the frontend and holds VITE_* / VERCEL_OIDC_TOKEN).
+    env_file:
+      - .env.backend
+    volumes:
+      # embedding_model.py downloads intfloat/multilingual-e5-small at import
+      # time; cache it so restarts don't re-download.
+      - hf_cache:/root/.cache/huggingface
+      # Relative-path runtime state (cwd is /app).
+      - paper_cache:/app/paper_cache
+      - storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First boot downloads the embedding model before uvicorn is listening.
+      start_period: 120s
+
+volumes:
+  hf_cache:
+  paper_cache:
+  storage:

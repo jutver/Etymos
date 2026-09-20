@@ -1,0 +1,22 @@
+# Keep secrets, local state and caches out of the build context / image.
+.env*
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+marker_env/
+.pytest_cache/
+
+# Runtime state — mounted as named volumes by docker-compose*.yml instead.
+paper_cache/
+api/paper_cache/
+storage/
+api/storage/
+
+# Not needed at runtime
+tests/
+logs/
+*.md
+Dockerfile*
+.dockerignore
+run_api.ps1

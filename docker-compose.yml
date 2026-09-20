@@ -8,8 +8,10 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    # Backend-only secrets (see .env.backend.example). NOT the repo-root `.env`,
+    # which the Vercel CLI writes for the frontend.
     env_file:
-      - .env
+      - .env.backend
     # VPS has an NVIDIA GPU (used for the local Qwen2.5-1.5B metadata-extraction
     # path). Requires the NVIDIA Container Toolkit installed on the host
     # (see docs/DEPLOY_BACKEND.md). Remove this block if running CPU-only.

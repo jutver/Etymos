@@ -21,10 +21,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Ubuntu 22.04's apt Python is 3.10, compatible with the torch==2.5.1 /
 # transformers==4.46.3 pins in requirements.txt. curl is required by
 # docker-compose.yml's healthcheck (`curl -f http://localhost:8000/api/health`).
+# build-essential (gcc) is required at runtime, not just build time: triton
+# compiles a small CUDA driver stub on first GPU use, and the -runtime CUDA
+# image ships no C compiler ("RuntimeError: Failed to find C compiler").
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3.10 \
         python3-pip \
         curl \
+        build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
     && ln -sf /usr/bin/python3 /usr/bin/python

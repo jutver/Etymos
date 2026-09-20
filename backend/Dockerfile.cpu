@@ -1,0 +1,34 @@
+# CPU-only image (no NVIDIA GPU) — for Docker Desktop on a dev machine or any
+# VPS without a GPU. The GPU variant is `Dockerfile` (nvidia/cuda base).
+#
+# On CPU the local Qwen2.5 path (4-bit bitsandbytes, GPU-only) is unusable, so
+# the `gemini_metadata_extraction` and `gemini_ai_rewrite` feature flags must
+# be ON and GEMINI_API_KEY must be set (see .env.backend.example).
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app \
+    HF_HOME=/root/.cache/huggingface
+
+# curl: used by the compose healthcheck.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# requirements.txt begins with `--extra-index-url .../whl/cu124` (CUDA torch,
+# ~GBs of nvidia libs). Install the small CPU-only torch first, then install the
+# rest with that index line stripped so pip sees torch>=2.5.1 as satisfied.
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && grep -v '^--extra-index-url' requirements.txt > requirements.cpu.txt \
+    && pip install -r requirements.cpu.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
