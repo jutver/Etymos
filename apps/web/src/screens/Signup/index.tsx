@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Envelope, Eye, EyeSlash, Info, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ export default function SignupPage() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords don't match.");
+      setError(tr("Passwords don't match."));
       return;
     }
 
@@ -65,10 +66,9 @@ export default function SignupPage() {
 
   return (
     <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
-      <h1 className="text-h3 font-bold tracking-tight text-navy-900">Create your account</h1>
+      <h1 className="text-h3 font-bold tracking-tight text-navy-900">{t("Create your account")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
-        Start with 3 free checks a month. No card required.
-      </p>
+        {t("Start with 3 free checks a month. No card required.")}</p>
 
       {error && (
         <div className="mt-5 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-severity-high-line bg-severity-high-bg px-4 py-3 text-sm text-severity-high">
@@ -79,7 +79,7 @@ export default function SignupPage() {
 
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">Email</span>
+          <span className="text-xs font-semibold text-ink-700">{t("Email")}</span>
           <div className="relative">
             <Envelope size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
@@ -94,7 +94,7 @@ export default function SignupPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">Password</span>
+          <span className="text-xs font-semibold text-ink-700">{t("Password")}</span>
           <div className="relative">
             <LockKey size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
@@ -103,13 +103,13 @@ export default function SignupPage() {
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder={t("At least 6 characters")}
               className="w-full rounded-[var(--radius-control)] border border-line bg-white py-2.5 pl-10 pr-10 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("Hide password") : t("Show password")}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-500"
             >
               {showPassword ? <EyeSlash size={17} /> : <Eye size={17} />}
@@ -118,7 +118,7 @@ export default function SignupPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">Confirm password</span>
+          <span className="text-xs font-semibold text-ink-700">{t("Confirm password")}</span>
           <div className="relative">
             <LockKey size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
@@ -127,13 +127,13 @@ export default function SignupPage() {
               minLength={6}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter your password"
+              placeholder={t("Re-enter your password")}
               className="w-full rounded-[var(--radius-control)] border border-line bg-white py-2.5 pl-10 pr-10 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword((v) => !v)}
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              aria-label={showConfirmPassword ? t("Hide password") : t("Show password")}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-500"
             >
               {showConfirmPassword ? <EyeSlash size={17} /> : <Eye size={17} />}
@@ -144,20 +144,16 @@ export default function SignupPage() {
         <div className="mt-1 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-line bg-surface-muted px-4 py-3 text-sm text-ink-600">
           <Info size={18} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <span>
-            <span className="font-semibold text-ink-900">Etymos is in closed beta.</span> Creating an
-            account adds you to the waitlist — an admin reviews each request, and you'll get access
-            once you're approved.
-          </span>
+            <span className="font-semibold text-ink-900">{t("Etymos is in closed beta.")}</span>{" "}{t("Creating an account adds you to the waitlist — an admin reviews each request, and you'll get access once you're approved.")}</span>
         </div>
 
         <Button type="submit" size="lg" loading={loading} fullWidth>
-          Create account
-        </Button>
+          {t("Create account")}</Button>
       </form>
 
       <div className="my-5 flex items-center gap-3">
         <div className="h-px flex-1 bg-line" />
-        <span className="text-xs font-medium text-ink-400">or</span>
+        <span className="text-xs font-medium text-ink-400">{t("or")}</span>
         <div className="h-px flex-1 bg-line" />
       </div>
 
@@ -169,14 +165,12 @@ export default function SignupPage() {
         onClick={handleGoogleOAuth}
         iconLeft={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
       >
-        Continue with Google
-      </Button>
+        {t("Continue with Google")}</Button>
 
       <p className="mt-6 text-center text-sm text-ink-600">
-        Already have an account?{" "}
+        {t("Already have an account?")}{" "}
         <Link to="/login" className="font-semibold text-brand-600 hover:underline">
-          Log in
-        </Link>
+          {t("Log in")}</Link>
       </p>
     </div>
   );

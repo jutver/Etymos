@@ -54,6 +54,15 @@ COPY requirements.txt .
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install -r requirements.txt
 
+# triton (used by bitsandbytes' 4-bit kernels) compiles its CUDA driver stub with
+# gcc *against Python.h* on first GPU use. build-essential above supplies gcc but
+# not the Python headers, so without this every local-Qwen call (metadata
+# extraction, AI rewrite, AI-content detection) died with "fatal error: Python.h:
+# No such file or directory". Its own layer, placed AFTER the pip install on
+# purpose, so adding it does not invalidate the multi-GB torch layer above.
+RUN apt-get update && apt-get install -y --no-install-recommends python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the rest of the backend (api/, main.py, doan_van.py, llm_metadata.py,
 # config.py, search_paper/, tests/, etc).
 COPY . .

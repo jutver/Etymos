@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { t, tr } from "../lib/i18n";
 
 export interface Column<T> {
   key: string;
@@ -26,7 +27,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   loading,
-  emptyMessage = "No results.",
+  emptyMessage = tr("No results."),
   onRowClick,
   page,
   pageCount,
@@ -46,7 +47,7 @@ export function DataTable<T>({
                     col.className,
                   )}
                 >
-                  {col.label}
+                  {t(col.label)}
                 </th>
               ))}
             </tr>
@@ -55,13 +56,12 @@ export function DataTable<T>({
             {loading ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-fg-subtle">
-                  Loading…
-                </td>
+                  {t("Loading…")}</td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-fg-subtle">
-                  {emptyMessage}
+                  {t(emptyMessage)}
                 </td>
               </tr>
             ) : (
@@ -89,7 +89,7 @@ export function DataTable<T>({
       {pageCount > 1 && (
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
           <span className="text-caption text-fg-subtle">
-            Page {page + 1} of {pageCount}
+            {t("Page")}{" "}{page + 1} {" "}{t("of")}{" "}{pageCount}
           </span>
           <div className="flex gap-1.5">
             <button

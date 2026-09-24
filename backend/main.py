@@ -310,6 +310,12 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
         source_metadata=source_metadata_by_paper_id,
     )
 
+    # AI-content detection + plain-language explanations. Additive and
+    # failure-proof (see report_enrichment.py): never changes the score.
+    from report_enrichment import enrich_report
+
+    enrich_report(final_report, progress_callback)
+
     try:
         blocks = final_report.get("document", {}).get("blocks")
         debug_report = final_report

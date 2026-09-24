@@ -28,6 +28,7 @@ import {
   type TableData,
   type TableRow,
 } from "./blocks";
+import { t as tl } from "../../lib/i18n";
 
 export interface TableBlockProps {
   table: TableData;
@@ -103,19 +104,19 @@ function ColumnHeader({
           type="button"
           {...attributes}
           {...listeners}
-          title="Drag to reorder column"
+          title={tl("Drag to reorder column")}
           className="flex size-4 shrink-0 cursor-grab items-center justify-center rounded text-ink-300 opacity-0 hover:bg-white hover:text-ink-600 group-hover/col:opacity-100 active:cursor-grabbing"
         >
           <DotsSixVertical size={12} weight="bold" />
         </button>
       )}
       <span className="flex-1 truncate text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
-        Col {index + 1}
+        {tl("Col {{n}}", { n: index + 1 })}
       </span>
       {!locked && canRemove && (
         <button
           type="button"
-          title="Delete column"
+          title={tl("Delete column")}
           onClick={onRemove}
           className="flex size-4 shrink-0 items-center justify-center rounded text-ink-300 opacity-0 hover:bg-white hover:text-severity-high group-hover/col:opacity-100"
         >
@@ -125,7 +126,7 @@ function ColumnHeader({
       {!locked && (
         <div
           onPointerDown={handlePointerDown}
-          title="Drag to resize column"
+          title={tl("Drag to resize column")}
           className="absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize"
         >
           <div className="mx-auto h-full w-px bg-line group-hover/col:bg-brand-400" />
@@ -182,7 +183,7 @@ const TableRowView = memo(function TableRowView({
             type="button"
             {...attributes}
             {...listeners}
-            title="Drag to reorder row"
+            title={tl("Drag to reorder row")}
             className="flex size-4 items-center justify-center rounded text-ink-300 opacity-0 hover:bg-white hover:text-ink-600 group-hover/row:opacity-100 active:cursor-grabbing"
           >
             <DotsSixVertical size={12} weight="bold" />
@@ -209,7 +210,7 @@ const TableRowView = memo(function TableRowView({
         <div className="flex w-6 shrink-0 items-center justify-center border-b border-line">
           <button
             type="button"
-            title="Delete row"
+            title={tl("Delete row")}
             onClick={() => onRemove(row.id)}
             className="flex size-4 items-center justify-center rounded text-ink-300 opacity-0 hover:bg-surface-muted hover:text-severity-high group-hover/row:opacity-100"
           >
@@ -295,7 +296,7 @@ export function TableBlock({ table, locked, muted, onChange }: TableBlockProps) 
             {!locked && (
               <button
                 type="button"
-                title="Add column"
+                title={tl("Add column")}
                 onClick={() => handleInsertColumn(table.columnIds.length)}
                 className="flex w-6 shrink-0 items-center justify-center border-b border-line text-ink-300 hover:bg-surface-muted hover:text-brand-600"
               >
@@ -328,8 +329,7 @@ export function TableBlock({ table, locked, muted, onChange }: TableBlockProps) 
             onClick={() => handleInsertRow(table.rows.length)}
             className="flex w-full items-center justify-center gap-1 border-t border-line py-1 text-[0.6875rem] font-medium text-ink-400 hover:bg-surface-muted hover:text-brand-600"
           >
-            <Plus size={11} /> Add row
-          </button>
+            <Plus size={11} />{" "}{tl("Add row")}</button>
         )}
       </div>
     </div>

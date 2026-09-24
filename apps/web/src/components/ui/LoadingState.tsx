@@ -1,5 +1,6 @@
 import { cn } from "@etymos/shared";
 import { Spinner } from "./Spinner";
+import { t, tr } from "../../lib/i18n";
 
 interface LoadingStateProps {
   /** Short message describing what is being fetched. */
@@ -17,7 +18,7 @@ interface LoadingStateProps {
  * `SkeletonCard` — a placeholder that matches the final layout avoids the
  * content jump that a centred spinner causes.
  */
-export function LoadingState({ label = "Loading", hint, className }: LoadingStateProps) {
+export function LoadingState({ label = tr("Loading"), hint, className }: LoadingStateProps) {
   return (
     <div
       role="status"
@@ -27,8 +28,8 @@ export function LoadingState({ label = "Loading", hint, className }: LoadingStat
     >
       <Spinner label={null} />
       <div>
-        <p className="text-caption font-medium text-ink-700">{label}</p>
-        {hint && <p className="mt-1 text-micro text-ink-500">{hint}</p>}
+        <p className="text-caption font-medium text-ink-700">{t(label)}</p>
+        {hint && <p className="mt-1 text-micro text-ink-500">{t(hint)}</p>}
       </div>
     </div>
   );

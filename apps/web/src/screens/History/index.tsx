@@ -3,13 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { CaretRight, ClockCounterClockwise, MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel, planLabel, PROJECTS } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
-import { formatDate } from "@etymos/shared";
+import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { cn } from "@etymos/shared";
 import { CheckStatePill } from "../Documents/CheckStatePill";
 import { analyzingStateFor } from "../../lib/documentsQueries";
 import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
+import { t, tr, tn } from "../../lib/i18n";
 
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
@@ -106,12 +107,12 @@ export default function HistoryPage() {
     e.stopPropagation();
     try {
       await moveToTrash(id);
-      pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+      pushToast({ kind: "info", title: tr("Moved to trash"), description: tr("Restore it anytime from My Trash.") });
     } catch (err) {
       pushToast({
         kind: "error",
-        title: "Couldn't move to trash",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: tr("Couldn't move to trash"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
       });
     }
   }
@@ -120,13 +121,13 @@ export default function HistoryPage() {
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-h1 font-bold tracking-tight text-navy-900">History</h1>
+          <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("History")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">
             {credits > 0
-              ? `Credit-pack checks are kept for ${historyRetentionLabel(plan, true)}.`
+              ? t("Credit-pack checks are kept for {{historyRetentionLabel}}.", { historyRetentionLabel: historyRetentionLabel(plan, true) })
               : plan === "free"
-                ? `Free plan keeps checks for ${historyRetentionLabel(plan)}. Upgrade for extended history.`
-                : `Your ${planLabel(plan)} plan keeps checks for ${historyRetentionLabel(plan)}.`}
+                ? t("Free plan keeps checks for {{historyRetentionLabel}}. Upgrade for extended history.", { historyRetentionLabel: historyRetentionLabel(plan) })
+                : t("Your {{planLabel}} plan keeps checks for {{historyRetentionLabel}}.", { planLabel: planLabel(plan), historyRetentionLabel: historyRetentionLabel(plan) })}
           </p>
         </div>
       </div>
@@ -134,12 +135,9 @@ export default function HistoryPage() {
       {expiredCount > 0 && (
         <div className="mt-5 flex items-center justify-between rounded-[var(--radius-card)] border border-severity-moderate-line bg-severity-moderate-bg px-4 py-3 text-sm text-severity-moderate">
           <span>
-            {expiredCount} older check{expiredCount === 1 ? "" : "s"} removed after the 7-day Free
-            retention window.
-          </span>
+            {tn(expiredCount, "{{count}} older check removed after the 7-day Free retention window.", "{{count}} older checks removed after the 7-day Free retention window.")}</span>
           <Button as="link" to="/pricing" size="sm" variant="outline">
-            Keep history for 12 months
-          </Button>
+            {t("Keep history for 12 months")}</Button>
         </div>
       )}
 
@@ -150,7 +148,7 @@ export default function HistoryPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search documents..."
+              placeholder={t("Search documents...")}
               className="w-full rounded-full border border-line bg-surface-tint py-2 pl-9 pr-4 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
           </div>
@@ -190,8 +188,7 @@ export default function HistoryPage() {
                     {hasVersions && (
                       <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
                         <ClockCounterClockwise size={12} />
-                        {group.versions.length} checks
-                      </span>
+                        {group.versions.length}{" "}{t("checks")}</span>
                     )}
                     <span className="hidden shrink-0 whitespace-nowrap text-sm text-ink-500 sm:inline">
                       {formatDate(group.latest.date)}
@@ -207,12 +204,12 @@ export default function HistoryPage() {
                       )}
                     </span>
                     <span className="hidden shrink-0 text-sm text-ink-500 sm:inline">
-                      {group.latest.project ?? PROJECTS[0]}
+                      {group.latest.project ?? t(PROJECTS[0])}
                     </span>
                     {!hasVersions && (
                       <button
                         onClick={(e) => handleDelete(e, group.latest.id)}
-                        aria-label="Move to trash"
+                        aria-label={t("Move to trash")}
                         className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
                       >
                         <Trash size={15} />
@@ -229,7 +226,7 @@ export default function HistoryPage() {
                           className="flex cursor-pointer items-center gap-3 border-t border-line/60 py-3 pl-11 pr-5 text-left transition-colors first:border-t-0 hover:bg-white"
                         >
                           <span className="w-16 shrink-0 text-xs font-medium text-ink-400">
-                            {i === 0 ? "Latest" : `v${group.versions.length - i}`}
+                            {i === 0 ? t("Latest") : `v${group.versions.length - i}`}
                           </span>
                           <span className="min-w-0 flex-1 truncate text-sm text-ink-700">
                             {formatDate(v.date)}
@@ -246,7 +243,7 @@ export default function HistoryPage() {
                           </span>
                           <button
                             onClick={(e) => handleDelete(e, v.id)}
-                            aria-label="Move to trash"
+                            aria-label={t("Move to trash")}
                             className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
                           >
                             <Trash size={15} />
@@ -261,19 +258,18 @@ export default function HistoryPage() {
 
             {!historyError && groups.length === 0 && (
               <p className="px-5 py-12 text-center text-sm text-ink-400">
-                {history.length === 0 ? "No documents yet." : "No documents match your search."}
+                {history.length === 0 ? t("No documents yet.") : t("No documents match your search.")}
               </p>
             )}
 
             {historyError && (
-              <p className="px-5 py-12 text-center text-sm text-severity-high">{historyError}</p>
+              <p className="px-5 py-12 text-center text-sm text-severity-high">{t(historyError)}</p>
             )}
           </div>
         )}
 
         <p className="border-t border-line px-5 py-3 text-xs text-ink-400 sm:hidden">
-          Tip: tap a file with multiple checks to see its version history.
-        </p>
+          {t("Tip: tap a file with multiple checks to see its version history.")}</p>
       </div>
     </div>
   );

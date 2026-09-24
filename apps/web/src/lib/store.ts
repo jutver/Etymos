@@ -20,6 +20,7 @@ import type {
   PlanTier,
   Toast,
 } from "@etymos/shared";
+import { t as tl, tr } from "./i18n";
 
 // Hardcoded fallback only — used before configQueries.ts's fetchPlanDefinitions()
 // resolves (or if it fails). Once that fetch succeeds, setPlanLimitsFromConfig()
@@ -85,7 +86,7 @@ export const PROJECTS: string[] = ["Default"];
 export const CHECK_STALE_MS = 30 * 60 * 1000;
 
 const INTERRUPTED_MESSAGE =
-  "This check was interrupted and never finished. Please run it again.";
+  tr("This check was interrupted and never finished. Please run it again.");
 
 interface AppState {
   plan: PlanTier;
@@ -235,11 +236,11 @@ export const useAppStore = create<AppState>()(
         const value: BalanceOption[] = [
           {
             source: "plan",
-            label: `${planLabel(plan)} plan checks`,
+            label: tl("{{planLabel}} plan checks", { planLabel: planLabel(plan) }),
             remaining: Math.max(0, PLAN_DOC_LIMITS[plan] - checksUsedThisPeriod),
           },
-          { source: "standard", label: "Standard credits", remaining: standardCredits },
-          { source: "premium", label: "Premium credits", remaining: premiumCredits },
+          { source: "standard", label: tr("Standard credits"), remaining: standardCredits },
+          { source: "premium", label: tr("Premium credits"), remaining: premiumCredits },
         ];
         balancesCache = { key, value };
         return value;
@@ -340,7 +341,7 @@ export const useAppStore = create<AppState>()(
         } catch (err) {
           set({
             historyLoading: false,
-            historyError: err instanceof Error ? err.message : "Failed to load history",
+            historyError: err instanceof Error ? err.message : tr("Failed to load history"),
           });
           return;
         }
@@ -414,7 +415,7 @@ export const useAppStore = create<AppState>()(
             const job = await getJob(entry.checkJobId);
 
             if (job.status === "failed") {
-              await fail(entry.id, job.error ?? "Analysis failed.");
+              await fail(entry.id, job.error ?? tr("Analysis failed."));
               continue;
             }
 
@@ -602,14 +603,14 @@ export const useAppStore = create<AppState>()(
 );
 
 export function planLabel(plan: PlanTier): string {
-  if (plan === "free") return "Free";
-  if (plan === "student") return "Standard";
-  return "Premium";
+  if (plan === "free") return tl("Free");
+  if (plan === "student") return tl("Standard");
+  return tl("Premium");
 }
 
 export function historyRetentionLabel(plan: PlanTier, hasCredits = false): string {
-  if (hasCredits) return "30 days per check";
-  if (plan === "free") return "7 days";
-  if (plan === "student") return "9 months";
-  return "12 months";
+  if (hasCredits) return tl("30 days per check");
+  if (plan === "free") return tl("7 days");
+  if (plan === "student") return tl("9 months");
+  return tl("12 months");
 }

@@ -35,6 +35,7 @@ import {
   type DateRange,
 } from "../../lib/dashboardQueries";
 import { friendlyError } from "../../lib/errors";
+import { t } from "../../lib/i18n";
 
 function formatVND(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(Math.round(amount)) + " đ";
@@ -78,8 +79,8 @@ export default function DashboardPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-h1 font-semibold text-fg">Dashboard</h1>
-          <p className="mt-1 text-body text-fg-muted">Signups, revenue, and platform activity, {formatRangeLabel(range)}.</p>
+          <h1 className="text-h1 font-semibold text-fg">{t("Dashboard")}</h1>
+          <p className="mt-1 text-body text-fg-muted">{t("Signups, revenue, and platform activity,")}{" "}{formatRangeLabel(range)}.</p>
         </div>
         <DateRangePicker value={range} onChange={setRange} />
       </div>
@@ -87,15 +88,15 @@ export default function DashboardPage() {
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
       <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total users" value={loading ? "…" : String(metrics?.totalUsers ?? 0)} icon={Users} />
-        <StatCard label="MRR" value={loading ? "…" : formatVND(metrics?.mrr ?? 0)} icon={CurrencyDollar} />
+        <StatCard label={t("Total users")} value={loading ? "…" : String(metrics?.totalUsers ?? 0)} icon={Users} />
+        <StatCard label={t("MRR")} value={loading ? "…" : formatVND(metrics?.mrr ?? 0)} icon={CurrencyDollar} />
         <StatCard
-          label="Documents"
+          label={t("Documents")}
           value={loading ? "…" : String(metrics?.documentsByDay.reduce((s, p) => s + p.value, 0) ?? 0)}
           icon={FileText}
         />
         <StatCard
-          label="Checkout volume"
+          label={t("Checkout volume")}
           value={loading ? "…" : formatVND(metrics?.checkoutVolumeByDay.reduce((s, p) => s + p.value, 0) ?? 0)}
           icon={ShoppingCart}
         />
@@ -103,27 +104,27 @@ export default function DashboardPage() {
 
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          label="Flagged document rate"
+          label={t("Flagged document rate")}
           value={loading ? "…" : formatPercent(metrics?.flaggedDocumentRate ?? 0)}
           icon={Flag}
         />
         <Link to="/verification" className="block transition-opacity hover:opacity-80">
           <StatCard
-            label="Verification queue"
+            label={t("Verification queue")}
             value={loading ? "…" : String(metrics?.verificationQueueDepth ?? 0)}
             icon={GraduationCap}
           />
         </Link>
         <Link to="/waitlist/access" className="block transition-opacity hover:opacity-80">
           <StatCard
-            label="Pending access requests"
+            label={t("Pending access requests")}
             value={loading ? "…" : String(metrics?.accessQueueDepth ?? 0)}
             icon={Hourglass}
           />
         </Link>
         <Link to="/waitlist/purchases" className="block transition-opacity hover:opacity-80">
           <StatCard
-            label="Pending purchases"
+            label={t("Pending purchases")}
             value={loading ? "…" : String(metrics?.purchaseQueueDepth ?? 0)}
             icon={Receipt}
           />
@@ -131,7 +132,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard title="Signups over time" empty={!loading && (metrics?.signupsByDay.every((p) => p.value === 0) ?? true)}>
+        <ChartCard title={t("Signups over time")} empty={!loading && (metrics?.signupsByDay.every((p) => p.value === 0) ?? true)}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={metrics?.signupsByDay}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -144,7 +145,7 @@ export default function DashboardPage() {
         </ChartCard>
 
         <ChartCard
-          title="Documents analyzed over time"
+          title={t("Documents analyzed over time")}
           empty={!loading && metrics?.documentsByDay.every((p) => p.value === 0)}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -159,7 +160,7 @@ export default function DashboardPage() {
         </ChartCard>
 
         <ChartCard
-          title="Checkout volume over time"
+          title={t("Checkout volume over time")}
           empty={!loading && metrics?.checkoutVolumeByDay.every((p) => p.value === 0)}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -173,7 +174,7 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Plan distribution" empty={!loading && (metrics?.planDistribution.length ?? 0) === 0}>
+        <ChartCard title={t("Plan distribution")} empty={!loading && (metrics?.planDistribution.length ?? 0) === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -194,7 +195,7 @@ export default function DashboardPage() {
         </ChartCard>
 
         <ChartCard
-          title="Plagiarism severity distribution"
+          title={t("Plagiarism severity distribution")}
           empty={!loading && (metrics?.severityDistribution.length ?? 0) === 0}
         >
           <ResponsiveContainer width="100%" height="100%">

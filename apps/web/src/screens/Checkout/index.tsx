@@ -9,7 +9,9 @@ import { useAppStore } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
 import { createPurchaseRequest, describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
+import { trackEvent } from "../../lib/analytics";
 import type { CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 type Status = "idle" | "submitting" | "error";
 
@@ -54,6 +56,11 @@ export default function CheckoutPage() {
     if (!item) navigate("/pricing", { replace: true });
   }, [item, navigate]);
 
+  const hasItem = item !== null;
+  useEffect(() => {
+    if (hasItem) trackEvent("checkout_started");
+  }, [hasItem]);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchPlanDefinitions(), fetchCreditPacks(), fetchActivePlanDiscounts()])
@@ -82,7 +89,7 @@ export default function CheckoutPage() {
 
   if (!item) return null;
   if (configLoading || pendingLoading) {
-    return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>;
+    return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">{t("Loading…")}</div>;
   }
 
   // One outstanding request at a time. Only an admin can clear it, so there is
@@ -90,23 +97,20 @@ export default function CheckoutPage() {
   if (pending) {
     return (
       <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
-        <h1 className="text-h2 font-bold tracking-tight text-navy-900">Request awaiting approval</h1>
+        <h1 className="text-h2 font-bold tracking-tight text-navy-900">{t("Request awaiting approval")}</h1>
         <div className="mt-7 flex items-start gap-3 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
           <HourglassMedium size={22} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">
-              You already have a request for {describePurchaseRequest(pending)}.
+              {t("You already have a request for {{request}}.", { request: describePurchaseRequest(pending) })}
             </p>
             <p className="mt-1 text-sm text-ink-500">
-              An admin reviews it manually. You'll be able to make another request once this one has been
-              approved or declined.
-            </p>
+              {t("An admin reviews it manually. You'll be able to make another request once this one has been approved or declined.")}</p>
           </div>
         </div>
         <div className="mt-7 flex flex-col gap-3">
           <Button as="link" to="/account/plan" size="lg" fullWidth>
-            Back to My Plan
-          </Button>
+            {t("Back to My Plan")}</Button>
         </div>
       </div>
     );
@@ -146,7 +150,7 @@ export default function CheckoutPage() {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) {
       setCodeStatus("error");
-      setCodeError("Invalid discount code.");
+      setCodeError(tr("Invalid discount code."));
       return;
     }
     // A manually-applied code overrides any automatic plan/pack discount
@@ -171,34 +175,33 @@ export default function CheckoutPage() {
         quantity: item.kind === "pack" ? quantity : 1,
       });
       refreshPending();
+      trackEvent("purchase_requested", { kind: item.kind });
       navigate("/payment-success");
     } catch (err: unknown) {
       setStatus("error");
-      setSubmitError(err instanceof Error ? err.message : "Could not submit your request. Please try again.");
+      setSubmitError(err instanceof Error ? err.message : tr("Could not submit your request. Please try again."));
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
-      <h1 className="text-h2 font-bold tracking-tight text-navy-900">Request access</h1>
+      <h1 className="text-h2 font-bold tracking-tight text-navy-900">{t("Request access")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
-        Transfer the amount below, then submit your request. An admin confirms the payment manually before
-        your plan or credits are applied.
-      </p>
+        {t("Transfer the amount below, then submit your request. An admin confirms the payment manually before your plan or credits are applied.")}</p>
 
       <div className="mt-7 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Order summary</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Order summary")}</p>
         <div className="mt-3 flex items-center justify-between border-b border-line pb-4">
           <div>
             <p className="text-sm font-bold text-navy-900">
-              {plan ? plan.name : `${pack?.label} pack`}
+              {plan ? t(plan.name) : t("{{label}} pack", { label: t(pack?.label) ?? "" })}
             </p>
             <p className="text-xs text-ink-500">
               {plan
-                ? `Billed ${item.kind === "plan" && item.billingCycle === "annual" ? "annually" : "monthly"}`
+                ? (item.kind === "plan" && item.billingCycle === "annual" ? t("Billed annually") : t("Billed monthly"))
                 : pack
-                  ? `${(pack.checks * quantity).toLocaleString()} credits total · never expire`
-                  : "One-time purchase, credits never expire"}
+                  ? t("{{n}} credits total · never expire", { n: (pack.checks * quantity).toLocaleString(currentLocale()) })
+                  : t("One-time purchase, credits never expire")}
             </p>
           </div>
           <div className="flex items-baseline gap-1.5">
@@ -214,15 +217,15 @@ export default function CheckoutPage() {
         {item.kind === "pack" && pack && (
           <div className="flex items-center justify-between border-b border-line py-4">
             <div>
-              <p className="text-sm font-semibold text-navy-900">Quantity</p>
-              <p className="text-xs text-ink-500">{formatVND(pack.price)} per pack</p>
+              <p className="text-sm font-semibold text-navy-900">{t("Quantity")}</p>
+              <p className="text-xs text-ink-500">{formatVND(pack.price)}{" "}{t("per pack")}</p>
             </div>
             <div className="flex items-center gap-1 rounded-full border border-line p-1">
               <button
                 type="button"
                 onClick={() => changeQuantity(quantity - 1)}
                 disabled={quantity <= MIN_PACK_QUANTITY}
-                aria-label="Decrease quantity"
+                aria-label={t("Decrease quantity")}
                 className="flex size-7 items-center justify-center rounded-full text-ink-700 transition-colors hover:bg-surface-tint disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Minus size={13} weight="bold" />
@@ -240,7 +243,7 @@ export default function CheckoutPage() {
                 type="button"
                 onClick={() => changeQuantity(quantity + 1)}
                 disabled={quantity >= MAX_PACK_QUANTITY}
-                aria-label="Increase quantity"
+                aria-label={t("Increase quantity")}
                 className="flex size-7 items-center justify-center rounded-full text-ink-700 transition-colors hover:bg-surface-tint disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus size={13} weight="bold" />
@@ -259,7 +262,7 @@ export default function CheckoutPage() {
                 setCodeStatus("idle");
                 setCodeError(null);
               }}
-              placeholder="Discount code"
+              placeholder={t("Discount code")}
               className="min-w-0 flex-1 rounded-full border border-line bg-surface-tint px-3.5 py-1.5 text-xs placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
@@ -268,17 +271,17 @@ export default function CheckoutPage() {
               disabled={!codeInput.trim() || codeStatus === "applying"}
               className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink-700 hover:border-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {codeStatus === "applying" ? "Applying…" : "Apply"}
+              {codeStatus === "applying" ? t("Applying…") : t("Apply")}
             </button>
           </div>
-          {codeError && <p className="mt-2 text-xs font-medium text-severity-high">{codeError}</p>}
+          {codeError && <p className="mt-2 text-xs font-medium text-severity-high">{t(codeError)}</p>}
           {appliedDiscount?.source === "code" && !codeError && (
-            <p className="mt-2 text-xs font-medium text-success">Discount code applied.</p>
+            <p className="mt-2 text-xs font-medium text-success">{t("Discount code applied.")}</p>
           )}
         </div>
 
         <div className="flex items-center justify-between pt-4">
-          <p className="text-sm font-bold text-navy-900">Total</p>
+          <p className="text-sm font-bold text-navy-900">{t("Total")}</p>
           <div className="flex items-baseline gap-1.5">
             {hasDiscount && (
               <span className="text-sm font-semibold text-ink-400 line-through">{formatVND(basePrice)}</span>
@@ -291,7 +294,7 @@ export default function CheckoutPage() {
       </div>
 
       <div className="mt-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment method</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Payment method")}</p>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {PAYMENT_METHODS.map((m) => (
             <button
@@ -303,9 +306,9 @@ export default function CheckoutPage() {
               )}
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-line">
-                <img src={m.logo} alt={m.label} className="size-7 object-contain" />
+                <img src={m.logo} alt={t(m.label)} className="size-7 object-contain" />
               </span>
-              <span className="text-sm font-semibold text-ink-900">{m.label}</span>
+              <span className="text-sm font-semibold text-ink-900">{t(m.label)}</span>
               {method === m.id && <Check size={16} weight="bold" className="ml-auto text-brand-600" />}
             </button>
           ))}
@@ -315,20 +318,18 @@ export default function CheckoutPage() {
           <div className="mt-4 rounded-[var(--radius-card)] border border-line bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-navy-900">VietQR transfer</p>
+                <p className="text-sm font-semibold text-navy-900">{t("VietQR transfer")}</p>
                 <p className="text-xs text-ink-500">
-                  Scan to transfer, then submit your request below for an admin to confirm.
-                </p>
+                  {t("Scan to transfer, then submit your request below for an admin to confirm.")}</p>
               </div>
               <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-                Scan to pay
-              </span>
+                {t("Scan to pay")}</span>
             </div>
 
             <div className="mt-3 flex justify-center rounded-2xl border border-dashed border-line bg-white p-4">
               <img
                 src={`https://api.vietqr.io/image/970423-00004634438-ajMAt1a.jpg?accountName=NGUYEN%20BA%20TUNG%20DUONG&amount=${price}`}
-                alt="VietQR code"
+                alt={t("VietQR code")}
                 className="h-[220px] w-[220px] rounded-xl object-contain"
               />
             </div>
@@ -340,8 +341,8 @@ export default function CheckoutPage() {
         <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-4 py-3.5 text-sm text-severity-high">
           <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Couldn't submit your request</p>
-            <p className="mt-0.5 text-severity-high/90">{submitError}</p>
+            <p className="font-semibold">{t("Couldn't submit your request")}</p>
+            <p className="mt-0.5 text-severity-high/90">{t(submitError)}</p>
           </div>
         </div>
       )}
@@ -355,12 +356,11 @@ export default function CheckoutPage() {
           fullWidth
         >
           {status === "submitting"
-            ? "Submitting request..."
-            : `Submit request for ${formatVND(price)}`}
+            ? t("Submitting request...")
+            : t("Submit request for {{formatVND}}", { formatVND: formatVND(price) })}
         </Button>
         <p className="text-center text-xs text-ink-400">
-          Nothing is charged automatically and no access is granted until an admin approves your request.
-        </p>
+          {t("Nothing is charged automatically and no access is granted until an admin approves your request.")}</p>
       </div>
     </div>
   );

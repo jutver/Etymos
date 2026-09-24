@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   ChartLineUp,
+  Pulse,
   Users,
   ShieldWarning,
   SealCheck,
@@ -14,15 +15,18 @@ import {
 } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { cn } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
+import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: ChartLineUp, end: true },
-  { to: "/users", label: "Users", icon: Users },
-  { to: "/moderation", label: "Moderation", icon: ShieldWarning },
-  { to: "/verification", label: "Verification", icon: SealCheck },
-  { to: "/waitlist", label: "Waitlist", icon: Hourglass },
-  { to: "/pricing", label: "Pricing", icon: Tag },
-  { to: "/config", label: "Config", icon: SlidersHorizontal },
+  { to: "/", label: tr("Dashboard"), icon: ChartLineUp, end: true },
+  { to: "/activity", label: tr("Activity"), icon: Pulse },
+  { to: "/users", label: tr("Users"), icon: Users },
+  { to: "/moderation", label: tr("Moderation"), icon: ShieldWarning },
+  { to: "/verification", label: tr("Verification"), icon: SealCheck },
+  { to: "/waitlist", label: tr("Waitlist"), icon: Hourglass },
+  { to: "/pricing", label: tr("Pricing"), icon: Tag },
+  { to: "/config", label: tr("Config"), icon: SlidersHorizontal },
 ];
 
 /** Etymos brand mark on the dark sidebar — mirrors apps/web/src/components/layout/Logo.tsx's
@@ -44,8 +48,8 @@ function Brand() {
     <div className="flex items-center gap-2.5">
       <BrandMark />
       <div className="leading-tight">
-        <p className="text-sm font-bold tracking-tight text-white">Etymos</p>
-        <p className="text-micro font-medium uppercase tracking-wider text-white/50">Admin</p>
+        <p className="text-sm font-bold tracking-tight text-white">{t("Etymos")}</p>
+        <p className="text-micro font-medium uppercase tracking-wider text-white/50">{t("Admin")}</p>
       </div>
     </div>
   );
@@ -68,7 +72,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           }
         >
           <Icon size={18} weight="bold" />
-          {label}
+          {t(label)}
         </NavLink>
       ))}
     </div>
@@ -78,14 +82,16 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 function LogoutButton() {
   return (
     <div className="border-t border-white/10 p-3">
+      <div className="px-3 pb-2">
+        <LanguageSwitcher tone="dark" />
+      </div>
       <button
         type="button"
         onClick={() => supabase.auth.signOut()}
         className="flex w-full cursor-pointer items-center gap-2.5 rounded-control px-3 py-2 text-body font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white"
       >
         <SignOut size={18} weight="bold" />
-        Log out
-      </button>
+        {t("Log out")}</button>
     </div>
   );
 }
@@ -101,7 +107,7 @@ export function AdminNav() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle navigation"
+          aria-label={t("Toggle navigation")}
           aria-expanded={open}
           className="flex size-9 cursor-pointer items-center justify-center rounded-control text-white/80 transition hover:bg-white/10"
         >
@@ -128,7 +134,7 @@ export function AdminNav() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="Close navigation"
+            aria-label={t("Close navigation")}
             className="flex size-8 cursor-pointer items-center justify-center rounded-control text-white/70 hover:bg-white/10"
           >
             <X size={18} />

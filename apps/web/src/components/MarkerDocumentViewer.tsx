@@ -3,6 +3,7 @@ import { CircleNotch, DownloadSimple, WarningCircle } from "@phosphor-icons/reac
 import type { MatchedSource, Severity } from "../lib/types";
 import { downloadMarkerPreviewDocx, pollMarkerPreview, type MarkerPreview } from "../lib/api";
 import { locateSnippetRaw, wordOverlapRecall } from "../lib/textMatch";
+import { t, tr } from "../lib/i18n";
 
 /**
  * Replaces the raw-PDF preview (PlagiarismPdfViewer, still used for the
@@ -38,9 +39,9 @@ const SEVERITY_COLOR: Record<Severity, { fill: string; fillActive: string; borde
 };
 
 const SEVERITY_LABEL: Record<Severity, string> = {
-  high: "High match",
-  moderate: "Moderate match",
-  low: "Common phrasing",
+  high: tr("High match"),
+  moderate: tr("Moderate match"),
+  low: tr("Common phrasing"),
 };
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 3, moderate: 2, low: 1 };
@@ -186,7 +187,7 @@ export function MarkerDocumentViewer({
           status: "failed",
           html: null,
           docx_ready: false,
-          error: err instanceof Error ? err.message : "Failed to load preview.",
+          error: err instanceof Error ? err.message : tr("Failed to load preview."),
         });
       }
     });
@@ -322,7 +323,7 @@ export function MarkerDocumentViewer({
     try {
       await downloadMarkerPreviewDocx(reportId, fileNameForDownload);
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Download failed.");
+      setDownloadError(err instanceof Error ? err.message : tr("Download failed."));
     } finally {
       setDownloading(false);
     }
@@ -340,17 +341,16 @@ export function MarkerDocumentViewer({
   return (
     <div className="flex h-full flex-col rounded-[var(--radius-card)] border border-line bg-surface-tint p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-ink-700">Document preview</p>
+        <p className="text-sm font-medium text-ink-700">{t("Document preview")}</p>
         <div className="flex items-center gap-2">
-          {downloadError && <span className="text-xs font-medium text-severity-high">{downloadError}</span>}
+          {downloadError && <span className="text-xs font-medium text-severity-high">{t(downloadError)}</span>}
           <button
             onClick={handleDownload}
             disabled={preview?.status !== "ready" || !preview.docx_ready || downloading}
             className="flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {downloading ? <CircleNotch size={14} className="animate-spin motion-reduce:animate-none" /> : <DownloadSimple size={14} />}
-            Download .docx
-          </button>
+            {t("Download .docx")}</button>
         </div>
       </div>
 
@@ -359,7 +359,7 @@ export function MarkerDocumentViewer({
           {(Object.keys(SEVERITY_LABEL) as Severity[]).map((sev) => (
             <div key={sev} className="flex items-center gap-1.5">
               <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: SEVERITY_COLOR[sev].border }} />
-              <span className="text-ink-600">{SEVERITY_LABEL[sev]}</span>
+              <span className="text-ink-600">{t(SEVERITY_LABEL[sev])}</span>
               <span className="font-semibold text-ink-800">{severityCounts[sev] ?? 0}</span>
             </div>
           ))}
@@ -371,14 +371,13 @@ export function MarkerDocumentViewer({
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <CircleNotch size={22} className="animate-spin motion-reduce:animate-none text-brand-500" />
             <p className="text-sm text-ink-500">
-              Rendering a cleaner document preview from your PDF… this can take a little while the first time.
-            </p>
+              {t("Rendering a cleaner document preview from your PDF… this can take a little while the first time.")}</p>
           </div>
         ) : preview.status === "failed" || preview.status === "unavailable" ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <WarningCircle size={22} className="text-ink-400" />
             <p className="max-w-sm text-sm text-ink-500">
-              {preview.error ?? "A document preview isn't available for this report."}
+              {preview.error ?? t("A document preview isn't available for this report.")}
             </p>
           </div>
         ) : (

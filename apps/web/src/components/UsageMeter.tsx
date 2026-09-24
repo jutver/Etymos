@@ -3,6 +3,7 @@ import { useAppStore } from "../lib/store";
 import type { BalanceSource } from "../lib/store";
 import { cn } from "@etymos/shared";
 import { Link } from "react-router-dom";
+import { t } from "../lib/i18n";
 
 const SOURCE_ICON: Record<BalanceSource, typeof Coins> = {
   plan: GraduationCap,
@@ -39,7 +40,7 @@ export function UsageMeter({ compact = false, interactive = true }: { compact?: 
               {...(interactive
                 ? { type: "button" as const, "aria-pressed": selected, onClick: () => setSelectedBalance(b.source) }
                 : {})}
-              title={b.label}
+              title={t(b.label)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors",
                 compact ? "px-2.5 py-1 text-[0.6875rem]" : "px-3.5 py-1.5 text-xs",
@@ -61,15 +62,14 @@ export function UsageMeter({ compact = false, interactive = true }: { compact?: 
                 <Icon size={compact ? 12 : 14} weight={selected ? "fill" : "regular"} />
               )}
               <span>{b.remaining}</span>
-              {!compact && <span className="font-medium opacity-70">{b.label}</span>}
+              {!compact && <span className="font-medium opacity-70">{t(b.label)}</span>}
             </Tag>
           );
         })}
       </div>
       {allZero && !compact && (
         <Link to="/pricing" className="w-fit text-xs font-semibold text-brand-600 underline underline-offset-2">
-          Upgrade or buy credits
-        </Link>
+          {t("Upgrade or buy credits")}</Link>
       )}
     </div>
   );

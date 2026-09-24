@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { t } from "../lib/i18n";
 
 interface ChartCardProps {
   title: string;
@@ -9,12 +10,11 @@ interface ChartCardProps {
 export function ChartCard({ title, children, empty }: ChartCardProps) {
   return (
     <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-      <h3 className="text-caption font-medium text-fg-muted">{title}</h3>
+      <h3 className="text-caption font-medium text-fg-muted">{t(title)}</h3>
       <div className="mt-3 h-56">
         {empty ? (
           <div className="flex h-full items-center justify-center text-caption text-fg-subtle">
-            No data yet.
-          </div>
+            {t("No data yet.")}</div>
         ) : (
           children
         )}

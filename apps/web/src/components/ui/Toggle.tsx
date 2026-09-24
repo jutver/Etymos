@@ -1,4 +1,5 @@
 import { cn } from "@etymos/shared";
+import { t } from "../../lib/i18n";
 
 interface ToggleProps {
   checked: boolean;
@@ -20,8 +21,8 @@ export function Toggle({ checked, onChange, label, description, icon }: TogglePr
       <div className="flex items-center gap-3">
         {icon && <span className="text-ink-500">{icon}</span>}
         <div>
-          <p className="text-sm font-semibold text-ink-900">{label}</p>
-          {description && <p className="text-xs text-ink-500">{description}</p>}
+          <p className="text-sm font-semibold text-ink-900">{t(label)}</p>
+          {description && <p className="text-xs text-ink-500">{t(description)}</p>}
         </div>
       </div>
       <span

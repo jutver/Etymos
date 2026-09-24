@@ -13,6 +13,7 @@ import { cn } from "@etymos/shared";
 import { LogoMark } from "../../components/layout/Logo";
 import { Button } from "../../components/ui/Button";
 import { VersionHistoryMenu, type DocumentVersion } from "./VersionHistoryMenu";
+import { t } from "../../lib/i18n";
 
 /** Icon-only control used across the right-hand side of the bar. */
 function BarIconButton({
@@ -31,8 +32,8 @@ function BarIconButton({
     <button
       type="button"
       onClick={onClick}
-      title={label}
-      aria-label={label}
+      title={t(label)}
+      aria-label={t(label)}
       className={cn(
         "flex size-9 items-center justify-center rounded-[var(--radius-input)] transition-colors",
         active
@@ -62,8 +63,8 @@ function HomeLogoButton({ onGoHome }: { onGoHome: () => void }) {
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      aria-label="Back to Upload"
-      title="Back to Upload"
+      aria-label={t("Back to Upload")}
+      title={t("Back to Upload")}
       className="group flex shrink-0 items-center gap-2 rounded-[var(--radius-input)] p-1 transition-colors hover:bg-surface-muted"
     >
       <span className="relative flex size-8 items-center justify-center">
@@ -126,7 +127,7 @@ function FileNameField({
       <input
         ref={inputRef}
         value={draft}
-        aria-label="Document name"
+        aria-label={t("Document name")}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -149,11 +150,11 @@ function FileNameField({
       type="button"
       disabled={disabled}
       onClick={() => setEditing(true)}
-      title="Rename document"
+      title={t("Rename document")}
       className="min-w-0 truncate rounded-[var(--radius-input)] px-2 py-1 text-sm font-semibold text-ink-900 transition-colors hover:bg-surface-muted disabled:pointer-events-none"
     >
       {value}
-      <span className="sr-only"> — click to rename</span>
+      <span className="sr-only">{" "}{t("— click to rename")}</span>
     </button>
   );
 }
@@ -211,7 +212,7 @@ export function ReportTopBar({
           <VersionHistoryMenu versions={versions} onRestore={onRestoreVersion}>
             {(toggle, open) => (
               <BarIconButton
-                label="Version history"
+                label={t("Version history")}
                 active={open}
                 onClick={toggle}
                 aria-haspopup="menu"
@@ -223,7 +224,7 @@ export function ReportTopBar({
           </VersionHistoryMenu>
 
           <BarIconButton
-            label={locked ? "Unlock editing" : "Lock editing"}
+            label={locked ? t("Unlock editing") : t("Lock editing")}
             active={!locked}
             onClick={onToggleLock}
             aria-pressed={!locked}
@@ -231,12 +232,12 @@ export function ReportTopBar({
             {locked ? <LockSimple size={18} weight="fill" /> : <LockSimpleOpen size={18} />}
           </BarIconButton>
 
-          <BarIconButton label={rechecking ? "Rechecking…" : "Recheck document"} onClick={onRecheck}>
+          <BarIconButton label={rechecking ? t("Rechecking…") : t("Recheck document")} onClick={onRecheck}>
             <ArrowsClockwise size={18} className={cn(rechecking && "animate-spin motion-reduce:animate-none")} />
           </BarIconButton>
 
           <BarIconButton
-            label={exportLocked ? "Export PDF — upgrade to unlock" : "Export PDF"}
+            label={exportLocked ? t("Export PDF — upgrade to unlock") : t("Export PDF")}
             onClick={onExport}
           >
             <span className="relative inline-flex">
@@ -268,7 +269,7 @@ export function ReportTopBar({
             iconLeft={<FloppyDisk size={15} weight={dirty ? "fill" : "regular"} />}
             className="ml-1"
           >
-            {dirty ? "Save" : "Saved"}
+            {dirty ? t("Save") : t("Saved")}
           </Button>
         </div>
       </div>

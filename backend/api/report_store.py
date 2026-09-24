@@ -198,6 +198,22 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
         logger.exception("Failed to upsert documents row for report_id=%s", report_id)
         return  # No point trying to insert matches for a document row that didn't land.
 
+    # AI-content detection result (report_enrichment.py). Written as its own
+    # UPDATE, apart from the upsert above, on purpose: if the
+    # `documents.ai_detection` column doesn't exist yet (migration not applied)
+    # only this write fails — the report itself must still persist exactly as
+    # before.
+    ai_detection = report.get("ai_detection")
+    if ai_detection:
+        try:
+            client.table("documents").update({"ai_detection": ai_detection}).eq("id", report_id).execute()
+        except Exception as exc:
+            logger.warning(
+                "Could not persist ai_detection for report_id=%s "
+                "(has supabase/migrations/20260727000100_documents_ai_detection.sql been applied?): %s",
+                report_id, exc,
+            )
+
     try:
         matches = report.get("matches") or []
         rows = []
@@ -361,6 +377,7 @@ def _fetch_from_supabase(report_id: str) -> Optional[dict[str, Any]]:
             "created_at": doc.get("uploaded_at"),
             "overall_score": doc.get("similarity_score"),
             "document_status": doc.get("status"),
+            "ai_detection": doc.get("ai_detection"),
             "matches": matches,
         }
     except Exception:

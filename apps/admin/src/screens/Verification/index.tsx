@@ -14,6 +14,7 @@ import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { cn } from "@etymos/shared";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
@@ -24,10 +25,10 @@ function verificationTone(status: VerificationStatus): BadgeTone {
 }
 
 const STATUS_TABS: { key: VerificationStatus | "all"; label: string }[] = [
-  { key: "pending", label: "Pending" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-  { key: "all", label: "All" },
+  { key: "pending", label: tr("Pending") },
+  { key: "approved", label: tr("Approved") },
+  { key: "rejected", label: tr("Rejected") },
+  { key: "all", label: tr("All") },
 ];
 
 export default function VerificationPage() {
@@ -108,29 +109,29 @@ export default function VerificationPage() {
   const columns: Column<VerificationRequest>[] = [
     {
       key: "requester",
-      label: "Requester",
+      label: tr("Requester"),
       render: (r) => r.profiles?.email ?? r.profiles?.display_name ?? r.user_id,
     },
     {
       key: "storage_path",
-      label: "Evidence file",
+      label: tr("Evidence file"),
       render: (r) => (
         <span className="truncate">{r.storage_path.split("/").pop() ?? r.storage_path}</span>
       ),
     },
     {
       key: "status",
-      label: "Status",
+      label: tr("Status"),
       render: (r) => <StatusBadge label={r.status} tone={verificationTone(r.status)} />,
     },
     {
       key: "created_at",
-      label: "Submitted",
-      render: (r) => new Date(r.created_at).toLocaleDateString(),
+      label: tr("Submitted"),
+      render: (r) => new Date(r.created_at).toLocaleDateString(currentLocale()),
     },
     {
       key: "actions",
-      label: "Actions",
+      label: tr("Actions"),
       className: "text-right",
       render: (r) => (
         <div className="flex justify-end gap-1.5">
@@ -138,7 +139,7 @@ export default function VerificationPage() {
             type="button"
             onClick={() => handlePreview(r)}
             disabled={previewLoading}
-            title="Preview evidence"
+            title={t("Preview evidence")}
             className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {previewLoading ? (
@@ -153,7 +154,7 @@ export default function VerificationPage() {
                 type="button"
                 disabled={actingId === r.id}
                 onClick={() => handleApprove(r)}
-                title="Approve"
+                title={t("Approve")}
                 className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-success/40 bg-success-bg text-success transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check size={14} weight="bold" />
@@ -162,7 +163,7 @@ export default function VerificationPage() {
                 type="button"
                 disabled={actingId === r.id}
                 onClick={() => handleReject(r)}
-                title="Reject"
+                title={t("Reject")}
                 className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-destructive/40 bg-destructive-bg text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <X size={14} weight="bold" />
@@ -176,10 +177,9 @@ export default function VerificationPage() {
 
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">Student Verification</h1>
+      <h1 className="text-h1 font-semibold text-fg">{t("Student Verification")}</h1>
       <p className="mt-1 text-body text-fg-muted">
-        Review submitted student ID evidence, approve or reject verification requests.
-      </p>
+        {t("Review submitted student ID evidence, approve or reject verification requests.")}</p>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1.5">
@@ -198,7 +198,7 @@ export default function VerificationPage() {
                   : "text-fg-muted hover:bg-surface-raised hover:text-fg",
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </div>
@@ -214,7 +214,7 @@ export default function VerificationPage() {
               setPage(0);
               setSearch(e.target.value);
             }}
-            placeholder="Search by file name…"
+            placeholder={t("Search by file name…")}
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
@@ -228,7 +228,7 @@ export default function VerificationPage() {
           rows={rows}
           rowKey={(r) => r.id}
           loading={loading}
-          emptyMessage="No verification requests found."
+          emptyMessage={t("No verification requests found.")}
           page={page}
           pageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}
           onPageChange={setPage}
@@ -251,7 +251,7 @@ export default function VerificationPage() {
               <button
                 type="button"
                 onClick={() => setPreview(null)}
-                title="Close"
+                title={t("Close")}
                 className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
               >
                 <X size={16} weight="bold" />
@@ -259,11 +259,11 @@ export default function VerificationPage() {
             </div>
             <div className="flex-1 overflow-auto bg-surface-muted p-4">
               {preview.storagePath.toLowerCase().endsWith(".pdf") ? (
-                <iframe src={preview.url} title="Evidence document" className="h-[65vh] w-full rounded-control" />
+                <iframe src={preview.url} title={t("Evidence document")} className="h-[65vh] w-full rounded-control" />
               ) : (
                 <img
                   src={preview.url}
-                  alt="Verification evidence"
+                  alt={t("Verification evidence")}
                   className="mx-auto max-h-[65vh] w-auto rounded-control object-contain"
                 />
               )}

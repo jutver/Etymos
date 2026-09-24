@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { cn } from "@etymos/shared";
+import { t } from "../../lib/i18n";
 
 export function LogoMark({ size = 44, onDark = false }: { size?: number; onDark?: boolean }) {
   // The white brand mark needs contrast to read on light backgrounds, so it
@@ -51,8 +52,7 @@ export function Logo({
           variant === "light" ? "text-white" : "text-navy-900",
         )}
       >
-        Etymos
-      </span>
+        {t("Etymos")}</span>
     </Link>
   );
 }

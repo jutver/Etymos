@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { t } from "../../lib/i18n";
 
 interface ModalProps {
   open: boolean;
@@ -64,7 +65,7 @@ export function ModalCloseButton({ onClose }: { onClose: () => void }) {
   return (
     <button
       onClick={onClose}
-      aria-label="Close"
+      aria-label={t("Close")}
       className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
     >
       <X size={20} />

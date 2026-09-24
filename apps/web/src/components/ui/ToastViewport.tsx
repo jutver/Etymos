@@ -5,6 +5,7 @@ import { CheckCircle, Info, WarningCircle, XCircle, X } from "@phosphor-icons/re
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import type { Toast } from "@etymos/shared";
+import { t as tl } from "../../lib/i18n";
 
 const iconFor: Record<Toast["kind"], React.ReactNode> = {
   success: <CheckCircle size={20} weight="fill" className="text-success" />,
@@ -34,14 +35,14 @@ function ToastItem({ toast }: { toast: Toast }) {
     >
       <div className="mt-0.5 shrink-0">{iconFor[toast.kind]}</div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-ink-900">{toast.title}</p>
+        <p className="text-sm font-semibold text-ink-900">{tl(toast.title)}</p>
         {toast.description && (
-          <p className="mt-0.5 text-sm text-ink-500">{toast.description}</p>
+          <p className="mt-0.5 text-sm text-ink-500">{tl(toast.description)}</p>
         )}
       </div>
       <button
         onClick={() => dismiss(toast.id)}
-        aria-label="Dismiss"
+        aria-label={tl("Dismiss")}
         className="shrink-0 rounded-full p-1 text-ink-300 hover:bg-surface-muted hover:text-ink-700"
       >
         <X size={16} />

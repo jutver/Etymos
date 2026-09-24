@@ -5,12 +5,13 @@ import { Button } from "../../components/ui/Button";
 import { Logo } from "../../components/layout/Logo";
 import { useAuth } from "../../lib/auth";
 import { fetchMyProfile, type MyProfile } from "../../lib/profileQueries";
+import { t, currentLocale } from "../../lib/i18n";
 
 function formatRequestedAt(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(currentLocale(), {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -69,37 +70,37 @@ export default function WaitlistPage() {
           </div>
 
           <h1 className="mt-4 text-h3 font-bold tracking-tight text-navy-900">
-            {rejected ? "Access not granted" : "You're on the waitlist"}
+            {rejected ? t("Access not granted") : t("You're on the waitlist")}
           </h1>
 
           <p className="mt-2.5 text-sm leading-relaxed text-ink-600">
             {rejected
-              ? "We weren't able to approve your request for the closed beta at this time. If you think this was a mistake, reply to your signup email and we'll take another look."
-              : "Etymos is in closed beta and every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved."}
+              ? t("We weren't able to approve your request for the closed beta at this time. If you think this was a mistake, reply to your signup email and we'll take another look.")
+              : t("Etymos is in closed beta and every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved.")}
           </p>
 
           <dl className="mt-6 flex flex-col gap-3 border-t border-line pt-5 text-sm">
             {user?.email && (
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-ink-500">Account</dt>
+                <dt className="text-ink-500">{t("Account")}</dt>
                 <dd className="truncate font-medium text-ink-900">{user.email}</dd>
               </div>
             )}
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-ink-500">Status</dt>
+              <dt className="text-ink-500">{t("Status")}</dt>
               <dd className="font-medium text-ink-900">
-                {rejected ? "Rejected" : "Awaiting approval"}
+                {rejected ? t("Rejected") : t("Awaiting approval")}
               </dd>
             </div>
             {requestedAt && (
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-ink-500">Requested</dt>
+                <dt className="text-ink-500">{t("Requested")}</dt>
                 <dd className="font-medium text-ink-900">{requestedAt}</dd>
               </div>
             )}
             {rejected && reviewedAt && (
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-ink-500">Reviewed</dt>
+                <dt className="text-ink-500">{t("Reviewed")}</dt>
                 <dd className="font-medium text-ink-900">{reviewedAt}</dd>
               </div>
             )}
@@ -120,8 +121,7 @@ export default function WaitlistPage() {
             onClick={handleSignOut}
             iconLeft={<SignOut size={18} />}
           >
-            Log out
-          </Button>
+            {t("Log out")}</Button>
         </div>
       </div>
     </div>

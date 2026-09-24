@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { EnvelopeSimple, ArrowClockwise, CheckCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
+import { t } from "../../lib/i18n";
 
 interface LocationState {
   email?: string;
@@ -67,18 +68,16 @@ export default function VerifyEmailPage() {
       </div>
 
       <h1 className="mt-5 text-center text-h3 font-bold tracking-tight text-navy-900">
-        Check your email
-      </h1>
+        {t("Check your email")}</h1>
 
       <p className="mt-2.5 text-center text-sm leading-relaxed text-ink-600">
-        We've sent a 6-digit verification code to{" "}
+        {t("We've sent a 6-digit verification code to")}{" "}
         {email ? (
           <span className="font-semibold text-navy-900">{email}</span>
         ) : (
-          "your email address"
+          t("your email address")
         )}
-        . Enter it below to activate your account.
-      </p>
+        {t(". Enter it below to activate your account.")}</p>
 
       <form onSubmit={handleVerify} className="mt-6 flex flex-col gap-3">
         <input
@@ -97,13 +96,12 @@ export default function VerifyEmailPage() {
         {resent && (
           <div className="flex items-center justify-center gap-2 text-sm text-green-600">
             <CheckCircle size={16} weight="fill" />
-            <span>Verification code resent!</span>
+            <span>{t("Verification code resent!")}</span>
           </div>
         )}
 
         <Button type="submit" size="lg" fullWidth loading={verifying} disabled={!email || code.length < 6}>
-          Verify email
-        </Button>
+          {t("Verify email")}</Button>
       </form>
 
       <Button
@@ -116,14 +114,12 @@ export default function VerifyEmailPage() {
         className="mt-3"
         iconLeft={<ArrowClockwise size={16} />}
       >
-        Resend code
-      </Button>
+        {t("Resend code")}</Button>
 
       <p className="mt-6 text-center text-sm text-ink-600">
-        Already verified?{" "}
+        {t("Already verified?")}{" "}
         <Link to="/login" className="font-semibold text-brand-600 hover:underline">
-          Log in
-        </Link>
+          {t("Log in")}</Link>
       </p>
     </div>
   );

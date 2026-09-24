@@ -3,6 +3,7 @@ import { Modal, ModalCloseButton } from "../../components/ui/Modal";
 import { SeverityTag } from "../../components/Severity";
 import { tokenizeWithOverlap } from "../../lib/textOverlap";
 import type { MatchedSource } from "@etymos/shared";
+import { t as tl } from "../../lib/i18n";
 
 function OverlapText({ text, otherText }: { text: string; otherText: string }) {
   const tokens = tokenizeWithOverlap(text, otherText);
@@ -38,10 +39,9 @@ export function SourceComparisonModal({
         <ModalCloseButton onClose={onClose} />
         <div className="flex flex-wrap items-center gap-3">
           <h2 id="comparison-title" className="text-h3 font-bold text-navy-900">
-            Source comparison
-          </h2>
+            {tl("Source comparison")}</h2>
           <SeverityTag severity={match.severity} />
-          <span className="text-sm font-semibold text-ink-500">{match.matchPercent}% match</span>
+          <span className="text-sm font-semibold text-ink-500">{match.matchPercent}{tl("% match")}</span>
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-500">
           {match.sourceKind === "academic" ? <GraduationCap size={15} /> : <Globe size={15} />}
@@ -51,8 +51,7 @@ export function SourceComparisonModal({
         <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
           <div className="rounded-[var(--radius-card)] border border-line bg-surface-tint p-5">
             <p className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
-              Your document
-            </p>
+              {tl("Your document")}</p>
             <div className="mt-3">
               <OverlapText text={match.userSnippet} otherText={match.sourceSnippet} />
             </div>
@@ -68,9 +67,7 @@ export function SourceComparisonModal({
         </div>
 
         <p className="mt-4 text-xs text-ink-400">
-          Highlighted words appear in both passages. Overlap is measured at the phrase level, not
-          just individual words.
-        </p>
+          {tl("Highlighted words appear in both passages. Overlap is measured at the phrase level, not just individual words.")}</p>
       </div>
     </Modal>
   );

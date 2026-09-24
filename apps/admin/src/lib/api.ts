@@ -1,4 +1,5 @@
-// Thin client for the handful of admin actions that must go through the
+
+import { t } from "./i18n";// Thin client for the handful of admin actions that must go through the
 // backend rather than a plain Supabase write — currently just force-delete
 // (backend/api/app.py's `DELETE /api/admin/users/{id}`, which purges Storage
 // objects and calls `client.auth.admin.delete_user`, neither of which a
@@ -25,7 +26,7 @@ async function errorMessageFromResponse(response: Response): Promise<string> {
   } catch {
     // response wasn't JSON — fall back to raw text
   }
-  return text || `Request failed with ${response.status}`;
+  return text || t("Request failed with {{status}}", { status: response.status });
 }
 
 /** Immediately and irreversibly deletes `targetUserId`'s account, no consent

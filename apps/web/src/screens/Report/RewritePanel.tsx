@@ -7,6 +7,7 @@ import { SeverityTag } from "../../components/Severity";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { rewriteText } from "../../lib/api";
+import { t } from "../../lib/i18n";
 
 export function RewritePanel({
   match,
@@ -50,7 +51,7 @@ export function RewritePanel({
       setVariant(data.rewritten_text);
     } catch (err) {
       console.error("Rewrite error:", err);
-      setVariant("Something went wrong while contacting the AI. Please try again.");
+      setVariant(t("Something went wrong while contacting the AI. Please try again."));
       setFailed(true);
     } finally {
       setRegenerating(false);
@@ -70,8 +71,8 @@ export function RewritePanel({
           <MagicWand size={20} weight="bold" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-navy-900">AI Rewrite Assistant</h2>
-          <p className="text-xs text-ink-500">Academic tone · English</p>
+          <h2 className="text-lg font-bold text-navy-900">{t("AI Rewrite Assistant")}</h2>
+          <p className="text-xs text-ink-500">{t("Academic tone · English")}</p>
         </div>
         <ModalCloseButton onClose={onClose} />
       </div>
@@ -79,27 +80,25 @@ export function RewritePanel({
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6">
         <div className="flex items-center gap-2">
           <SeverityTag severity={match.severity} />
-          <span className="text-xs font-medium text-ink-500">{match.matchPercent}% match</span>
+          <span className="text-xs font-medium text-ink-500">{match.matchPercent}{t("% match")}</span>
         </div>
 
         <p className="mt-4 text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
-          Flagged passage
-        </p>
+          {t("Flagged passage")}</p>
         <div className="mt-2 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg/40 p-4">
           <p className="text-sm leading-relaxed text-ink-800">{match.userSnippet}</p>
         </div>
 
         <div className="mt-6 flex items-center justify-between">
           <p className="text-[0.6875rem] font-bold uppercase tracking-wide text-brand-600">
-            AI paraphrase
-          </p>
+            {t("AI paraphrase")}</p>
           <button
             onClick={handleRegenerate}
             disabled={regenerating}
             className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline disabled:opacity-50"
           >
             <ArrowClockwise size={14} className={cn(regenerating && "animate-spin motion-reduce:animate-none")} />
-            {regenerating ? "Regenerating..." : "Regenerate"}
+            {regenerating ? t("Regenerating...") : t("Regenerate")}
           </button>
         </div>
         
@@ -116,9 +115,7 @@ export function RewritePanel({
         </div>
 
         <p className="mt-3 text-xs text-ink-500">
-          Accepting this rewrite replaces the flagged passage in your document and recalculates
-          your similarity score.
-        </p>
+          {t("Accepting this rewrite replaces the flagged passage in your document and recalculates your similarity score.")}</p>
       </div>
 
       <div className="flex items-center gap-3 border-t border-line px-6 py-5">
@@ -128,7 +125,7 @@ export function RewritePanel({
           disabled={regenerating || failed || !variant}
           iconLeft={copied ? <Check size={16} /> : <Copy size={16} />}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("Copied") : t("Copy")}
         </Button>
         <Button
           fullWidth
@@ -138,8 +135,7 @@ export function RewritePanel({
             onClose();
           }}
         >
-          Accept & replace
-        </Button>
+          {t("Accept & replace")}</Button>
       </div>
     </SlideOver>
   );

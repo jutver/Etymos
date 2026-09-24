@@ -1,4 +1,5 @@
 import { cn } from "@etymos/shared";
+import { t } from "../lib/i18n";
 
 type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
@@ -19,7 +20,7 @@ export function StatusBadge({ label, tone = "neutral" }: { label: string; tone?:
         TONE_CLASSES[tone],
       )}
     >
-      {label}
+      {t(label)}
     </span>
   );
 }

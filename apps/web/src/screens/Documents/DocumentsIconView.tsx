@@ -2,12 +2,14 @@ import type { MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretLeft, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
-import { formatDate, cn } from "@etymos/shared";
+import { cn } from "@etymos/shared";
+import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { CheckStatePill } from "./CheckStatePill";
 import { analyzingStateFor } from "../../lib/documentsQueries";
 import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import type { ProjectGroup } from "./types";
+import { t, tn } from "../../lib/i18n";
 
 interface DocumentsIconViewProps {
   groups: ProjectGroup[];
@@ -38,7 +40,7 @@ function CardCheckbox({
   return (
     <input
       type="checkbox"
-      aria-label={`Select ${label}`}
+      aria-label={t("Select {{label}}", { label: label })}
       checked={checked}
       onChange={onChange}
       onClick={(e) => e.stopPropagation()}
@@ -80,16 +82,14 @@ export function DocumentsIconView({
           className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-ink-900"
         >
           <CaretLeft size={14} weight="bold" />
-          All projects
-        </button>
+          {t("All projects")}</button>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-400">
-          {activeFolder} &middot; {docs.length} document{docs.length === 1 ? "" : "s"}
+          {activeFolder} &middot; {tn(docs.length, "{{count}} document", "{{count}} documents")}
         </p>
 
         {docs.length === 0 ? (
           <p className="rounded-[var(--radius-card-lg)] border border-dashed border-line bg-white px-5 py-12 text-center text-sm text-ink-400">
-            No documents in this project yet.
-          </p>
+            {t("No documents in this project yet.")}</p>
         ) : (
           <div className={GRID}>
             {docs.map((doc) => {
@@ -143,7 +143,7 @@ export function DocumentsIconView({
         <span className="flex size-12 items-center justify-center rounded-xl border border-dashed border-brand-300 text-brand-500">
           <FolderPlus size={22} />
         </span>
-        <span className="text-xs font-semibold text-brand-600">Create project</span>
+        <span className="text-xs font-semibold text-brand-600">{t("Create project")}</span>
       </button>
 
       {groups.map((group) => {
@@ -174,7 +174,7 @@ export function DocumentsIconView({
             </span>
             <span className="line-clamp-2 w-full text-xs font-semibold text-ink-900">{group.name}</span>
             <span className="text-[11px] text-ink-400">
-              {group.docs.length} document{group.docs.length === 1 ? "" : "s"}
+              {tn(group.docs.length, "{{count}} document", "{{count}} documents")}
             </span>
           </div>
         );
@@ -182,8 +182,7 @@ export function DocumentsIconView({
 
       {groups.length === 0 && (
         <p className="col-span-full rounded-[var(--radius-card-lg)] border border-dashed border-line bg-white px-5 py-12 text-center text-sm text-ink-400">
-          No projects or documents match your search.
-        </p>
+          {t("No projects or documents match your search.")}</p>
       )}
     </div>
   );

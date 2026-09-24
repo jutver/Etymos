@@ -24,30 +24,31 @@ import { forceDeleteUser } from "../../lib/api";
 import { isProfileBanned, isProfileOnline, type BillingCycle, type PlanTier, type Profile } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { useAdminAuth } from "../../lib/auth";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 const PLAN_OPTIONS: PlanTier[] = ["free", "student", "professional"];
 const BILLING_OPTIONS: BillingCycle[] = ["monthly", "annual"];
 
 const FIELD_LABELS: Record<string, string> = {
-  plan_tier: "Plan tier",
-  billing_cycle: "Billing cycle",
-  standard_credits: "Standard credits",
-  premium_credits: "Premium credits",
-  student_verified: "Student verified",
+  plan_tier: tr("Plan tier"),
+  billing_cycle: tr("Billing cycle"),
+  standard_credits: tr("Standard credits"),
+  premium_credits: tr("Premium credits"),
+  student_verified: tr("Student verified"),
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  profile_updated: "Profile updated",
-  user_banned: "User banned",
-  user_unbanned: "User unbanned",
-  deletion_requested: "Account deletion requested",
-  deletion_request_cancelled: "Deletion request cancelled",
-  user_force_deleted: "User force-deleted",
+  profile_updated: tr("Profile updated"),
+  user_banned: tr("User banned"),
+  user_unbanned: tr("User unbanned"),
+  deletion_requested: tr("Account deletion requested"),
+  deletion_request_cancelled: tr("Deletion request cancelled"),
+  user_force_deleted: tr("User force-deleted"),
 };
 
 function formatAuditValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "boolean") return value ? t("Yes") : t("No");
   return String(value);
 }
 
@@ -372,11 +373,11 @@ export default function UserDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-body text-fg-muted">Loading…</p>;
+    return <p className="text-body text-fg-muted">{t("Loading…")}</p>;
   }
 
   if (!profile) {
-    return <p className="text-body text-destructive">{error ?? "User not found."}</p>;
+    return <p className="text-body text-destructive">{error ?? t("User not found.")}</p>;
   }
 
   const online = isProfileOnline(profile.last_seen_at);
@@ -391,32 +392,30 @@ export default function UserDetailPage() {
         className="mb-4 flex cursor-pointer items-center gap-1.5 text-caption font-medium text-fg-muted transition-colors hover:text-fg"
       >
         <ArrowLeft size={14} weight="bold" />
-        Back to Users
-      </button>
+        {t("Back to Users")}</button>
 
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-h1 font-semibold text-fg">{profile.email ?? profile.display_name ?? profile.id}</h1>
-        <StatusBadge label={profile.role} tone={roleTone(profile.role)} />
+        <StatusBadge label={t(profile.role)} tone={roleTone(profile.role)} />
         <span className="inline-flex items-center gap-1.5">
           <span className={cn("size-2 shrink-0 rounded-full", online ? "bg-success" : "bg-fg-subtle/40")} aria-hidden />
-          <span className="text-caption text-fg-muted">{online ? "Online now" : "Offline"}</span>
+          <span className="text-caption text-fg-muted">{online ? t("Online now") : t("Offline")}</span>
         </span>
-        {banned && <StatusBadge label="Banned" tone="destructive" />}
-        {deletionRequested && <StatusBadge label="Deletion requested" tone="warning" />}
+        {banned && <StatusBadge label={t("Banned")} tone="destructive" />}
+        {deletionRequested && <StatusBadge label={t("Deletion requested")} tone="warning" />}
       </div>
       <p className="mt-1 text-body text-fg-muted">
-        Joined {new Date(profile.created_at).toLocaleDateString()} · {profile.checks_used_this_period} checks used this period
-        {profile.last_seen_at && <> · Last seen {new Date(profile.last_seen_at).toLocaleString()}</>}
+        {t("Joined")}{" "}{new Date(profile.created_at).toLocaleDateString(currentLocale())} · {profile.checks_used_this_period} {" "}{t("checks used this period")}{profile.last_seen_at && <> {" "}{t("· Last seen")}{" "}{new Date(profile.last_seen_at).toLocaleString(currentLocale())}</>}
       </p>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
       <div className="mt-6 space-y-5 rounded-card border border-border bg-surface p-6 shadow-card">
-        <h2 className="text-h2 font-semibold text-fg">Plan & credits</h2>
+        <h2 className="text-h2 font-semibold text-fg">{t("Plan & credits")}</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Plan tier</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan tier")}</label>
             <select
               value={planTier}
               onChange={(e) => setPlanTier(e.target.value as PlanTier)}
@@ -431,7 +430,7 @@ export default function UserDetailPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Billing cycle</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Billing cycle")}</label>
             <select
               value={billingCycle}
               onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
@@ -446,7 +445,7 @@ export default function UserDetailPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Standard credits</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Standard credits")}</label>
             <input
               type="number"
               min={0}
@@ -457,7 +456,7 @@ export default function UserDetailPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Premium credits</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Premium credits")}</label>
             <input
               type="number"
               min={0}
@@ -470,7 +469,7 @@ export default function UserDetailPage() {
           <div className="flex items-end">
             <div className="flex items-center gap-2.5">
               <Switch checked={studentVerified} onChange={setStudentVerified} />
-              <span className="text-body text-fg">Student verified</span>
+              <span className="text-body text-fg">{t("Student verified")}</span>
             </div>
           </div>
         </div>
@@ -481,20 +480,20 @@ export default function UserDetailPage() {
           disabled={saving}
           className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? t("Saving…") : t("Save changes")}
         </button>
       </div>
 
       <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex items-center gap-2">
           <ShieldWarning size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">Ban</h2>
+          <h2 className="text-h2 font-semibold text-fg">{t("Ban")}</h2>
         </div>
 
         {banned ? (
           <div className="rounded-control border border-destructive/40 bg-destructive-bg p-3.5">
             <p className="text-body font-medium text-destructive">
-              {profile.banned_permanent ? "Banned permanently" : `Banned until ${new Date(profile.banned_until!).toLocaleString()}`}
+              {profile.banned_permanent ? t("Banned permanently") : t("Banned until {{n}}", { n: new Date(profile.banned_until!).toLocaleString(currentLocale()) })}
             </p>
             {profile.ban_reason && <p className="mt-1 text-caption text-destructive/90">"{profile.ban_reason}"</p>}
             <button
@@ -503,22 +502,20 @@ export default function UserDetailPage() {
               disabled={unbanSubmitting}
               className="mt-3 cursor-pointer rounded-control border border-destructive/40 bg-surface px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:bg-destructive-bg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {unbanSubmitting ? "Unbanning…" : "Unban user"}
+              {unbanSubmitting ? t("Unbanning…") : t("Unban user")}
             </button>
           </div>
         ) : (
           <>
             <p className="text-body text-fg-muted">
-              Banning signs this user out immediately and blocks sign-in until unbanned. They'll see your message.
-            </p>
+              {t("Banning signs this user out immediately and blocks sign-in until unbanned. They'll see your message.")}</p>
             <button
               type="button"
               onClick={openBanModal}
               className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
             >
               <Prohibit size={14} weight="bold" />
-              Ban user
-            </button>
+              {t("Ban user")}</button>
           </>
         )}
       </div>
@@ -526,46 +523,44 @@ export default function UserDetailPage() {
       <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex items-center gap-2">
           <TrashSimple size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">Delete account</h2>
+          <h2 className="text-h2 font-semibold text-fg">{t("Delete account")}</h2>
         </div>
 
         {deletionRequested ? (
           <div className="rounded-control border border-warning/40 bg-warning-bg p-3.5">
             <p className="text-body font-medium text-warning">
-              Deletion requested {new Date(profile.deletion_requested_at!).toLocaleString()}
+              {t("Deletion requested")}{" "}{new Date(profile.deletion_requested_at!).toLocaleString(currentLocale())}
             </p>
             <p className="mt-1 text-caption text-warning/90">
-              Waiting for the user to confirm from their account — nothing is deleted until they click confirm.
-            </p>
+              {t("Waiting for the user to confirm from their account — nothing is deleted until they click confirm.")}</p>
             <button
               type="button"
               onClick={handleCancelDeletionRequest}
               disabled={cancellingDeletion}
               className="mt-3 cursor-pointer rounded-control border border-border bg-surface px-3.5 py-1.5 text-caption font-semibold text-fg transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {cancellingDeletion ? "Cancelling…" : "Cancel deletion request"}
+              {cancellingDeletion ? t("Cancelling…") : t("Cancel deletion request")}
             </button>
           </div>
         ) : (
           <div>
             <p className="text-body text-fg-muted">
-              Requesting deletion prompts the user to confirm in their own account before anything is removed.
-            </p>
+              {t("Requesting deletion prompts the user to confirm in their own account before anything is removed.")}</p>
             <button
               type="button"
               onClick={handleRequestDeletion}
               disabled={requestingDeletion}
               className="mt-3 cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-semibold text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {requestingDeletion ? "Requesting…" : "Request deletion"}
+              {requestingDeletion ? t("Requesting…") : t("Request deletion")}
             </button>
           </div>
         )}
 
         <div className="border-t border-border pt-4">
           <p className="text-body text-fg-muted">
-            Force delete removes the account and all its data immediately —{" "}
-            <span className="font-semibold text-fg">no confirmation from the user, cannot be undone.</span>
+            {t("Force delete removes the account and all its data immediately —")}{" "}
+            <span className="font-semibold text-fg">{t("no confirmation from the user, cannot be undone.")}</span>
           </p>
           <button
             type="button"
@@ -576,21 +571,20 @@ export default function UserDetailPage() {
             className="mt-3 flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
           >
             <TrashSimple size={14} weight="bold" />
-            Force delete account
-          </button>
+            {t("Force delete account")}</button>
         </div>
       </div>
 
       <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex items-center gap-2">
           <ClockCounterClockwise size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">Audit trail</h2>
+          <h2 className="text-h2 font-semibold text-fg">{t("Audit trail")}</h2>
         </div>
 
         {auditLoading ? (
-          <p className="text-body text-fg-muted">Loading…</p>
+          <p className="text-body text-fg-muted">{t("Loading…")}</p>
         ) : auditLog.length === 0 ? (
-          <p className="text-body text-fg-muted">No audit events recorded for this user yet.</p>
+          <p className="text-body text-fg-muted">{t("No audit events recorded for this user yet.")}</p>
         ) : (
           <ul className="space-y-3">
             {auditLog.map((entry) => {
@@ -603,22 +597,22 @@ export default function UserDetailPage() {
                 <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-body font-medium text-fg">
-                      {ACTION_LABELS[entry.action] ?? entry.action}
+                      {t(ACTION_LABELS[entry.action] ?? entry.action)}
                     </span>
                     <span className="text-caption text-fg-muted">
-                      {new Date(entry.created_at).toLocaleString()}
+                      {new Date(entry.created_at).toLocaleString(currentLocale())}
                     </span>
                   </div>
                   {entry.actor_id && (
                     <p className="mt-0.5 text-caption text-fg-muted">
-                      By {entry.actor_id === adminUser?.id ? "you" : entry.actor_id}
+                      {t("By")}{" "}{entry.actor_id === adminUser?.id ? "you" : entry.actor_id}
                     </p>
                   )}
                   {changedFields.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {changedFields.map((field) => (
                         <li key={field} className="text-caption text-fg-muted">
-                          <span className="font-medium text-fg">{FIELD_LABELS[field] ?? field}</span>:{" "}
+                          <span className="font-medium text-fg">{t(FIELD_LABELS[field] ?? field)}</span>:{" "}
                           {formatAuditValue(before[field])} → {formatAuditValue(after[field])}
                         </li>
                       ))}
@@ -634,18 +628,17 @@ export default function UserDetailPage() {
       <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex items-center gap-2">
           <ListBullets size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">Usage log</h2>
+          <h2 className="text-h2 font-semibold text-fg">{t("Usage log")}</h2>
         </div>
         <p className="text-caption text-fg-muted">
-          The user's own activity — document checks and purchases — as opposed to admin-caused changes above.
-        </p>
+          {t("The user's own activity — document checks and purchases — as opposed to admin-caused changes above.")}</p>
 
         {usageLoading ? (
-          <p className="text-body text-fg-muted">Loading…</p>
+          <p className="text-body text-fg-muted">{t("Loading…")}</p>
         ) : usageError ? (
-          <p className="text-caption text-destructive">{usageError}</p>
+          <p className="text-caption text-destructive">{t(usageError)}</p>
         ) : usageLog.length === 0 ? (
-          <p className="text-body text-fg-muted">No activity recorded for this user yet.</p>
+          <p className="text-body text-fg-muted">{t("No activity recorded for this user yet.")}</p>
         ) : (
           <ul className="space-y-3">
             {usageLog.map((entry) => (
@@ -653,10 +646,10 @@ export default function UserDetailPage() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="truncate text-body font-medium text-fg">{entry.title}</span>
                   <span className="shrink-0 text-caption text-fg-muted">
-                    {new Date(entry.created_at).toLocaleString()}
+                    {new Date(entry.created_at).toLocaleString(currentLocale())}
                   </span>
                 </div>
-                <p className="mt-0.5 text-caption text-fg-muted">{entry.detail}</p>
+                <p className="mt-0.5 text-caption text-fg-muted">{t(entry.detail)}</p>
               </li>
             ))}
           </ul>
@@ -673,11 +666,11 @@ export default function UserDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-              <p className="text-body font-medium text-fg">Ban user</p>
+              <p className="text-body font-medium text-fg">{t("Ban user")}</p>
               <button
                 type="button"
                 onClick={() => setBanModalOpen(false)}
-                title="Close"
+                title={t("Close")}
                 className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
               >
                 <X size={16} weight="bold" />
@@ -695,8 +688,7 @@ export default function UserDetailPage() {
                       : "border-border text-fg-muted hover:bg-surface-raised",
                   )}
                 >
-                  Permanent
-                </button>
+                  {t("Permanent")}</button>
                 <button
                   type="button"
                   onClick={() => setBanMode("until")}
@@ -707,13 +699,12 @@ export default function UserDetailPage() {
                       : "border-border text-fg-muted hover:bg-surface-raised",
                   )}
                 >
-                  For a period
-                </button>
+                  {t("For a period")}</button>
               </div>
 
               {banMode === "until" && (
                 <div>
-                  <label className="mb-1.5 block text-caption font-medium text-fg-muted">Banned until</label>
+                  <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Banned until")}</label>
                   <input
                     type="datetime-local"
                     value={banUntilInput}
@@ -725,13 +716,12 @@ export default function UserDetailPage() {
 
               <div>
                 <label className="mb-1.5 block text-caption font-medium text-fg-muted">
-                  Message shown to the user
-                </label>
+                  {t("Message shown to the user")}</label>
                 <textarea
                   value={banReasonInput}
                   onChange={(e) => setBanReasonInput(e.target.value)}
                   rows={3}
-                  placeholder="Explain why this account is banned…"
+                  placeholder={t("Explain why this account is banned…")}
                   className="w-full resize-none rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 />
               </div>
@@ -742,7 +732,7 @@ export default function UserDetailPage() {
                 disabled={banSubmitting || (banMode === "until" && !banUntilInput)}
                 className="w-full cursor-pointer rounded-control bg-destructive px-4 py-2 text-body font-semibold text-white transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {banSubmitting ? "Banning…" : "Ban user"}
+                {banSubmitting ? t("Banning…") : t("Ban user")}
               </button>
             </div>
           </div>
@@ -759,11 +749,11 @@ export default function UserDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-              <p className="text-body font-medium text-destructive">Force delete account</p>
+              <p className="text-body font-medium text-destructive">{t("Force delete account")}</p>
               <button
                 type="button"
                 onClick={() => setForceDeleteModalOpen(false)}
-                title="Close"
+                title={t("Close")}
                 className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
               >
                 <X size={16} weight="bold" />
@@ -771,14 +761,11 @@ export default function UserDetailPage() {
             </div>
             <div className="space-y-4 p-5">
               <p className="text-body text-fg-muted">
-                This immediately and permanently deletes{" "}
-                <span className="font-semibold text-fg">{profile.email ?? profile.id}</span> and all their data. The
-                user is not asked for consent. This cannot be undone.
-              </p>
+                {t("This immediately and permanently deletes")}{" "}
+                <span className="font-semibold text-fg">{profile.email ?? profile.id}</span> {" "}{t("and all their data. The user is not asked for consent. This cannot be undone.")}</p>
               <div>
                 <label className="mb-1.5 block text-caption font-medium text-fg-muted">
-                  Type {DELETE_CONFIRM_PHRASE} to confirm
-                </label>
+                  {t("Type")}{" "}{DELETE_CONFIRM_PHRASE} {" "}{t("to confirm")}</label>
                 <input
                   value={forceDeleteConfirmText}
                   onChange={(e) => setForceDeleteConfirmText(e.target.value)}
@@ -792,7 +779,7 @@ export default function UserDetailPage() {
                 disabled={forceDeleting || forceDeleteConfirmText !== DELETE_CONFIRM_PHRASE}
                 className="w-full cursor-pointer rounded-control bg-destructive px-4 py-2 text-body font-semibold text-white transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {forceDeleting ? "Deleting…" : "Permanently delete account"}
+                {forceDeleting ? t("Deleting…") : t("Permanently delete account")}
               </button>
             </div>
           </div>

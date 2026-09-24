@@ -20,6 +20,7 @@ import type {
   DiscountType,
 } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
+import { t as tl, currentLocale } from "../../lib/i18n";
 
 function localInputToIso(value: string): string | null {
   if (!value) return null;
@@ -28,14 +29,14 @@ function localInputToIso(value: string): string | null {
 }
 
 function formatSchedule(startsAt: string | null, endsAt: string | null): string {
-  if (!startsAt && !endsAt) return "Always active";
-  const start = startsAt ? new Date(startsAt).toLocaleString() : "now";
-  const end = endsAt ? new Date(endsAt).toLocaleString() : "no end date";
+  if (!startsAt && !endsAt) return tl("Always active");
+  const start = startsAt ? new Date(startsAt).toLocaleString(currentLocale()) : tl("now");
+  const end = endsAt ? new Date(endsAt).toLocaleString(currentLocale()) : tl("no end date");
   return `${start} → ${end}`;
 }
 
 function formatAmount(discountType: DiscountType, amount: number): string {
-  return discountType === "percent" ? `${amount}% off` : `${amount.toLocaleString()} VND off`;
+  return discountType === "percent" ? tl("{{amount}}% off", { amount }) : tl("{{amount}} VND off", { amount: amount.toLocaleString(currentLocale()) });
 }
 
 function DiscountTypeAmountFields({
@@ -52,19 +53,19 @@ function DiscountTypeAmountFields({
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
-        <label className="mb-1.5 block text-caption font-medium text-fg-muted">Discount type</label>
+        <label className="mb-1.5 block text-caption font-medium text-fg-muted">{tl("Discount type")}</label>
         <select
           value={discountType}
           onChange={(e) => onDiscountTypeChange(e.target.value as DiscountType)}
           className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
         >
-          <option value="percent">Percent</option>
-          <option value="fixed">Fixed amount (VND)</option>
+          <option value="percent">{tl("Percent")}</option>
+          <option value="fixed">{tl("Fixed amount (VND)")}</option>
         </select>
       </div>
       <div>
         <label className="mb-1.5 block text-caption font-medium text-fg-muted">
-          Amount {discountType === "percent" ? "(%)" : "(VND)"}
+          {tl("Amount")}{" "}{discountType === "percent" ? "(%)" : tl("(VND)")}
         </label>
         <input
           type="number"
@@ -92,7 +93,7 @@ function ScheduleFields({
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
-        <label className="mb-1.5 block text-caption font-medium text-fg-muted">Starts at (optional)</label>
+        <label className="mb-1.5 block text-caption font-medium text-fg-muted">{tl("Starts at (optional)")}</label>
         <input
           type="datetime-local"
           value={startsAt}
@@ -101,7 +102,7 @@ function ScheduleFields({
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-caption font-medium text-fg-muted">Ends at (optional)</label>
+        <label className="mb-1.5 block text-caption font-medium text-fg-muted">{tl("Ends at (optional)")}</label>
         <input
           type="datetime-local"
           value={endsAt}
@@ -127,17 +128,17 @@ function PlanPackDiscounts({
   onError: (msg: string) => void;
 }) {
   const targets = [
-    ...plans.map((p) => ({ value: `plan:${p.id}`, label: `${p.name} (plan)`, target_type: "plan" as const, target_id: p.id })),
-    ...packs.map((p) => ({ value: `pack:${p.id}`, label: `${p.label} (pack)`, target_type: "pack" as const, target_id: p.id })),
+    ...plans.map((p) => ({ value: `plan:${p.id}`, label: tl("{{name}} (plan)", { name: p.name }), target_type: "plan" as const, target_id: p.id })),
+    ...packs.map((p) => ({ value: `pack:${p.id}`, label: tl("{{label}} (pack)", { label: p.label }), target_type: "pack" as const, target_id: p.id })),
   ];
 
   function targetLabel(targetType: "plan" | "pack", targetId: string): string {
     if (targetType === "plan") {
       const plan = plans.find((p) => p.id === targetId);
-      return plan ? `${plan.name} (plan)` : `${targetId} (plan)`;
+      return tl("{{name}} (plan)", { name: plan ? plan.name : targetId });
     }
     const pack = packs.find((p) => p.id === targetId);
-    return pack ? `${pack.label} (pack)` : `${targetId} (pack)`;
+    return tl("{{name}} (pack)", { name: pack ? pack.label : targetId });
   }
 
   const [targetValue, setTargetValue] = useState(targets[0]?.value ?? "");
@@ -202,10 +203,10 @@ function PlanPackDiscounts({
   return (
     <div className="space-y-4">
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="text-h2 font-semibold text-fg">New plan/pack discount</h2>
+        <h2 className="text-h2 font-semibold text-fg">{tl("New plan/pack discount")}</h2>
         <div className="mt-3 space-y-3">
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Target</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{tl("Target")}</label>
             <select
               value={targetValue}
               onChange={(e) => setTargetValue(e.target.value)}
@@ -213,7 +214,7 @@ function PlanPackDiscounts({
             >
               {targets.map((t) => (
                 <option key={t.value} value={t.value}>
-                  {t.label}
+                  {tl(t.label)}
                 </option>
               ))}
             </select>
@@ -227,7 +228,7 @@ function PlanPackDiscounts({
           <ScheduleFields startsAt={startsAt} endsAt={endsAt} onStartsAtChange={setStartsAt} onEndsAtChange={setEndsAt} />
           <div className="flex items-center gap-2.5">
             <Switch checked={active} onChange={setActive} />
-            <span className="text-body text-fg-muted">Active</span>
+            <span className="text-body text-fg-muted">{tl("Active")}</span>
           </div>
           <button
             type="button"
@@ -235,15 +236,14 @@ function PlanPackDiscounts({
             onClick={handleCreate}
             className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {creating ? "Creating…" : "Create discount"}
+            {creating ? tl("Creating…") : tl("Create discount")}
           </button>
         </div>
       </div>
 
       {discounts.length === 0 ? (
         <div className="rounded-card border border-border bg-surface p-6 text-body text-fg-subtle">
-          No plan or pack discounts yet.
-        </div>
+          {tl("No plan or pack discounts yet.")}</div>
       ) : (
         <div className="divide-y divide-border rounded-card border border-border bg-surface shadow-card">
           {discounts.map((d) => (
@@ -265,8 +265,7 @@ function PlanPackDiscounts({
                   onClick={() => remove(d)}
                   className="cursor-pointer rounded-control px-3 py-1.5 text-caption font-medium text-destructive transition hover:bg-destructive-bg disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Delete
-                </button>
+                  {tl("Delete")}</button>
               </div>
             </div>
           ))}
@@ -349,15 +348,15 @@ function DiscountCodes({
   return (
     <div className="space-y-4">
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="text-h2 font-semibold text-fg">New discount code</h2>
+        <h2 className="text-h2 font-semibold text-fg">{tl("New discount code")}</h2>
         <div className="mt-3 space-y-3">
           <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">Code</label>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{tl("Code")}</label>
             <input
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="e.g. WELCOME10"
+              placeholder={tl("e.g. WELCOME10")}
               className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 font-mono text-body uppercase text-fg outline-none focus-visible:border-accent"
             />
           </div>
@@ -370,20 +369,19 @@ function DiscountCodes({
           <ScheduleFields startsAt={startsAt} endsAt={endsAt} onStartsAtChange={setStartsAt} onEndsAtChange={setEndsAt} />
           <div>
             <label className="mb-1.5 block text-caption font-medium text-fg-muted">
-              Max redemptions (blank = unlimited)
-            </label>
+              {tl("Max redemptions (blank = unlimited)")}</label>
             <input
               type="number"
               min={1}
               value={maxRedemptions}
               onChange={(e) => setMaxRedemptions(e.target.value)}
-              placeholder="Unlimited"
+              placeholder={tl("Unlimited")}
               className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
             />
           </div>
           <div className="flex items-center gap-2.5">
             <Switch checked={active} onChange={setActive} />
-            <span className="text-body text-fg-muted">Active</span>
+            <span className="text-body text-fg-muted">{tl("Active")}</span>
           </div>
           <button
             type="button"
@@ -391,15 +389,14 @@ function DiscountCodes({
             onClick={handleCreate}
             className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {creating ? "Creating…" : "Create code"}
+            {creating ? tl("Creating…") : tl("Create code")}
           </button>
         </div>
       </div>
 
       {codes.length === 0 ? (
         <div className="rounded-card border border-border bg-surface p-6 text-body text-fg-subtle">
-          No discount codes yet.
-        </div>
+          {tl("No discount codes yet.")}</div>
       ) : (
         <div className="divide-y divide-border rounded-card border border-border bg-surface shadow-card">
           {codes.map((c) => (
@@ -410,7 +407,7 @@ function DiscountCodes({
                 <p className="mt-0.5 text-caption text-fg-subtle">{formatSchedule(c.starts_at, c.ends_at)}</p>
                 <p className="mt-0.5 text-caption text-fg-subtle">
                   {c.max_redemptions === null
-                    ? `${c.redemption_count} used (unlimited)`
+                    ? tl("{{redemption_count}} used (unlimited)", { redemption_count: c.redemption_count })
                     : `${c.redemption_count} / ${c.max_redemptions} used`}
                 </p>
               </div>
@@ -426,8 +423,7 @@ function DiscountCodes({
                   onClick={() => remove(c)}
                   className="cursor-pointer rounded-control px-3 py-1.5 text-caption font-medium text-destructive transition hover:bg-destructive-bg disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Delete
-                </button>
+                  {tl("Delete")}</button>
               </div>
             </div>
           ))}
@@ -470,17 +466,16 @@ export default function DiscountsPage() {
     }
   }
 
-  if (loading) return <p className="text-body text-fg-muted">Loading…</p>;
+  if (loading) return <p className="text-body text-fg-muted">{tl("Loading…")}</p>;
 
   return (
     <div className="space-y-8">
       {error && <p className="text-caption text-destructive">{error}</p>}
 
       <div>
-        <h2 className="text-h2 font-semibold text-fg">Plan & pack discounts</h2>
+        <h2 className="text-h2 font-semibold text-fg">{tl("Plan & pack discounts")}</h2>
         <p className="mt-1 text-caption text-fg-muted">
-          Apply a direct discount to a specific plan or credit pack, with an optional schedule.
-        </p>
+          {tl("Apply a direct discount to a specific plan or credit pack, with an optional schedule.")}</p>
         <div className="mt-3">
           <PlanPackDiscounts
             plans={plans}
@@ -493,10 +488,9 @@ export default function DiscountsPage() {
       </div>
 
       <div>
-        <h2 className="text-h2 font-semibold text-fg">Discount codes</h2>
+        <h2 className="text-h2 font-semibold text-fg">{tl("Discount codes")}</h2>
         <p className="mt-1 text-caption text-fg-muted">
-          Codes users can type in at checkout. Redemptions are tracked automatically.
-        </p>
+          {tl("Codes users can type in at checkout. Redemptions are tracked automatically.")}</p>
         <div className="mt-3">
           <DiscountCodes codes={discountCodes} onChanged={handleChanged} onError={setError} />
         </div>

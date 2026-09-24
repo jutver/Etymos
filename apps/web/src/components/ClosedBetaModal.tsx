@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Flask } from "@phosphor-icons/react";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
+import { t } from "../lib/i18n";
 
 const STORAGE_KEY = "etymos-closed-beta-notice-seen";
 
@@ -28,16 +29,11 @@ export function ClosedBetaModal() {
           <Flask size={22} weight="fill" />
         </div>
         <h2 id="closed-beta-title" className="mt-4 text-h3 font-bold tracking-tight text-navy-900">
-          Etymos is in closed beta
-        </h2>
+          {t("Etymos is in closed beta")}</h2>
         <p className="mt-2.5 text-sm leading-relaxed text-ink-600">
-          This is an early version of the product, open to a small group of invited users while we
-          refine it. You're welcome to look around — signing up adds you to the waitlist, and we'll
-          let you in as we widen access. Expect rough edges, and thank you for the patience.
-        </p>
+          {t("This is an early version of the product, open to a small group of invited users while we refine it. You're welcome to look around — signing up adds you to the waitlist, and we'll let you in as we widen access. Expect rough edges, and thank you for the patience.")}</p>
         <Button fullWidth size="lg" className="mt-6" onClick={dismiss}>
-          Got it
-        </Button>
+          {t("Got it")}</Button>
       </div>
     </Modal>
   );

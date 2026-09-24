@@ -1,4 +1,5 @@
 import { supabase } from "@etymos/shared";
+import { tr, t } from "./i18n";
 
 export interface BackendJob {
   job_id: string;
@@ -16,6 +17,10 @@ export interface BackendReport {
   overall_score: number;
   total_input_chunks: number;
   input_text?: string;
+  /** AI-generated-content detection (backend/ai_detector.py). Raw snake_case
+   * block — parse it with `parseAiDetection` (lib/aiDetection.ts). Absent on
+   * reports produced before the detector existed. */
+  ai_detection?: unknown;
   matched_papers: Array<{
     source_paper_id: string;
     source_title: string;
@@ -135,14 +140,14 @@ async function errorMessageFromResponse(response: Response): Promise<string> {
   } catch {
     // response wasn't JSON — fall back to raw text
   }
-  return text || `Request failed with ${response.status}`;
+  return text || t("Request failed with {{status}}", { status: response.status });
 }
 
 async function getAuthHeader(): Promise<Record<string, string>> {
   const { data, error } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
   if (error || !accessToken) {
-    throw new Error("Your session has expired. Please sign in again and retry.");
+    throw new Error(tr("Your session has expired. Please sign in again and retry."));
   }
   return { Authorization: `Bearer ${accessToken}` };
 }

@@ -9,6 +9,8 @@
 import { supabase } from "@etymos/shared";
 import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSource } from "@etymos/shared";
 import type { DocumentVersion } from "../screens/Report/VersionHistoryMenu";
+import { parseAiDetection } from "./aiDetection";
+import { tr } from "./i18n";
 
 interface DocumentRow {
   id: string;
@@ -31,6 +33,9 @@ interface DocumentRow {
   check_state?: CheckState | null;
   check_job_id?: string | null;
   check_error?: string | null;
+  // Added by supabase/migrations/20260727000100_documents_ai_detection.sql.
+  // Optional in the type so rows read before that migration is applied still parse.
+  ai_detection?: unknown;
 }
 
 /** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
@@ -86,7 +91,7 @@ interface DocumentPassageRow {
 function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
   return {
     id: row.id,
-    title: row.title ?? "Untitled document",
+    title: row.title ?? tr("Untitled document"),
     fileName: row.file_name ?? undefined,
     date: row.uploaded_at.slice(0, 10),
     similarityScore: row.similarity_score != null ? Number(row.similarity_score) : 0,
@@ -175,7 +180,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
 
   return {
     id: docRow.id,
-    title: docRow.title ?? "Untitled document",
+    title: docRow.title ?? tr("Untitled document"),
     fileName: docRow.file_name ?? "",
     language: (docRow.language ?? "vi") as CheckedDocument["language"],
     wordCount: docRow.word_count ?? 0,
@@ -186,6 +191,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     academicSourcesScanned: docRow.academic_sources_scanned ?? 0,
     passages,
     matches,
+    aiDetection: parseAiDetection(docRow.ai_detection),
   };
 }
 

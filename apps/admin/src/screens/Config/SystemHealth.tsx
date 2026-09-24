@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, XCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -19,12 +20,12 @@ async function checkBackendHealth(): Promise<{ ok: boolean; latencyMs: number | 
     const response = await fetch(`${API_BASE_URL}/api/health`);
     const latencyMs = Math.round(performance.now() - start);
     if (!response.ok) {
-      return { ok: false, latencyMs, detail: `Responded with HTTP ${response.status}` };
+      return { ok: false, latencyMs, detail: t("Responded with HTTP {{status}}", { status: response.status }) };
     }
     const body = (await response.json()) as { status?: string; service?: string };
-    return { ok: body.status === "ok", latencyMs, detail: body.service ?? "Responding" };
+    return { ok: body.status === "ok", latencyMs, detail: body.service ?? tr("Responding") };
   } catch {
-    return { ok: false, latencyMs: null, detail: "Unreachable — check the backend deployment" };
+    return { ok: false, latencyMs: null, detail: tr("Unreachable — check the backend deployment") };
   }
 }
 
@@ -54,8 +55,8 @@ function Indicator({ ok, label, detail }: { ok: boolean; label: string; detail: 
         <XCircle size={22} weight="fill" className="shrink-0 text-destructive" />
       )}
       <div>
-        <p className="text-body font-medium text-fg">{label}</p>
-        <p className="text-caption text-fg-muted">{detail}</p>
+        <p className="text-body font-medium text-fg">{t(label)}</p>
+        <p className="text-caption text-fg-muted">{t(detail)}</p>
       </div>
     </div>
   );
@@ -80,7 +81,7 @@ export default function SystemHealthPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-caption text-fg-subtle">
-          {health ? `Checked ${new Date(health.checkedAt).toLocaleTimeString()}` : ""}
+          {health ? t("Checked {{toLocaleTimeString}}", { toLocaleTimeString: new Date(health.checkedAt).toLocaleTimeString(currentLocale()) }) : ""}
         </p>
         <button
           type="button"
@@ -88,30 +89,30 @@ export default function SystemHealthPage() {
           disabled={loading}
           className="cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Checking…" : "Recheck"}
+          {loading ? t("Checking…") : t("Recheck")}
         </button>
       </div>
 
       {loading && !health ? (
-        <p className="text-body text-fg-muted">Checking…</p>
+        <p className="text-body text-fg-muted">{t("Checking…")}</p>
       ) : (
         health && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Indicator
               ok={health.connectivityOk}
-              label="Supabase connectivity"
+              label={t("Supabase connectivity")}
               detail={
                 health.connectivityOk
-                  ? `Responding (${health.latencyMs}ms)`
-                  : "Query failed — check RLS policies and credentials"
+                  ? t("Responding ({{ms}}ms)", { ms: health.latencyMs ?? "?" })
+                  : t("Query failed — check RLS policies and credentials")
               }
             />
             <Indicator
               ok={health.backendOk}
-              label="Backend API"
+              label={t("Backend API")}
               detail={
                 health.backendOk
-                  ? `${health.backendDetail} (${health.backendLatencyMs}ms)`
+                  ? t("{{detail}} ({{ms}}ms)", { detail: health.backendDetail, ms: health.backendLatencyMs ?? "?" })
                   : health.backendDetail
               }
             />

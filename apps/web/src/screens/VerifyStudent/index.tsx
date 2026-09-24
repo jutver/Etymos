@@ -13,6 +13,7 @@ import { supabase } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
 import { useAppStore } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
+import { t, tr } from "../../lib/i18n";
 
 const EVIDENCE_BUCKET = "student-verification";
 
@@ -85,14 +86,14 @@ export default function VerifyStudentPage() {
       setSubmitted(true);
       pushToast({
         kind: "success",
-        title: "Submitted for review",
-        description: "We'll email you once an admin has reviewed your document.",
+        title: tr("Submitted for review"),
+        description: tr("We'll email you once an admin has reviewed your document."),
       });
     } catch (err) {
       pushToast({
         kind: "error",
-        title: "Couldn't submit verification",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: tr("Couldn't submit verification"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
       });
     } finally {
       setSubmitting(false);
@@ -106,24 +107,24 @@ export default function VerifyStudentPage() {
           <Clock size={24} weight="fill" />
         </div>
         <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">
-          {submitted ? "Submitted for review" : "Verification in progress"}
+          {submitted ? t("Submitted for review") : t("Verification in progress")}
         </h1>
         <p className="mt-1.5 text-sm text-ink-500">
           {submitted
-            ? "Your document was uploaded and a verification request is now pending. An admin will review it and your account will be updated automatically once it's approved."
-            : "We already have a verification request from you and it's currently being reviewed by an admin. Your account will be updated automatically once a decision is made."}
+            ? t("Your document was uploaded and a verification request is now pending. An admin will review it and your account will be updated automatically once it's approved.")
+            : t("We already have a verification request from you and it's currently being reviewed by an admin. Your account will be updated automatically once a decision is made.")}
         </p>
 
         <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface-tint px-5 py-3.5">
             <CheckCircle size={22} weight="fill" className="shrink-0 text-brand-600" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-ink-900">Verification pending</p>
-              <p className="text-xs text-ink-500">We'll let you know as soon as a decision is made.</p>
+              <p className="text-sm font-semibold text-ink-900">{t("Verification pending")}</p>
+              <p className="text-xs text-ink-500">{t("We'll let you know as soon as a decision is made.")}</p>
             </div>
           </div>
           <p className="mt-4 text-xs text-ink-400">
-            Think this is a mistake? <a href="mailto:support@etymos.ai" className="font-semibold text-brand-600 underline underline-offset-2">Contact support</a>.
+            {t("Think this is a mistake?")}{" "}<a href="mailto:support@etymos.ai" className="font-semibold text-brand-600 underline underline-offset-2">{t("Contact support")}</a>.
           </p>
 
           <Button
@@ -138,8 +139,7 @@ export default function VerifyStudentPage() {
               }
             }}
           >
-            Continue
-          </Button>
+            {t("Continue")}</Button>
         </div>
       </div>
     );
@@ -151,20 +151,18 @@ export default function VerifyStudentPage() {
         <div className="flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
           <CheckCircle size={24} weight="fill" />
         </div>
-        <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">You're already verified</h1>
+        <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">{t("You're already verified")}</h1>
         <p className="mt-1.5 text-sm text-ink-500">
-          Your student status has already been approved — no further action is needed.
-        </p>
+          {t("Your student status has already been approved — no further action is needed.")}</p>
         <Button size="lg" className="mt-6" onClick={() => navigate("/account/plan")}>
-          Go to My Plan
-        </Button>
+          {t("Go to My Plan")}</Button>
       </div>
     );
   }
 
   if (checkingExisting) {
     return (
-      <div className="mx-auto max-w-xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>
+      <div className="mx-auto max-w-xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">{t("Loading…")}</div>
     );
   }
 
@@ -173,20 +171,17 @@ export default function VerifyStudentPage() {
       <div className="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-600">
         <GraduationCap size={24} weight="fill" />
       </div>
-      <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">Verify your student status</h1>
+      <h1 className="mt-4 text-h2 font-bold tracking-tight text-navy-900">{t("Verify your student status")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
-        Standard requires a quick one-time verification. Upload a photo of your student ID or
-        an enrollment document to continue.
-      </p>
+        {t("Standard requires a quick one-time verification. Upload a photo of your student ID or an enrollment document to continue.")}</p>
 
       {existingStatus === "rejected" && (
         <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-4 py-3.5 text-sm text-severity-high">
           <Warning size={20} weight="fill" className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Your previous submission was rejected</p>
+            <p className="font-semibold">{t("Your previous submission was rejected")}</p>
             <p className="mt-0.5 text-severity-high/90">
-              Please upload a clearer document and resubmit for review.
-            </p>
+              {t("Please upload a clearer document and resubmit for review.")}</p>
           </div>
         </div>
       )}
@@ -202,12 +197,12 @@ export default function VerifyStudentPage() {
               />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-ink-900">{file.name}</p>
-                <p className="text-xs text-ink-500">Ready to submit</p>
+                <p className="text-xs text-ink-500">{t("Ready to submit")}</p>
               </div>
             </div>
             <button
               onClick={() => setFile(null)}
-              aria-label="Remove file"
+              aria-label={t("Remove file")}
               className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-white hover:text-severity-high"
             >
               <X size={16} />
@@ -234,14 +229,12 @@ export default function VerifyStudentPage() {
               <UploadSimple size={26} weight="bold" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-ink-900">Drag & drop your document here</p>
+              <p className="text-sm font-semibold text-ink-900">{t("Drag & drop your document here")}</p>
               <p className="mt-1 text-xs text-ink-500">
-                or <span className="font-semibold text-brand-600">browse files</span> on your computer
-              </p>
+                {t("or")}{" "}<span className="font-semibold text-brand-600">{t("browse files")}</span>{" "}{t("on your computer")}</p>
             </div>
             <p className="flex items-center gap-1.5 text-[0.6875rem] text-ink-300">
-              <FileImage size={13} /> JPG, PNG, or PDF of a student ID or enrollment letter
-            </p>
+              <FileImage size={13} />{" "}{t("JPG, PNG, or PDF of a student ID or enrollment letter")}</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -264,11 +257,10 @@ export default function VerifyStudentPage() {
           iconLeft={<CheckCircle size={18} weight="fill" />}
           onClick={submit}
         >
-          {submitting ? "Submitting..." : "Submit for verification"}
+          {submitting ? t("Submitting...") : t("Submit for verification")}
         </Button>
         <p className="mt-3 text-center text-[0.6875rem] text-ink-400">
-          Your document is stored securely and reviewed by an admin before your account is verified.
-        </p>
+          {t("Your document is stored securely and reviewed by an admin before your account is verified.")}</p>
       </div>
     </div>
   );

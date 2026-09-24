@@ -16,6 +16,7 @@ import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { cn } from "@etymos/shared";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
@@ -26,10 +27,10 @@ function purchaseTone(status: PurchaseStatus): BadgeTone {
 }
 
 const STATUS_TABS: { key: PurchaseStatus | "all"; label: string }[] = [
-  { key: "pending", label: "Pending" },
-  { key: "success", label: "Approved" },
-  { key: "declined", label: "Declined" },
-  { key: "all", label: "All" },
+  { key: "pending", label: tr("Pending") },
+  { key: "success", label: tr("Approved") },
+  { key: "declined", label: tr("Declined") },
+  { key: "all", label: tr("All") },
 ];
 
 function formatVND(amount: number | null): string {
@@ -86,13 +87,13 @@ export default function PurchasesPage() {
 
   function describeItem(r: PurchaseRequest): string {
     if (r.kind === "plan") {
-      return `${r.plan_tier ?? "—"} plan${r.billing_cycle ? ` · ${r.billing_cycle}` : ""}`;
+      return t("{{tier}} plan", { tier: r.plan_tier ?? "—" }) + (r.billing_cycle ? ` · ${r.billing_cycle}` : "");
     }
     const pack = packs.find((p) => p.id === r.pack_id);
     const qty = r.quantity ?? 1;
     const label = qty > 1 ? `${pack?.label ?? r.pack_id ?? "—"} ×${qty}` : (pack?.label ?? r.pack_id ?? "—");
     if (!pack) return label;
-    return `${label} · ${pack.checks * qty} checks`;
+    return t("{{label}} · {{count}} checks", { label, count: pack.checks * qty });
   }
 
   async function handleApprove(row: PurchaseRequest) {
@@ -104,7 +105,7 @@ export default function PurchasesPage() {
       // false means another admin already reviewed this event — not an error,
       // but the list is stale, so surface it rather than silently reloading.
       if (!granted) {
-        setError("This request was already reviewed by someone else. Refreshing.");
+        setError(tr("This request was already reviewed by someone else. Refreshing."));
       }
       reload();
     } catch (err) {
@@ -132,12 +133,12 @@ export default function PurchasesPage() {
   const columns: Column<PurchaseRequest>[] = [
     {
       key: "requester",
-      label: "Requester",
+      label: tr("Requester"),
       render: (r) => r.profiles?.email ?? r.profiles?.display_name ?? r.user_id,
     },
     {
       key: "item",
-      label: "Item",
+      label: tr("Item"),
       render: (r) => (
         <span className="flex items-center gap-2">
           <StatusBadge label={r.kind} tone={r.kind === "plan" ? "accent" : "info"} />
@@ -147,22 +148,22 @@ export default function PurchasesPage() {
     },
     {
       key: "amount",
-      label: "Amount",
+      label: tr("Amount"),
       render: (r) => <span className="font-mono">{formatVND(r.amount)}</span>,
     },
     {
       key: "status",
-      label: "Status",
+      label: tr("Status"),
       render: (r) => <StatusBadge label={r.status} tone={purchaseTone(r.status)} />,
     },
     {
       key: "created_at",
-      label: "Requested",
-      render: (r) => new Date(r.created_at).toLocaleDateString(),
+      label: tr("Requested"),
+      render: (r) => new Date(r.created_at).toLocaleDateString(currentLocale()),
     },
     {
       key: "actions",
-      label: "Actions",
+      label: tr("Actions"),
       className: "text-right",
       render: (r) =>
         r.status === "pending" ? (
@@ -171,7 +172,7 @@ export default function PurchasesPage() {
               type="button"
               disabled={actingId === r.id}
               onClick={() => handleApprove(r)}
-              title="Approve and grant"
+              title={t("Approve and grant")}
               className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-success/40 bg-success-bg text-success transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={14} weight="bold" />
@@ -180,7 +181,7 @@ export default function PurchasesPage() {
               type="button"
               disabled={actingId === r.id}
               onClick={() => setDeclining(r)}
-              title="Decline"
+              title={t("Decline")}
               className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-destructive/40 bg-destructive-bg text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X size={14} weight="bold" />
@@ -211,7 +212,7 @@ export default function PurchasesPage() {
                   : "text-fg-muted hover:bg-surface-raised hover:text-fg",
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </div>
@@ -227,7 +228,7 @@ export default function PurchasesPage() {
               setPage(0);
               setSearch(e.target.value);
             }}
-            placeholder="Search by plan or pack…"
+            placeholder={t("Search by plan or pack…")}
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
@@ -241,7 +242,7 @@ export default function PurchasesPage() {
           rows={rows}
           rowKey={(r) => r.id}
           loading={loading}
-          emptyMessage="No purchase requests found."
+          emptyMessage={t("No purchase requests found.")}
           page={page}
           pageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}
           onPageChange={setPage}
@@ -250,9 +251,9 @@ export default function PurchasesPage() {
 
       {declining && (
         <ReviewNoteDialog
-          title="Decline purchase"
-          description={`No plan or credits will be granted for this ${declining.kind} request.`}
-          confirmLabel="Decline"
+          title={t("Decline purchase")}
+          description={t("No plan or credits will be granted for this {{kind}} request.", { kind: declining.kind })}
+          confirmLabel={t("Decline")}
           pending={actingId === declining.id}
           onCancel={() => setDeclining(null)}
           onConfirm={(note) => handleDecline(declining, note)}

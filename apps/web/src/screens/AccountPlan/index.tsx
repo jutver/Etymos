@@ -19,6 +19,7 @@ import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
+import { t, tr, tn, currentLocale } from "../../lib/i18n";
 
 export default function AccountPlanPage() {
   const navigate = useNavigate();
@@ -70,7 +71,7 @@ export default function AccountPlanPage() {
   function cancelSubscription() {
     cancelSubscriptionAction();
     setConfirmCancel(false);
-    pushToast({ kind: "info", title: "Subscription canceled", description: "You're back on the Free plan." });
+    pushToast({ kind: "info", title: tr("Subscription canceled"), description: tr("You're back on the Free plan.") });
   }
 
   function buyPack(packId: CreditPack["id"]) {
@@ -81,19 +82,17 @@ export default function AccountPlanPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
-      <h1 className="text-h1 font-bold tracking-tight text-navy-900">My Plan</h1>
-      <p className="mt-1.5 text-sm text-ink-500">Usage, billing, and subscription in one place.</p>
+      <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Plan")}</h1>
+      <p className="mt-1.5 text-sm text-ink-500">{t("Usage, billing, and subscription in one place.")}</p>
 
       {pending && (
         <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
-            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
             <p className="mt-0.5 text-sm text-ink-500">
-              {describePurchaseRequest(pending)}, requested{" "}
-              {new Date(pending.createdAt).toLocaleDateString("vi-VN")}. An admin confirms your payment before
-              the change is applied — you can't submit another request until then.
-            </p>
+              {t(describePurchaseRequest(pending))}{t(", requested")}{" "}
+              {new Date(pending.createdAt).toLocaleDateString(currentLocale())}{t(". An admin confirms your payment before the change is applied — you can't submit another request until then.")}</p>
           </div>
         </div>
       )}
@@ -101,14 +100,13 @@ export default function AccountPlanPage() {
       <section className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Current plan</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Current plan")}</p>
             <p className="flex items-center gap-2 text-2xl font-extrabold text-navy-900">
-              {planLabel(plan)}
+              {t(planLabel(plan))}
               {plan === "student" && studentVerified && (
                 <span className="flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-bold text-success">
                   <GraduationCap size={13} weight="fill" />
-                  Verified
-                </span>
+                  {t("Verified")}</span>
               )}
             </p>
           </div>
@@ -116,31 +114,27 @@ export default function AccountPlanPage() {
         </div>
 
         <p className="mt-4 text-xs text-ink-500">
-          {checksUsedThisPeriod} of {planDocLimit(plan)} checks used this cycle.
-        </p>
+          {t("{{used}} of {{limit}} checks used this cycle.", { used: checksUsedThisPeriod, limit: planDocLimit(plan) })}</p>
 
         <div className="mt-4 flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-surface-tint px-4 py-2.5 text-sm text-ink-700">
           <CalendarBlank size={16} className="text-ink-400" />
-          Usage resets in {daysLeft} day{daysLeft === 1 ? "" : "s"} ({resetDate.toLocaleDateString("vi-VN")})
+          {tn(daysLeft, "Usage resets in {{count}} day", "Usage resets in {{count}} days")} ({resetDate.toLocaleDateString(currentLocale())})
         </div>
       </section>
 
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink-900">
           <ShieldCheck size={17} weight="bold" />
-          Subscription management
-        </h2>
+          {t("Subscription management")}</h2>
 
         <div className="mt-4 flex items-center justify-between rounded-[var(--radius-control)] border border-line px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-ink-900">Payment method</p>
+            <p className="text-sm font-semibold text-ink-900">{t("Payment method")}</p>
             <p className="text-xs text-ink-500">
-              {PAYMENT_METHODS.find((m) => m.id === method)?.label} on file (demo)
-            </p>
+              {t(PAYMENT_METHODS.find((m) => m.id === method)?.label)}{" "}{t("on file (demo)")}</p>
           </div>
           <Button variant="outline" size="sm" iconLeft={<CreditCard size={15} />} onClick={() => setMethodOpen((v) => !v)}>
-            Manage
-          </Button>
+            {t("Manage")}</Button>
         </div>
 
         {methodOpen && (
@@ -155,9 +149,9 @@ export default function AccountPlanPage() {
                 )}
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-line">
-                  <img src={m.logo} alt={m.label} className="size-6 object-contain" />
+                  <img src={m.logo} alt={t(m.label)} className="size-6 object-contain" />
                 </span>
-                <span className="text-sm font-semibold text-ink-900">{m.label}</span>
+                <span className="text-sm font-semibold text-ink-900">{t(m.label)}</span>
                 {method === m.id && <Check size={15} weight="bold" className="ml-auto text-brand-600" />}
               </button>
             ))}
@@ -169,30 +163,26 @@ export default function AccountPlanPage() {
             {confirmCancel ? (
               <div className="flex items-center gap-3 rounded-[var(--radius-control)] border border-severity-high-line bg-severity-high-bg px-4 py-3 text-sm text-severity-high">
                 <WarningCircle size={18} weight="fill" className="shrink-0" />
-                <span className="flex-1">Cancel your subscription? You'll drop to the Free plan immediately.</span>
+                <span className="flex-1">{t("Cancel your subscription? You'll drop to the Free plan immediately.")}</span>
                 <Button size="sm" variant="danger" onClick={cancelSubscription}>
-                  Confirm
-                </Button>
+                  {t("Confirm")}</Button>
                 <Button size="sm" variant="ghost" onClick={() => setConfirmCancel(false)}>
-                  Keep plan
-                </Button>
+                  {t("Keep plan")}</Button>
               </div>
             ) : (
               <Button variant="outline" onClick={() => setConfirmCancel(true)}>
-                Cancel subscription
-              </Button>
+                {t("Cancel subscription")}</Button>
             )}
           </div>
         ) : (
           <p className="mt-5 text-sm text-ink-500">
-            You're on the Free plan. Choose a plan below to unlock unlimited checks.
-          </p>
+            {t("You're on the Free plan. Choose a plan below to unlock unlimited checks.")}</p>
         )}
       </section>
 
       <section className="mt-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-h3 font-bold tracking-tight text-navy-900">Change plan</h2>
+          <h2 className="text-h3 font-bold tracking-tight text-navy-900">{t("Change plan")}</h2>
           <div className="inline-flex items-center gap-1 self-start rounded-full bg-surface-muted p-1">
             <button
               onClick={() => setBillingCycle("monthly")}
@@ -201,8 +191,7 @@ export default function AccountPlanPage() {
                 billingCycle === "monthly" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
               )}
             >
-              Monthly
-            </button>
+              {t("Monthly")}</button>
             <button
               onClick={() => setBillingCycle("annual")}
               className={cn(
@@ -210,9 +199,8 @@ export default function AccountPlanPage() {
                 billingCycle === "annual" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
               )}
             >
-              Annual
-              <span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
-                Save up to {maxAnnualSavings}%
+              {t("Annual")}<span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
+                {t("Save up to {{percent}}%", { percent: maxAnnualSavings })}
               </span>
             </button>
           </div>
@@ -221,8 +209,7 @@ export default function AccountPlanPage() {
           // PlanCard routes straight to checkout; while a request is pending
           // there is nothing to choose, so the grid is replaced outright.
           <p className="mt-5 rounded-[var(--radius-card)] border border-dashed border-line bg-surface-tint px-5 py-6 text-center text-sm text-ink-500">
-            Plan changes are paused while your {describePurchaseRequest(pending)} request is under review.
-          </p>
+            {t("Plan changes are paused while your {{request}} request is under review.", { request: describePurchaseRequest(pending) })}</p>
         ) : (
           <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
             {plans.map((p) => (
@@ -233,8 +220,8 @@ export default function AccountPlanPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-h3 font-bold tracking-tight text-navy-900">Buy credits</h2>
-        <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription required.</p>
+        <h2 className="text-h3 font-bold tracking-tight text-navy-900">{t("Buy credits")}</h2>
+        <p className="mt-1 text-sm text-ink-500">{t("For one-off checks, no subscription required.")}</p>
         <div className="mx-auto mt-6 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
           {creditPacks.map((pack) => (
             <div
@@ -243,12 +230,12 @@ export default function AccountPlanPage() {
             >
               {pack.badge && (
                 <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">
-                  {pack.badge}
+                  {t(pack.badge)}
                 </span>
               )}
-              <p className="text-lg font-bold text-navy-900">{pack.label}</p>
+              <p className="text-lg font-bold text-navy-900">{t(pack.label)}</p>
               <p className="mt-3 text-3xl font-extrabold text-navy-900">{formatVND(pack.price)}</p>
-              <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
+              <p className="mt-1 text-xs text-ink-500">{t(pack.description)}</p>
               <Button
                 variant="secondary"
                 fullWidth
@@ -256,14 +243,13 @@ export default function AccountPlanPage() {
                 disabled={!!pending}
                 onClick={() => buyPack(pack.id)}
               >
-                {pending ? "Request pending" : "Buy credits"}
+                {pending ? t("Request pending") : t("Buy credits")}
               </Button>
             </div>
           ))}
         </div>
         <p className="mt-4 text-xs text-ink-400">
-          Current credit balance: {standardCredits} standard, {premiumCredits} premium
-        </p>
+          {t("Current credit balance: {{standard}} standard, {{premium}} premium", { standard: standardCredits, premium: premiumCredits })}</p>
       </section>
     </div>
   );

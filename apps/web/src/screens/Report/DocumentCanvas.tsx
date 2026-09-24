@@ -25,6 +25,7 @@ import { BlockItem } from "./BlockItem";
 import { blocksFromRendered, newTableBlock, type DocBlock, type MatchColorIndex, type TableData } from "./blocks";
 import type { RenderedPassage } from "./highlights";
 import { replaceMarkWithText } from "./replaceMatch";
+import { t } from "../../lib/i18n";
 
 export type { MatchColorIndex } from "./blocks";
 
@@ -54,6 +55,13 @@ interface DocumentEditorProps {
   onInput: (text: string) => void;
   overLimitOffset: number | undefined;
   editorRef: React.RefObject<HTMLDivElement | null>;
+  /** Passage ids to give the paragraph-level "looks machine-written" wash —
+   * see highlights.ts's `mapAiSegmentsToPassages`. */
+  aiFlaggedPassageIds: Set<string>;
+  /** Block (== passage) id to scroll to and emphasise, set when the reader
+   * picks a paragraph from the AI Detection sidebar card. Reuses `focusTick`
+   * to re-trigger on repeat clicks, same as `activeMatchId`. */
+  activeAiBlockId: string | null;
 }
 
 /**
@@ -64,7 +72,7 @@ interface DocumentEditorProps {
  * a component with real state now instead of raw DOM content.
  */
 const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(function DocumentEditor(
-  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, overLimitOffset, editorRef },
+  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, overLimitOffset, editorRef, aiFlaggedPassageIds, activeAiBlockId },
   ref,
 ) {
   const [blocks, setBlocks] = useState<DocBlock[]>(() => blocksFromRendered(rendered));
@@ -172,14 +180,26 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeMatchId, focusTick, editorRef]);
 
+  // Scroll to the paragraph picked from the AI Detection sidebar card. A
+  // separate effect from the one above (not merged) because it targets the
+  // whole block wrapper (`data-block-id`, always present) rather than a
+  // `<mark>` (only plagiarism matches get one) — the block model already
+  // gives every block a stable, queryable id via BlockItemInner.
+  useEffect(() => {
+    if (!activeAiBlockId) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const target = editor.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(activeAiBlockId)}"]`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeAiBlockId, focusTick, editorRef]);
+
   if (blocks.length === 0) {
     return (
       <div className="flex flex-col items-center py-16 text-center">
         <FileDashed size={30} className="text-ink-300" />
-        <p className="mt-3 text-sm font-medium text-ink-700">No extracted text for this document</p>
+        <p className="mt-3 text-sm font-medium text-ink-700">{t("No extracted text for this document")}</p>
         <p className="mt-1 max-w-sm text-xs leading-relaxed text-ink-500">
-          Start typing to draft here, or open the original file from the toolbar above.
-        </p>
+          {t("Start typing to draft here, or open the original file from the toolbar above.")}</p>
       </div>
     );
   }
@@ -193,7 +213,7 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
       role="textbox"
       aria-multiline="true"
       aria-readonly={locked}
-      aria-label="Document text"
+      aria-label={t("Document text")}
       onFocusCapture={handleFocusCapture}
       onClick={handleClick}
       onInput={(e) => onInput((e.currentTarget as HTMLDivElement).innerText)}
@@ -218,6 +238,8 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
               overLimitOffset={overLimitOffset}
               locked={locked}
               onTableChange={handleTableChange}
+              aiFlagged={aiFlaggedPassageIds.has(block.id)}
+              aiActive={block.id === activeAiBlockId}
             />
           ))}
         </SortableContext>
@@ -250,6 +272,11 @@ export interface DocumentCanvasProps {
    * `Infinity` means the whole document is within the limit. Omitted
    * entirely also means "nothing is over the limit". */
   overLimitOffset?: number;
+  /** Passage ids flagged by AI-content detection — see DocumentEditorProps. */
+  aiFlaggedPassageIds: Set<string>;
+  /** Block id to scroll to and emphasise for the AI Detection sidebar's
+   * "jump to this paragraph" click. */
+  activeAiBlockId: string | null;
 }
 
 /**
@@ -265,7 +292,7 @@ export interface DocumentCanvasProps {
  * each paragraph's keystrokes, needs to be React-owned.
  */
 export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasProps>(function DocumentCanvas(
-  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, onPageChange, resetKey, editorRef, overLimitOffset },
+  { rendered, colorIndexByMatch, activeMatchId, focusTick, showHighlights, onSelectMatch, onClearSelection, locked, onInput, onPageChange, resetKey, editorRef, overLimitOffset, aiFlaggedPassageIds, activeAiBlockId },
   ref,
 ) {
   const innerRef = useRef<DocumentCanvasHandle>(null);
@@ -303,6 +330,8 @@ export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasPro
           onInput={onInput}
           overLimitOffset={overLimitOffset}
           editorRef={editorRef}
+          aiFlaggedPassageIds={aiFlaggedPassageIds}
+          activeAiBlockId={activeAiBlockId}
         />
       </div>
     </div>

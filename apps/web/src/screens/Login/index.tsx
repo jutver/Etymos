@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Envelope, Eye, EyeSlash, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
+import { t } from "../../lib/i18n";
 
 interface LocationState {
   from?: { pathname: string };
@@ -54,8 +55,8 @@ export default function LoginPage() {
 
   return (
     <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
-      <h1 className="text-h3 font-bold tracking-tight text-navy-900">Welcome back</h1>
-      <p className="mt-1.5 text-sm text-ink-500">Log in to continue to your Etymos account.</p>
+      <h1 className="text-h3 font-bold tracking-tight text-navy-900">{t("Welcome back")}</h1>
+      <p className="mt-1.5 text-sm text-ink-500">{t("Log in to continue to your Etymos account.")}</p>
 
       {error && (
         <div className="mt-5 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-severity-high-line bg-severity-high-bg px-4 py-3 text-sm text-severity-high">
@@ -66,7 +67,7 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">Email</span>
+          <span className="text-xs font-semibold text-ink-700">{t("Email")}</span>
           <div className="relative">
             <Envelope size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
@@ -81,7 +82,7 @@ export default function LoginPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">Password</span>
+          <span className="text-xs font-semibold text-ink-700">{t("Password")}</span>
           <div className="relative">
             <LockKey size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
@@ -89,13 +90,13 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your password"
+              placeholder={t("Your password")}
               className="w-full rounded-[var(--radius-control)] border border-line bg-white py-2.5 pl-10 pr-10 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("Hide password") : t("Show password")}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-500"
             >
               {showPassword ? <EyeSlash size={17} /> : <Eye size={17} />}
@@ -104,13 +105,12 @@ export default function LoginPage() {
         </label>
 
         <Button type="submit" size="lg" loading={loading} fullWidth className="mt-1">
-          Log in
-        </Button>
+          {t("Log in")}</Button>
       </form>
 
       <div className="my-5 flex items-center gap-3">
         <div className="h-px flex-1 bg-line" />
-        <span className="text-xs font-medium text-ink-400">or</span>
+        <span className="text-xs font-medium text-ink-400">{t("or")}</span>
         <div className="h-px flex-1 bg-line" />
       </div>
 
@@ -122,14 +122,12 @@ export default function LoginPage() {
         onClick={handleGoogleOAuth}
         iconLeft={<img src="/assets/logo/google.png" alt="" className="size-[18px] object-contain" />}
       >
-        Continue with Google
-      </Button>
+        {t("Continue with Google")}</Button>
 
       <p className="mt-6 text-center text-sm text-ink-600">
-        New to Etymos?{" "}
+        {t("New to Etymos?")}{" "}
         <Link to="/signup" className="font-semibold text-brand-600 hover:underline">
-          Create an account
-        </Link>
+          {t("Create an account")}</Link>
       </p>
     </div>
   );

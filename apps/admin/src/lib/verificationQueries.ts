@@ -2,6 +2,7 @@ import { supabase } from "@etymos/shared";
 import type { Profile } from "./types";
 import type { PagedResult } from "./supabaseQueries";
 import { PAGE_SIZE } from "./supabaseQueries";
+import { tr } from "./i18n";
 
 export type VerificationStatus = "pending" | "approved" | "rejected";
 
@@ -87,6 +88,6 @@ export async function getEvidenceSignedUrl(storagePath: string): Promise<string>
     .from(EVIDENCE_BUCKET)
     .createSignedUrl(storagePath, 300);
   if (error) throw error;
-  if (!data?.signedUrl) throw new Error("Could not generate a preview link for this file.");
+  if (!data?.signedUrl) throw new Error(tr("Could not generate a preview link for this file."));
   return data.signedUrl;
 }

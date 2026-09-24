@@ -357,6 +357,12 @@ def check_text_plagiarism(
     }
     final_report["queries"] = queries
 
+    # AI-content detection + plain-language explanations (additive, never
+    # raises; progress values continue on from "building_report" at 95).
+    from report_enrichment import enrich_report
+
+    enrich_report(final_report, progress_callback, progress_points=(96, 98))
+
     warnings: list[str] = []
 
     if unavailable_papers > 0:

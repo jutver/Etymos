@@ -1,16 +1,17 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
 
 const TABS = [
-  { to: "/pricing/plans", label: "Plans & packs" },
-  { to: "/pricing/discounts", label: "Discounts" },
+  { to: "/pricing/plans", label: tr("Plans & packs") },
+  { to: "/pricing/discounts", label: tr("Discounts") },
 ];
 
 export function PricingLayout() {
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">Pricing</h1>
-      <p className="mt-1 text-body text-fg-muted">Plans, credit packs, and discounts.</p>
+      <h1 className="text-h1 font-semibold text-fg">{t("Pricing")}</h1>
+      <p className="mt-1 text-body text-fg-muted">{t("Plans, credit packs, and discounts.")}</p>
 
       <div className="mt-5 flex gap-1 border-b border-border">
         {TABS.map((tab) => (
@@ -26,7 +27,7 @@ export function PricingLayout() {
               )
             }
           >
-            {tab.label}
+            {t(tab.label)}
           </NavLink>
         ))}
       </div>

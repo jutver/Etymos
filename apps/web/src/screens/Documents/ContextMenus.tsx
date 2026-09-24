@@ -5,6 +5,7 @@ import { cn } from "@etymos/shared";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { PROJECTS } from "../../lib/store";
 import type { ContextMenuState, ProjectGroup } from "./types";
+import { t } from "../../lib/i18n";
 
 function MenuItem({
   icon,
@@ -28,7 +29,7 @@ function MenuItem({
       )}
     >
       {icon}
-      {label}
+      {t(label)}
     </button>
   );
 }
@@ -54,7 +55,7 @@ export function ProjectContextMenu({
         <>
           <MenuItem
             icon={<PencilSimple size={16} />}
-            label="Rename"
+            label={t("Rename")}
             onClick={() => {
               onRename(project);
               onClose();
@@ -62,7 +63,7 @@ export function ProjectContextMenu({
           />
           <MenuItem
             icon={<Trash size={16} />}
-            label="Delete"
+            label={t("Delete")}
             danger
             onClick={() => {
               onDelete(project);
@@ -107,7 +108,7 @@ export function DocumentContextMenu({
         <>
           <MenuItem
             icon={<PencilSimple size={16} />}
-            label="Rename"
+            label={t("Rename")}
             onClick={() => {
               onRename(doc);
               handleClose();
@@ -115,12 +116,12 @@ export function DocumentContextMenu({
           />
           <MenuItem
             icon={<FolderSimple size={16} />}
-            label="Move to project…"
+            label={t("Move to project…")}
             onClick={() => setMode("move")}
           />
           <MenuItem
             icon={<Trash size={16} />}
-            label="Delete"
+            label={t("Delete")}
             danger
             onClick={() => {
               onDelete(doc);
@@ -137,12 +138,11 @@ export function DocumentContextMenu({
             onClick={() => setMode("main")}
             className="flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-400 hover:bg-surface-tint"
           >
-            <CaretLeft size={12} /> Back
-          </button>
+            <CaretLeft size={12} />{" "}{t("Back")}</button>
           <div className="my-1 h-px bg-line" />
           <div className="max-h-56 overflow-y-auto">
             {otherProjects.length === 0 && (
-              <p className="px-3 py-2 text-xs text-ink-400">No other projects yet.</p>
+              <p className="px-3 py-2 text-xs text-ink-400">{t("No other projects yet.")}</p>
             )}
             {otherProjects.map((p) => (
               <MenuItem

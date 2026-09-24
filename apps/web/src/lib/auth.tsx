@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@etymos/shared";
+import { t } from "./i18n";
 
 interface AuthContextValue {
   session: Session | null;
@@ -69,7 +70,7 @@ export function useAuth() {
 
 export function displayNameFor(user: User | null): string {
   if (!user) return "";
-  return (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || "Etymos user";
+  return (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || t("Etymos user");
 }
 
 export function initialsFor(user: User | null): string {

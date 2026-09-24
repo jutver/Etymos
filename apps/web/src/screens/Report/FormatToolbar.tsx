@@ -24,6 +24,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
 
 /**
  * Rich-text commands run through `document.execCommand`.
@@ -47,17 +48,17 @@ function toggleLink() {
     exec("unlink");
     return;
   }
-  const url = window.prompt("Link URL");
+  const url = window.prompt(t("Link URL"));
   if (url) exec("createLink", url);
 }
 
 const TEXT_COLORS = [
-  { label: "Default", value: "#1a2233" },
-  { label: "Blue", value: "#1e4fc4" },
-  { label: "Red", value: "#dc2626" },
-  { label: "Amber", value: "#b45309" },
-  { label: "Green", value: "#059669" },
-  { label: "Violet", value: "#7c3aed" },
+  { label: tr("Default"), value: "#1a2233" },
+  { label: tr("Blue"), value: "#1e4fc4" },
+  { label: tr("Red"), value: "#dc2626" },
+  { label: tr("Amber"), value: "#b45309" },
+  { label: tr("Green"), value: "#059669" },
+  { label: tr("Violet"), value: "#7c3aed" },
 ];
 
 const ToolButton = forwardRef<
@@ -73,8 +74,8 @@ const ToolButton = forwardRef<
     <button
       ref={ref}
       type="button"
-      title={label}
-      aria-label={label}
+      title={t(label)}
+      aria-label={t(label)}
       // Keeps the caret/selection in the document while the command runs —
       // the toolbar never steals focus, so it can never trap it either.
       onMouseDown={(e) => e.preventDefault()}
@@ -220,7 +221,7 @@ export function FormatToolbar({
     <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
       <div
         role="toolbar"
-        aria-label="Document formatting"
+        aria-label={t("Document formatting")}
         aria-controls="report-document-editor"
         className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-full border border-line/80 bg-white/90 px-2 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-md"
       >
@@ -238,7 +239,7 @@ export function FormatToolbar({
                     view === v ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-900",
                   )}
                 >
-                  {v === "document" ? "Document" : "Original"}
+                  {v === "document" ? t("Document") : t("Original")}
                 </button>
               ))}
             </div>
@@ -253,7 +254,7 @@ export function FormatToolbar({
               role="switch"
               aria-checked={showHighlights}
               onClick={onToggleHighlights}
-              title={showHighlights ? "Hide plagiarism highlights" : "Show plagiarism highlights"}
+              title={showHighlights ? t("Hide plagiarism highlights") : t("Show plagiarism highlights")}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
                 showHighlights
@@ -262,17 +263,15 @@ export function FormatToolbar({
               )}
             >
               {showHighlights ? <Eye size={14} weight="bold" /> : <EyeSlash size={14} weight="bold" />}
-              Plagiarism
-            </button>
+              {t("Plagiarism")}</button>
             {focusActive && onClearFocus && (
               <button
                 type="button"
                 onClick={onClearFocus}
-                title="Show every highlight again (Esc)"
+                title={t("Show every highlight again (Esc)")}
                 className="ml-0.5 flex shrink-0 items-center gap-1 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
               >
-                Showing 1 source · Show all
-                <X size={12} weight="bold" />
+                {t("Showing 1 source · Show all")}<X size={12} weight="bold" />
               </button>
             )}
             <Divider />
@@ -281,8 +280,7 @@ export function FormatToolbar({
 
         {view === "original" ? (
           <span className="flex items-center gap-1.5 px-2 text-xs font-medium text-ink-500">
-            <FileText size={14} /> Viewing the uploaded file
-          </span>
+            <FileText size={14} />{" "}{t("Viewing the uploaded file")}</span>
         ) : locked ? (
           <button
             type="button"
@@ -290,21 +288,20 @@ export function FormatToolbar({
             className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
           >
             <LockSimple size={14} weight="fill" />
-            Reading mode — unlock to edit
-          </button>
+            {t("Reading mode — unlock to edit")}</button>
         ) : (
           <>
-            <ToolButton label="Undo" onAction={() => exec("undo")}>
+            <ToolButton label={t("Undo")} onAction={() => exec("undo")}>
               <ArrowUUpLeft size={16} />
             </ToolButton>
-            <ToolButton label="Redo" onAction={() => exec("redo")}>
+            <ToolButton label={t("Redo")} onAction={() => exec("redo")}>
               <ArrowUUpRight size={16} />
             </ToolButton>
 
             <Divider />
 
             <select
-              aria-label="Paragraph style"
+              aria-label={t("Paragraph style")}
               defaultValue="p"
               onMouseDown={(e) => e.stopPropagation()}
               onChange={(e) => {
@@ -313,31 +310,31 @@ export function FormatToolbar({
               }}
               className="h-8 rounded-lg bg-transparent px-1.5 text-xs font-medium text-ink-700 outline-none hover:bg-surface-muted"
             >
-              <option value="p">Body</option>
-              <option value="h1">Heading 1</option>
-              <option value="h2">Heading 2</option>
-              <option value="h3">Heading 3</option>
-              <option value="blockquote">Quote</option>
+              <option value="p">{t("Body")}</option>
+              <option value="h1">{t("Heading 1")}</option>
+              <option value="h2">{t("Heading 2")}</option>
+              <option value="h3">{t("Heading 3")}</option>
+              <option value="blockquote">{t("Quote")}</option>
             </select>
 
             <Divider />
 
-            <ToolButton label="Bold" onAction={() => exec("bold")}>
+            <ToolButton label={t("Bold")} onAction={() => exec("bold")}>
               <TextB size={16} weight="bold" />
             </ToolButton>
-            <ToolButton label="Italic" onAction={() => exec("italic")}>
+            <ToolButton label={t("Italic")} onAction={() => exec("italic")}>
               <TextItalic size={16} />
             </ToolButton>
-            <ToolButton label="Underline" onAction={() => exec("underline")}>
+            <ToolButton label={t("Underline")} onAction={() => exec("underline")}>
               <TextUnderline size={16} />
             </ToolButton>
-            <ToolButton label="Strikethrough" onAction={() => exec("strikeThrough")}>
+            <ToolButton label={t("Strikethrough")} onAction={() => exec("strikeThrough")}>
               <TextStrikethrough size={16} />
             </ToolButton>
 
             <ToolButton
               ref={colorButtonRef}
-              label="Text colour"
+              label={t("Text colour")}
               active={colorOpen}
               onAction={() => setColorOpen((v) => !v)}
             >
@@ -349,8 +346,8 @@ export function FormatToolbar({
                   <button
                     key={c.value}
                     type="button"
-                    title={c.label}
-                    aria-label={`Text colour ${c.label}`}
+                    title={t(c.label)}
+                    aria-label={t("Text colour {{label}}", { label: c.label })}
                     onClick={() => {
                       exec("foreColor", c.value);
                       setColorOpen(false);
@@ -364,40 +361,40 @@ export function FormatToolbar({
 
             <Divider />
 
-            <ToolButton label="Align left" onAction={() => exec("justifyLeft")}>
+            <ToolButton label={t("Align left")} onAction={() => exec("justifyLeft")}>
               <TextAlignLeft size={16} />
             </ToolButton>
-            <ToolButton label="Align centre" onAction={() => exec("justifyCenter")}>
+            <ToolButton label={t("Align centre")} onAction={() => exec("justifyCenter")}>
               <TextAlignCenter size={16} />
             </ToolButton>
-            <ToolButton label="Align right" onAction={() => exec("justifyRight")}>
+            <ToolButton label={t("Align right")} onAction={() => exec("justifyRight")}>
               <TextAlignRight size={16} />
             </ToolButton>
-            <ToolButton label="Justify" onAction={() => exec("justifyFull")}>
+            <ToolButton label={t("Justify")} onAction={() => exec("justifyFull")}>
               <TextAlignJustify size={16} />
             </ToolButton>
 
             <Divider />
 
-            <ToolButton label="Bulleted list" onAction={() => exec("insertUnorderedList")}>
+            <ToolButton label={t("Bulleted list")} onAction={() => exec("insertUnorderedList")}>
               <ListBullets size={16} />
             </ToolButton>
-            <ToolButton label="Numbered list" onAction={() => exec("insertOrderedList")}>
+            <ToolButton label={t("Numbered list")} onAction={() => exec("insertOrderedList")}>
               <ListNumbers size={16} />
             </ToolButton>
 
             <Divider />
 
-            <ToolButton label="Insert link" onAction={toggleLink}>
+            <ToolButton label={t("Insert link")} onAction={toggleLink}>
               <LinkSimple size={16} />
             </ToolButton>
-            <ToolButton label="Clear formatting" onAction={() => exec("removeFormat")}>
+            <ToolButton label={t("Clear formatting")} onAction={() => exec("removeFormat")}>
               <Eraser size={16} />
             </ToolButton>
 
             <Divider />
 
-            <ToolButton label="Insert table" onAction={onInsertTable}>
+            <ToolButton label={t("Insert table")} onAction={onInsertTable}>
               <Table size={16} />
             </ToolButton>
           </>

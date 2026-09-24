@@ -5,6 +5,7 @@
 // by date. No new table. RLS already permits admin reads on both
 // (documents_all_self_or_admin, checkout_events_select_self_or_admin).
 import { supabase } from "@etymos/shared";
+import { tr, t } from "./i18n";
 
 export type UsageLogKind = "document" | "checkout";
 
@@ -39,21 +40,21 @@ interface CheckoutUsageRow {
 
 function describeDocument(d: DocumentUsageRow): UsageLogEntry {
   const parts = [
-    d.status ? `Status: ${d.status}` : null,
-    d.similarity_score != null ? `${d.similarity_score}% similarity` : null,
-    d.word_count != null ? `${d.word_count} words` : null,
+    d.status ? t("Status: {{status}}", { status: d.status }) : null,
+    d.similarity_score != null ? t("{{score}}% similarity", { score: d.similarity_score }) : null,
+    d.word_count != null ? t("{{count}} words", { count: d.word_count }) : null,
   ].filter(Boolean);
   return {
     id: `doc-${d.id}`,
     kind: "document",
     created_at: d.uploaded_at,
-    title: d.title || d.file_name || "Untitled document",
-    detail: parts.length > 0 ? parts.join(" · ") : "Document check",
+    title: d.title || d.file_name || tr("Untitled document"),
+    detail: parts.length > 0 ? parts.join(" · ") : tr("Document check"),
   };
 }
 
 function describeCheckout(c: CheckoutUsageRow): UsageLogEntry {
-  const label = c.kind === "plan" ? `Plan purchase: ${c.plan_tier ?? "—"}` : `Credit pack: ${c.pack_id ?? "—"}`;
+  const label = c.kind === "plan" ? t("Plan purchase: {{tier}}", { tier: c.plan_tier ?? "—" }) : t("Credit pack: {{pack}}", { pack: c.pack_id ?? "—" });
   const amount = c.amount != null ? `${c.amount} ${c.currency}` : "—";
   return {
     id: `checkout-${c.id}`,

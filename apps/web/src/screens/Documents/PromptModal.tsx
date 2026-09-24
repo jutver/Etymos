@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Modal, ModalCloseButton } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { t, tr } from "../../lib/i18n";
 
 interface PromptModalProps {
   open: boolean;
@@ -21,7 +22,7 @@ export function PromptModal({
   label,
   initialValue = "",
   placeholder,
-  confirmLabel = "Save",
+  confirmLabel = tr("Save"),
   onClose,
   onSubmit,
 }: PromptModalProps) {
@@ -39,7 +40,7 @@ export function PromptModal({
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed) {
-      setError("This field can't be empty.");
+      setError(tr("This field can't be empty."));
       return;
     }
     onSubmit(trimmed);
@@ -50,12 +51,12 @@ export function PromptModal({
       <form onSubmit={handleSubmit} className="relative p-6">
         <ModalCloseButton onClose={onClose} />
         <h2 id="prompt-modal-title" className="text-h3 font-bold text-navy-900">
-          {title}
+          {t(title)}
         </h2>
-        {description && <p className="mt-1.5 text-sm text-ink-500">{description}</p>}
+        {description && <p className="mt-1.5 text-sm text-ink-500">{t(description)}</p>}
 
         <label className="mt-5 block text-xs font-semibold uppercase tracking-wide text-ink-400">
-          {label}
+          {t(label)}
         </label>
         <input
           autoFocus
@@ -71,10 +72,9 @@ export function PromptModal({
 
         <div className="mt-6 flex items-center justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+            {t("Cancel")}</Button>
           <Button type="submit" variant="primary">
-            {confirmLabel}
+            {t(confirmLabel)}
           </Button>
         </div>
       </form>

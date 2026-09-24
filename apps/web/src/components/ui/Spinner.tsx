@@ -1,4 +1,5 @@
 import { cn } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
 
 export type SpinnerSize = "sm" | "md" | "lg";
 
@@ -37,7 +38,7 @@ interface SpinnerProps {
  * than freezing mid-frame). The two-tone border keeps it readable as a
  * progress affordance even when static.
  */
-export function Spinner({ size = "md", tone = "brand", className, label = "Loading" }: SpinnerProps) {
+export function Spinner({ size = "md", tone = "brand", className, label = tr("Loading") }: SpinnerProps) {
   return (
     <span
       role="status"
@@ -48,7 +49,7 @@ export function Spinner({ size = "md", tone = "brand", className, label = "Loadi
         className,
       )}
     >
-      {label !== null && <span className="sr-only">{label}</span>}
+      {label !== null && <span className="sr-only">{t(label)}</span>}
     </span>
   );
 }

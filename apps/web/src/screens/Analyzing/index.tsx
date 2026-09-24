@@ -8,7 +8,10 @@ import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { pollJob, getReport, type BackendDocumentBlock } from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
+import { trackEvent } from "../../lib/analytics";
+import { parseAiDetection } from "../../lib/aiDetection";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
+import { t as tl, tr } from "../../lib/i18n";
 
 interface LocationState {
   docLabels?: string[];
@@ -181,11 +184,11 @@ export default function AnalyzingPage() {
 
   const steps = useMemo(() => {
     const all = [
-      { id: "extract", label: docLabels.length > 1 ? "Extracting text from all documents" : "Extracting text" },
-      { id: "web", label: "Scanning web sources", skip: state.webSources === false },
-      { id: "academic", label: "Comparing academic papers", skip: state.academicSources === false },
-      { id: "semantic", label: "Running semantic detection" },
-      { id: "explain", label: "Generating explanations" },
+      { id: "extract", label: docLabels.length > 1 ? tr("Extracting text from all documents") : tr("Extracting text") },
+      { id: "web", label: tr("Scanning web sources"), skip: state.webSources === false },
+      { id: "academic", label: tr("Comparing academic papers"), skip: state.academicSources === false },
+      { id: "semantic", label: tr("Running semantic detection") },
+      { id: "explain", label: tr("Generating explanations") },
     ];
     return all.filter((s) => !s.skip);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,7 +207,7 @@ export default function AnalyzingPage() {
     if (state.reportMode === "backend" && state.documentId && !state.jobId) {
       if (completedRef.current) return;
       completedRef.current = true;
-      const message = "This check was interrupted and never finished. Please run it again.";
+      const message = tr("This check was interrupted and never finished. Please run it again.");
       setJobStatus("failed");
       setJobMessage(message);
       void markCheckFailed(state.documentId, message).catch(() => undefined);
@@ -227,7 +230,7 @@ export default function AnalyzingPage() {
           if (cancelled) return;
 
           if (job.status === "failed") {
-            const message = job.error ?? "Analysis failed.";
+            const message = job.error ?? tr("Analysis failed.");
             setJobStatus("failed");
             setJobMessage(message);
             // Settle the row the Upload screen inserted, so Documents/History
@@ -311,7 +314,7 @@ export default function AnalyzingPage() {
               // no longer render byte-identical text. Falls back to the
               // old template only for reports built before this field
               // existed.
-              explanation: match.explanation ?? `Matched ${match.label.replace(/_/g, " ")}.`,
+              explanation: match.explanation ?? tl("Matched {{label}}.", { label: match.label.replace(/_/g, " ") }),
               rewriteSuggestions: [],
               // `input_offset` is omitted (never zeroed) when the backend could
               // not localise the sentence, so its presence is the capability
@@ -394,6 +397,7 @@ export default function AnalyzingPage() {
             })),
             matches,
             pdfUrl: state.pdfDataUrl ?? undefined, // ← thêm dòng này
+            aiDetection: parseAiDetection(report.ai_detection),
           };
 
           recordCheckedDocument(doc);
@@ -427,9 +431,10 @@ export default function AnalyzingPage() {
             addHistoryEntries(entries);
           }
           markFirstCheckComplete();
+          trackEvent("check_completed", { documents: ids.length });
           setResultIds(ids);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Analysis failed.";
+          const message = error instanceof Error ? error.message : tr("Analysis failed.");
           setJobStatus("failed");
           setJobMessage(message);
           if (state.documentId) {
@@ -484,6 +489,7 @@ export default function AnalyzingPage() {
 
       addHistoryEntries(entries);
       markFirstCheckComplete();
+      trackEvent("check_completed", { documents: ids.length });
       setResultIds(ids);
       return;
     }
@@ -493,7 +499,7 @@ export default function AnalyzingPage() {
   }, [stepIndex, steps.length, stepDuration]);
 
   const progress = Math.min(100, Math.round((stepIndex / steps.length) * 100));
-  const docLabel = docLabels.length > 1 ? `${docLabels.length} documents` : docLabels[0];
+  const docLabel = docLabels.length > 1 ? tl("{{count}} documents", { count: docLabels.length }) : docLabels[0];
   const failed = jobStatus === "failed";
 
   return (
@@ -521,23 +527,22 @@ export default function AnalyzingPage() {
       </motion.div>
 
       <h1 className="mt-6 text-h2 font-bold tracking-tight text-navy-900">
-        {failed ? "Analysis failed" : resultIds ? "Analysis complete" : "Analyzing your document"}
+        {failed ? tl("Analysis failed") : resultIds ? tl("Analysis complete") : tl("Analyzing your document")}
       </h1>
-      <p className="mt-2 max-w-sm text-sm text-ink-500">{docLabel}</p>
+      <p className="mt-2 max-w-sm text-sm text-ink-500">{tl(docLabel)}</p>
 
       {failed ? (
         <div className="mt-4 w-full max-w-sm rounded-lg border border-severity-high-line bg-severity-high-bg px-4 py-3 text-left text-sm">
           <p className="font-semibold text-severity-high">
-            We couldn't finish analyzing this document. Please try again.
-          </p>
-          {jobMessage && <p className="mt-1 text-xs text-severity-high/80">{jobMessage}</p>}
+            {tl("We couldn't finish analyzing this document. Please try again.")}</p>
+          {jobMessage && <p className="mt-1 text-xs text-severity-high/80">{tl(jobMessage)}</p>}
         </div>
       ) : (
         state.reportMode === "backend" &&
         !resultIds && (
           <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm text-ink-600">
-            <p className="font-semibold text-ink-900">{jobStatus === "completed" ? "Finishing up" : jobMessage ?? "Waiting for backend"}</p>
-            {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">Progress: {jobProgress}%</p>}
+            <p className="font-semibold text-ink-900">{jobStatus === "completed" ? tl("Finishing up") : tl(jobMessage) ?? tl("Waiting for backend")}</p>
+            {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">{tl("Progress: {{percent}}%", { percent: jobProgress })}</p>}
           </div>
         )
       )}
@@ -551,23 +556,21 @@ export default function AnalyzingPage() {
               transition={{ duration: 0.4, ease: "easeOut" }}
             />
           </div>
-          <p className="mt-2 text-xs font-medium text-ink-400">{progress}% complete</p>
+          <p className="mt-2 text-xs font-medium text-ink-400">{progress}{tl("% complete")}</p>
         </div>
       )}
 
       {!resultIds && !failed && state.documentId && (
         <div className="mt-6 flex w-full max-w-sm flex-col items-center gap-3">
           <p className="text-xs text-ink-400">
-            This check keeps running if you leave — it stays in your documents as “Checking”.
-          </p>
+            {tl("This check keeps running if you leave — it stays in your documents as “Checking”.")}</p>
           <Button
             size="sm"
             variant="outline"
             iconLeft={<ClockCounterClockwise size={15} />}
             onClick={() => navigate("/documents")}
           >
-            Continue in background
-          </Button>
+            {tl("Continue in background")}</Button>
         </div>
       )}
 
@@ -595,7 +598,7 @@ export default function AnalyzingPage() {
                     <CircleNotch size={20} className="shrink-0 animate-spin motion-reduce:animate-none text-brand-500" />
                   )}
                   <span className={cn("text-sm font-medium", done ? "text-ink-500" : "text-ink-900")}>
-                    {step.label}
+                    {tl(step.label)}
                   </span>
                 </motion.div>
               );
@@ -607,8 +610,7 @@ export default function AnalyzingPage() {
       {failed && (
         <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
           <Button size="lg" fullWidth onClick={() => navigate("/upload", { replace: true })}>
-            Try again
-          </Button>
+            {tl("Try again")}</Button>
           <Button
             size="lg"
             variant="outline"
@@ -616,8 +618,7 @@ export default function AnalyzingPage() {
             iconLeft={<ClockCounterClockwise size={18} />}
             onClick={() => navigate("/history", { replace: true })}
           >
-            Go to History
-          </Button>
+            {tl("Go to History")}</Button>
         </div>
       )}
 
@@ -629,8 +630,7 @@ export default function AnalyzingPage() {
               fullWidth
               onClick={() => navigate(`/report/${resultIds[0]}`, { replace: true })}
             >
-              View report
-            </Button>
+              {tl("View report")}</Button>
           )}
           <Button
             size="lg"
@@ -639,8 +639,7 @@ export default function AnalyzingPage() {
             iconLeft={<ClockCounterClockwise size={18} />}
             onClick={() => navigate("/history", { replace: true })}
           >
-            Go to History
-          </Button>
+            {tl("Go to History")}</Button>
         </div>
       )}
     </div>

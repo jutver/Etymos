@@ -169,6 +169,47 @@ export interface MatchedSource {
   sourceDoi?: string;
 }
 
+/** One analysed paragraph from the backend's AI-content detector. */
+export interface AiDetectionSegment {
+  /** Offsets into the report's `input_text`. */
+  start: number;
+  end: number;
+  blockId?: string | null;
+  words: number;
+  /** 0-100, likelihood this paragraph is machine-written. */
+  score: number;
+  /** First ~160 characters of the paragraph, so the UI can show which one it is. */
+  excerpt?: string;
+}
+
+export type AiDetectionLevel = "low" | "possible" | "likely";
+
+/**
+ * Result of backend/ai_detector.py, stored in `documents.ai_detection`.
+ * Deliberately separate from `similarityScore`: plagiarism and machine-written
+ * text are different signals. `available: false` means the detector could not
+ * run for this check (no GPU/model, or disabled by an admin) — not "no AI".
+ */
+export type AiDetection =
+  | { available: false; reason?: string }
+  | {
+      available: true;
+      method: string;
+      model: string;
+      /** 0-100, word-weighted across the analysed paragraphs. */
+      overallScore: number;
+      level: AiDetectionLevel;
+      /** "low" for non-English text or very short documents. */
+      confidence: "normal" | "low";
+      language: string;
+      analyzedWords: number;
+      /** % of analysed words sitting in paragraphs that individually look machine-written. */
+      aiShare: number;
+      segments: AiDetectionSegment[];
+      reasons: string[];
+      disclaimer: string;
+    };
+
 export interface CheckedDocument {
   id: string;
   title: string;
@@ -183,6 +224,8 @@ export interface CheckedDocument {
   passages: DocPassage[];
   matches: MatchedSource[];
   pdfUrl?: string;
+  /** AI-generated-content detection; absent for reports checked before it shipped. */
+  aiDetection?: AiDetection;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

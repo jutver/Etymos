@@ -4,6 +4,7 @@ import { FileMagnifyingGlass } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
 import { useAppStore, planWordLimit } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
+import { trackEvent } from "../../lib/analytics";
 import {
   fetchCheckedDocument,
   fetchDocumentVersions,
@@ -21,12 +22,14 @@ import { FormatToolbar } from "./FormatToolbar";
 import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
+import { AiContentChip } from "./AiContentChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
-import { buildMatchFocusMap, buildRenderedPassages, countWords } from "./highlights";
+import { aiFlaggedPassageIds, buildMatchFocusMap, buildRenderedPassages, countWords, mapAiSegmentsToPassages } from "./highlights";
 import { isOverLimit } from "./renderPassageText";
 import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
+import { t as tl, tr } from "../../lib/i18n";
 
 // Private Storage bucket the backend uploads original PDFs into (see
 // backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
@@ -48,14 +51,13 @@ function ScoreChip({ score }: { score: number }) {
   const status = statusFromScore(score);
   return (
     <span
-      title={`Similarity score ${score}%`}
+      title={tl("Similarity score {{score}}%", { score: score })}
       className={cn(
         "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums sm:inline-flex",
         SCORE_CHIP[status],
       )}
     >
-      {score}% similar
-    </span>
+      {score}{tl("% similar")}</span>
   );
 }
 
@@ -97,7 +99,7 @@ export default function ReportPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : "Failed to load report");
+        setLoadError(err instanceof Error ? err.message : tr("Failed to load report"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -109,6 +111,13 @@ export default function ReportPage() {
 
   const doc = (refetchNonce > 0 ? remoteDoc : cachedDoc ?? remoteDoc) ?? null;
   const historyMeta = id ? history.find((h) => h.id === id) : undefined;
+
+  // Analytics: one `report_viewed` per report actually rendered (not per
+  // re-render, and not for a 404/failed load).
+  const hasDoc = doc !== null;
+  useEffect(() => {
+    if (id && hasDoc) trackEvent("report_viewed");
+  }, [id, hasDoc]);
 
   // fetchCheckedDocument() (documentsQueries.ts) only ever reads the
   // `documents`/`document_matches`/`document_passages` tables — it never
@@ -136,7 +145,7 @@ export default function ReportPage() {
         if (error || !data?.signedUrl) {
           setSignedPdfUrl(null);
           setPdfFetchError(
-            error?.message ?? "Không thể tạo liên kết xem trước cho file PDF gốc.",
+            error?.message ?? tl("Could not create a preview link for the original PDF."),
           );
           return;
         }
@@ -157,6 +166,11 @@ export default function ReportPage() {
   const canvasRef = useRef<DocumentCanvasHandle>(null);
   const baselineTextRef = useRef("");
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  // Which AI-flagged paragraph the reader picked from the sidebar card —
+  // kept apart from activeMatchId (Functional Wall Rule: separate signal),
+  // but the two are mutually exclusive in the UI (picking one clears the
+  // other) so the Document view never has to show two kinds of focus at once.
+  const [activeAiSegmentId, setActiveAiSegmentId] = useState<string | null>(null);
   // Bumped on every selection so picking the same source again scrolls again.
   const [focusTick, setFocusTick] = useState(0);
   // Plagiarism highlights on/off in the Document view (presentational only).
@@ -181,7 +195,7 @@ export default function ReportPage() {
   const [fileName, setFileName] = useState("");
 
   useEffect(() => {
-    if (doc) setFileName(historyMeta?.title ?? doc.title ?? doc.fileName ?? "Untitled document");
+    if (doc) setFileName(historyMeta?.title ?? doc.title ?? doc.fileName ?? tl("Untitled document"));
   }, [doc, historyMeta?.title]);
 
   // Remounting the editor is the only way to discard the browser-owned DOM and
@@ -234,6 +248,26 @@ export default function ReportPage() {
     () => buildRenderedPassages(doc?.passages ?? [], visibleMatches),
     [doc?.passages, visibleMatches],
   );
+
+  // AI-detection segments worth pointing at — same score threshold
+  // AiDetectionSection uses for its own "Paragraphs that look
+  // machine-written" list, so the highlighted set in the Document/Original
+  // views always matches exactly what the sidebar lists.
+  const flaggedAiSegments = useMemo(
+    () =>
+      (doc?.aiDetection?.available ? doc.aiDetection.segments : [])
+        .filter((s) => s.score >= 60)
+        .map((s) => ({ id: `${s.start}-${s.end}`, start: s.start, end: s.end, excerpt: s.excerpt ?? "", score: s.score })),
+    [doc],
+  );
+  // Which passage (Document view block) each flagged segment falls inside —
+  // see highlights.ts's mapAiSegmentsToPassages docstring for why this is a
+  // whole-paragraph mapping rather than a sentence-level one.
+  const aiSegmentToPassage = useMemo(
+    () => mapAiSegmentsToPassages(doc?.passages ?? [], flaggedAiSegments),
+    [doc?.passages, flaggedAiSegments],
+  );
+  const aiFlaggedIds = useMemo(() => aiFlaggedPassageIds(aiSegmentToPassage), [aiSegmentToPassage]);
 
   // Sidebar order is the source of truth for both the highlight colour and the
   // number badge, so the two views can never disagree.
@@ -293,23 +327,33 @@ export default function ReportPage() {
   // same click that focused it also brings every highlight back.
   const handleSelectMatch = useCallback((matchId: string) => {
     setActiveMatchId((current) => (current === matchId ? null : matchId));
+    setActiveAiSegmentId(null);
     setFocusTick((t) => t + 1);
   }, []);
   const clearSelection = useCallback(() => setActiveMatchId(null), []);
 
+  // Same toggle-to-let-go behaviour as handleSelectMatch, for a flagged
+  // paragraph picked from the AI Detection sidebar card.
+  const handleSelectAiSegment = useCallback((segmentId: string) => {
+    setActiveAiSegmentId((current) => (current === segmentId ? null : segmentId));
+    setActiveMatchId(null);
+    setFocusTick((t) => t + 1);
+  }, []);
+
   // Escape also lets go of the focused source (unless the key is meant for a
   // text field or an already-handled dialog).
   useEffect(() => {
-    if (!activeMatchId) return;
+    if (!activeMatchId && !activeAiSegmentId) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       setActiveMatchId(null);
+      setActiveAiSegmentId(null);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeMatchId]);
+  }, [activeMatchId, activeAiSegmentId]);
 
   // "Accept & replace" (only reachable outside reading mode — see
   // notifyReadingMode): put the AI rewrite into the document in place of the
@@ -335,8 +379,8 @@ export default function ReportPage() {
     if (!replaced) {
       pushToast({
         kind: "error",
-        title: "Couldn't replace the passage",
-        description: "It no longer matches the document text exactly. Use Copy and paste the rewrite in yourself.",
+        title: tr("Couldn't replace the passage"),
+        description: tr("It no longer matches the document text exactly. Use Copy and paste the rewrite in yourself."),
       });
       return;
     }
@@ -346,8 +390,8 @@ export default function ReportPage() {
     setActiveMatchId(null);
     pushToast({
       kind: "success",
-      title: "Passage replaced",
-      description: "The flagged sentence now reads as your rewrite. Save to keep this version.",
+      title: tr("Passage replaced"),
+      description: tr("The flagged sentence now reads as your rewrite. Save to keep this version."),
     });
   }
 
@@ -362,11 +406,11 @@ export default function ReportPage() {
   function notifyReadingMode() {
     pushToast({
       kind: "warning",
-      title: "You're in reading mode",
+      title: tr("You're in reading mode"),
       description:
         view === "original"
-          ? "The document can't be edited in reading mode. Switch to the Document tab and choose \"Reading mode — unlock to edit\", then try again."
-          : "The document can't be edited in reading mode. Choose \"Reading mode — unlock to edit\" in the toolbar to switch modes, then continue rewriting.",
+          ? tr("The document can't be edited in reading mode. Switch to the Document tab and choose \"Reading mode — unlock to edit\", then try again.")
+          : tr("The document can't be edited in reading mode. Choose \"Reading mode — unlock to edit\" in the toolbar to switch modes, then continue rewriting."),
     });
   }
 
@@ -376,6 +420,7 @@ export default function ReportPage() {
       notifyReadingMode();
       return false;
     }
+    trackEvent("rewrite_accepted");
     if (view !== "document") {
       pendingRewriteRef.current = { match, rewritten };
       setView("document");
@@ -401,8 +446,8 @@ export default function ReportPage() {
     } catch {
       pushToast({
         kind: "error",
-        title: "Rename failed",
-        description: "The new name is shown locally but could not be saved.",
+        title: tr("Rename failed"),
+        description: tr("The new name is shown locally but could not be saved."),
       });
     }
   }
@@ -414,16 +459,16 @@ export default function ReportPage() {
     setSaving(true);
     try {
       const version = await saveDocumentVersion(id, {
-        label: `Version ${versions.length + 1}`,
+        label: tl("Version {{v}}", { v: versions.length + 1 }),
         html,
         wordCount: countWords(text),
       });
       baselineTextRef.current = text;
       setVersions((prev) => [version, ...prev].slice(0, 20));
       setDirty(false);
-      pushToast({ kind: "success", title: "Draft saved", description: "A version was added to history." });
+      pushToast({ kind: "success", title: tr("Draft saved"), description: tr("A version was added to history.") });
     } catch {
-      pushToast({ kind: "error", title: "Could not save", description: "The version was not recorded." });
+      pushToast({ kind: "error", title: tr("Could not save"), description: tr("The version was not recorded.") });
     } finally {
       setSaving(false);
     }
@@ -433,14 +478,14 @@ export default function ReportPage() {
     if (editorRef.current) editorRef.current.innerHTML = version.html;
     baselineTextRef.current = editorRef.current?.innerText ?? "";
     setDirty(false);
-    pushToast({ kind: "info", title: `Restored ${version.label}` });
+    pushToast({ kind: "info", title: tl("Restored {{label}}", { label: version.label }) });
   }
 
   function handleRecheck() {
     if (loading) return;
     setRefetchNonce((n) => n + 1);
     setResolvedIds(new Set());
-    pushToast({ kind: "info", title: "Rechecking", description: "Pulling the latest match results." });
+    pushToast({ kind: "info", title: tr("Rechecking"), description: tr("Pulling the latest match results.") });
   }
 
   function handleCite(match: MatchedSource) {
@@ -452,10 +497,11 @@ export default function ReportPage() {
       navigate("/paywall");
       return;
     }
+    trackEvent("report_exported");
     setExporting(true);
     window.setTimeout(() => {
       setExporting(false);
-      pushToast({ kind: "success", title: "Report exported", description: "Etymos-Report.pdf is ready." });
+      pushToast({ kind: "success", title: tr("Report exported"), description: tr("Etymos-Report.pdf is ready.") });
     }, 1200);
   }
 
@@ -475,14 +521,13 @@ export default function ReportPage() {
         <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-surface-tint text-ink-400">
           <FileMagnifyingGlass size={26} />
         </div>
-        <h1 className="mt-5 text-h3 font-bold text-navy-900">Report not found</h1>
+        <h1 className="mt-5 text-h3 font-bold text-navy-900">{tl("Report not found")}</h1>
         <p className="mt-2 text-sm text-ink-500">
-          {loadError ??
-            "We couldn't find this document. It may have been deleted, moved to trash, or the link is incorrect."}
+          {tl(loadError) ??
+            tl("We couldn't find this document. It may have been deleted, moved to trash, or the link is incorrect.")}
         </p>
         <Button className="mt-6" onClick={() => navigate("/history")}>
-          Back to History
-        </Button>
+          {tl("Back to History")}</Button>
       </div>
     );
   }
@@ -524,7 +569,12 @@ export default function ReportPage() {
         exporting={exporting}
         onExport={handleExport}
         exportLocked={isFree}
-        scoreSlot={<ScoreChip score={displayScore} />}
+        scoreSlot={
+          <>
+            <ScoreChip score={displayScore} />
+            <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate("/paywall")} />
+          </>
+        }
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -551,12 +601,18 @@ export default function ReportPage() {
             <div className="relative flex-1 overflow-hidden pt-16">
               <PlagiarismPdfViewer
                 pdfUrl={effectivePdfUrl ?? ""}
-                unavailableMessage={pdfFetchError ?? undefined}
+                unavailableMessage={tl(pdfFetchError) ?? undefined}
                 matches={visibleMatches}
                 activeMatchId={activeMatchId}
-                onMatchClick={setActiveMatchId}
+                onMatchClick={(matchId) => {
+                  setActiveMatchId(matchId);
+                  setActiveAiSegmentId(null);
+                }}
                 onPageChange={handleOriginalPageChange}
                 overLimitOffset={overLimitOffset}
+                aiSegments={flaggedAiSegments}
+                activeAiSegmentId={activeAiSegmentId}
+                onAiSegmentClick={handleSelectAiSegment}
               />
             </div>
           ) : (
@@ -576,6 +632,8 @@ export default function ReportPage() {
                 resetKey={resetKey}
                 editorRef={editorRef}
                 overLimitOffset={overLimitOffset}
+                aiFlaggedPassageIds={aiFlaggedIds}
+                activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
               />
             </div>
           )}
@@ -609,8 +667,14 @@ export default function ReportPage() {
           resolvedIds={resolvedIds}
           explanationLocked={isFree}
           rewriteLocked={plan !== "professional"}
+          aiDetection={doc.aiDetection}
+          activeAiSegmentId={activeAiSegmentId}
+          onAiSegmentClick={handleSelectAiSegment}
           onSelect={handleSelectMatch}
-          onViewComparison={setComparisonMatch}
+          onViewComparison={(match) => {
+            trackEvent("source_comparison_opened");
+            setComparisonMatch(match);
+          }}
           onRewrite={(match) => {
             if (isFree) {
               navigate("/paywall");
@@ -625,6 +689,7 @@ export default function ReportPage() {
               notifyReadingMode();
               return;
             }
+            trackEvent("rewrite_opened");
             setRewriteMatch(match);
           }}
           onCite={handleCite}

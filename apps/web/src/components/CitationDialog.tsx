@@ -5,6 +5,7 @@ import { cn } from "@etymos/shared";
 import { Modal, ModalCloseButton } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { formatCitationText, formatCitationBibtex } from "../lib/citation";
+import { t, tr } from "../lib/i18n";
 
 type CitationVariant = "text" | "bibtex";
 
@@ -41,15 +42,14 @@ export function CitationDialog({
       <div className="p-6 sm:p-8">
         <ModalCloseButton onClose={onClose} />
         <h2 id="citation-dialog-title" className="text-h3 font-bold text-navy-900">
-          Copy citation
-        </h2>
+          {t("Copy citation")}</h2>
         <p className="mt-1 text-sm text-ink-500">{match.sourceTitle}</p>
 
         <div className="mt-5 flex gap-1.5 rounded-[var(--radius-card)] bg-surface-tint p-1">
           {(
             [
-              { id: "text" as const, label: "Text (Word/Docs)" },
-              { id: "bibtex" as const, label: "BibTeX" },
+              { id: "text" as const, label: tr("Text (Word/Docs)") },
+              { id: "bibtex" as const, label: tr("BibTeX") },
             ]
           ).map((tab) => (
             <button
@@ -63,7 +63,7 @@ export function CitationDialog({
                   : "text-ink-500 hover:text-ink-900",
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </div>
@@ -77,7 +77,7 @@ export function CitationDialog({
           onClick={handleCopy}
           iconLeft={copied ? <Check size={16} /> : <Copy size={16} />}
         >
-          {copied ? "Copied" : "Copy to clipboard"}
+          {copied ? t("Copied") : t("Copy to clipboard")}
         </Button>
       </div>
     </Modal>

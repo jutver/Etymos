@@ -7,6 +7,7 @@ import { StatusBadge, roleTone } from "../../components/StatusBadge";
 import { listProfiles, PAGE_SIZE, type DateRange } from "../../lib/supabaseQueries";
 import { isProfileOnline, type Profile } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 /** Local YYYY-MM-DD for a Date, used both to render the date input's value
  * and to build the day's [from, to) range below — kept in the viewer's local
@@ -71,14 +72,14 @@ export default function UsersPage() {
   const isToday = signupDate === toDateInputValue(new Date());
 
   const columns: Column<Profile>[] = [
-    { key: "email", label: "Email", render: (r) => r.email ?? r.display_name ?? r.id },
-    { key: "role", label: "Role", render: (r) => <StatusBadge label={r.role} tone={roleTone(r.role)} /> },
-    { key: "plan", label: "Plan", render: (r) => <span className="capitalize">{r.plan_tier}</span> },
-    { key: "standard_credits", label: "Standard", render: (r) => r.standard_credits },
-    { key: "premium_credits", label: "Premium", render: (r) => r.premium_credits },
+    { key: "email", label: tr("Email"), render: (r) => r.email ?? r.display_name ?? r.id },
+    { key: "role", label: tr("Role"), render: (r) => <StatusBadge label={t(r.role)} tone={roleTone(r.role)} /> },
+    { key: "plan", label: tr("Plan"), render: (r) => <span className="capitalize">{r.plan_tier}</span> },
+    { key: "standard_credits", label: tr("Standard"), render: (r) => r.standard_credits },
+    { key: "premium_credits", label: tr("Premium"), render: (r) => r.premium_credits },
     {
       key: "online",
-      label: "Online",
+      label: tr("Online"),
       render: (r) => {
         const online = isProfileOnline(r.last_seen_at);
         return (
@@ -87,27 +88,27 @@ export default function UsersPage() {
               className={cn("size-2 shrink-0 rounded-full", online ? "bg-success" : "bg-fg-subtle/40")}
               aria-hidden
             />
-            <span className="text-caption text-fg-muted">{online ? "Online" : "Offline"}</span>
+            <span className="text-caption text-fg-muted">{online ? t("Online") : t("Offline")}</span>
           </span>
         );
       },
     },
     {
       key: "student_verified",
-      label: "Student verified",
-      render: (r) => (r.student_verified ? "Yes" : "No"),
+      label: tr("Student verified"),
+      render: (r) => (r.student_verified ? t("Yes") : t("No")),
     },
     {
       key: "created_at",
-      label: "Joined",
-      render: (r) => new Date(r.created_at).toLocaleDateString(),
+      label: tr("Joined"),
+      render: (r) => new Date(r.created_at).toLocaleDateString(currentLocale()),
     },
   ];
 
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">Users</h1>
-      <p className="mt-1 text-body text-fg-muted">Search, inspect, and manually adjust plans/credits.</p>
+      <h1 className="text-h1 font-semibold text-fg">{t("Users")}</h1>
+      <p className="mt-1 text-body text-fg-muted">{t("Search, inspect, and manually adjust plans/credits.")}</p>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1 sm:min-w-[240px]">
@@ -121,7 +122,7 @@ export default function UsersPage() {
               setPage(0);
               setSearch(e.target.value);
             }}
-            placeholder="Search by email or name…"
+            placeholder={t("Search by email or name…")}
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
@@ -138,8 +139,7 @@ export default function UsersPage() {
               isToday ? "bg-accent-bg text-accent" : "border border-border text-fg-muted hover:bg-surface-raised",
             )}
           >
-            Signed up today
-          </button>
+            {t("Signed up today")}</button>
           <input
             type="date"
             value={signupDate}
@@ -158,8 +158,7 @@ export default function UsersPage() {
               }}
               className="cursor-pointer rounded-control border border-border px-3 py-2 text-caption font-medium text-fg-muted transition hover:bg-surface-raised"
             >
-              Clear
-            </button>
+              {t("Clear")}</button>
           )}
         </div>
       </div>
@@ -172,7 +171,7 @@ export default function UsersPage() {
           rows={rows}
           rowKey={(r) => r.id}
           loading={loading}
-          emptyMessage={signupDate ? "No users signed up on this day." : "No users found."}
+          emptyMessage={signupDate ? t("No users signed up on this day.") : t("No users found.")}
           onRowClick={(r) => navigate(`/users/${r.id}`)}
           page={page}
           pageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}

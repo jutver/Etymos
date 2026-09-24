@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth";
 import { useAppStore } from "../../lib/store";
 import { fetchMyProfile } from "../../lib/profileQueries";
 import { BannedScreen, DeletionConfirmScreen } from "./AccountStatusScreens";
+import { t } from "../../lib/i18n";
 
 /** Closed-beta gate state. `unknown` means the profile fetch is still in
  * flight — we must render a loading state rather than guessing, or we'd
@@ -31,7 +32,7 @@ function FullPageLoader() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-surface-tint">
       <CircleNotch size={28} weight="bold" className="animate-spin motion-reduce:animate-none text-brand-600" />
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">{t("Loading…")}</span>
     </div>
   );
 }

@@ -1,26 +1,27 @@
 import type { Severity, DocStatus } from "@etymos/shared";
 import { cn } from "@etymos/shared";
+import { t, tr } from "../lib/i18n";
 
 export const severityConfig: Record<
   Severity,
   { label: string; text: string; bg: string; line: string; dot: string }
 > = {
   high: {
-    label: "High match",
+    label: tr("High match"),
     text: "text-severity-high",
     bg: "bg-severity-high-bg",
     line: "border-severity-high-line",
     dot: "bg-severity-high",
   },
   moderate: {
-    label: "Moderate match",
+    label: tr("Moderate match"),
     text: "text-severity-moderate",
     bg: "bg-severity-moderate-bg",
     line: "border-severity-moderate-line",
     dot: "bg-severity-moderate",
   },
   low: {
-    label: "Common phrasing",
+    label: tr("Common phrasing"),
     text: "text-severity-low",
     bg: "bg-severity-low-bg",
     line: "border-severity-low-line",
@@ -41,7 +42,7 @@ export function SeverityTag({ severity, className }: { severity: Severity; class
       )}
     >
       <span className={cn("size-1.5 rounded-full", c.dot)} />
-      {c.label}
+      {t(c.label)}
     </span>
   );
 }
@@ -54,21 +55,21 @@ export function statusFromScore(score: number): DocStatus {
 }
 
 const statusConfig: Record<DocStatus, { label: string; text: string; bg: string; line: string }> = {
-  clean: { label: "Clean", text: "text-success", bg: "bg-success-bg", line: "border-success/20" },
+  clean: { label: tr("Clean"), text: "text-success", bg: "bg-success-bg", line: "border-success/20" },
   low: {
-    label: "Low similarity",
+    label: tr("Low similarity"),
     text: "text-severity-low",
     bg: "bg-severity-low-bg",
     line: "border-severity-low-line",
   },
   moderate: {
-    label: "Moderate similarity",
+    label: tr("Moderate similarity"),
     text: "text-severity-moderate",
     bg: "bg-severity-moderate-bg",
     line: "border-severity-moderate-line",
   },
   high: {
-    label: "High similarity",
+    label: tr("High similarity"),
     text: "text-severity-high",
     bg: "bg-severity-high-bg",
     line: "border-severity-high-line",
@@ -87,7 +88,7 @@ export function StatusPill({ status, className }: { status: DocStatus; className
         className,
       )}
     >
-      {c.label}
+      {t(c.label)}
     </span>
   );
 }
@@ -111,8 +112,8 @@ export function SimilarityBadge({ score, size = "md" }: { score: number; size?: 
         {score}%
       </div>
       <div className="flex flex-col">
-        <span className="text-caption font-medium text-ink-500">Similarity Score</span>
-        <span className={cn("text-sm font-semibold", c.text)}>{c.label}</span>
+        <span className="text-caption font-medium text-ink-500">{t("Similarity Score")}</span>
+        <span className={cn("text-sm font-semibold", c.text)}>{t(c.label)}</span>
       </div>
     </div>
   );

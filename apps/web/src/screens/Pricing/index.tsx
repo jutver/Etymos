@@ -11,6 +11,7 @@ import { useAppStore } from "../../lib/store";
 import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
 
 function applyDiscount(price: number, discount: ActivePlanDiscount): number {
   return discount.discount_type === "percent"
@@ -20,24 +21,24 @@ function applyDiscount(price: number, discount: ActivePlanDiscount): number {
 
 const faqs = [
   {
-    q: "Can I cancel my subscription anytime?",
-    a: "Yes. Cancel anytime from your account settings, no questions asked. You'll keep Premium access until the end of your current billing period.",
+    q: tr("Can I cancel my subscription anytime?"),
+    a: tr("Yes. Cancel anytime from your account settings, no questions asked. You'll keep Premium access until the end of your current billing period."),
   },
   {
-    q: "What happens to my history if I downgrade to Free?",
-    a: "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Standard, 12 months on Premium).",
+    q: tr("What happens to my history if I downgrade to Free?"),
+    a: tr("Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Standard, 12 months on Premium)."),
   },
   {
-    q: "Is paying with VNPay, MoMo, or ZaloPay secure?",
-    a: "Yes. All three are established Vietnamese payment processors. Etymos never stores your card or wallet credentials directly.",
+    q: tr("Is paying with VNPay, MoMo, or ZaloPay secure?"),
+    a: tr("Yes. All three are established Vietnamese payment processors. Etymos never stores your card or wallet credentials directly."),
   },
   {
-    q: "What's the difference between subscribing and buying credits?",
-    a: "A subscription gives unlimited checks for a flat monthly fee, best for regular use. Credit packs are pay-per-use, best if you only need to check a document occasionally.",
+    q: tr("What's the difference between subscribing and buying credits?"),
+    a: tr("A subscription gives unlimited checks for a flat monthly fee, best for regular use. Credit packs are pay-per-use, best if you only need to check a document occasionally."),
   },
   {
-    q: "Do you support languages other than Vietnamese?",
-    a: "Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Standard and Premium.",
+    q: tr("Do you support languages other than Vietnamese?"),
+    a: tr("Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Standard and Premium."),
   },
 ];
 
@@ -83,11 +84,9 @@ export default function PricingPage() {
     <div>
       <section className="mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
         <h1 className="text-h1 font-bold tracking-tight text-navy-900">
-          Simple, honest pricing
-        </h1>
+          {t("Simple, honest pricing")}</h1>
         <p className="mx-auto mt-3 max-w-md text-body-lg text-ink-600">
-          Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.
-        </p>
+          {t("Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.")}</p>
 
         <div className="mx-auto mt-7 inline-flex items-center gap-1 rounded-full bg-surface-muted p-1">
           <button
@@ -97,8 +96,7 @@ export default function PricingPage() {
               billingCycle === "monthly" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
             )}
           >
-            Monthly
-          </button>
+            {t("Monthly")}</button>
           <button
             onClick={() => setBillingCycle("annual")}
             className={cn(
@@ -106,9 +104,8 @@ export default function PricingPage() {
               billingCycle === "annual" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
             )}
           >
-            Annual
-            <span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
-              Save up to {maxAnnualSavings}%
+            {t("Annual")}<span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
+              {t("Save up to {{percent}}%", { percent: maxAnnualSavings })}
             </span>
           </button>
         </div>
@@ -118,11 +115,9 @@ export default function PricingPage() {
         <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
-            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
             <p className="mt-0.5 text-sm text-ink-500">
-              {describePurchaseRequest(pending)} — an admin confirms it before your access changes. You can't
-              submit another request until then.
-            </p>
+              {t(describePurchaseRequest(pending))}{" "}{t("— an admin confirms it before your access changes. You can't submit another request until then.")}</p>
           </div>
         </div>
       )}
@@ -145,11 +140,9 @@ export default function PricingPage() {
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <div className="text-center">
             <h2 className="text-h2 font-bold tracking-tight text-navy-900">
-              Prefer to pay as you go?
-            </h2>
+              {t("Prefer to pay as you go?")}</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-ink-600">
-              Buy credits for one-off checks, no subscription required. Credits never expire.
-            </p>
+              {t("Buy credits for one-off checks, no subscription required. Credits never expire.")}</p>
           </div>
 
           <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
@@ -164,10 +157,10 @@ export default function PricingPage() {
                 >
                   {pack.badge && (
                     <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">
-                      {pack.badge}
+                      {t(pack.badge)}
                     </span>
                   )}
-                  <p className="text-lg font-bold text-navy-900">{pack.label}</p>
+                  <p className="text-lg font-bold text-navy-900">{t(pack.label)}</p>
                   <div className="mt-3 flex items-baseline justify-center gap-1.5">
                     {hasDiscount && (
                       <span className="text-base font-semibold text-ink-400 line-through">
@@ -178,7 +171,7 @@ export default function PricingPage() {
                       {formatVND(hasDiscount ? discountedPrice : pack.price)}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-ink-500">{pack.description}</p>
+                  <p className="mt-1 text-xs text-ink-500">{t(pack.description)}</p>
                   <Button
                     variant="secondary"
                     fullWidth
@@ -186,7 +179,7 @@ export default function PricingPage() {
                     disabled={!!pending}
                     onClick={() => buyPack(pack.id)}
                   >
-                    {pending ? "Request pending" : "Buy credits"}
+                    {pending ? t("Request pending") : t("Buy credits")}
                   </Button>
                 </div>
               );
@@ -198,25 +191,23 @@ export default function PricingPage() {
       {/* Feature comparison table */}
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
         <h2 className="text-center text-h2 font-bold tracking-tight text-navy-900">
-          Compare every feature
-        </h2>
+          {t("Compare every feature")}</h2>
 
         <div className="mt-9 overflow-x-auto rounded-[var(--radius-card-lg)] border border-line">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-tint text-left">
-                <th className="px-5 py-4 font-semibold text-ink-500">Feature</th>
-                <th className="px-5 py-4 text-center font-semibold text-ink-700">Free</th>
+                <th className="px-5 py-4 font-semibold text-ink-500">{t("Feature")}</th>
+                <th className="px-5 py-4 text-center font-semibold text-ink-700">{t("Free")}</th>
                 <th className="px-5 py-4 text-center font-semibold text-brand-600">
-                  Standard
-                </th>
-                <th className="px-5 py-4 text-center font-semibold text-ink-700">Premium</th>
+                  {t("Standard")}</th>
+                <th className="px-5 py-4 text-center font-semibold text-ink-700">{t("Premium")}</th>
               </tr>
             </thead>
             <tbody>
               {FEATURE_MATRIX.map((row, i) => (
                 <tr key={row.feature} className={cn(i % 2 === 1 && "bg-surface-tint/50")}>
-                  <td className="px-5 py-3.5 font-medium text-ink-800">{row.feature}</td>
+                  <td className="px-5 py-3.5 font-medium text-ink-800">{t(row.feature)}</td>
                   <td className="px-5 py-3.5 text-center">
                     <Cell value={row.free} />
                   </td>
@@ -236,8 +227,7 @@ export default function PricingPage() {
       {/* FAQ */}
       <section className="mx-auto max-w-2xl px-5 py-20 sm:px-8">
         <h2 className="text-center text-h2 font-bold tracking-tight text-navy-900">
-          Frequently asked questions
-        </h2>
+          {t("Frequently asked questions")}</h2>
         <div className="mt-8 flex flex-col gap-2">
           {faqs.map((f, i) => (
             <div key={f.q} className="rounded-[var(--radius-card)] border border-line bg-white">
@@ -245,14 +235,14 @@ export default function PricingPage() {
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
               >
-                <span className="text-sm font-semibold text-ink-900">{f.q}</span>
+                <span className="text-sm font-semibold text-ink-900">{t(f.q)}</span>
                 <CaretDown
                   size={16}
                   className={cn("shrink-0 text-ink-400 transition-transform", openFaq === i && "rotate-180")}
                 />
               </button>
               {openFaq === i && (
-                <p className="px-5 pb-4 text-sm leading-relaxed text-ink-600">{f.a}</p>
+                <p className="px-5 pb-4 text-sm leading-relaxed text-ink-600">{t(f.a)}</p>
               )}
             </div>
           ))}
@@ -264,7 +254,7 @@ export default function PricingPage() {
 
 function Cell({ value }: { value: boolean | string }) {
   if (typeof value === "string") {
-    return <span className="text-xs font-medium text-ink-700">{value}</span>;
+    return <span className="text-xs font-medium text-ink-700">{t(value)}</span>;
   }
   return value ? (
     <Check size={17} weight="bold" className="mx-auto text-success" />

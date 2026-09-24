@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CaretRight, GraduationCap, MagnifyingGlass, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
-import type { MatchedSource } from "@etymos/shared";
+import type { AiDetection, MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
+import { AiDetectionSection } from "./AiDetectionSection";
 import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
+import { t, tn } from "../../lib/i18n";
 
 export interface SourcesSidebarProps {
   matches: MatchedSource[];
@@ -16,6 +18,14 @@ export interface SourcesSidebarProps {
   resolvedIds: Set<string>;
   explanationLocked: boolean;
   rewriteLocked: boolean;
+  /** Same data as the top bar's AiContentChip — rendered as its own section
+   * below the matched sources instead of behind a chip+modal. `undefined`
+   * (no detection run / old report) or `{ available: false }` renders
+   * nothing, same as the chip. */
+  aiDetection: AiDetection | undefined;
+  /** Passed straight through to AiDetectionSection — see its own docs. */
+  activeAiSegmentId?: string | null;
+  onAiSegmentClick?: (segmentId: string) => void;
   onSelect: (matchId: string) => void;
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
@@ -33,6 +43,9 @@ export function SourcesSidebar({
   resolvedIds,
   explanationLocked,
   rewriteLocked,
+  aiDetection,
+  activeAiSegmentId,
+  onAiSegmentClick,
   onSelect,
   onViewComparison,
   onRewrite,
@@ -72,8 +85,7 @@ export function SourcesSidebar({
         <Sidebar size={18} />
         <span className="text-xs font-bold tabular-nums">{matches.length}</span>
         <span className="[writing-mode:vertical-rl] text-xs font-semibold tracking-wide">
-          Sources
-        </span>
+          {t("Sources")}</span>
       </button>
     );
   }
@@ -81,26 +93,24 @@ export function SourcesSidebar({
   return (
     <aside
       id="report-sources-panel"
-      aria-label="Matched sources"
+      aria-label={t("Matched sources")}
       className="flex max-h-[45%] w-full shrink-0 flex-col border-t border-line bg-white lg:max-h-none lg:w-[22rem] lg:border-l lg:border-t-0 xl:w-[24rem]"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-navy-900">
-            {isFiltering ? `${shownIndexes.length} of ${matches.length}` : matches.length} matched source
-            {(isFiltering ? shownIndexes.length : matches.length) === 1 ? "" : "s"}
+            {isFiltering ? t("{{shown}} of {{total}} matched sources", { shown: shownIndexes.length, total: matches.length }) : tn(matches.length, "{{count}} matched source", "{{count}} matched sources")}
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            Each colour matches a highlight in your document.
-          </p>
+            {t("Each colour matches a highlight in your document.")}</p>
         </div>
         <button
           type="button"
           onClick={onToggle}
           aria-expanded
           aria-controls="report-sources-panel"
-          aria-label="Collapse sources panel"
-          title="Collapse sources panel"
+          aria-label={t("Collapse sources panel")}
+          title={t("Collapse sources panel")}
           className="hidden size-8 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 lg:flex"
         >
           <CaretRight size={16} />
@@ -110,7 +120,7 @@ export function SourcesSidebar({
       {matches.length > 0 && (
         <div className="shrink-0 border-b border-line px-3 py-2.5">
           <label className="relative block">
-            <span className="sr-only">Search matched sources</span>
+            <span className="sr-only">{t("Search matched sources")}</span>
             <MagnifyingGlass
               size={14}
               aria-hidden="true"
@@ -126,7 +136,7 @@ export function SourcesSidebar({
                   setQuery("");
                 }
               }}
-              placeholder="Search title, author or text…"
+              placeholder={t("Search title, author or text…")}
               autoComplete="off"
               className="h-9 w-full rounded-[var(--radius-input)] border border-line bg-white pl-8 pr-8 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
             />
@@ -134,7 +144,7 @@ export function SourcesSidebar({
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                aria-label="Clear search"
+                aria-label={t("Clear search")}
                 className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
               >
                 <X size={12} />
@@ -148,21 +158,18 @@ export function SourcesSidebar({
         {matches.length === 0 ? (
           <div className="flex flex-col items-center px-4 py-14 text-center">
             <ShieldCheck size={28} className="text-success" />
-            <p className="mt-3 text-sm font-semibold text-navy-900">No matched sources</p>
+            <p className="mt-3 text-sm font-semibold text-navy-900">{t("No matched sources")}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-500">
-              Nothing in this document overlapped the sources we scanned.
-            </p>
+              {t("Nothing in this document overlapped the sources we scanned.")}</p>
           </div>
         ) : shownIndexes.length === 0 ? (
           <div className="flex flex-col items-center px-4 py-12 text-center">
             <MagnifyingGlass size={26} className="text-ink-300" />
-            <p className="mt-3 text-sm font-semibold text-navy-900">No sources match</p>
+            <p className="mt-3 text-sm font-semibold text-navy-900">{t("No sources match")}</p>
             <p className="mt-1 break-words text-xs leading-relaxed text-ink-500">
-              Nothing matched "{query.trim()}". Try a different word from the title, author or text.
-            </p>
+              {t("Nothing matched \"")}{query.trim()}{t("\". Try a different word from the title, author or text.")}</p>
             <Button size="sm" variant="outline" className="mt-3 h-8 px-3 text-xs" onClick={() => setQuery("")}>
-              Clear search
-            </Button>
+              {t("Clear search")}</Button>
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -203,16 +210,21 @@ export function SourcesSidebar({
           >
             <GraduationCap size={20} weight="bold" className="mx-auto text-brand-600" />
             <p className="mt-2 text-xs font-semibold text-navy-900">
-              {lockedCount} more found by Semantic Detection
-            </p>
+              {lockedCount}{" "}{t("more found by Semantic Detection")}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-500">
-              Upgrade to catch paraphrased and reworded copying too.
-            </p>
+              {t("Upgrade to catch paraphrased and reworded copying too.")}</p>
             <Button size="sm" className="mt-3 h-8 px-3 text-xs" onClick={onUpgrade}>
-              Unlock
-            </Button>
+              {t("Unlock")}</Button>
           </div>
         )}
+
+        <AiDetectionSection
+          detection={aiDetection}
+          locked={explanationLocked}
+          onUpgrade={onUpgrade}
+          activeSegmentId={activeAiSegmentId}
+          onSegmentClick={onAiSegmentClick}
+        />
       </div>
     </aside>
   );

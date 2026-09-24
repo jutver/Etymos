@@ -6,6 +6,7 @@
 import { CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import type { CheckState } from "../../lib/documentsQueries";
+import { t } from "../../lib/i18n";
 
 interface CheckStatePillProps {
   state: CheckState;
@@ -25,8 +26,7 @@ export function CheckStatePill({ state, className }: CheckStatePillProps) {
         )}
       >
         <WarningCircle size={13} weight="fill" />
-        Interrupted
-      </span>
+        {t("Interrupted")}</span>
     );
   }
 
@@ -39,7 +39,6 @@ export function CheckStatePill({ state, className }: CheckStatePillProps) {
       role="status"
     >
       <CircleNotch size={13} className="animate-spin motion-reduce:animate-none" aria-hidden />
-      Checking
-    </span>
+      {t("Checking")}</span>
   );
 }

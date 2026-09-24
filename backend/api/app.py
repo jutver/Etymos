@@ -27,6 +27,8 @@ from report_store import delete_report, get_report, list_reports, save_report
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
 from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
+from ai_explain import register_flag as register_explain_flag
+from report_enrichment import register_flags as register_enrichment_flags
 from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
@@ -51,6 +53,11 @@ async def lifespan(_: FastAPI):
         register_rewrite_flag()
     except Exception:
         logger.exception("Feature flag registration failed; using code defaults.")
+    try:
+        register_enrichment_flags()
+        register_explain_flag()
+    except Exception:
+        logger.exception("AI detection/explanation flag registration failed; using code defaults.")
     yield
 
 

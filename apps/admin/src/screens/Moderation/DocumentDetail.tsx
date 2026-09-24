@@ -6,6 +6,7 @@ import { getDocument, setModerationStatus } from "../../lib/moderationQueries";
 import { useAdminAuth } from "../../lib/auth";
 import type { AdminDocument } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
+import { t, currentLocale } from "../../lib/i18n";
 
 export default function DocumentDetailPage() {
   const { documentId } = useParams<{ documentId: string }>();
@@ -52,11 +53,11 @@ export default function DocumentDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-body text-fg-muted">Loading…</p>;
+    return <p className="text-body text-fg-muted">{t("Loading…")}</p>;
   }
 
   if (!doc) {
-    return <p className="text-body text-destructive">{error ?? "Document not found."}</p>;
+    return <p className="text-body text-destructive">{error ?? t("Document not found.")}</p>;
   }
 
   return (
@@ -67,8 +68,7 @@ export default function DocumentDetailPage() {
         className="mb-4 flex cursor-pointer items-center gap-1.5 text-caption font-medium text-fg-muted transition-colors hover:text-fg"
       >
         <ArrowLeft size={14} weight="bold" />
-        Back to Moderation
-      </button>
+        {t("Back to Moderation")}</button>
 
       <div className="flex items-center gap-3">
         <h1 className="text-h1 font-semibold text-fg">{doc.title ?? doc.file_name ?? doc.id}</h1>
@@ -76,21 +76,21 @@ export default function DocumentDetailPage() {
         <StatusBadge label={doc.moderation_status} tone={moderationTone(doc.moderation_status)} />
       </div>
       <p className="mt-1 text-body text-fg-muted">
-        Owner: {doc.profiles?.email ?? doc.profiles?.display_name ?? doc.user_id} · Uploaded{" "}
-        {new Date(doc.uploaded_at).toLocaleDateString()}
-        {doc.similarity_score != null ? ` · ${doc.similarity_score}% similarity` : ""}
+        {t("Owner:")}{" "}{doc.profiles?.email ?? doc.profiles?.display_name ?? doc.user_id} {" "}{t("· Uploaded")}{" "}
+        {new Date(doc.uploaded_at).toLocaleDateString(currentLocale())}
+        {doc.similarity_score != null ? t(" · {{similarity_score}}% similarity", { similarity_score: doc.similarity_score }) : ""}
       </p>
 
       <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6">
-        <h2 className="text-h2 font-semibold text-fg">Moderation</h2>
+        <h2 className="text-h2 font-semibold text-fg">{t("Moderation")}</h2>
 
         <div>
-          <label className="mb-1.5 block text-caption font-medium text-fg-muted">Notes</label>
+          <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Notes")}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="Optional context for this moderation decision…"
+            placeholder={t("Optional context for this moderation decision…")}
             className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
@@ -106,8 +106,7 @@ export default function DocumentDetailPage() {
               className="flex cursor-pointer items-center gap-1.5 rounded-control border border-warning/40 bg-warning-bg px-3.5 py-2 text-body font-medium text-warning transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Flag size={16} weight="bold" />
-              Flag
-            </button>
+              {t("Flag")}</button>
           )}
 
           {doc.moderation_status !== "none" && (
@@ -118,8 +117,7 @@ export default function DocumentDetailPage() {
               className="flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3.5 py-2 text-body font-medium text-fg-muted transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ArrowCounterClockwise size={16} weight="bold" />
-              Clear
-            </button>
+              {t("Clear")}</button>
           )}
 
           {doc.moderation_status !== "removed" && !confirmingRemove && (
@@ -130,27 +128,24 @@ export default function DocumentDetailPage() {
               className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-2 text-body font-medium text-destructive transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash size={16} weight="bold" />
-              Remove
-            </button>
+              {t("Remove")}</button>
           )}
 
           {confirmingRemove && (
             <div className="flex items-center gap-2 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-2">
-              <span className="text-body font-medium text-destructive">Remove this document?</span>
+              <span className="text-body font-medium text-destructive">{t("Remove this document?")}</span>
               <button
                 type="button"
                 onClick={() => applyStatus("removed")}
                 className="cursor-pointer text-body font-semibold text-destructive underline"
               >
-                Confirm
-              </button>
+                {t("Confirm")}</button>
               <button
                 type="button"
                 onClick={() => setConfirmingRemove(false)}
                 className="cursor-pointer text-body text-fg-muted underline"
               >
-                Cancel
-              </button>
+                {t("Cancel")}</button>
             </div>
           )}
         </div>

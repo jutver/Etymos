@@ -5,6 +5,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import type { MatchedSource, Severity } from "../lib/types";
 import { extractWordTokens, findFuzzyMatch, normalize, normalizeWithMap } from "../lib/textMatch";
+import { t, tr } from "../lib/i18n";
 
 // Ép nó load chính xác version đang dùng qua mạng
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -28,6 +29,16 @@ type PlagiarismPdfViewerProps = {
    * limit. See the suppression logic inside `measurePage` for exactly how
    * this is used — it's a deliberate approximation, documented there. */
   overLimitOffset?: number;
+  /** AI-detection segments to give the same "find it on the page" treatment
+   * as plagiarism matches — a separate, always-violet wash (DESIGN.md's
+   * Functional Wall Rule: different signal, never sharing severity colours).
+   * Located by searching each page's text layer for `excerpt`, the same way
+   * matches are searched for `userSnippet` — this viewer only ever sees
+   * rendered PDF text, never the backend's character offsets. Optional so
+   * existing callers (e.g. Upload's bare file preview) don't need it. */
+  aiSegments?: { id: string; excerpt: string; score: number }[];
+  activeAiSegmentId?: string | null;
+  onAiSegmentClick?: (segmentId: string) => void;
 };
 
 // Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
@@ -54,16 +65,43 @@ type MatchLocation = {
   endOffsetInItem: number;
 };
 
+// Cùng cấu trúc MatchLocation/HighlightRect ở trên nhưng cho đoạn nghi AI viết
+// - không có severity (AI detection không phân mức cao/vừa/thấp như đạo văn),
+// tô 1 màu tím cố định, đo bằng đúng cơ chế Range API như match.
+type AiSegmentLocation = {
+  id: string;
+  itemStart: number;
+  startOffsetInItem: number;
+  itemEnd: number;
+  endOffsetInItem: number;
+};
+
+type AiHighlightRect = {
+  segmentId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 const SEVERITY_COLOR: Record<Severity, { fill: string; fillActive: string; border: string }> = {
   high: { fill: "rgba(220, 38, 38, 0.16)", fillActive: "rgba(220, 38, 38, 0.38)", border: "rgba(220, 38, 38, 0.55)" },
   moderate: { fill: "rgba(217, 119, 6, 0.15)", fillActive: "rgba(217, 119, 6, 0.36)", border: "rgba(217, 119, 6, 0.55)" },
   low: { fill: "rgba(37, 99, 235, 0.13)", fillActive: "rgba(37, 99, 235, 0.34)", border: "rgba(37, 99, 235, 0.5)" },
 };
 
+// Cùng màu --color-ai-flag (#7c3aed) dùng cho chip/card AI Detection ở
+// sidebar, để 2 nơi luôn khớp nhau về mặt màu sắc.
+const AI_FLAG_COLOR = {
+  fill: "rgba(124, 58, 237, 0.10)",
+  fillActive: "rgba(124, 58, 237, 0.24)",
+  border: "rgba(124, 58, 237, 0.4)",
+};
+
 const SEVERITY_LABEL: Record<Severity, string> = {
-  high: "High match",
-  moderate: "Moderate match",
-  low: "Common phrasing",
+  high: tr("High match"),
+  moderate: tr("Moderate match"),
+  low: tr("Common phrasing"),
 };
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 3, moderate: 2, low: 1 };
@@ -95,6 +133,9 @@ export function PlagiarismPdfViewer({
   unavailableMessage,
   onPageChange,
   overLimitOffset = Infinity,
+  aiSegments = [],
+  activeAiSegmentId = null,
+  onAiSegmentClick,
 }: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   // "Trang hiện tại" giờ không còn điều khiển việc render nữa (mọi trang đều
@@ -119,6 +160,13 @@ export function PlagiarismPdfViewer({
   // giờ mọi trang đều mount cùng lúc (chính xác tuyệt đối, không lem).
   const [pageRects, setPageRects] = useState<Record<number, HighlightRect[]>>({});
 
+  // Song song với matchesByPage/pageRects/matchLocationsCache ở trên, nhưng
+  // cho đoạn AI - tách riêng hẳn (không gộp chung state) để không đụng vào
+  // logic match đã chạy ổn định.
+  const [aiSegmentsByPage, setAiSegmentsByPage] = useState<Record<number, string[]>>({});
+  const [aiPageRects, setAiPageRects] = useState<Record<number, AiHighlightRect[]>>({});
+  const aiLocationsCache = useRef<Record<number, AiSegmentLocation[]>>({});
+
   const matchLocationsCache = useRef<Record<number, MatchLocation[]>>({});
   // Container DOM của từng trang (để đo Range/getClientRects và để scrollIntoView).
   const pageContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -131,6 +179,7 @@ export function PlagiarismPdfViewer({
     matches.forEach((m) => map.set(m.id, m));
     return map;
   }, [matches]);
+
 
   // --- 1. Đọc file thành ArrayBuffer (ổn định hơn blob URL) ---
   useEffect(() => {
@@ -149,7 +198,7 @@ export function PlagiarismPdfViewer({
       })
       .catch((err) => {
         console.error("Failed to read file as ArrayBuffer:", err);
-        if (!cancelled) setBufferError("Không thể đọc file này.");
+        if (!cancelled) setBufferError(tr("Could not read this file."));
       });
     return () => {
       cancelled = true;
@@ -165,6 +214,7 @@ export function PlagiarismPdfViewer({
   useEffect(() => {
     pageContainerRefs.current.clear();
     setPageRects({});
+    setAiPageRects({});
     setCurrentPage(1);
   }, [fileSource]);
 
@@ -246,15 +296,77 @@ export function PlagiarismPdfViewer({
     [matchById, overLimitOffset],
   );
 
+  // Song song measurePage() ở trên, nhưng đo vị trí pixel của đoạn AI-flagged
+  // - cùng kỹ thuật Range API, tách hàm riêng (không gộp vào measurePage) để
+  // không đụng/rủi ro logic match đã chạy ổn định. Không có khái niệm
+  // "overLimitOffset suppression" hay severity ở đây - AI segments không có 2
+  // khái niệm đó.
+  const measureAiPage = useCallback((page: number) => {
+    const container = pageContainerRefs.current.get(page);
+    const locations = aiLocationsCache.current[page];
+    if (!container || !locations || locations.length === 0) {
+      setAiPageRects((prev) => {
+        if (!(page in prev)) return prev;
+        const next: Record<number, AiHighlightRect[]> = {};
+        for (const key of Object.keys(prev)) {
+          const k = Number(key);
+          if (k !== page) next[k] = prev[k];
+        }
+        return next;
+      });
+      return;
+    }
+    const spans = container.querySelectorAll<HTMLElement>("span");
+    if (spans.length === 0) {
+      setAiPageRects((prev) => ({ ...prev, [page]: [] }));
+      return;
+    }
+    const containerRect = container.getBoundingClientRect();
+    const rects: AiHighlightRect[] = [];
+
+    for (const loc of locations) {
+      const startSpan = spans[loc.itemStart];
+      const endSpan = spans[loc.itemEnd];
+      const startNode = startSpan?.firstChild;
+      const endNode = endSpan?.firstChild;
+      if (!startNode || !endNode) continue;
+
+      try {
+        const range = document.createRange();
+        const startLen = startNode.textContent?.length ?? 0;
+        const endLen = endNode.textContent?.length ?? 0;
+        range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
+        range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
+
+        for (const cr of Array.from(range.getClientRects())) {
+          if (cr.width <= 0 || cr.height <= 0) continue;
+          rects.push({
+            segmentId: loc.id,
+            x: cr.left - containerRect.left,
+            y: cr.top - containerRect.top,
+            width: cr.width,
+            height: cr.height,
+          });
+        }
+      } catch {
+        // Bỏ qua nếu range không hợp lệ, giống measurePage().
+      }
+    }
+
+    setAiPageRects((prev) => ({ ...prev, [page]: rects }));
+  }, []);
+
   // --- 3. Quét toàn bộ văn bản để biết trang nào có match nào, và lưu lại vị
   //         trí "logic" (item + offset ký tự) của từng match. KHÔNG tính toạ
   //         độ pixel ở bước này - toạ độ pixel do trình duyệt tự đo thật khi
   //         từng trang render (bước 2), nên không còn sai số/lem nữa. ---
   useEffect(() => {
     if (!fileSource) return;
-    if (matches.length === 0) {
+    if (matches.length === 0 && aiSegments.length === 0) {
       setMatchesByPage({});
       matchLocationsCache.current = {};
+      setAiSegmentsByPage({});
+      aiLocationsCache.current = {};
       return;
     }
 
@@ -269,10 +381,19 @@ export function PlagiarismPdfViewer({
       .promise.then(async (pdfDoc) => {
         const byPage: Record<number, string[]> = {};
         const locCache: Record<number, MatchLocation[]> = {};
+        const aiByPage: Record<number, string[]> = {};
+        const aiLocCache: Record<number, AiSegmentLocation[]> = {};
 
         const normalizedSnippets = matches
           .filter((m) => m.userSnippet && m.userSnippet.trim().length > 0)
           .map((m) => ({ id: m.id, severity: m.severity, snippet: normalize(m.userSnippet) }));
+
+        // Excerpt luôn là 160 ký tự đầu của đoạn, có thể bị cắt kèm "…" -
+        // bỏ ký tự đó trước khi tìm, không thì indexOf/fuzzy sẽ không bao
+        // giờ khớp (trang PDF không có ký tự "…" ở giữa câu).
+        const normalizedAiSegments = aiSegments
+          .map((s) => ({ id: s.id, snippet: normalize(s.excerpt.replace(/…$/, "").trim()) }))
+          .filter((s) => s.snippet.length >= 8);
 
         for (let pageIdx = 1; pageIdx <= pdfDoc.numPages; pageIdx++) {
           if (cancelled) return;
@@ -346,18 +467,61 @@ export function PlagiarismPdfViewer({
               endOffsetInItem,
             });
           }
+
+          // Cùng cơ chế tìm kiếm ở trên (exact rồi fuzzy), tái dùng đúng
+          // normalizedPageText/rawIndexMap/charToItem/getPageTokens vừa tính
+          // cho trang này - không parse lại PDF lần 2.
+          for (const { id, snippet } of normalizedAiSegments) {
+            let matchStart: number;
+            let matchEndInclusive: number;
+
+            const idx = normalizedPageText.indexOf(snippet);
+            if (idx !== -1) {
+              matchStart = idx;
+              matchEndInclusive = idx + snippet.length - 1;
+            } else {
+              const snippetWords = snippet.split(" ").filter(Boolean);
+              const fuzzy = findFuzzyMatch(getPageTokens(), snippetWords);
+              if (!fuzzy) continue;
+              matchStart = fuzzy.start;
+              matchEndInclusive = fuzzy.end;
+            }
+
+            const rawStart = rawIndexMap[matchStart] ?? 0;
+            const rawEnd =
+              rawIndexMap[Math.min(matchEndInclusive, rawIndexMap.length - 1)] ?? rawStart;
+
+            const itemStart = charToItem[rawStart] ?? 0;
+            const itemEnd = charToItem[rawEnd] ?? charToItem[charToItem.length - 1] ?? 0;
+            const startOffsetInItem = charOffsetInItem[rawStart] ?? 0;
+            const endOffsetInItem = charOffsetInItem[rawEnd] ?? 0;
+
+            (aiByPage[pageIdx] ??= []).push(id);
+            (aiLocCache[pageIdx] ??= []).push({
+              id,
+              itemStart,
+              startOffsetInItem,
+              itemEnd,
+              endOffsetInItem,
+            });
+          }
         }
 
         if (!cancelled) {
           matchLocationsCache.current = locCache;
           setMatchesByPage(byPage);
+          aiLocationsCache.current = aiLocCache;
+          setAiSegmentsByPage(aiByPage);
           // Các trang trong dải cuộn dài có thể đã render text layer XONG
           // TRƯỚC KHI bước quét này hoàn tất (chạy song song), nên chủ động đo
           // lại toàn bộ trang đã mount ngay khi có kết quả quét mới, thay vì
           // chờ một sự kiện render khác không chắc sẽ xảy ra.
           requestAnimationFrame(() => {
             if (cancelled) return;
-            pageContainerRefs.current.forEach((_, p) => measurePage(p));
+            pageContainerRefs.current.forEach((_, p) => {
+              measurePage(p);
+              measureAiPage(p);
+            });
           });
         }
       })
@@ -371,17 +535,19 @@ export function PlagiarismPdfViewer({
     return () => {
       cancelled = true;
     };
-    // measurePage cố ý không nằm trong dependency: nó chỉ được gọi lại ở đây
-    // để "bù" race giữa quét văn bản và render trang, không phải điều khiển
-    // luồng chính của effect này (chỉ nên chạy lại khi file/matches đổi).
+    // measurePage/measureAiPage cố ý không nằm trong dependency: chúng chỉ
+    // được gọi lại ở đây để "bù" race giữa quét văn bản và render trang,
+    // không phải điều khiển luồng chính của effect này (chỉ nên chạy lại khi
+    // file/matches/aiSegments đổi).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileSource, matches]);
+  }, [fileSource, matches, aiSegments]);
 
   // Xoá toàn bộ highlight cũ ngay khi đổi zoom để không hiện sai vị trí trong
   // lúc chờ các trang render lại theo scale mới (mỗi trang sẽ tự đo lại qua
   // onRenderTextLayerSuccess bên dưới).
   useEffect(() => {
     setPageRects({});
+    setAiPageRects({});
   }, [scale]);
 
   useEffect(() => {
@@ -427,6 +593,13 @@ export function PlagiarismPdfViewer({
     if (targetPage) scrollToPage(Number(targetPage));
   }, [activeMatchId, matchesByPage, scrollToPage]);
 
+  // Cùng cơ chế ở trên, cho việc bấm 1 đoạn "nghi AI viết" từ card sidebar.
+  useEffect(() => {
+    if (!activeAiSegmentId) return;
+    const targetPage = Object.entries(aiSegmentsByPage).find(([, ids]) => ids.includes(activeAiSegmentId))?.[0];
+    if (targetPage) scrollToPage(Number(targetPage));
+  }, [activeAiSegmentId, aiSegmentsByPage, scrollToPage]);
+
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
     setCurrentPage(1);
@@ -435,7 +608,7 @@ export function PlagiarismPdfViewer({
 
   function onDocumentLoadError(err: Error) {
     console.error("PDF load error:", err);
-    setLoadError("Không thể tải file PDF. File có thể bị lỗi cấu trúc hoặc không được hỗ trợ.");
+    setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
   }
 
   const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
@@ -449,6 +622,11 @@ export function PlagiarismPdfViewer({
     return counts;
   }, [pageRects]);
   const hasHighlights = severityCounts.high + severityCounts.moderate + severityCounts.low > 0;
+  const aiSegmentCount = useMemo(() => {
+    const ids = new Set<string>();
+    Object.values(aiPageRects).forEach((rects) => rects.forEach((r) => ids.add(r.segmentId)));
+    return ids.size;
+  }, [aiPageRects]);
   const hoveredMatch = hoveredMatchId ? matchById.get(hoveredMatchId) : null;
   const hoveredLocation = useMemo(() => {
     if (!hoveredMatchId) return null;
@@ -473,19 +651,19 @@ export function PlagiarismPdfViewer({
             onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
-            aria-label="Trang trước"
+            aria-label={t("Previous page")}
           >
             <CaretLeft size={16} />
           </button>
           <span className="text-sm font-medium text-ink-700">
-            Trang {currentPage} / {numPages ?? "..."}
-            {analyzing && <span className="ml-2 text-xs text-ink-400">(đang quét trùng lặp...)</span>}
+            {t("Page")}{" "}{currentPage} / {numPages ?? "..."}
+            {analyzing && <span className="ml-2 text-xs text-ink-400">{t("(scanning for overlaps...)")}</span>}
           </span>
           <button
             onClick={() => scrollToPage(Math.min(numPages ?? currentPage, currentPage + 1))}
             disabled={!numPages || currentPage >= numPages}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
-            aria-label="Trang sau"
+            aria-label={t("Next page")}
           >
             <CaretRight size={16} />
           </button>
@@ -495,7 +673,7 @@ export function PlagiarismPdfViewer({
           <button
             onClick={() => setScale((s) => Math.max(0.6, s - 0.1))}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600"
-            aria-label="Thu nhỏ"
+            aria-label={t("Zoom out")}
           >
             <MagnifyingGlassMinus size={16} />
           </button>
@@ -505,7 +683,7 @@ export function PlagiarismPdfViewer({
           <button
             onClick={() => setScale((s) => Math.min(2, s + 0.1))}
             className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600"
-            aria-label="Phóng to"
+            aria-label={t("Zoom in")}
           >
             <MagnifyingGlassPlus size={16} />
           </button>
@@ -513,7 +691,7 @@ export function PlagiarismPdfViewer({
       </div>
 
       {/* Legend mức độ trùng lặp, kiểu Turnitin */}
-      {hasHighlights && (
+      {(hasHighlights || aiSegmentCount > 0) && (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-line bg-white px-3 py-2 text-xs">
           {(Object.keys(SEVERITY_LABEL) as Severity[]).map((sev) => (
             <div key={sev} className="flex items-center gap-1.5">
@@ -521,10 +699,20 @@ export function PlagiarismPdfViewer({
                 className="inline-block size-2.5 rounded-full"
                 style={{ backgroundColor: SEVERITY_COLOR[sev].border }}
               />
-              <span className="text-ink-600">{SEVERITY_LABEL[sev]}</span>
+              <span className="text-ink-600">{t(SEVERITY_LABEL[sev])}</span>
               <span className="font-semibold text-ink-800">{severityCounts[sev] ?? 0}</span>
             </div>
           ))}
+          {aiSegmentCount > 0 && (
+            <div className="flex items-center gap-1.5 border-l border-line pl-4">
+              <span
+                className="inline-block size-2.5 rounded-full"
+                style={{ backgroundColor: AI_FLAG_COLOR.border }}
+              />
+              <span className="text-ink-600">{t("AI content")}</span>
+              <span className="font-semibold text-ink-800">{aiSegmentCount}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -541,26 +729,27 @@ export function PlagiarismPdfViewer({
           <p
             className={`py-12 text-center text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}
           >
-            {unavailableMessage ?? "Không có file PDF gốc để hiển thị preview."}
+            {t(unavailableMessage) ?? t("No original PDF available to preview.")}
           </p>
         ) : bufferError ? (
-          <p className="py-12 text-center text-sm font-medium text-severity-high">{bufferError}</p>
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(bufferError)}</p>
         ) : loadError ? (
-          <p className="py-12 text-center text-sm font-medium text-severity-high">{loadError}</p>
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(loadError)}</p>
         ) : isPreparingFile ? (
-          <p className="py-12 text-center text-sm text-ink-400">Đang chuẩn bị file...</p>
+          <p className="py-12 text-center text-sm text-ink-400">{t("Preparing file...")}</p>
         ) : fileSource ? (
           <Document
             file={fileSource}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
-            loading={<p className="py-12 text-center text-sm text-ink-400">Đang tải PDF...</p>}
+            loading={<p className="py-12 text-center text-sm text-ink-400">{t("Loading PDF...")}</p>}
           >
             {/* Dải trang dài cuộn liên tục - mọi trang được mount cùng lúc,
                 xếp dọc, thay cho việc chỉ mount 1 <Page> theo pageNumber. */}
             <div className="flex flex-col items-center gap-6">
               {pageNumbers.map((p) => {
                 const rects = pageRects[p] ?? [];
+                const aiRects = aiPageRects[p] ?? [];
                 return (
                   <div
                     key={p}
@@ -578,9 +767,36 @@ export function PlagiarismPdfViewer({
                       renderTextLayer
                       onRenderTextLayerSuccess={() => {
                         measurePage(p);
+                        measureAiPage(p);
                         updateCurrentPage();
                       }}
                     />
+
+                    {/* Overlay đoạn nghi AI viết - vẽ TRƯỚC overlay match nên
+                        nằm DƯỚI nó trong thứ tự DOM/stacking: match (câu, hẹp
+                        hơn) luôn nhận click trước khi trùng vùng với AI wash
+                        (đoạn, rộng hơn) - đúng "Functional Wall Rule", 2 tín
+                        hiệu vẫn tách biệt về màu/click nhưng không giành nhau. */}
+                    <div className="pointer-events-none absolute inset-0">
+                      {aiRects.map((r, i) => {
+                        const isActive = activeAiSegmentId === r.segmentId;
+                        return (
+                          <div
+                            key={`ai-${r.segmentId}-${i}`}
+                            onClick={() => onAiSegmentClick?.(r.segmentId)}
+                            className="pointer-events-auto absolute cursor-pointer rounded-[2px] transition-colors"
+                            style={{
+                              left: r.x,
+                              top: r.y,
+                              width: r.width,
+                              height: r.height,
+                              backgroundColor: isActive ? AI_FLAG_COLOR.fillActive : AI_FLAG_COLOR.fill,
+                              boxShadow: isActive ? `inset 0 0 0 1px ${AI_FLAG_COLOR.border}` : undefined,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
 
                     {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
                     <div className="pointer-events-none absolute inset-0">
@@ -619,7 +835,7 @@ export function PlagiarismPdfViewer({
                         }}
                       >
                         <p className="font-semibold text-white">
-                          {SEVERITY_LABEL[hoveredMatch.severity]} · {hoveredMatch.matchPercent}%
+                          {t(SEVERITY_LABEL[hoveredMatch.severity])} · {hoveredMatch.matchPercent}%
                         </p>
                         <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
                       </div>
@@ -648,7 +864,7 @@ export function PlagiarismPdfViewer({
                     : "border-line bg-white text-ink-500 hover:border-brand-300"
                 }`}
               >
-                Trang {p} ({matchesByPage[p].length})
+                {t("Page")}{" "}{p} ({matchesByPage[p].length})
               </button>
             ))}
         </div>

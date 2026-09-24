@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowCounterClockwise, Trash } from "@phosphor-icons/react";
 import { useAppStore } from "../../lib/store";
-import { formatDate } from "@etymos/shared";
+import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
+import { t, tr } from "../../lib/i18n";
 
 export default function TrashPage() {
   const navigate = useNavigate();
@@ -17,12 +18,12 @@ export default function TrashPage() {
   async function restore(id: string) {
     try {
       await restoreFromTrash(id);
-      pushToast({ kind: "success", title: "Document restored", description: "It's back in your History." });
+      pushToast({ kind: "success", title: tr("Document restored"), description: tr("It's back in your History.") });
     } catch (err) {
       pushToast({
         kind: "error",
-        title: "Couldn't restore document",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: tr("Couldn't restore document"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
       });
     }
   }
@@ -31,12 +32,12 @@ export default function TrashPage() {
     setConfirmId(null);
     try {
       await permanentlyDeleteTrash(id);
-      pushToast({ kind: "info", title: "Document permanently deleted" });
+      pushToast({ kind: "info", title: tr("Document permanently deleted") });
     } catch (err) {
       pushToast({
         kind: "error",
-        title: "Couldn't delete document",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: tr("Couldn't delete document"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
       });
     }
   }
@@ -44,22 +45,21 @@ export default function TrashPage() {
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div>
-        <h1 className="text-h1 font-bold tracking-tight text-navy-900">My Trash</h1>
+        <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Trash")}</h1>
         <p className="mt-1.5 text-sm text-ink-500">
-          Documents deleted from History land here. Restore them or delete them permanently.
-        </p>
+          {t("Documents deleted from History land here. Restore them or delete them permanently.")}</p>
       </div>
 
       <div className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
-              <th className="px-5 py-3 font-semibold">Document</th>
-              <th className="px-5 py-3 font-semibold">Date</th>
-              <th className="px-5 py-3 font-semibold">Similarity</th>
-              <th className="px-5 py-3 font-semibold">Status</th>
-              <th className="px-5 py-3 font-semibold">Project</th>
-              <th className="px-5 py-3 font-semibold">Actions</th>
+              <th className="px-5 py-3 font-semibold">{t("Document")}</th>
+              <th className="px-5 py-3 font-semibold">{t("Date")}</th>
+              <th className="px-5 py-3 font-semibold">{t("Similarity")}</th>
+              <th className="px-5 py-3 font-semibold">{t("Status")}</th>
+              <th className="px-5 py-3 font-semibold">{t("Project")}</th>
+              <th className="px-5 py-3 font-semibold">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -80,11 +80,9 @@ export default function TrashPage() {
                   {confirmId === h.id ? (
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="danger" onClick={() => deleteForever(h.id)}>
-                        Confirm
-                      </Button>
+                        {t("Confirm")}</Button>
                       <Button size="sm" variant="ghost" onClick={() => setConfirmId(null)}>
-                        Cancel
-                      </Button>
+                        {t("Cancel")}</Button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -94,8 +92,7 @@ export default function TrashPage() {
                         iconLeft={<ArrowCounterClockwise size={14} />}
                         onClick={() => restore(h.id)}
                       >
-                        Restore
-                      </Button>
+                        {t("Restore")}</Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -103,8 +100,7 @@ export default function TrashPage() {
                         className="text-severity-high hover:bg-severity-high-bg"
                         onClick={() => setConfirmId(h.id)}
                       >
-                        Delete forever
-                      </Button>
+                        {t("Delete forever")}</Button>
                     </div>
                   )}
                 </td>
@@ -113,8 +109,7 @@ export default function TrashPage() {
             {trash.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-5 py-12 text-center text-sm text-ink-400">
-                  Trash is empty.
-                </td>
+                  {t("Trash is empty.")}</td>
               </tr>
             )}
           </tbody>

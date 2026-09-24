@@ -1,5 +1,6 @@
 import { Modal, ModalCloseButton } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { t, tr } from "../../lib/i18n";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -14,7 +15,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Delete",
+  confirmLabel = tr("Delete"),
   onClose,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -23,15 +24,14 @@ export function ConfirmDialog({
       <div className="relative p-6">
         <ModalCloseButton onClose={onClose} />
         <h2 id="confirm-dialog-title" className="text-h3 font-bold text-navy-900">
-          {title}
+          {t(title)}
         </h2>
-        <p className="mt-2 text-sm text-ink-500">{description}</p>
+        <p className="mt-2 text-sm text-ink-500">{t(description)}</p>
         <div className="mt-6 flex items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+            {t("Cancel")}</Button>
           <Button variant="danger" onClick={onConfirm}>
-            {confirmLabel}
+            {t(confirmLabel)}
           </Button>
         </div>
       </div>

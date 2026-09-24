@@ -3,11 +3,13 @@ import { Link, useLocation } from "react-router-dom";
 import { List, X } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { Button } from "../ui/Button";
+import { t, tr } from "../../lib/i18n";
+import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const links = [
-  { label: "Features", href: "/#features" },
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "Pricing", href: "/pricing" },
+  { label: tr("Features"), href: "/#features" },
+  { label: tr("How it works"), href: "/#how-it-works" },
+  { label: tr("Pricing"), href: "/pricing" },
 ];
 
 export function PublicNav() {
@@ -26,24 +28,23 @@ export function PublicNav() {
               to={l.href}
               className="text-sm font-medium text-ink-700 transition-colors hover:text-brand-600"
             >
-              {l.label}
+              {t(l.label)}
             </Link>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
+          <LanguageSwitcher />
           <Button as="link" to="/login" variant="ghost" size="sm">
-            Log in
-          </Button>
+            {t("Log in")}</Button>
           <Button as="link" to="/signup" size="sm">
-            Get Started
-          </Button>
+            {t("Get Started")}</Button>
         </div>
 
         <button
           className="flex size-10 items-center justify-center rounded-lg text-ink-700 lg:hidden"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle menu"
+          aria-label={t("Toggle menu")}
         >
           {open ? <X size={22} /> : <List size={22} />}
         </button>
@@ -59,17 +60,16 @@ export function PublicNav() {
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface-tint"
               >
-                {l.label}
+                {t(l.label)}
               </Link>
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2">
+            <LanguageSwitcher className="self-start" />
             <Button as="link" to="/login" variant="outline" fullWidth onClick={() => setOpen(false)}>
-              Log in
-            </Button>
+              {t("Log in")}</Button>
             <Button as="link" to="/signup" fullWidth onClick={() => setOpen(false)}>
-              Get Started
-            </Button>
+              {t("Get Started")}</Button>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import { listDocuments } from "../../lib/moderationQueries";
 import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import type { AdminDocument } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 export default function ModerationPage() {
   const navigate = useNavigate();
@@ -37,33 +38,33 @@ export default function ModerationPage() {
   }, [page, search]);
 
   const columns: Column<AdminDocument>[] = [
-    { key: "title", label: "Document", render: (r) => r.title ?? r.file_name ?? r.id },
+    { key: "title", label: tr("Document"), render: (r) => r.title ?? r.file_name ?? r.id },
     {
       key: "owner",
-      label: "Owner",
+      label: tr("Owner"),
       render: (r) => r.profiles?.email ?? r.profiles?.display_name ?? r.user_id,
     },
     {
       key: "status",
-      label: "Similarity",
+      label: tr("Similarity"),
       render: (r) => r.status ? <StatusBadge label={r.status} tone={docStatusTone(r.status)} /> : "—",
     },
     {
       key: "moderation_status",
-      label: "Moderation",
+      label: tr("Moderation"),
       render: (r) => <StatusBadge label={r.moderation_status} tone={moderationTone(r.moderation_status)} />,
     },
     {
       key: "uploaded_at",
-      label: "Uploaded",
-      render: (r) => new Date(r.uploaded_at).toLocaleDateString(),
+      label: tr("Uploaded"),
+      render: (r) => new Date(r.uploaded_at).toLocaleDateString(currentLocale()),
     },
   ];
 
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">Moderation</h1>
-      <p className="mt-1 text-body text-fg-muted">Browse documents across all users, flag or remove content.</p>
+      <h1 className="text-h1 font-semibold text-fg">{t("Moderation")}</h1>
+      <p className="mt-1 text-body text-fg-muted">{t("Browse documents across all users, flag or remove content.")}</p>
 
       <div className="relative mt-5 max-w-sm">
         <MagnifyingGlass
@@ -76,7 +77,7 @@ export default function ModerationPage() {
             setPage(0);
             setSearch(e.target.value);
           }}
-          placeholder="Search by document title…"
+          placeholder={t("Search by document title…")}
           className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
         />
       </div>
@@ -89,7 +90,7 @@ export default function ModerationPage() {
           rows={rows}
           rowKey={(r) => r.id}
           loading={loading}
-          emptyMessage="No documents found."
+          emptyMessage={t("No documents found.")}
           onRowClick={(r) => navigate(`/moderation/${r.id}`)}
           page={page}
           pageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}

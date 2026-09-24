@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Coins, HourglassMedium, ShieldWarning, Sparkle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
@@ -6,9 +7,14 @@ import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
+import { trackEvent } from "../../lib/analytics";
+import { t, tr } from "../../lib/i18n";
 
 export default function PaywallPage() {
   const navigate = useNavigate();
+  useEffect(() => {
+    trackEvent("paywall_viewed");
+  }, []);
   const pendingDocLabel = useAppStore((s) => s.pendingDocLabel);
   const clearPendingCheck = useAppStore((s) => s.clearPendingCheck);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
@@ -42,12 +48,11 @@ export default function PaywallPage() {
           <ShieldWarning size={28} weight="fill" />
         </div>
         <h1 className="mt-5 text-h1 font-bold tracking-tight text-navy-900">
-          You're out of checks for this month
-        </h1>
+          {t("You're out of checks for this month")}</h1>
         <p className="mx-auto mt-3 max-w-md text-body-lg text-ink-600">
           {pendingDocLabel
-            ? <>We'll pick up right where you left off with <span className="font-semibold text-ink-800">{pendingDocLabel}</span> as soon as you're ready.</>
-            : "Subscribe for unlimited checks, or buy credits for one-off use."}
+            ? <>{t("We'll pick up right where you left off with")}{" "}<span className="font-semibold text-ink-800">{pendingDocLabel}</span>{" "}{t("as soon as you're ready.")}</>
+            : t("Subscribe for unlimited checks, or buy credits for one-off use.")}
         </p>
       </div>
 
@@ -55,11 +60,9 @@ export default function PaywallPage() {
         <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
-            <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
+            <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
             <p className="mt-0.5 text-sm text-ink-500">
-              {describePurchaseRequest(pending)} — an admin has to confirm it before your access changes. You
-              can't submit another request until then.
-            </p>
+              {t(describePurchaseRequest(pending))}{" "}{t("— an admin has to confirm it before your access changes. You can't submit another request until then.")}</p>
           </div>
         </div>
       )}
@@ -67,9 +70,9 @@ export default function PaywallPage() {
       <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Subscribe */}
         <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-600">Best value</p>
-          <h2 className="mt-1.5 text-lg font-bold text-navy-900">Subscribe</h2>
-          <p className="mt-1 text-sm text-ink-500">Unlimited checks for regular use.</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-600">{t("Best value")}</p>
+          <h2 className="mt-1.5 text-lg font-bold text-navy-900">{t("Subscribe")}</h2>
+          <p className="mt-1 text-sm text-ink-500">{t("Unlimited checks for regular use.")}</p>
 
           <div className="mt-5 flex flex-col gap-3">
             {subscribePlans.map((plan) => (
@@ -82,10 +85,10 @@ export default function PaywallPage() {
               >
                 <div>
                   <p className="flex items-center gap-1.5 text-sm font-bold text-navy-900">
-                    {plan.name}
+                    {t(plan.name)}
                     {plan.mostPopular && <Sparkle size={13} weight="fill" className="text-brand-500" />}
                   </p>
-                  <p className="text-xs text-ink-500">{formatVND(plan.priceMonthly)}/mo</p>
+                  <p className="text-xs text-ink-500">{formatVND(plan.priceMonthly)}{t("/mo")}</p>
                 </div>
                 <Button
                   size="sm"
@@ -93,17 +96,17 @@ export default function PaywallPage() {
                   disabled={!!pending}
                   onClick={() => choosePlan(plan)}
                 >
-                  {pending ? "Pending" : "Choose"}
+                  {pending ? t("Pending") : t("Choose")}
                 </Button>
               </div>
             ))}
           </div>
 
           <ul className="mt-5 flex flex-col gap-2">
-            {["More documents per month", "Higher word limits", "Priority support"].map((f) => (
+            {[tr("More documents per month"), tr("Higher word limits"), tr("Priority support")].map((f) => (
               <li key={f} className="flex items-center gap-2 text-xs text-ink-600">
                 <Check size={14} weight="bold" className="text-brand-500" />
-                {f}
+                {t(f)}
               </li>
             ))}
           </ul>
@@ -111,9 +114,9 @@ export default function PaywallPage() {
 
         {/* Buy credits */}
         <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Pay as you go</p>
-          <h2 className="mt-1.5 text-lg font-bold text-navy-900">Buy credits</h2>
-          <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription.</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-500">{t("Pay as you go")}</p>
+          <h2 className="mt-1.5 text-lg font-bold text-navy-900">{t("Buy credits")}</h2>
+          <p className="mt-1 text-sm text-ink-500">{t("For one-off checks, no subscription.")}</p>
 
           <div className="mt-5 flex flex-col gap-3">
             {CREDIT_PACKS.map((pack) => (
@@ -126,12 +129,12 @@ export default function PaywallPage() {
                     <Coins size={17} weight="fill" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-navy-900">{pack.label}</p>
-                    <p className="text-xs text-ink-500">{formatVND(pack.price)} · {pack.description}</p>
+                    <p className="text-sm font-bold text-navy-900">{t(pack.label)}</p>
+                    <p className="text-xs text-ink-500">{formatVND(pack.price)} · {t(pack.description)}</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline" disabled={!!pending} onClick={() => choosePack(pack.id)}>
-                  {pending ? "Pending" : "Buy"}
+                  {pending ? t("Pending") : t("Buy")}
                 </Button>
               </div>
             ))}
@@ -141,8 +144,7 @@ export default function PaywallPage() {
 
       <div className="mt-8 text-center">
         <button onClick={maybeLater} className="text-sm font-medium text-ink-500 hover:text-ink-700 hover:underline">
-          Maybe later
-        </button>
+          {t("Maybe later")}</button>
       </div>
     </div>
   );

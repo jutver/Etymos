@@ -2,12 +2,14 @@ import type { MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretRight, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
-import { formatDate, cn } from "@etymos/shared";
+import { cn } from "@etymos/shared";
+import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { CheckStatePill } from "./CheckStatePill";
 import { analyzingStateFor } from "../../lib/documentsQueries";
 import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import type { ProjectGroup } from "./types";
+import { t, tn } from "../../lib/i18n";
 
 interface DocumentsListViewProps {
   groups: ProjectGroup[];
@@ -54,11 +56,11 @@ export function DocumentsListView({
         <span className="flex size-8 items-center justify-center rounded-lg border border-dashed border-brand-300 text-brand-500">
           <FolderPlus size={16} />
         </span>
-        <span className="text-sm font-semibold text-brand-600">Create project</span>
+        <span className="text-sm font-semibold text-brand-600">{t("Create project")}</span>
       </button>
 
       {groups.length === 0 && (
-        <p className="px-5 py-12 text-center text-sm text-ink-400">No projects or documents match your search.</p>
+        <p className="px-5 py-12 text-center text-sm text-ink-400">{t("No projects or documents match your search.")}</p>
       )}
 
       {groups.map((group) => {
@@ -77,7 +79,7 @@ export function DocumentsListView({
               {manageMode && !group.isDefault && (
                 <input
                   type="checkbox"
-                  aria-label={`Select ${group.name}`}
+                  aria-label={t("Select {{name}}", { name: group.name })}
                   checked={isSelected}
                   onChange={() => onToggleSelectProject(group.name)}
                   className="size-4 shrink-0 rounded border-line text-brand-500 focus:ring-brand-300"
@@ -97,9 +99,9 @@ export function DocumentsListView({
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-100/60 text-brand-500">
                   <FolderSimple size={16} weight={isOpen ? "fill" : "regular"} />
                 </span>
-                <span className="truncate text-sm font-semibold text-ink-900">{group.name}</span>
+                <span className="truncate text-sm font-semibold text-ink-900">{group.isDefault ? t("Default") : group.name}</span>
                 <span className="shrink-0 text-xs text-ink-400">
-                  {group.docs.length} document{group.docs.length === 1 ? "" : "s"}
+                  {tn(group.docs.length, "{{count}} document", "{{count}} documents")}
                 </span>
               </button>
             </div>
@@ -107,7 +109,7 @@ export function DocumentsListView({
             {isOpen && (
               <div className="border-t border-line bg-surface-tint/50">
                 {group.docs.length === 0 ? (
-                  <p className="px-16 py-3 text-xs text-ink-400">No documents in this project yet.</p>
+                  <p className="px-16 py-3 text-xs text-ink-400">{t("No documents in this project yet.")}</p>
                 ) : (
                   group.docs.map((doc) => {
                     const docSelected = selectedDocs.has(doc.id);
@@ -124,7 +126,7 @@ export function DocumentsListView({
                         {manageMode && (
                           <input
                             type="checkbox"
-                            aria-label={`Select ${doc.title}`}
+                            aria-label={t("Select {{title}}", { title: doc.title })}
                             checked={docSelected}
                             onChange={() => onToggleSelectDoc(doc.id)}
                             onClick={(e) => e.stopPropagation()}

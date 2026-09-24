@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@etymos/shared";
 import { Spinner } from "./Spinner";
+import { t as tl, tr } from "../../lib/i18n";
 
 interface PageLoaderProps {
   /** Visible message. Keep it short — this is a transient state. */
@@ -28,7 +29,7 @@ interface PageLoaderProps {
  * resolves quickly never flashes a loader at all.
  */
 export function PageLoader({
-  label = "Loading",
+  label = tr("Loading"),
   delayMs = 150,
   fill = "page",
   className,
@@ -56,7 +57,7 @@ export function PageLoader({
       )}
     >
       <Spinner size="lg" label={null} />
-      <p className="text-caption font-medium text-ink-500">{label}</p>
+      <p className="text-caption font-medium text-ink-500">{tl(label)}</p>
     </div>
   );
 }

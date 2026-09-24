@@ -1,4 +1,5 @@
 import { cn } from "@etymos/shared";
+import { t, currentLocale } from "../../lib/i18n";
 
 export interface WordCountPillProps {
   words: number;
@@ -25,13 +26,12 @@ export function WordCountPill({
       className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2.5 rounded-full border border-line/80 bg-white/90 px-3.5 py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-card)] backdrop-blur-md"
     >
       <span className="tabular-nums text-ink-900">
-        <span className="font-semibold">{words.toLocaleString()}</span> words
-      </span>
+        <span className="font-semibold">{words.toLocaleString(currentLocale())}</span>{" "}{t("words")}</span>
       <span aria-hidden="true" className="h-3 w-px bg-line" />
-      <span className="hidden tabular-nums sm:inline">{characters.toLocaleString()} chars</span>
+      <span className="hidden tabular-nums sm:inline">{characters.toLocaleString(currentLocale())}{" "}{t("chars")}</span>
       <span aria-hidden="true" className="hidden h-3 w-px bg-line sm:block" />
       <span className="tabular-nums">
-        Page {page} of {pageCount}
+        {t("Page {{page}} of {{count}}", { page, count: pageCount })}
       </span>
       <span aria-hidden="true" className="h-3 w-px bg-line" />
       <span className="flex items-center gap-1.5">
@@ -42,7 +42,7 @@ export function WordCountPill({
             locked ? "bg-ink-300" : dirty ? "bg-severity-moderate" : "bg-success",
           )}
         />
-        {locked ? "Reading" : dirty ? "Unsaved" : "Saved"}
+        {locked ? t("Reading") : dirty ? t("Unsaved") : t("Saved")}
       </span>
     </div>
   );

@@ -14,6 +14,7 @@ import { cn } from "@etymos/shared";
 import { severityConfig } from "./Severity";
 import { colorForMatch } from "../screens/Report/highlights";
 import { Button } from "./ui/Button";
+import { t } from "../lib/i18n";
 
 interface MatchCardProps {
   match: MatchedSource;
@@ -89,9 +90,9 @@ export function MatchCard({
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500">
             {match.sourceKind === "academic" ? <GraduationCap size={13} /> : <Globe size={13} />}
-            <span className={severity.text}>{severity.label}</span>
+            <span className={severity.text}>{t(severity.label)}</span>
             <span aria-hidden="true">·</span>
-            <span>{match.matchPercent}% match</span>
+            <span>{match.matchPercent}{t("% match")}</span>
           </span>
           <span className="mt-1 block truncate text-sm font-semibold leading-snug text-ink-900">
             {match.sourceTitle}
@@ -101,8 +102,7 @@ export function MatchCard({
 
         {resolved && (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-[0.625rem] font-bold text-success">
-            <CheckCircle size={11} weight="fill" /> Fixed
-          </span>
+            <CheckCircle size={11} weight="fill" />{" "}{t("Fixed")}</span>
         )}
       </button>
 
@@ -126,15 +126,13 @@ export function MatchCard({
 
         {selected && notLocated && (
           <p role="status" className="mt-2 text-xs leading-relaxed text-ink-500">
-            Couldn't find this passage in the document text, so there's nothing to highlight.
-          </p>
+            {t("Couldn't find this passage in the document text, so there's nothing to highlight.")}</p>
         )}
 
         {locked ? (
           <p className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-brand-600">
             <LockSimple size={13} weight="fill" />
-            Explanation available on paid plans
-          </p>
+            {t("Explanation available on paid plans")}</p>
         ) : (
           <>
             <button
@@ -144,8 +142,7 @@ export function MatchCard({
               aria-controls={explanationId}
               className="mt-2.5 flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-100/50"
             >
-              Why this is flagged
-              <CaretDown
+              {t("Why this is flagged")}<CaretDown
                 size={13}
                 className={cn("transition-transform", explanationOpen && "rotate-180")}
               />
@@ -169,8 +166,7 @@ export function MatchCard({
             iconLeft={<ArrowsLeftRight size={14} />}
             className="h-8 px-2.5 text-xs"
           >
-            Compare
-          </Button>
+            {t("Compare")}</Button>
           {onCite && (
             <Button
               size="sm"
@@ -179,8 +175,7 @@ export function MatchCard({
               iconLeft={<Quotes size={14} />}
               className="h-8 px-2.5 text-xs"
             >
-              Copy Citation
-            </Button>
+              {t("Copy Citation")}</Button>
           )}
           <Button
             size="sm"
@@ -189,8 +184,7 @@ export function MatchCard({
             iconLeft={rewriteLocked ? <LockSimple size={12} weight="fill" /> : <MagicWand size={14} />}
             className="h-8 px-2.5 text-xs"
           >
-            Rewrite
-          </Button>
+            {t("Rewrite")}</Button>
         </div>
       </div>
     </article>

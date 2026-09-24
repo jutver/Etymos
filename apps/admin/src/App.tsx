@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useLanguage } from "./lib/i18n";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
 import { AdminShell } from "./components/layout/AdminShell";
 import LoginPage from "./screens/Login";
 import AuthCallbackPage from "./screens/AuthCallback";
 import DashboardPage from "./screens/Dashboard";
+import ActivityPage from "./screens/Activity";
 import UsersPage from "./screens/Users";
 import UserDetailPage from "./screens/Users/UserDetail";
 import ModerationPage from "./screens/Moderation";
@@ -21,6 +23,8 @@ import PlansAndPacksPage from "./screens/Pricing/PlansAndPacks";
 import DiscountsPage from "./screens/Pricing/Discounts";
 
 function App() {
+  // Re-render every screen when the UI language changes (t() reads it at call time).
+  useLanguage();
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -29,6 +33,7 @@ function App() {
       <Route element={<RequireAdmin />}>
         <Route element={<AdminShell />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/users/:id" element={<UserDetailPage />} />
           <Route path="/moderation" element={<ModerationPage />} />

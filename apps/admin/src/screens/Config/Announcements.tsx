@@ -11,6 +11,7 @@ import {
 } from "../../lib/configQueries";
 import type { Announcement, AnnouncementSeverity } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
+import { t, currentLocale } from "../../lib/i18n";
 
 const SEVERITIES: AnnouncementSeverity[] = ["info", "success", "warning", "error"];
 
@@ -84,13 +85,13 @@ export default function AnnouncementsPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="text-h2 font-semibold text-fg">New announcement</h2>
+        <h2 className="text-h2 font-semibold text-fg">{t("New announcement")}</h2>
         <div className="mt-3 space-y-3">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={2}
-            placeholder="Message shown to users…"
+            placeholder={t("Message shown to users…")}
             className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
           />
           <div className="flex items-center gap-3">
@@ -111,7 +112,7 @@ export default function AnnouncementsPage() {
               onClick={handleCreate}
               className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {creating ? "Publishing…" : "Publish"}
+              {creating ? t("Publishing…") : t("Publish")}
             </button>
           </div>
         </div>
@@ -120,11 +121,10 @@ export default function AnnouncementsPage() {
       {error && <p className="text-caption text-destructive">{error}</p>}
 
       {loading ? (
-        <p className="text-body text-fg-muted">Loading…</p>
+        <p className="text-body text-fg-muted">{t("Loading…")}</p>
       ) : announcements.length === 0 ? (
         <div className="rounded-card border border-border bg-surface p-6 text-body text-fg-subtle">
-          No announcements yet.
-        </div>
+          {t("No announcements yet.")}</div>
       ) : (
         <div className="divide-y divide-border rounded-card border border-border bg-surface shadow-card">
           {announcements.map((a) => (
@@ -133,10 +133,10 @@ export default function AnnouncementsPage() {
                 <div className="flex items-center gap-2">
                   <StatusBadge label={a.severity} tone={SEVERITY_TONE[a.severity]} />
                   <span className="text-caption text-fg-subtle">
-                    {new Date(a.created_at).toLocaleDateString()}
+                    {new Date(a.created_at).toLocaleDateString(currentLocale())}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-body text-fg">{a.message}</p>
+                <p className="mt-1 truncate text-body text-fg">{t(a.message)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <Switch checked={a.is_active} onChange={(v) => toggleActive(a, v)} />
@@ -148,21 +148,20 @@ export default function AnnouncementsPage() {
                       onClick={() => handleDelete(a.id)}
                       className="cursor-pointer rounded-control bg-destructive px-2.5 py-1 text-caption font-semibold text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {deletingId === a.id ? "Deleting…" : "Confirm"}
+                      {deletingId === a.id ? t("Deleting…") : t("Confirm")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteId(null)}
                       className="cursor-pointer rounded-control px-2.5 py-1 text-caption font-medium text-fg-muted transition hover:bg-surface-raised"
                     >
-                      Cancel
-                    </button>
+                      {t("Cancel")}</button>
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(a.id)}
-                    title="Delete announcement"
+                    title={t("Delete announcement")}
                     className="flex size-7 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-destructive-bg hover:text-destructive active:scale-95"
                   >
                     <Trash size={14} weight="bold" />

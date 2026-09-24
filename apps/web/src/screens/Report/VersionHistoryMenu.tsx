@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { t, currentLocale } from "../../lib/i18n";
 
 export interface DocumentVersion {
   id: string;
@@ -53,17 +54,15 @@ export function VersionHistoryMenu({
       {open && (
         <div
           role="menu"
-          aria-label="Version history"
+          aria-label={t("Version history")}
           className="absolute right-0 top-[calc(100%+8px)] z-30 w-72 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
         >
           <p className="px-2.5 py-2 text-micro font-bold uppercase tracking-wide text-ink-500">
-            Version history
-          </p>
+            {t("Version history")}</p>
 
           {versions.length === 0 ? (
             <p className="px-2.5 pb-3 pt-1 text-xs leading-relaxed text-ink-500">
-              No saved versions yet. Each time you save, a snapshot lands here.
-            </p>
+              {t("No saved versions yet. Each time you save, a snapshot lands here.")}</p>
           ) : (
             <ul className="max-h-72 overflow-y-auto scrollbar-thin">
               {versions.map((v, i) => (
@@ -85,11 +84,10 @@ export function VersionHistoryMenu({
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-ink-900">
-                        {v.label}
+                        {t(v.label)}
                       </span>
                       <span className="block text-xs text-ink-500">
-                        {v.savedAt} · {v.wordCount.toLocaleString()} words
-                      </span>
+                        {v.savedAt} · {v.wordCount.toLocaleString(currentLocale())}{" "}{t("words")}</span>
                     </span>
                     <ArrowCounterClockwise
                       size={14}

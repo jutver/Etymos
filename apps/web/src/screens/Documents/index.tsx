@@ -18,6 +18,7 @@ import { ProjectContextMenu, DocumentContextMenu } from "./ContextMenus";
 import { PromptModal } from "./PromptModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { ContextMenuState, DocumentsViewMode, ProjectGroup } from "./types";
+import { t, tr, tn } from "../../lib/i18n";
 
 type PromptState =
   | { kind: "create-project" }
@@ -143,13 +144,13 @@ export default function DocumentsPage() {
 
   async function handleCreateProject(name: string) {
     if (name === PROJECTS[0] || allProjectNames.includes(name)) {
-      pushToast({ kind: "error", title: "A project with that name already exists." });
+      pushToast({ kind: "error", title: tr("A project with that name already exists.") });
       return;
     }
     addKnownProject(name);
     setExpanded((s) => new Set(s).add(name));
     setPrompt(null);
-    pushToast({ kind: "success", title: `Created project "${name}"` });
+    pushToast({ kind: "success", title: t("Created project \"{{name}}\"", { name: name }) });
   }
 
   async function handleRenameProject(oldName: string, newName: string) {
@@ -158,7 +159,7 @@ export default function DocumentsPage() {
       return;
     }
     if (newName === PROJECTS[0] || allProjectNames.includes(newName)) {
-      pushToast({ kind: "error", title: "A project with that name already exists." });
+      pushToast({ kind: "error", title: tr("A project with that name already exists.") });
       return;
     }
     setBusy(true);
@@ -172,10 +173,10 @@ export default function DocumentsPage() {
         next.add(newName);
         return next;
       });
-      pushToast({ kind: "success", title: `Renamed to "${newName}"` });
+      pushToast({ kind: "success", title: t("Renamed to \"{{newName}}\"", { newName: newName }) });
       setPrompt(null);
     } catch {
-      pushToast({ kind: "error", title: "Couldn't rename project", description: "Please try again." });
+      pushToast({ kind: "error", title: tr("Couldn't rename project"), description: tr("Please try again.") });
     } finally {
       setBusy(false);
     }
@@ -189,12 +190,12 @@ export default function DocumentsPage() {
       removeKnownProject(project.name);
       pushToast({
         kind: "info",
-        title: `Deleted project "${project.name}"`,
-        description: project.docs.length > 0 ? "Its documents were moved to Default." : undefined,
+        title: t("Deleted project \"{{name}}\"", { name: project.name }),
+        description: project.docs.length > 0 ? tr("Its documents were moved to Default.") : undefined,
       });
       setConfirm(null);
     } catch {
-      pushToast({ kind: "error", title: "Couldn't delete project", description: "Please try again." });
+      pushToast({ kind: "error", title: tr("Couldn't delete project"), description: tr("Please try again.") });
     } finally {
       setBusy(false);
     }
@@ -205,10 +206,10 @@ export default function DocumentsPage() {
     try {
       await renameDocument(doc.id, title);
       renameDocumentInHistory(doc.id, title);
-      pushToast({ kind: "success", title: "Document renamed" });
+      pushToast({ kind: "success", title: tr("Document renamed") });
       setPrompt(null);
     } catch {
-      pushToast({ kind: "error", title: "Couldn't rename document", description: "Please try again." });
+      pushToast({ kind: "error", title: tr("Couldn't rename document"), description: tr("Please try again.") });
     } finally {
       setBusy(false);
     }
@@ -220,9 +221,9 @@ export default function DocumentsPage() {
       const target = project === PROJECTS[0] ? null : project;
       await moveDocumentToProject(doc.id, target);
       setDocumentProject(doc.id, target);
-      pushToast({ kind: "success", title: `Moved to "${project}"` });
+      pushToast({ kind: "success", title: t("Moved to \"{{project}}\"", { project: project }) });
     } catch {
-      pushToast({ kind: "error", title: "Couldn't move document", description: "Please try again." });
+      pushToast({ kind: "error", title: tr("Couldn't move document"), description: tr("Please try again.") });
     } finally {
       setBusy(false);
     }
@@ -232,12 +233,12 @@ export default function DocumentsPage() {
     setConfirm(null);
     try {
       await moveToTrash(doc.id);
-      pushToast({ kind: "info", title: "Moved to trash", description: "Restore it anytime from My Trash." });
+      pushToast({ kind: "info", title: tr("Moved to trash"), description: tr("Restore it anytime from My Trash.") });
     } catch (err) {
       pushToast({
         kind: "error",
-        title: "Couldn't move to trash",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: tr("Couldn't move to trash"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
       });
     }
   }
@@ -265,14 +266,14 @@ export default function DocumentsPage() {
     if (docFailures === 0 && projectFailures === 0) {
       pushToast({
         kind: "info",
-        title: "Deleted selected items",
-        description: docIds.length > 0 ? "Documents were moved to My Trash." : undefined,
+        title: tr("Deleted selected items"),
+        description: docIds.length > 0 ? tr("Documents were moved to My Trash.") : undefined,
       });
     } else {
       pushToast({
         kind: "error",
-        title: "Some items couldn't be deleted",
-        description: "Please try again.",
+        title: tr("Some items couldn't be deleted"),
+        description: tr("Please try again."),
       });
     }
 
@@ -287,8 +288,8 @@ export default function DocumentsPage() {
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-h1 font-bold tracking-tight text-navy-900">Documents</h1>
-          <p className="mt-1.5 text-sm text-ink-500">Organize your checks into projects, Finder-style.</p>
+          <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Documents")}</h1>
+          <p className="mt-1.5 text-sm text-ink-500">{t("Organize your checks into projects, Finder-style.")}</p>
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle
@@ -299,7 +300,7 @@ export default function DocumentsPage() {
             }}
           />
           <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
-            {manageMode ? "Done" : "Manage"}
+            {manageMode ? t("Done") : t("Manage")}
           </Button>
         </div>
       </div>
@@ -310,17 +311,16 @@ export default function DocumentsPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search projects and documents..."
+            placeholder={t("Search projects and documents...")}
             className="w-full rounded-full border border-line bg-white py-2 pl-9 pr-4 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
         </div>
 
         {manageMode && selectionCount > 0 && (
           <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
-            <span className="font-medium text-ink-700">{selectionCount} selected</span>
+            <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
             <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
-              Delete
-            </Button>
+              {t("Delete")}</Button>
           </div>
         )}
       </div>
@@ -328,13 +328,12 @@ export default function DocumentsPage() {
       <div className="mt-4">
         {historyLoading && history.length === 0 && (
           <div className="rounded-[var(--radius-card-lg)] border border-line bg-white px-5 py-12 text-center text-sm text-ink-400">
-            Loading documents…
-          </div>
+            {t("Loading documents…")}</div>
         )}
 
         {historyError && (
           <div className="rounded-[var(--radius-card-lg)] border border-severity-high-line bg-severity-high-bg px-5 py-12 text-center text-sm text-severity-high">
-            {historyError}
+            {t(historyError)}
           </div>
         )}
 
@@ -393,12 +392,12 @@ export default function DocumentsPage() {
         open={prompt !== null}
         title={
           prompt?.kind === "create-project"
-            ? "Create project"
+            ? t("Create project")
             : prompt?.kind === "rename-project"
-              ? "Rename project"
-              : "Rename document"
+              ? t("Rename project")
+              : t("Rename document")
         }
-        label={prompt?.kind === "rename-document" ? "Title" : "Project name"}
+        label={prompt?.kind === "rename-document" ? t("Title") : t("Project name")}
         initialValue={
           prompt?.kind === "rename-project"
             ? prompt.project.name
@@ -406,8 +405,8 @@ export default function DocumentsPage() {
               ? prompt.doc.title
               : ""
         }
-        placeholder={prompt?.kind === "rename-document" ? undefined : "e.g. Thesis drafts"}
-        confirmLabel={prompt?.kind === "create-project" ? "Create" : "Save"}
+        placeholder={prompt?.kind === "rename-document" ? undefined : t("e.g. Thesis drafts")}
+        confirmLabel={prompt?.kind === "create-project" ? t("Create") : t("Save")}
         onClose={() => setPrompt(null)}
         onSubmit={(value) => {
           if (!prompt) return;
@@ -422,19 +421,19 @@ export default function DocumentsPage() {
         open={confirm !== null}
         title={
           confirm?.kind === "delete-project"
-            ? `Delete "${confirm.project.name}"?`
+            ? t("Delete \"{{name}}\"?", { name: confirm.project.name })
             : confirm?.kind === "bulk-delete"
-              ? `Delete ${selectionCount} selected item${selectionCount === 1 ? "" : "s"}?`
-              : "Delete this document?"
+              ? tn(selectionCount, "Delete {{count}} selected item?", "Delete {{count}} selected items?")
+              : t("Delete this document?")
         }
         description={
           confirm?.kind === "delete-project"
             ? confirm.project.docs.length > 0
-              ? `${confirm.project.docs.length} document${confirm.project.docs.length === 1 ? "" : "s"} will be moved to Default. They won't be deleted.`
-              : "This project has no documents."
+              ? tn(confirm.project.docs.length, "{{count}} document will be moved to Default. It won't be deleted.", "{{count}} documents will be moved to Default. They won't be deleted.")
+              : t("This project has no documents.")
             : confirm?.kind === "bulk-delete"
-              ? "Selected documents move to My Trash. Selected projects are deleted and their documents move to Default."
-              : "This moves the document to My Trash. You can restore it anytime."
+              ? t("Selected documents move to My Trash. Selected projects are deleted and their documents move to Default.")
+              : t("This moves the document to My Trash. You can restore it anytime.")
         }
         onClose={() => setConfirm(null)}
         onConfirm={() => {

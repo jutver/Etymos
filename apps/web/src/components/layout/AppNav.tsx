@@ -17,12 +17,14 @@ import { cn } from "@etymos/shared";
 import { planLabel, useAppStore } from "../../lib/store";
 import { useAuth, displayNameFor, initialsFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
+import { t, tr } from "../../lib/i18n";
+import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const navLinks = [
-  { label: "Upload", href: "/upload", icon: UploadSimple },
-  { label: "Documents", href: "/documents", icon: FolderOpen },
-  { label: "History", href: "/history", icon: ClockCounterClockwise },
-  { label: "My Trash", href: "/trash", icon: Trash },
+  { label: tr("Upload"), href: "/upload", icon: UploadSimple },
+  { label: tr("Documents"), href: "/documents", icon: FolderOpen },
+  { label: tr("History"), href: "/history", icon: ClockCounterClockwise },
+  { label: tr("My Trash"), href: "/trash", icon: Trash },
 ];
 
 export function AppNav() {
@@ -61,7 +63,7 @@ export function AppNav() {
                   )}
                 >
                   <l.icon size={16} weight={active ? "fill" : "regular"} />
-                  {l.label}
+                  {t(l.label)}
                 </Link>
               );
             })}
@@ -69,13 +71,14 @@ export function AppNav() {
         </div>
 
         <div className="flex items-center gap-3">
+          <LanguageSwitcher tone="dark" />
           <div className="hidden sm:block">
             <UsageMeter compact interactive={false} />
           </div>
 
           <button
             onClick={() => setMobileNavOpen((v) => !v)}
-            aria-label="Toggle navigation"
+            aria-label={t("Toggle navigation")}
             className="flex size-9 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 md:hidden"
           >
             {mobileNavOpen ? <X size={20} /> : <List size={20} />}
@@ -96,7 +99,7 @@ export function AppNav() {
               <div className="absolute right-0 top-[calc(100%+10px)] w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)]">
                 <div className="px-3 py-2.5">
                   <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
-                  <p className="truncate text-xs text-ink-500">{user?.email ?? `${planLabel(plan)} plan`}</p>
+                  <p className="truncate text-xs text-ink-500">{user?.email ?? t("{{plan}} plan", { plan: planLabel(plan) })}</p>
                 </div>
                 <div className="h-px bg-line" />
                 <Link
@@ -104,15 +107,13 @@ export function AppNav() {
                   onClick={() => setMenuOpen(false)}
                   className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
-                  My Profile
-                </Link>
+                  {t("My Profile")}</Link>
                 <Link
                   to="/account/plan"
                   onClick={() => setMenuOpen(false)}
                   className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
-                  My Plan
-                </Link>
+                  {t("My Plan")}</Link>
                 <div className="h-px bg-line" />
                 <button
                   onClick={async () => {
@@ -123,8 +124,7 @@ export function AppNav() {
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
                   <SignOut size={16} />
-                  Log out
-                </button>
+                  {t("Log out")}</button>
               </div>
             )}
           </div>
@@ -150,7 +150,7 @@ export function AppNav() {
                   )}
                 >
                   <l.icon size={16} weight={active ? "fill" : "regular"} />
-                  {l.label}
+                  {t(l.label)}
                 </Link>
               );
             })}

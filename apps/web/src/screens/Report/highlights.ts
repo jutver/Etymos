@@ -1,4 +1,5 @@
 import type { DocPassage, MatchedSource } from "@etymos/shared";
+import { tr } from "../../lib/i18n";
 
 /**
  * Highlight palette for matched passages.
@@ -28,37 +29,37 @@ export interface HighlightColor {
 export const HIGHLIGHT_COLORS: HighlightColor[] = [
   {
     key: "amber",
-    label: "Amber",
+    label: tr("Amber"),
     mark: "bg-[#fdf0c9] text-[#5a4408] decoration-[#b45309] dark:bg-[#5a4408] dark:text-[#fdf0c9] dark:decoration-[#fbbf24]",
     chip: "bg-[#eab308]",
   },
   {
     key: "rose",
-    label: "Rose",
+    label: tr("Rose"),
     mark: "bg-[#fde0e4] text-[#7f1d3a] decoration-[#be123c] dark:bg-[#5c1024] dark:text-[#fde0e4] dark:decoration-[#fb7185]",
     chip: "bg-[#e11d48]",
   },
   {
     key: "violet",
-    label: "Violet",
+    label: tr("Violet"),
     mark: "bg-[#e9e2fd] text-[#4c1d95] decoration-[#7c3aed] dark:bg-[#3b1e75] dark:text-[#e9e2fd] dark:decoration-[#a78bfa]",
     chip: "bg-[#7c3aed]",
   },
   {
     key: "teal",
-    label: "Teal",
+    label: tr("Teal"),
     mark: "bg-[#cdf3ea] text-[#0f4f45] decoration-[#0d9488] dark:bg-[#0c3b34] dark:text-[#cdf3ea] dark:decoration-[#2dd4bf]",
     chip: "bg-[#0d9488]",
   },
   {
     key: "sky",
-    label: "Sky",
+    label: tr("Sky"),
     mark: "bg-[#d9e8fe] text-[#1e3a8a] decoration-[#2563eb] dark:bg-[#10315e] dark:text-[#d9e8fe] dark:decoration-[#60a5fa]",
     chip: "bg-[#2563eb]",
   },
   {
     key: "lime",
-    label: "Lime",
+    label: tr("Lime"),
     mark: "bg-[#e6f5c8] text-[#3f5c0c] decoration-[#65a30d] dark:bg-[#2f4110] dark:text-[#e6f5c8] dark:decoration-[#a3e635]",
     chip: "bg-[#65a30d]",
   },
@@ -91,7 +92,7 @@ export function matchTone(match: Pick<MatchedSource, "matchPercent">): MatchTone
 
 export const LIGHT_HIGHLIGHT: HighlightColor = {
   key: "blush",
-  label: "Light pink",
+  label: tr("Light pink"),
   mark: "bg-[#fdeef2] text-[#7f1d3a] decoration-[#f4a9bd] dark:bg-[#4a1826] dark:text-[#fde0e4] dark:decoration-[#fb9db4]",
   chip: "bg-[#f4a9bd]",
 };
@@ -445,4 +446,56 @@ export function countWords(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   return trimmed.split(/\s+/).length;
+}
+
+// ---------------------------------------------------------------------------
+// AI-DETECTION HIGHLIGHTING (AiDetectionSection <-> Document/Original views)
+// ---------------------------------------------------------------------------
+// The detector scores whole paragraphs, not sentences (see backend/
+// ai_detector.py's `select_segments`), so — unlike plagiarism matches, which
+// splice a highlight around one sentence inside a passage — an AI-flagged
+// segment always highlights an *entire* passage/block. That is the correct
+// granularity here, not a simplification of the match machinery above.
+
+/** One AI-detection segment's flagged range, in the report's `input_text`
+ * coordinate space — the same coordinates `MatchedSource.startOffset` /
+ * `DocPassage.startOffset` use, per ai_detector.py's docstring, so a segment
+ * can be located against passages the same way `offsetsWithinPassage` does
+ * for matches. */
+export interface AiSegmentRange {
+  id: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Maps each AI segment to the passage it falls inside (paragraph-for-
+ * paragraph, since `select_segments` derives both from the same backend
+ * blocks). A segment with no match — no offsets on either side, or an old
+ * report with no passage structure — is simply absent from the result, the
+ * same "can't be located" outcome an unlocatable plagiarism match gets.
+ */
+export function mapAiSegmentsToPassages(
+  passages: DocPassage[],
+  segments: AiSegmentRange[],
+): Map<string, string> {
+  const bySegment = new Map<string, string>();
+  for (const seg of segments) {
+    const hit = passages.find(
+      (p) =>
+        p.startOffset != null &&
+        p.endOffset != null &&
+        seg.start >= p.startOffset &&
+        seg.end <= p.endOffset,
+    );
+    if (hit) bySegment.set(seg.id, hit.id);
+  }
+  return bySegment;
+}
+
+/** Passage ids that should get the "looks machine-written" paragraph-level
+ * treatment in the Document view — just the value set of `mapAiSegmentsToPassages`,
+ * named separately because that's what BlockItem actually consumes. */
+export function aiFlaggedPassageIds(bySegment: Map<string, string>): Set<string> {
+  return new Set(bySegment.values());
 }

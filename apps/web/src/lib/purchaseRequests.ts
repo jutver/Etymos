@@ -27,6 +27,7 @@ import type {
   PlanTier,
 } from "@etymos/shared";
 import { useAuth } from "./auth";
+import { t } from "./i18n";
 
 /** camelCase view model over a `checkout_events` row. */
 export interface PurchaseRequest {
@@ -141,11 +142,11 @@ export async function fetchMyPendingRequest(userId: string): Promise<PurchaseReq
 /** Human-readable summary of what was requested, for banners/receipts. */
 export function describePurchaseRequest(request: PurchaseRequest): string {
   if (request.kind === "plan") {
-    const tier = request.planTier === "professional" ? "Premium" : "Standard";
-    const cycle = request.billingCycle === "annual" ? "annual" : "monthly";
-    return `${tier} plan (${cycle})`;
+    const tier = request.planTier === "professional" ? t("Premium") : t("Standard");
+    const cycle = request.billingCycle === "annual" ? t("annual") : t("monthly");
+    return t("{{tier}} plan ({{cycle}})", { tier, cycle });
   }
-  const label = request.packId === "pack-premium" ? "Premium credit pack" : "Standard credit pack";
+  const label = request.packId === "pack-premium" ? t("Premium credit pack") : t("Standard credit pack");
   return request.quantity > 1 ? `${label} ×${request.quantity}` : label;
 }
 

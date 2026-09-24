@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X } from "@phosphor-icons/react";
+import { t } from "../../lib/i18n";
 
 interface ReviewNoteDialogProps {
   title: string;
@@ -35,11 +36,11 @@ export function ReviewNoteDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          <p className="text-body font-medium text-fg">{title}</p>
+          <p className="text-body font-medium text-fg">{t(title)}</p>
           <button
             type="button"
             onClick={onCancel}
-            title="Close"
+            title={t("Close")}
             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
           >
             <X size={16} weight="bold" />
@@ -47,12 +48,12 @@ export function ReviewNoteDialog({
         </div>
 
         <div className="p-5">
-          <p className="text-caption text-fg-muted">{description}</p>
+          <p className="text-caption text-fg-muted">{t(description)}</p>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder="Reason (optional)…"
+            placeholder={t("Reason (optional)…")}
             className="mt-3 w-full resize-none rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
           />
           <div className="mt-4 flex justify-end gap-2">
@@ -61,15 +62,14 @@ export function ReviewNoteDialog({
               onClick={onCancel}
               className="cursor-pointer rounded-control border border-border px-3 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised active:scale-95"
             >
-              Cancel
-            </button>
+              {t("Cancel")}</button>
             <button
               type="button"
               disabled={pending}
               onClick={() => onConfirm(note)}
               className="cursor-pointer rounded-control border border-destructive/40 bg-destructive-bg px-3 py-1.5 text-caption font-medium text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {confirmLabel}
+              {t(confirmLabel)}
             </button>
           </div>
         </div>

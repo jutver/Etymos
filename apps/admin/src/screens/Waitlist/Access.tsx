@@ -9,6 +9,7 @@ import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
 import { cn } from "@etymos/shared";
+import { t, tr, currentLocale } from "../../lib/i18n";
 
 type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
@@ -19,10 +20,10 @@ function accessTone(status: AccessStatus): BadgeTone {
 }
 
 const STATUS_TABS: { key: AccessStatus | "all"; label: string }[] = [
-  { key: "waitlisted", label: "Waitlisted" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-  { key: "all", label: "All" },
+  { key: "waitlisted", label: tr("Waitlisted") },
+  { key: "approved", label: tr("Approved") },
+  { key: "rejected", label: tr("Rejected") },
+  { key: "all", label: tr("All") },
 ];
 
 export default function AccessPage() {
@@ -90,27 +91,27 @@ export default function AccessPage() {
   const columns: Column<Profile>[] = [
     {
       key: "user",
-      label: "User",
+      label: tr("User"),
       render: (r) => r.email ?? r.display_name ?? r.id,
     },
     {
       key: "access_status",
-      label: "Status",
+      label: tr("Status"),
       render: (r) => <StatusBadge label={r.access_status} tone={accessTone(r.access_status)} />,
     },
     {
       key: "access_requested_at",
-      label: "Requested",
-      render: (r) => new Date(r.access_requested_at ?? r.created_at).toLocaleDateString(),
+      label: tr("Requested"),
+      render: (r) => new Date(r.access_requested_at ?? r.created_at).toLocaleDateString(currentLocale()),
     },
     {
       key: "access_note",
-      label: "Note",
+      label: tr("Note"),
       render: (r) => <span className="text-fg-muted">{r.access_note ?? "—"}</span>,
     },
     {
       key: "actions",
-      label: "Actions",
+      label: tr("Actions"),
       className: "text-right",
       render: (r) =>
         r.access_status === "waitlisted" ? (
@@ -119,7 +120,7 @@ export default function AccessPage() {
               type="button"
               disabled={actingId === r.id}
               onClick={() => handleApprove(r)}
-              title="Approve access"
+              title={t("Approve access")}
               className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-success/40 bg-success-bg text-success transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={14} weight="bold" />
@@ -128,7 +129,7 @@ export default function AccessPage() {
               type="button"
               disabled={actingId === r.id}
               onClick={() => setRejecting(r)}
-              title="Reject access"
+              title={t("Reject access")}
               className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-destructive/40 bg-destructive-bg text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X size={14} weight="bold" />
@@ -159,7 +160,7 @@ export default function AccessPage() {
                   : "text-fg-muted hover:bg-surface-raised hover:text-fg",
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </div>
@@ -175,7 +176,7 @@ export default function AccessPage() {
               setPage(0);
               setSearch(e.target.value);
             }}
-            placeholder="Search by email or name…"
+            placeholder={t("Search by email or name…")}
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
@@ -189,7 +190,7 @@ export default function AccessPage() {
           rows={rows}
           rowKey={(r) => r.id}
           loading={loading}
-          emptyMessage="No access requests found."
+          emptyMessage={t("No access requests found.")}
           page={page}
           pageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}
           onPageChange={setPage}
@@ -198,9 +199,9 @@ export default function AccessPage() {
 
       {rejecting && (
         <ReviewNoteDialog
-          title="Reject access request"
-          description={`${rejecting.email ?? rejecting.display_name ?? rejecting.id} will not be able to use the app.`}
-          confirmLabel="Reject"
+          title={t("Reject access request")}
+          description={t("{{v}} will not be able to use the app.", { v: rejecting.email ?? rejecting.display_name ?? rejecting.id })}
+          confirmLabel={t("Reject")}
           pending={actingId === rejecting.id}
           onCancel={() => setRejecting(null)}
           onConfirm={(note) => handleReject(rejecting, note)}

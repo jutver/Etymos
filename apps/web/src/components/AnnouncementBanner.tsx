@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, Info, Warning, X, XCircle } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
+import { t } from "../lib/i18n";
 
 type AnnouncementSeverity = "info" | "warning" | "success" | "error";
 
@@ -98,10 +99,10 @@ export function AnnouncementBanner() {
       )}
     >
       <Icon size={17} weight="fill" className="shrink-0" />
-      <p className="flex-1">{announcement.message}</p>
+      <p className="flex-1">{t(announcement.message)}</p>
       <button
         onClick={dismiss}
-        aria-label="Dismiss announcement"
+        aria-label={t("Dismiss announcement")}
         className="shrink-0 rounded-full p-1 transition-colors hover:bg-black/5"
       >
         <X size={15} />

@@ -1,5 +1,6 @@
 import { cn } from "@etymos/shared";
 import { presetRange, type DateRange, type DateRangePreset } from "../lib/dashboardQueries";
+import { t } from "../lib/i18n";
 
 const PRESETS: { value: Exclude<DateRangePreset, "custom">; label: string }[] = [
   { value: "7d", label: "7d" },
@@ -43,7 +44,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
               value.preset === p.value ? "bg-accent-bg text-accent" : "text-fg-muted hover:text-fg",
             )}
           >
-            {p.label}
+            {t(p.label)}
           </button>
         ))}
         <button
@@ -54,8 +55,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             value.preset === "custom" ? "bg-accent-bg text-accent" : "text-fg-muted hover:text-fg",
           )}
         >
-          Custom
-        </button>
+          {t("Custom")}</button>
       </div>
 
       {value.preset === "custom" && (
@@ -66,7 +66,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             max={value.end}
             onChange={(e) => handleCustomStart(e.target.value)}
             className="bg-transparent text-caption text-fg outline-none"
-            aria-label="Start date"
+            aria-label={t("Start date")}
           />
           <span className="text-fg-subtle">–</span>
           <input
@@ -76,7 +76,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             max={TODAY}
             onChange={(e) => handleCustomEnd(e.target.value)}
             className="bg-transparent text-caption text-fg outline-none"
-            aria-label="End date"
+            aria-label={t("End date")}
           />
         </div>
       )}

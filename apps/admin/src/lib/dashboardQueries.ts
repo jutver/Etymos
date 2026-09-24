@@ -1,4 +1,5 @@
 import { supabase } from "@etymos/shared";
+import { t, tr } from "./i18n";
 
 // MVP: client-side aggregation over a date-range-bounded query. Revisit with a
 // SQL view/RPC if the table sizes make this slow.
@@ -22,10 +23,10 @@ const PRESET_DAYS: Record<Exclude<DateRangePreset, "custom">, number> = {
 };
 
 const PRESET_LABELS: Record<Exclude<DateRangePreset, "custom">, string> = {
-  "7d": "last 7 days",
-  "30d": "last 30 days",
-  "90d": "last 90 days",
-  "1y": "last year",
+  "7d": tr("last 7 days"),
+  "30d": tr("last 30 days"),
+  "90d": tr("last 90 days"),
+  "1y": tr("last year"),
 };
 
 function toISODate(d: Date): string {
@@ -43,8 +44,8 @@ export function presetRange(preset: Exclude<DateRangePreset, "custom">, now: Dat
 export const DEFAULT_DATE_RANGE: DateRange = presetRange("30d");
 
 export function formatRangeLabel(range: DateRange): string {
-  if (range.preset !== "custom") return PRESET_LABELS[range.preset];
-  return `${range.start} to ${range.end}`;
+  if (range.preset !== "custom") return t(PRESET_LABELS[range.preset]);
+  return t("{{start}} to {{end}}", { start: range.start, end: range.end });
 }
 
 function daysInRange(start: string, end: string): string[] {
