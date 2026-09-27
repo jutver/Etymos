@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "@phosphor-icons/react";
@@ -13,16 +13,52 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, children, maxWidth = "max-w-2xl", labelledBy }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("hidden"));
+
+      if (focusable.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
+    const focusDialog = window.requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
+      window.cancelAnimationFrame(focusDialog);
+      returnFocusRef.current?.focus();
     };
   }, [open, onClose]);
 
@@ -39,11 +75,13 @@ export function Modal({ open, onClose, children, maxWidth = "max-w-2xl", labelle
             onClick={onClose}
           />
           <motion.div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
+            tabIndex={-1}
             className={cn(
-              "relative z-10 w-full max-h-[calc(100dvh-2rem)] overflow-y-auto scrollbar-thin rounded-[var(--radius-card-lg)] bg-white shadow-[var(--shadow-pop)]",
+              "studio-card relative z-10 w-full max-h-[calc(100dvh-2rem)] overflow-y-auto scrollbar-thin rounded-[var(--radius-card-lg)] bg-white shadow-[var(--shadow-pop)]",
               maxWidth,
             )}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -65,7 +103,7 @@ export function ModalCloseButton({ onClose }: { onClose: () => void }) {
     <button
       onClick={onClose}
       aria-label="Close"
-      className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+      className="absolute right-4 top-4 flex size-11 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 sm:size-9"
     >
       <X size={20} />
     </button>

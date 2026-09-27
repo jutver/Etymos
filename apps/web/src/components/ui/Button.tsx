@@ -8,12 +8,12 @@ export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "dan
 export type ButtonSize = "sm" | "md" | "lg";
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold whitespace-nowrap " +
+  "studio-button inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold whitespace-nowrap " +
   "transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100 select-none";
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "text-white brand-gradient shadow-[0_10px_24px_-8px_rgba(30,79,196,0.55)] hover:brightness-[1.08] hover:shadow-[0_14px_28px_-8px_rgba(30,79,196,0.65)]",
+    "text-white brand-gradient shadow-[0_3px_8px_-2px_rgba(23,45,70,0.25)] hover:brightness-[1.08] hover:shadow-[0_5px_12px_-3px_rgba(23,45,70,0.3)]",
   secondary: "bg-navy-900 text-white hover:bg-navy-800",
   outline:
     "border border-line bg-white text-ink-900 hover:border-brand-400 hover:bg-brand-100/60",

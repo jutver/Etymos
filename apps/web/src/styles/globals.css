@@ -1,30 +1,33 @@
 @import "tailwindcss";
 @import "./fonts.css";
+@import "lenis/dist/lenis.css";
 
 @theme {
-  /* Brand — diagonal blue gradient */
-  --color-brand-100: #eaf5ff;
-  --color-brand-200: #cfe9ff;
-  --color-brand-300: #9fd2f0;
-  --color-brand-400: #5ea3e6;
-  --color-brand-500: #2c5fd6;
-  --color-brand-600: #1e4fc4;
-  --color-brand-700: #173d99;
-  --color-navy-900: #0f1b3d;
-  --color-navy-800: #16234a;
-  --color-navy-700: #1e2e5c;
+  /* Brand — research navy and accessible blue */
+  --color-brand-100: #eff6ff;
+  --color-brand-200: #dbeafe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1e40af;
+  --color-navy-900: #142b4a;
+  --color-navy-800: #1e3a5f;
+  --color-navy-700: #334f73;
 
   /* Neutrals & surfaces */
   --color-surface: #ffffff;
-  --color-surface-tint: #f5faff;
-  --color-surface-muted: #eef3fb;
-  --color-ink-900: #1a2233;
-  --color-ink-700: #3a4358;
-  --color-ink-500: #5c6680;
-  --color-ink-300: #9aa4bd;
-  --color-line: #e2e8f5;
+  --color-surface-tint: #f8fafc;
+  --color-surface-muted: #eef2f7;
+  --color-ink-900: #0f172a;
+  --color-ink-700: #334155;
+  --color-ink-600: #475569;
+  --color-ink-500: #526176;
+  --color-ink-400: #607086;
+  --color-ink-300: #66758a;
+  --color-line: #dce3ec;
 
-  /* Functional severity colors — deliberately outside the blue system */
+  /* Semantic status colors stay independent of the brand palette. */
   --color-severity-high: #dc2626;
   --color-severity-high-bg: #fef2f2;
   --color-severity-high-line: #fecaca;
@@ -67,8 +70,8 @@
   /* Radii — documented mixed scale: pills for buttons/badges, 16px cards, 10px inputs */
   --radius-input: 0.625rem;
   --radius-control: 0.75rem;
-  --radius-card: 1rem;
-  --radius-card-lg: 1.25rem;
+  --radius-card: 1.125rem;
+  --radius-card-lg: 1.5rem;
 
   /* Shadows — tinted toward navy, never pure black */
   --shadow-card: 0 1px 2px rgba(15, 27, 61, 0.04), 0 8px 24px -12px rgba(15, 27, 61, 0.12);
@@ -118,6 +121,7 @@
 
   html {
     color-scheme: light;
+    scroll-padding-top: 5rem;
   }
 
   body {
@@ -126,6 +130,18 @@
     font-feature-settings: "cv05", "ss01";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  button,
+  [role="button"],
+  a {
+    touch-action: manipulation;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href] {
+    cursor: pointer;
   }
 
   ::selection {
@@ -140,9 +156,28 @@
   }
 }
 
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  transform: translateY(-180%);
+  border-radius: var(--radius-input);
+  background: var(--color-navy-900);
+  color: white;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: transform 150ms ease-out;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 @layer utilities {
   .brand-gradient {
-    background-image: linear-gradient(115deg, var(--color-brand-300) 0%, var(--color-brand-500) 55%, var(--color-brand-600) 100%);
+    background-image: linear-gradient(115deg, var(--color-brand-500) 0%, var(--color-brand-600) 55%, var(--color-brand-600) 100%);
   }
 
   .brand-gradient-text {
@@ -263,3 +298,43 @@
 .marker-document-preview mark {
   color: inherit;
 }
+
+/* Research-studio system. Kept outside document content and semantic highlights. */
+
+  .workspace-shell, .public-shell { background-color: #f8fafc; }
+  .workspace-shell { background-image: linear-gradient(180deg, #eef3fa 68px, #f8fafc 390px); }
+  .studio-nav { background-image: linear-gradient(100deg, #142b4a, #1e3a5f); box-shadow: 0 3px 18px #142b4a1a; }
+  .studio-nav nav a { border: 1px solid transparent; }
+  .studio-nav nav a.bg-white\/10 { border-color: #ffffff26; background-color: #ffffff14; box-shadow: inset 0 1px #ffffff12; }
+  .public-nav { background-color: #fffffff2; box-shadow: 0 2px 16px #142b4a08; }
+  .studio-page > h1, .studio-page > div > h1, .studio-page > div > div > h1 {
+    font-size: clamp(1.8rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2;
+  }
+  .studio-card { box-shadow: 0 2px 3px #142b4a03, 0 12px 36px -22px #142b4a30; }
+  .studio-card > h2, .studio-card > h3 { letter-spacing: -.025em; }
+  .studio-auth { background: radial-gradient(ellipse at 15% 25%, #e5edfa, transparent 55%), #f8fafc; }
+  .studio-auth-card > .studio-card { border: 1px solid var(--color-line); border-radius: 1.75rem; background: #ffffffed; padding: clamp(1.25rem, 4vw, 2.5rem); box-shadow: 0 24px 80px -45px #142b4a60; }
+  .studio-dropzone { background-image: linear-gradient(145deg, #eff6ff, #ffffff); }
+  .studio-report { background-color: #eef2f7; }
+  .studio-report-bar { background-color: #fffffff5; box-shadow: 0 2px 12px #142b4a0a; border-top: 3px solid var(--color-brand-600); }
+  .studio-sources { background-color: #f8fafc; box-shadow: -6px 0 30px -24px #142b4a50; }
+  .studio-sources > div:first-child { background: #eef3fa; }
+  .studio-button { letter-spacing: -.012em; }
+  .studio-button:focus-visible { outline-offset: 4px; }
+  .studio-plan { border-top-width: 3px; }
+  .studio-page input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  .studio-auth input:not([type=checkbox]):not([type=radio]),
+  .studio-page textarea, .studio-page select {
+    transition: border-color .18s, box-shadow .18s;
+  }
+  .studio-page input:focus-visible, .studio-auth input:focus-visible,
+  .studio-page textarea:focus-visible, .studio-page select:focus-visible {
+    box-shadow: 0 0 0 4px #2563eb12;
+  }
+  .studio-page thead { background: #eef3fa; }
+  .studio-page thead th { color: var(--color-ink-600); font-size: .6875rem; letter-spacing: .07em; }
+  .studio-page tbody tr { transition: background-color .15s; }
+  .studio-page tbody tr:hover { background-color: #f1f5fb; }
+  @media (prefers-reduced-motion: reduce) {
+    .studio-page input, .studio-page textarea, .studio-page select, .studio-page tbody tr { transition: none; }
+  }

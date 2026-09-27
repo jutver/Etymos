@@ -222,7 +222,7 @@ export function FormatToolbar({
         role="toolbar"
         aria-label="Document formatting"
         aria-controls="report-document-editor"
-        className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-full border border-line/80 bg-white/90 px-2 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-md"
+        className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-xl border border-line/80 bg-white/95 px-2 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-md"
       >
         {hasOriginal && (
           <>

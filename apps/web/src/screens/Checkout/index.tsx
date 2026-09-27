@@ -82,7 +82,7 @@ export default function CheckoutPage() {
 
   if (!item) return null;
   if (configLoading || pendingLoading) {
-    return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>;
+    return <div className="studio-page mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">Loading…</div>;
   }
 
   // One outstanding request at a time. Only an admin can clear it, so there is
@@ -91,7 +91,7 @@ export default function CheckoutPage() {
     return (
       <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
         <h1 className="text-h2 font-bold tracking-tight text-navy-900">Request awaiting approval</h1>
-        <div className="mt-7 flex items-start gap-3 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+        <div className="studio-card mt-7 flex items-start gap-3 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
           <HourglassMedium size={22} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">
@@ -186,7 +186,7 @@ export default function CheckoutPage() {
         your plan or credits are applied.
       </p>
 
-      <div className="mt-7 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+      <div className="studio-card mt-7 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Order summary</p>
         <div className="mt-3 flex items-center justify-between border-b border-line pb-4">
           <div>

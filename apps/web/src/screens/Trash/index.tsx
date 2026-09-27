@@ -42,15 +42,15 @@ export default function TrashPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+    <div className="studio-page collection-editorial trash-shell mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div>
-        <h1 className="text-h1 font-bold tracking-tight text-navy-900">My Trash</h1>
+        <p className="editorial-kicker mb-3">RECOVER & ORGANIZE</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">My Trash</h1>
         <p className="mt-1.5 text-sm text-ink-500">
           Documents deleted from History land here. Restore them or delete them permanently.
         </p>
       </div>
 
-      <div className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white">
+      <div className="studio-card mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-400">

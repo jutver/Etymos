@@ -14,7 +14,7 @@ export default function AuthCallbackPage() {
   }, [loading, user, navigate]);
 
   return (
-    <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
+    <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
       <div className="flex flex-col items-center gap-4 py-8">
         <CircleNotch size={32} className="animate-spin motion-reduce:animate-none text-brand-600" />
         <p className="text-sm text-ink-600">Signing you in…</p>

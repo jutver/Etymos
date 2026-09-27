@@ -36,7 +36,7 @@ export default function PaywallPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-14 sm:px-8">
+    <div className="studio-page mx-auto max-w-4xl px-5 py-14 sm:px-8">
       <div className="text-center">
         <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-severity-moderate-bg text-severity-moderate">
           <ShieldWarning size={28} weight="fill" />
@@ -52,7 +52,7 @@ export default function PaywallPage() {
       </div>
 
       {pending && (
-        <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
+        <div className="studio-card mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">Your upgrade request is awaiting approval</p>
@@ -66,7 +66,7 @@ export default function PaywallPage() {
 
       <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Subscribe */}
-        <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
+        <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
           <p className="text-xs font-bold uppercase tracking-wide text-brand-600">Best value</p>
           <h2 className="mt-1.5 text-lg font-bold text-navy-900">Subscribe</h2>
           <p className="mt-1 text-sm text-ink-500">Unlimited checks for regular use.</p>
@@ -110,7 +110,7 @@ export default function PaywallPage() {
         </div>
 
         {/* Buy credits */}
-        <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
+        <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7">
           <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Pay as you go</p>
           <h2 className="mt-1.5 text-lg font-bold text-navy-900">Buy credits</h2>
           <p className="mt-1 text-sm text-ink-500">For one-off checks, no subscription.</p>

@@ -34,7 +34,7 @@ function BarIconButton({
       title={label}
       aria-label={label}
       className={cn(
-        "flex size-9 items-center justify-center rounded-[var(--radius-input)] transition-colors",
+        "flex size-11 items-center justify-center rounded-[var(--radius-input)] transition-colors sm:size-9",
         active
           ? "bg-brand-100 text-brand-600"
           : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
@@ -197,13 +197,13 @@ export function ReportTopBar({
   scoreSlot,
 }: ReportTopBarProps) {
   return (
-    <header className="z-20 shrink-0 border-b border-line/70 bg-white/85 backdrop-blur-md">
-      <div className="flex h-14 items-center gap-1 px-3 sm:px-4">
+    <header className="studio-report-bar z-20 shrink-0 border-b border-line/70 bg-white/85 backdrop-blur-md">
+      <div className="flex min-h-16 flex-wrap items-center gap-1 px-3 py-2 sm:px-5">
         <HomeLogoButton onGoHome={onGoHome} />
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-line" />
         <FileNameField value={fileName} onCommit={onRename} />
 
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="report-actions ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
           {scoreSlot}
 
           <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-line sm:block" />

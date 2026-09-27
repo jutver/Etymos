@@ -76,7 +76,7 @@ export function SkeletonCard({ className, lines = 3 }: { className?: string; lin
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)]",
+        "studio-card rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)]",
         className,
       )}
     >

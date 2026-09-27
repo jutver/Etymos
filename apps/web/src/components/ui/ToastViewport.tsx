@@ -29,7 +29,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
       transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "pointer-events-auto flex w-[22rem] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white p-4 shadow-[var(--shadow-card-hover)]",
+        "studio-card pointer-events-auto flex w-[22rem] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white p-4 shadow-[var(--shadow-card-hover)]",
       )}
     >
       <div className="mt-0.5 shrink-0">{iconFor[toast.kind]}</div>

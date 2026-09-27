@@ -67,7 +67,7 @@ export function SourcesSidebar({
         onClick={onToggle}
         aria-expanded={false}
         aria-controls="report-sources-panel"
-        className="hidden shrink-0 flex-col items-center gap-2 border-l border-line bg-white px-2 py-4 text-ink-500 transition-colors hover:text-ink-900 lg:flex"
+        className="hidden w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-white px-2 py-4 text-ink-500 transition-colors hover:text-ink-900 lg:flex"
       >
         <Sidebar size={18} />
         <span className="text-xs font-bold tabular-nums">{matches.length}</span>
@@ -82,7 +82,7 @@ export function SourcesSidebar({
     <aside
       id="report-sources-panel"
       aria-label="Matched sources"
-      className="flex max-h-[45%] w-full shrink-0 flex-col border-t border-line bg-white lg:max-h-none lg:w-[22rem] lg:border-l lg:border-t-0 xl:w-[24rem]"
+      className="studio-sources flex max-h-[45%] w-full shrink-0 flex-col border-t border-line bg-white lg:max-h-none lg:w-[22rem] lg:border-l lg:border-t-0 xl:w-[24rem]"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
@@ -101,7 +101,7 @@ export function SourcesSidebar({
           aria-controls="report-sources-panel"
           aria-label="Collapse sources panel"
           title="Collapse sources panel"
-          className="hidden size-8 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 lg:flex"
+          className="hidden size-11 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 lg:flex"
         >
           <CaretRight size={16} />
         </button>
@@ -128,14 +128,14 @@ export function SourcesSidebar({
               }}
               placeholder="Search title, author or text…"
               autoComplete="off"
-              className="h-9 w-full rounded-[var(--radius-input)] border border-line bg-white pl-8 pr-8 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
+              className="h-11 w-full rounded-[var(--radius-input)] border border-line bg-white pl-9 pr-10 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Clear search"
-                className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+                className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
               >
                 <X size={12} />
               </button>

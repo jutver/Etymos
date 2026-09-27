@@ -15,16 +15,17 @@ export function PublicNav() {
   const location = useLocation();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur-md">
-      <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8">
+    <header className="public-nav sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur-md">
+      <div className="mx-auto flex h-[80px] max-w-[1480px] items-center justify-between px-5 sm:px-8">
         <Logo />
 
-        <nav className="hidden items-center gap-8 lg:flex">
+        <nav aria-label="Primary navigation" className="hidden items-center gap-1 lg:flex">
           {links.map((l) => (
             <Link
               key={l.label}
               to={l.href}
-              className="text-sm font-medium text-ink-700 transition-colors hover:text-brand-600"
+              aria-current={location.pathname === l.href ? "page" : undefined}
+              className="rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-surface-muted hover:text-brand-600"
             >
               {l.label}
             </Link>
@@ -41,23 +42,26 @@ export function PublicNav() {
         </div>
 
         <button
-          className="flex size-10 items-center justify-center rounded-lg text-ink-700 lg:hidden"
+          className="flex size-11 items-center justify-center rounded-[var(--radius-input)] text-ink-700 hover:bg-surface-muted lg:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
+          aria-expanded={open}
+          aria-controls="public-mobile-navigation"
         >
           {open ? <X size={22} /> : <List size={22} />}
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-line bg-white px-5 py-4 lg:hidden">
-          <nav className="flex flex-col gap-1">
+        <div id="public-mobile-navigation" className="max-h-[calc(100dvh-80px)] overflow-y-auto border-t border-line bg-white px-5 py-4 lg:hidden">
+          <nav aria-label="Primary navigation" className="flex flex-col gap-1">
             {links.map((l) => (
               <Link
                 key={l.label}
                 to={l.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                aria-current={location.pathname === l.href ? "page" : undefined}
+                className="rounded-[var(--radius-input)] px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface-tint"
               >
                 {l.label}
               </Link>

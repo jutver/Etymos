@@ -64,7 +64,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
+    <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
       <h1 className="text-h3 font-bold tracking-tight text-navy-900">Create your account</h1>
       <p className="mt-1.5 text-sm text-ink-500">
         Start with 3 free checks a month. No card required.

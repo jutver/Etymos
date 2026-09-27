@@ -54,7 +54,7 @@ export function VersionHistoryMenu({
         <div
           role="menu"
           aria-label="Version history"
-          className="absolute right-0 top-[calc(100%+8px)] z-30 w-72 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
+          className="studio-card fixed inset-x-3 top-32 z-30 max-h-[60dvh] overflow-y-auto sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+8px)] sm:w-72 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
         >
           <p className="px-2.5 py-2 text-micro font-bold uppercase tracking-wide text-ink-500">
             Version history
