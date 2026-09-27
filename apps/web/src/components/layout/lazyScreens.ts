@@ -24,6 +24,7 @@ export const LoginPage = lazy(() => import("../../screens/Login"));
 export const SignupPage = lazy(() => import("../../screens/Signup"));
 export const VerifyEmailPage = lazy(() => import("../../screens/VerifyEmail"));
 export const AuthCallbackPage = lazy(() => import("../../screens/AuthCallback"));
+export const EmailVerifiedPage = lazy(() => import("../../screens/EmailVerified"));
 
 // Authenticated app
 export const UploadPage = lazy(() => import("../../screens/Upload"));

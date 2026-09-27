@@ -27,7 +27,13 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      // Confirmation link lands on the "email verified" page. The URL must be
+      // in Supabase's Redirect URLs allowlist or Supabase falls back to Site URL.
+      options: { emailRedirectTo: `${window.location.origin}/email-verified` },
+    });
 
     if (signUpError) {
       setError(signUpError.message);

@@ -50,6 +50,7 @@ export default function VerifyEmailPage() {
     const { error: resendError } = await supabase.auth.resend({
       type: "signup",
       email,
+      options: { emailRedirectTo: `${window.location.origin}/email-verified` },
     });
 
     setResending(false);
