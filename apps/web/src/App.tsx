@@ -31,6 +31,7 @@ import {
   VerifyStudentPage,
   VerifyEmailPage,
   AuthCallbackPage,
+  EmailVerifiedPage,
   WaitlistPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
@@ -141,6 +142,7 @@ function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/email-verified" element={<EmailVerifiedPage />} />
         </Route>
 
         <Route element={<RequireAuth />}>
