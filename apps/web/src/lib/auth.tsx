@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@etymos/shared";
+import { t } from "./i18n";
 
 interface AuthContextValue {
   session: Session | null;
@@ -9,6 +10,26 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue>({ session: null, user: null, loading: true });
+
+/**
+ * The auth params Supabase put in the URL this page was opened with (email
+ * verification links, OAuth returns). Captured once at module load because
+ * supabase-js strips a successful `#access_token=…` from the URL while it
+ * initialises, which happens before a lazy-loaded screen gets to render.
+ * Error params (`#error_code=otp_expired`) are left in place, but reading
+ * both from one snapshot keeps callers simple.
+ */
+export const initialAuthRedirect = (() => {
+  if (typeof window === "undefined") return { hasSession: false, errorCode: null, errorDescription: null };
+  const params = new URLSearchParams(window.location.search);
+  new URLSearchParams(window.location.hash.slice(1)).forEach((value, key) => params.set(key, value));
+  const hasError = params.has("error") || params.has("error_code") || params.has("error_description");
+  return {
+    hasSession: !hasError && (params.has("access_token") || params.has("code")),
+    errorCode: hasError ? (params.get("error_code") ?? params.get("error") ?? "unknown") : null,
+    errorDescription: params.get("error_description"),
+  };
+})();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -69,7 +90,7 @@ export function useAuth() {
 
 export function displayNameFor(user: User | null): string {
   if (!user) return "";
-  return (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || "Etymos user";
+  return (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || t("Etymos user");
 }
 
 export function initialsFor(user: User | null): string {

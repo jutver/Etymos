@@ -138,4 +138,3 @@ export const FEATURE_MATRIX: {
   { feature: "History retention", free: "7 days", student: "9 months", professional: "12 months" },
   { feature: "Support", free: "Basic", student: "Priority", professional: "24/7 priority" },
 ];
-

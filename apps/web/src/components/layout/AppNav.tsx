@@ -17,6 +17,7 @@ import { cn } from "@etymos/shared";
 import { planLabel, useAppStore } from "../../lib/store";
 import { useAuth, displayNameFor, initialsFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
+import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const navLinks = [
   { label: "Upload", href: "/upload", icon: UploadSimple },
@@ -72,6 +73,10 @@ export function AppNav() {
         <div className="flex items-center gap-3 lg:mt-auto lg:flex-col lg:items-stretch">
           <div className="hidden sm:block lg:mb-4 lg:rounded-xl lg:border lg:border-white/10 lg:p-3">
             <UsageMeter compact interactive={false} />
+          </div>
+
+          <div className="hidden lg:block lg:mb-2">
+            <LanguageSwitcher tone="dark" />
           </div>
 
           <button
@@ -161,6 +166,9 @@ export function AppNav() {
               );
             })}
           </nav>
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <LanguageSwitcher tone="dark" />
+          </div>
         </div>
       )}
     </header>

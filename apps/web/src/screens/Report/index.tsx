@@ -21,6 +21,7 @@ import { FormatToolbar } from "./FormatToolbar";
 import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
+import { AiContentChip } from "./AiContentChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { buildMatchFocusMap, buildRenderedPassages, countWords } from "./highlights";
 import { isOverLimit } from "./renderPassageText";
@@ -524,7 +525,12 @@ export default function ReportPage() {
         exporting={exporting}
         onExport={handleExport}
         exportLocked={isFree}
-        scoreSlot={<ScoreChip score={displayScore} />}
+        scoreSlot={
+          <>
+            <ScoreChip score={displayScore} />
+            <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate("/paywall")} />
+          </>
+        }
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">

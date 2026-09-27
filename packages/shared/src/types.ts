@@ -120,7 +120,44 @@ export interface DocPassage {
    * image extraction — the Document view falls back to a placeholder box
    * in that case (see DocumentCanvas's "image" case). */
   imageUrl?: string;
+  /** Inline formatting ranges extracted from the source document. */
+  textMarks?: TextMark[];
 }
+
+export interface TextMark {
+  start: number;
+  end: number;
+  style: "bold" | "italic";
+}
+
+export type AiDetectionLevel = "low" | "possible" | "likely";
+
+export interface AiDetectionSegment {
+  start: number;
+  end: number;
+  blockId: string | null;
+  words: number;
+  score: number;
+  excerpt?: string;
+}
+
+export type AiDetection =
+  | { available: false; reason?: string }
+  | {
+  available: true;
+  reason?: string;
+  method: string;
+  model: string;
+  overallScore: number;
+  level: AiDetectionLevel;
+  confidence: "normal" | "low";
+  language: string;
+  analyzedWords: number;
+  aiShare: number;
+  segments: AiDetectionSegment[];
+  reasons: string[];
+  disclaimer: string;
+};
 
 export interface MatchedSource {
   id: string;
@@ -183,6 +220,7 @@ export interface CheckedDocument {
   passages: DocPassage[];
   matches: MatchedSource[];
   pdfUrl?: string;
+  aiDetection?: AiDetection;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

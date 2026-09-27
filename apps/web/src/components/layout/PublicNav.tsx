@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { List, X } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { Button } from "../ui/Button";
+import { t } from "../../lib/i18n";
+import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const links = [
   { label: "Features", href: "/#features" },
@@ -27,17 +29,18 @@ export function PublicNav() {
               aria-current={location.pathname === l.href ? "page" : undefined}
               className="rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-surface-muted hover:text-brand-600"
             >
-              {l.label}
+              {t(l.label)}
             </Link>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
+          <LanguageSwitcher />
           <Button as="link" to="/login" variant="ghost" size="sm">
-            Log in
+            {t("Log in")}
           </Button>
           <Button as="link" to="/signup" size="sm">
-            Get Started
+            {t("Get Started")}
           </Button>
         </div>
 
@@ -63,16 +66,17 @@ export function PublicNav() {
                 aria-current={location.pathname === l.href ? "page" : undefined}
                 className="rounded-[var(--radius-input)] px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface-tint"
               >
-                {l.label}
+                {t(l.label)}
               </Link>
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2">
+            <LanguageSwitcher className="self-start" />
             <Button as="link" to="/login" variant="outline" fullWidth onClick={() => setOpen(false)}>
-              Log in
+              {t("Log in")}
             </Button>
             <Button as="link" to="/signup" fullWidth onClick={() => setOpen(false)}>
-              Get Started
+              {t("Get Started")}
             </Button>
           </div>
         </div>

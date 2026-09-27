@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { EnvelopeSimple } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
+import { t } from "../../lib/i18n";
 
 export function Footer() {
   return (
@@ -9,8 +10,7 @@ export function Footer() {
         <div>
           <Logo variant="light" /><p className="footer-statement">Thoughtful writing.<br /><em>Original by you.</em></p>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
-            Vietnamese-first plagiarism detection, built to be affordable for every student and
-            researcher.
+            {t("Vietnamese-first plagiarism detection, built to be affordable for every student and researcher.")}
           </p>
           <a
             href="mailto:hello@etymos.vn"
@@ -23,37 +23,37 @@ export function Footer() {
         </div>
 
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">Product</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Product")}</p>
           <ul className="mt-4 space-y-3 text-sm">
             <li>
               <Link to="/#features" className="hover:text-white">
-                Features
+                {t("Features")}
               </Link>
             </li>
             <li>
               <Link to="/#how-it-works" className="hover:text-white">
-                How it works
+                {t("How it works")}
               </Link>
             </li>
             <li>
               <Link to="/pricing" className="hover:text-white">
-                Pricing
+                {t("Pricing")}
               </Link>
             </li>
           </ul>
         </div>
 
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">Get started</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Get started")}</p>
           <ul className="mt-4 space-y-3 text-sm">
             <li>
               <Link to="/upload" className="hover:text-white">
-                Check a document
+                {t("Check a document")}
               </Link>
             </li>
             <li>
               <Link to="/history" className="hover:text-white">
-                My history
+                {t("My history")}
               </Link>
             </li>
           </ul>
@@ -62,7 +62,7 @@ export function Footer() {
 
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col-reverse items-center gap-3 px-5 py-6 text-xs text-white/40 sm:flex-row sm:justify-between sm:px-8">
-          <p>© 2026 Etymos. Made for Vietnamese students and researchers.</p>
+          <p>{t("© 2026 Etymos. Made for Vietnamese students and researchers.")}</p>
           <p>Prices shown in VND</p>
         </div>
       </div>

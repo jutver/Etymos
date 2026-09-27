@@ -5,6 +5,7 @@ import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../lib/store";
 import { Button } from "./ui/Button";
 import { cn } from "@etymos/shared";
+import { t } from "../lib/i18n";
 
 export function PlanCard({
   plan,
@@ -54,12 +55,12 @@ export function PlanCard({
       {plan.mostPopular && (
         <span className="absolute -top-3.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-[0_6px_16px_-4px_rgba(30,79,196,0.5)]">
           <Star size={12} weight="fill" />
-          Most popular
+          {t("Most popular")}
         </span>
       )}
 
-      <h3 className="text-h3 font-bold text-navy-900">{plan.name}</h3>
-      <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{plan.tagline}</p>
+      <h3 className="text-h3 font-bold text-navy-900">{t(plan.name)}</h3>
+      <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{t(plan.tagline)}</p>
 
       <div className="mt-6 flex items-baseline gap-1.5">
         {hasDiscount && (
@@ -78,7 +79,7 @@ export function PlanCard({
       <div className="mt-1 min-h-[3.25rem]">
         {plan.id !== "free" && billingCycle === "annual" && (
           <p className="text-xs font-medium text-success">
-            Save {annualSavingsPercent(plan.priceMonthly, plan.priceAnnual)}% vs. monthly
+            {t("Save {{percent}}% vs. monthly", { percent: annualSavingsPercent(plan.priceMonthly, plan.priceAnnual) })}
           </p>
         )}
         {needsVerification && !isCurrent && (
@@ -89,7 +90,7 @@ export function PlanCard({
             )}
           >
             <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
-            Requires student verification before checkout
+            {t("Requires student verification before checkout")}
           </p>
         )}
       </div>
@@ -102,19 +103,19 @@ export function PlanCard({
         disabled={isCurrent}
       >
         {isCurrent
-          ? "Current plan"
+          ? t("Current plan")
           : plan.id === "free"
-            ? "Start for free"
+            ? t("Start for free")
             : needsVerification
-              ? "Verify & choose plan"
-              : `Choose ${plan.name}`}
+              ? t("Verify & choose plan")
+              : t("Choose {{name}}", { name: plan.name })}
       </Button>
 
       <ul className="mt-7 flex flex-1 flex-col gap-3">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
             <Check size={16} weight="bold" className="mt-0.5 shrink-0 text-brand-500" />
-            <span>{f}</span>
+            <span>{t(f)}</span>
           </li>
         ))}
       </ul>

@@ -7,6 +7,8 @@ import { RequireAuth } from "./components/auth/RequireAuth";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { PageLoader } from "./components/ui/PageLoader";
 import { useAuth } from "./lib/auth";
+import { trackPageView } from "./lib/analytics";
+import { useLanguage } from "./lib/i18n";
 // Screens are lazy-loaded so each route is its own chunk — this roughly halves
 // the initial payload. The Suspense fallbacks live inside the layout shells,
 // so nav/footer stay mounted across a route transition.
@@ -29,6 +31,7 @@ import {
   VerifyStudentPage,
   VerifyEmailPage,
   AuthCallbackPage,
+  EmailVerifiedPage,
   WaitlistPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
@@ -111,10 +114,23 @@ function ScrollToTop() {
   return null;
 }
 
+/** Records one `page_view` per route change for the admin Activity dashboard. */
+function PageViewTracker() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    trackPageView(pathname);
+  }, [pathname]);
+  return null;
+}
+
 function App() {
+  // Re-render the whole route tree when the UI language changes: `t()` reads the
+  // current language at call time, so every screen has to render again.
+  useLanguage();
   return (
     <>
       <ScrollToTop />
+      <PageViewTracker />
       <Routes>
         <Route element={<PublicShellWithBanner />}>
           <Route path="/" element={<HomeRoute />} />
@@ -126,6 +142,7 @@ function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/email-verified" element={<EmailVerifiedPage />} />
         </Route>
 
         <Route element={<RequireAuth />}>

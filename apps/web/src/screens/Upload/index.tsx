@@ -26,12 +26,14 @@ import type { BalanceSource } from "../../lib/store";
 import { attachCheckJobId, createCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import { useAuth } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
+import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/cn";
 import type { Language } from "../../lib/types";
+import { t, tr, tn, currentLocale } from "../../lib/i18n";
 
 const languages: { id: Language; label: string }[] = [
   { id: "vi", label: "Tiếng Việt" },
-  { id: "en", label: "English" },
+  { id: "en", label: tr("English") },
 ];
 
 const BALANCE_ICON: Record<BalanceSource, typeof GraduationCap> = {
@@ -168,12 +170,14 @@ export default function UploadPage() {
     if (!hasContent || overLimit) return;
     setSelectedBalance(source);
 
-    const summaryLabel = docLabels.length > 1 ? `${docLabels.length} documents` : docLabels[0];
-    const allowed = requestCheck(source, summaryLabel || "Untitled document", docLabels.length);
+    const summaryLabel = docLabels.length > 1 ? t("{{count}} documents", { count: docLabels.length }) : docLabels[0];
+    const allowed = requestCheck(source, summaryLabel || t("Untitled document"), docLabels.length);
     if (!allowed) {
       navigate("/paywall");
       return;
     }
+
+    trackEvent("check_started", { input: tab, documents: docLabels.length, balance: source });
 
     setSubmitting(true);
     setSubmitError(null);
@@ -237,7 +241,7 @@ export default function UploadPage() {
         const file = files[0]?.file;
 
         if (!file) {
-          throw new Error("Please choose a PDF file to upload.");
+          throw new Error(tr("Please choose a PDF file to upload."));
         }
 
         // Đọc file thành base64 data URL để lưu được vào localStorage
@@ -271,9 +275,9 @@ export default function UploadPage() {
         return;
       }
 
-      throw new Error("Please add content before checking.");
+      throw new Error(tr("Please add content before checking."));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to start analysis.";
+      const message = error instanceof Error ? error.message : tr("Unable to start analysis.");
       setSubmitError(message);
       // The job never started, so settle its row instead of leaving a
       // permanent "Checking" entry behind.
@@ -293,8 +297,7 @@ export default function UploadPage() {
         <div>
           <p className="editorial-kicker mb-3">YOUR WRITING WORKSPACE</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">A clearer view of your writing.</h1>
           <p className="mt-1.5 text-body text-ink-600">
-            Upload one or more files or paste your text. We'll scan the web and academic papers.
-          </p>
+            {t("Upload one or more files or paste your text. We'll scan the web and academic papers.")}</p>
         </div>
       </div>
 
@@ -312,8 +315,7 @@ export default function UploadPage() {
                 tab === "file" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
               )}
             >
-              Upload files
-            </button>
+              {t("Upload files")}</button>
             <button
               onClick={() => setTab("paste")}
               role="tab"
@@ -324,8 +326,7 @@ export default function UploadPage() {
                 tab === "paste" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
               )}
             >
-              Paste text
-            </button>
+              {t("Paste text")}</button>
           </div>
 
           {tab === "file" ? (
@@ -369,15 +370,12 @@ export default function UploadPage() {
                   </div>
                   <div>
                     <p className="text-base font-semibold text-ink-900">
-                      Drag & drop one or more files here
-                    </p>
+                      {t("Drag & drop one or more files here")}</p>
                     <p className="mt-1.5 text-sm text-ink-500">
-                      or <span className="font-semibold text-brand-600">browse files</span> on your
-                      computer
-                    </p>
+                      {t("or")}{" "}<span className="font-semibold text-brand-600">{t("browse files")}</span>{" "}{t("on your computer")}</p>
                   </div>
                   <p className="text-xs text-ink-300">
-                    PDF, DOC, DOCX or TXT · up to {wordLimit.toLocaleString()} words on {planLabel(plan)}
+                    {t("PDF, DOC, DOCX or TXT · up to {{limit}} words on {{plan}}", { limit: wordLimit.toLocaleString(currentLocale()), plan: planLabel(plan) })}
                   </p>
                 </div>
               ) : (
@@ -421,12 +419,10 @@ export default function UploadPage() {
                       className="flex items-center gap-1.5 rounded-full border border-dashed border-line px-3 py-1.5 text-xs font-semibold text-ink-500 hover:border-brand-300 hover:text-brand-600"
                     >
                       <Plus size={13} weight="bold" />
-                      Add more
-                    </button>
+                      {t("Add more")}</button>
                   </div>
                   <p className="shrink-0 text-xs font-medium text-ink-400">
-                    {files.length} file{files.length === 1 ? "" : "s"} ready to check
-                  </p>
+                    {tn(files.length, "{{count}} file ready to check", "{{count}} files ready to check")}</p>
 
                   <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-line bg-surface-tint">
                     {previewFile && isPdfFile(previewFile.file) ? (
@@ -440,8 +436,7 @@ export default function UploadPage() {
                         </div>
                         <p className="text-sm font-semibold text-ink-700">{previewFile?.name}</p>
                         <p className="text-xs text-ink-400">
-                          Preview isn't available for this file type — it'll still be checked.
-                        </p>
+                          {t("Preview isn't available for this file type — it'll still be checked.")}</p>
                       </div>
                     )}
                   </div>
@@ -479,8 +474,7 @@ export default function UploadPage() {
               </div>
               {overLimit && (
                 <p className="mt-2 shrink-0 rounded-lg bg-severity-high-bg px-3 py-2 text-xs font-medium text-severity-high">
-                  This exceeds the {planLabel(plan)} plan's {wordLimit.toLocaleString()}-word limit.
-                  {plan !== "professional" && " Upgrade for a higher limit."}
+                  {t("This exceeds the {{plan}} plan's {{limit}}-word limit.", { plan: planLabel(plan), limit: wordLimit.toLocaleString(currentLocale()) })}{plan !== "professional" && t(" Upgrade for a higher limit.")}
                 </p>
               )}
             </div>
@@ -488,7 +482,7 @@ export default function UploadPage() {
 
           {submitError && (
             <p className="mt-4 shrink-0 rounded-lg border border-severity-high-line bg-severity-high-bg px-3 py-2 text-sm text-severity-high">
-              {submitError}
+              {t(submitError)}
             </p>
           )}
 
@@ -496,15 +490,15 @@ export default function UploadPage() {
             <Toggle
               checked={webSources}
               onChange={setWebSources}
-              label="Web sources"
-              description="Scan public websites"
+              label={t("Web sources")}
+              description={t("Scan public websites")}
               icon={<Globe size={18} />}
             />
             <Toggle
               checked={academicSources}
               onChange={setAcademicSources}
-              label="Academic papers"
-              description="Scan scholarly databases"
+              label={t("Academic papers")}
+              description={t("Scan scholarly databases")}
               icon={<GraduationCap size={18} />}
             />
           </div>
@@ -517,7 +511,7 @@ export default function UploadPage() {
                 aria-controls="language-options"
                 className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
               >
-                {languages.find((l) => l.id === language)?.label}
+                {t(languages.find((l) => l.id === language)?.label)}
                 <CaretDown size={14} className={cn("transition-transform", langOpen && "rotate-180")} />
               </button>
               {langOpen && (
@@ -536,7 +530,7 @@ export default function UploadPage() {
                         language === l.id ? "bg-brand-100 text-brand-700" : "text-ink-700 hover:bg-surface-tint",
                       )}
                     >
-                      {l.label}
+                      {t(l.label)}
                     </button>
                   ))}
                 </div>
@@ -551,7 +545,7 @@ export default function UploadPage() {
                 className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
               >
                 <FolderSimple size={15} />
-                {project || "No project"}
+                {project || t("No project")}
                 <CaretDown size={14} className={cn("transition-transform", projectOpen && "rotate-180")} />
               </button>
               {projectOpen && (
@@ -560,7 +554,7 @@ export default function UploadPage() {
                     autoFocus
                     value={projectQuery}
                     onChange={(e) => setProjectQuery(e.target.value)}
-                    placeholder="Search or create projects"
+                    placeholder={t("Search or create projects")}
                     className="mb-1 w-full rounded-lg border border-line bg-surface-tint px-3 py-2 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
                   />
                   <div className="max-h-48 overflow-y-auto scrollbar-thin">
@@ -583,11 +577,11 @@ export default function UploadPage() {
                         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-brand-600 hover:bg-surface-tint"
                       >
                         <Plus size={14} weight="bold" />
-                        Create project "{trimmedQuery}"
+                        {t("Create project \"")}{trimmedQuery}"
                       </button>
                     )}
                     {filteredProjects.length === 0 && !canCreateProject && (
-                      <p className="px-3 py-2 text-sm text-ink-400">No projects found</p>
+                      <p className="px-3 py-2 text-sm text-ink-400">{t("No projects found")}</p>
                     )}
                   </div>
                 </div>
@@ -602,7 +596,7 @@ export default function UploadPage() {
               iconLeft={<Sparkle size={18} weight="fill" />}
               className="w-full sm:ml-auto sm:w-auto"
             >
-              {docLabels.length > 1 ? `Check ${docLabels.length} documents` : "Check for plagiarism"}
+              {docLabels.length > 1 ? t("Check {{length}} documents", { length: docLabels.length }) : t("Check for plagiarism")}
             </Button>
           </div>
         </div>
@@ -616,7 +610,7 @@ export default function UploadPage() {
             </div>
             {remaining <= 1 && (
               <Button as="link" to="/pricing" size="sm" fullWidth className="mt-4">
-                {planLabel(plan) === "Free" ? "Upgrade or buy credits" : "Top up credits"}
+                {planLabel(plan) === "Free" ? t("Upgrade or buy credits") : t("Top up credits")}
               </Button>
             )}
           </div>
@@ -625,11 +619,9 @@ export default function UploadPage() {
             <div className="flex shrink-0 items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500">
                 <ClockCounterClockwise size={14} />
-                Recent checks
-              </p>
+                {t("Recent checks")}</p>
               <button onClick={() => navigate("/history")} className="text-xs font-semibold text-brand-600 hover:underline">
-                View all
-              </button>
+                {t("View all")}</button>
             </div>
             <div className="mt-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin">
               <div className="flex flex-col gap-1">
@@ -659,11 +651,9 @@ export default function UploadPage() {
         <div className="relative p-6">
           <ModalCloseButton onClose={() => setBalanceDialogOpen(false)} />
           <h2 id="balance-dialog-title" className="text-h3 font-bold text-navy-900">
-            Which balance should we use?
-          </h2>
+            {t("Which balance should we use?")}</h2>
           <p className="mt-1.5 text-sm text-ink-500">
-            You have credits available in more than one place. Pick which one this check should spend.
-          </p>
+            {t("You have credits available in more than one place. Pick which one this check should spend.")}</p>
           <div className="mt-5 flex flex-col gap-2.5">
             {availableBalances.map((b) => {
               const Icon = BALANCE_ICON[b.source];
@@ -678,10 +668,9 @@ export default function UploadPage() {
                       <Icon size={18} weight="bold" />
                     </span>
                     <span>
-                      <span className="block text-sm font-semibold text-navy-900">{b.label}</span>
+                      <span className="block text-sm font-semibold text-navy-900">{t(b.label)}</span>
                       <span className="block text-xs text-ink-500">
-                        {b.remaining} check{b.remaining === 1 ? "" : "s"} remaining
-                      </span>
+                        {tn(b.remaining, "{{count}} check remaining", "{{count}} checks remaining")}</span>
                     </span>
                   </span>
                   <span className="size-2.5 shrink-0 rounded-full border-2 border-line" />
