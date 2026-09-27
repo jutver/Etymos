@@ -313,6 +313,13 @@ def summarize(segment_results: list[dict], *, language: str, model_name: str) ->
                 # First words of the paragraph so the UI can say *which* one it is
                 # even when it only has the persisted report, not the full text.
                 "excerpt": _excerpt(s.get("text", "")),
+                # The three measurements behind the score, so the UI can
+                # explain *this* paragraph in the reader's language.
+                "features": {
+                    key: round(float(s["features"][key]), 3)
+                    for key in ("mean_nll", "top1_frac", "sent_std")
+                    if key in (s.get("features") or {})
+                },
             }
             for s in segment_results
         ],

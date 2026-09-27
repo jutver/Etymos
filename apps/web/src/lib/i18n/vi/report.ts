@@ -8,6 +8,9 @@ export const report: Record<string, string> = {
   "AI content": "Nội dung AI",
   "AI paraphrase": "Bản diễn đạt lại bằng AI",
   "AI-generated content": "Nội dung do AI tạo",
+  "AI": "AI",
+  "Sidebar sections": "Các mục thanh bên",
+  "Paragraphs that look machine-written, and why.": "Các đoạn có vẻ do máy viết, và lý do.",
   "AI-generated content detection — upgrade to unlock": "Phát hiện nội dung do AI tạo — nâng cấp để mở khóa",
   "Academic tone · English": "Giọng văn học thuật · Tiếng Anh",
   "Accept & replace": "Chấp nhận & thay thế",
@@ -113,6 +116,8 @@ export const report: Record<string, string> = {
   "Something went wrong while contacting the AI. Please try again.": "Đã xảy ra lỗi khi kết nối với AI. Vui lòng thử lại.",
   "Source comparison": "So sánh nguồn",
   "Sources": "Nguồn",
+  "Detectors of this kind misjudge writing by non-native English speakers more often.":
+    "Các công cụ phát hiện kiểu này dễ đánh giá sai hơn với văn bản của người không nói tiếng Anh bản ngữ.",
   "Start typing to draft here, or open the original file from the toolbar above.":
     "Hãy bắt đầu gõ để soạn thảo tại đây, hoặc mở file gốc từ thanh công cụ phía trên.",
   "Strikethrough": "Gạch ngang",

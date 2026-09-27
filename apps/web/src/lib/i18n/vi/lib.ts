@@ -82,4 +82,17 @@ export const lib: Record<string, string> = {
   "{{tier}} plan ({{cycle}})": "Gói {{tier}} ({{cycle}})",
   "🎓 Yes": "🎓 Có",
   "Documents / month": "Số tài liệu / tháng",
+  // lib/aiSegmentExplanation.ts
+  "This paragraph scored {{score}}% on the detector's combined measures of how predictable its wording is to a language model.":
+    "Đoạn này đạt {{score}}% theo tổng hợp các thước đo về mức độ dễ đoán của câu chữ đối với mô hình ngôn ngữ.",
+  "The wording is very predictable to a language model (perplexity ≈ {{ppl}}, versus ≈ {{human}} for typical human academic writing); machine-written text tends to pick the most expected word.":
+    "Câu chữ rất dễ đoán đối với mô hình ngôn ngữ (độ bối rối/perplexity ≈ {{ppl}}, trong khi văn học thuật do người viết thường ≈ {{human}}); văn bản do máy viết có xu hướng chọn từ dễ đoán nhất.",
+  "The wording is fairly unpredictable (perplexity ≈ {{ppl}}), which is typical of human writing.":
+    "Câu chữ khá khó đoán (độ bối rối/perplexity ≈ {{ppl}}), điều thường thấy ở văn do người viết.",
+  "{{pct}}% of the words were the language model's single top guess, against about {{human}}% in human academic writing.":
+    "{{pct}}% số từ trùng đúng với từ mà mô hình ngôn ngữ đoán nhiều khả năng nhất, trong khi văn học thuật do người viết chỉ khoảng {{human}}%.",
+  "Its sentences keep the same even rhythm, while human writing usually mixes easy and surprising sentences.":
+    "Các câu giữ một nhịp đều nhau, trong khi người viết thường xen kẽ câu dễ đoán và câu bất ngờ.",
+  "No single measure stands out; the score comes from the three measures together.":
+    "Không có thước đo nào nổi bật riêng; điểm số đến từ cả ba thước đo cộng lại.",
 };

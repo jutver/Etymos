@@ -192,6 +192,18 @@ export interface AiDetectionSegment {
   score: number;
   /** First ~160 characters of the paragraph, so the UI can show which one it is. */
   excerpt?: string;
+  /** The detector's three measurements for this paragraph (absent on reports
+   * checked before they were stored) — lets the UI explain the score. */
+  features?: AiSegmentFeatures;
+}
+
+export interface AiSegmentFeatures {
+  /** Mean negative log-likelihood per token; perplexity = e^meanNll. Lower = more predictable. */
+  meanNll?: number;
+  /** 0-1 share of tokens that were the reference model's single top guess. */
+  topOneShare?: number;
+  /** Spread of per-sentence meanNll ("burstiness"). Lower = more even rhythm. */
+  sentenceSpread?: number;
 }
 
 export type AiDetectionLevel = "low" | "possible" | "likely";

@@ -5,6 +5,7 @@ import type { AiDetection } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
 import { aiLevelLabel, translateAiText } from "../../lib/aiDetection";
 import { trackEvent } from "../../lib/analytics";
+import { AI_DETECTION_SOURCES, explainAiSegment } from "../../lib/aiSegmentExplanation";
 import { t, currentLocale } from "../../lib/i18n";
 
 const LEVEL_CHIP = {
@@ -26,6 +27,8 @@ export interface AiDetectionSectionProps {
    * identified by `${segment.start}-${segment.end}` (stable within one
    * report, and already how AiContentChip keys its own list). */
   onSegmentClick?: (segmentId: string) => void;
+  /** Open the "Why" details from the start (the sidebar's own AI tab). */
+  defaultExpanded?: boolean;
 }
 
 /**
@@ -37,8 +40,8 @@ export interface AiDetectionSectionProps {
  * Purely additive: AiContentChip stays exactly as it is, this is a second
  * surface for the same data, not a replacement.
  */
-export function AiDetectionSection({ detection, locked, onUpgrade, activeSegmentId, onSegmentClick }: AiDetectionSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+export function AiDetectionSection({ detection, locked, onUpgrade, activeSegmentId, onSegmentClick, defaultExpanded }: AiDetectionSectionProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
 
   // Old reports (checked before the detector existed) and checks where it
   // could not run: show nothing, same rule AiContentChip follows — an empty
@@ -152,6 +155,20 @@ export function AiDetectionSection({ detection, locked, onUpgrade, activeSegment
                         <p className="text-[11px] font-semibold tabular-nums text-ai-flag">
                           {Math.round(segment.score)}% · {segment.words}{" "}{t("words")}</p>
                         {segment.excerpt && <p className="mt-0.5 text-xs text-ink-700">{segment.excerpt}</p>}
+                        <ul className="mt-1.5 space-y-1 border-t border-ai-flag-line/60 pt-1.5">
+                          {explainAiSegment(segment).map((point) => (
+                            <li key={point.text} className="flex gap-1.5 text-[11px] leading-relaxed text-ink-600">
+                              <span aria-hidden="true" className="mt-1.5 size-1 shrink-0 rounded-full bg-ai-flag" />
+                              <span>
+                                {point.text}
+                                {point.sources.length > 0 && (
+                                  <span className="ml-0.5 text-ink-400">
+                                    {point.sources.map((id) => `[${id}]`).join("")}</span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </button>
                     </li>
                   );
@@ -163,6 +180,20 @@ export function AiDetectionSection({ detection, locked, onUpgrade, activeSegment
           {detection.disclaimer && (
             <p className="mt-3 text-[10px] text-ink-400">{translateAiText(detection.disclaimer)}</p>
           )}
+
+          <p className="mt-2 text-[10px] text-ink-400">
+            {t("Detectors of this kind misjudge writing by non-native English speakers more often.")}{" "}[4]</p>
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+            {t("Sources")}</p>
+          <ol className="mt-1 space-y-1 text-[10px] leading-relaxed text-ink-500">
+            {AI_DETECTION_SOURCES.map((source) => (
+              <li key={source.id} className="flex gap-1">
+                <span className="shrink-0 tabular-nums">[{source.id}]</span>
+                <a href={source.url} target="_blank" rel="noopener noreferrer" className="hover:text-ink-900 hover:underline">
+                  {source.citation}</a>
+              </li>
+            ))}
+          </ol>
         </>
       )}
     </div>

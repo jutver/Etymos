@@ -161,3 +161,12 @@ class TestDetectAiContent:
             raise ValueError("bad tensor")
 
         assert detect_ai_content(document, text, extractor=boom)["available"] is False
+
+
+def test_each_segment_carries_its_three_features_for_the_ui_explanation():
+    seg = {
+        "start": 0, "end": 100, "block_id": "b", "words": 100, "probability": 0.9,
+        "features": {"mean_nll": 1.73456, "top1_frac": 0.61234, "sent_std": 0.41234},
+    }
+    result = summarize([seg], language="en", model_name="m")
+    assert result["segments"][0]["features"] == {"mean_nll": 1.735, "top1_frac": 0.612, "sent_std": 0.412}

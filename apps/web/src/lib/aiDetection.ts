@@ -4,7 +4,7 @@
 // (Analyzing) and the reload path (documentsQueries) so both read it the same
 // way. Tolerant on purpose: anything unrecognised becomes `undefined` — the
 // report then simply shows no AI chip — rather than throwing.
-import type { AiDetection, AiDetectionLevel, AiDetectionSegment } from "@etymos/shared";
+import type { AiDetection, AiDetectionLevel, AiDetectionSegment, AiSegmentFeatures } from "@etymos/shared";
 import { t, tr } from "./i18n";
 
 const LEVELS: readonly AiDetectionLevel[] = ["low", "possible", "likely"];
@@ -12,6 +12,23 @@ const LEVELS: readonly AiDetectionLevel[] = ["low", "possible", "likely"];
 function num(value: unknown, fallback = 0): number {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function optionalNum(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number.NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** backend/ai_detector.py summarize(): segment["features"] = {mean_nll, top1_frac, sent_std}. */
+function parseSegmentFeatures(raw: unknown): AiSegmentFeatures | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const f = raw as Record<string, unknown>;
+  const features: AiSegmentFeatures = {
+    meanNll: optionalNum(f.mean_nll),
+    topOneShare: optionalNum(f.top1_frac),
+    sentenceSpread: optionalNum(f.sent_std),
+  };
+  return Object.values(features).some((v) => v !== undefined) ? features : undefined;
 }
 
 export function parseAiDetection(raw: unknown): AiDetection | undefined {
@@ -34,6 +51,7 @@ export function parseAiDetection(raw: unknown): AiDetection | undefined {
           words: num(s.words),
           score: num(s.score),
           excerpt: typeof s.excerpt === "string" ? s.excerpt : undefined,
+          features: parseSegmentFeatures(s.features),
         }))
     : [];
 
