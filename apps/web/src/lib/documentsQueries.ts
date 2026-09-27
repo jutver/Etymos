@@ -10,6 +10,7 @@ import { supabase } from "@etymos/shared";
 import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSource } from "@etymos/shared";
 import type { DocumentVersion } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
+import { parseExplanationFacts } from "./matchExplanation";
 import { tr } from "./i18n";
 
 interface DocumentRow {
@@ -66,6 +67,11 @@ interface DocumentMatchRow {
   source_snippet: string | null;
   explanation: string | null;
   rewrite_suggestions: string[] | null;
+  // Added by supabase/migrations/20260928000000_document_match_explanation_facts.sql.
+  explanation_facts?: unknown;
+  source_url?: string | null;
+  source_year?: string | null;
+  source_doi?: string | null;
 }
 
 interface DocumentPassageRow {
@@ -166,6 +172,10 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     sourceSnippet: m.source_snippet ?? "",
     explanation: m.explanation ?? "",
     rewriteSuggestions: m.rewrite_suggestions ?? [],
+    explanationFacts: parseExplanationFacts(m.explanation_facts),
+    sourceUrl: m.source_url || undefined,
+    sourceYear: m.source_year || undefined,
+    sourceDoi: m.source_doi || undefined,
   }));
 
   const passages: DocPassage[] = passageRows.map((p) => ({

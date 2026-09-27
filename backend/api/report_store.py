@@ -253,12 +253,31 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                     if m.get("word_overlap") is not None else None
                 ),
                 "rewrite_suggestions": None,
+                # supabase/migrations/20260928000000_document_match_explanation_facts.sql:
+                # lets the web app write the explanation in the UI language
+                # and cite the source (URL / year / DOI) after a reload.
+                "explanation_facts": m.get("explanation_facts") or None,
+                "source_url": m.get("source_url") or m.get("source_pdf_url") or None,
+                "source_year": str(m.get("source_year") or "").strip() or None,
+                "source_doi": m.get("source_doi") or None,
             })
         # Idempotent re-save: clear any previous match rows for this
         # document before inserting the current set.
         client.table("document_matches").delete().eq("document_id", report_id).execute()
         if rows:
-            client.table("document_matches").insert(rows).execute()
+            try:
+                client.table("document_matches").insert(rows).execute()
+            except Exception:
+                # Most likely the explanation_facts migration hasn't been
+                # applied yet: keep the matches, just without the new columns.
+                logger.warning(
+                    "Inserting document_matches with explanation facts failed for report_id=%s; "
+                    "retrying without them.", report_id, exc_info=True,
+                )
+                new_columns = {"explanation_facts", "source_url", "source_year", "source_doi"}
+                client.table("document_matches").insert(
+                    [{k: v for k, v in row.items() if k not in new_columns} for row in rows]
+                ).execute()
     except Exception:
         logger.exception("Failed to persist document_matches for report_id=%s", report_id)
 

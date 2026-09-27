@@ -237,3 +237,21 @@ class TestExplainMatches:
             clock=lambda: next(ticks),
         )
         assert [m["explanation_source"] for m in matches] == ["llm:local", "facts", "facts", "facts"]
+
+
+def test_fact_explanations_also_carry_their_facts_for_the_ui_language():
+    identical = _match(input_sentence="The model is trained on social media comments.",
+                       source_sentence="The model is trained on social media comments.")
+    reworded = _match(1)
+    explain_matches([identical, reworded], use_llm=False)
+    assert identical["explanation_facts"]["kind"] == "identical"
+    assert reworded["explanation_facts"]["kind"] == "reworded"
+    assert reworded["explanation_facts"]["title"] == "ViHateT5"
+    assert reworded["explanation_facts"]["semantic"] == 83
+
+
+def test_an_llm_explanation_drops_the_facts_so_the_ui_shows_the_llm_text():
+    matches = [_match(0), _match(1)]
+    explain_matches(matches, providers={"local": _ok}, order=["local"], limit=1)
+    assert "explanation_facts" not in matches[0]
+    assert "explanation_facts" in matches[1]

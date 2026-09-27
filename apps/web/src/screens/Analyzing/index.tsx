@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { pollJob, getReport, type BackendDocumentBlock } from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import { trackEvent } from "../../lib/analytics";
+import { parseExplanationFacts } from "../../lib/matchExplanation";
 import { parseAiDetection } from "../../lib/aiDetection";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
@@ -318,6 +319,8 @@ export default function AnalyzingPage() {
               // old template only for reports built before this field
               // existed.
               explanation: match.explanation ?? tl("Matched {{label}}.", { label: match.label.replace(/_/g, " ") }),
+              // Lets MatchCard write the explanation in the UI language (lib/matchExplanation.ts).
+              explanationFacts: parseExplanationFacts(match.explanation_facts),
               rewriteSuggestions: [],
               // `input_offset` is omitted (never zeroed) when the backend could
               // not localise the sentence, so its presence is the capability

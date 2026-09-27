@@ -179,6 +179,27 @@ export interface MatchedSource {
   sourceYear?: string;
   sourceUrl?: string;
   sourceDoi?: string;
+  /** Which explanation template applies and its values (backend
+   * ai_explain.explanation_facts) — lets the UI write `explanation` in the
+   * reader's language. Absent for LLM-written explanations and old reports:
+   * `explanation` is then shown as stored. */
+  explanationFacts?: MatchExplanationFacts;
+}
+
+export interface MatchExplanationFacts {
+  kind: "identical" | "definition_only" | "whole" | "verbatim" | "phrase" | "reworded";
+  /** Backend match label, e.g. "likely_plagiarism", "suspicious", "common_academic_definition". */
+  label: string;
+  /** Source title, already shortened for quoting (may be empty). */
+  title: string;
+  /** Longest run of identical words the two sentences share. */
+  shared: number;
+  /** Words in the student's sentence. */
+  total: number;
+  /** That shared run, quoted. */
+  phrase: string;
+  /** 0-100 meaning similarity. */
+  semantic: number;
 }
 
 /** One analysed paragraph from the backend's AI-content detector. */

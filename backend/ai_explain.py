@@ -266,6 +266,38 @@ def facts_explanation(match: dict, facts: dict | None = None) -> str:
     return (body.format(**fields) + suffix).strip()
 
 
+def explanation_facts(match: dict, facts: dict | None = None) -> dict:
+    """
+    The same choice facts_explanation() makes, as data instead of a sentence:
+    which template ("kind") plus the values it fills in. Lets the web app write
+    the explanation in the *reader's* UI language rather than the student's.
+    """
+    facts = facts or compute_facts(match)
+    shared = facts["shared_words"]
+    label = match.get("label") or ""
+    if facts["identical"]:
+        kind = "identical"
+    elif label == "common_academic_definition" and shared < PHRASE_MIN_WORDS:
+        kind = "definition_only"
+    elif facts["whole_sentence"] and shared >= PHRASE_MIN_WORDS:
+        kind = "whole"
+    elif shared >= VERBATIM_MIN_WORDS:
+        kind = "verbatim"
+    elif shared >= PHRASE_MIN_WORDS:
+        kind = "phrase"
+    else:
+        kind = "reworded"
+    return {
+        "kind": kind,
+        "label": label,
+        "title": _quote((match.get("source_title") or "").strip(), 80),
+        "shared": shared,
+        "total": facts["student_words"],
+        "phrase": _quote(facts["shared_phrase"]),
+        "semantic": facts["semantic_pct"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # LLM polish: prompt, validation (pure)
 # ---------------------------------------------------------------------------
@@ -449,6 +481,7 @@ def explain_matches(
             if (match.get("input_sentence") or "").strip() and (match.get("source_sentence") or "").strip():
                 match["explanation"] = facts_explanation(match, facts)
                 match["explanation_source"] = "facts"
+                match["explanation_facts"] = explanation_facts(match, facts)
             else:
                 match.setdefault("explanation_source", "template")
         except Exception:  # noqa: BLE001 — keep whatever explanation the match already had
@@ -489,6 +522,8 @@ def explain_matches(
                     break
                 match["explanation"] = text
                 match["explanation_source"] = f"llm:{name}"
+                # The LLM text replaces the fact template, so the UI must show it as is.
+                match.pop("explanation_facts", None)
                 failures[name] = 0
                 upgraded += 1
                 break

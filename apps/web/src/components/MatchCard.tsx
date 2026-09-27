@@ -15,6 +15,8 @@ import { severityConfig } from "./Severity";
 import { colorForMatch } from "../screens/Report/highlights";
 import { Button } from "./ui/Button";
 import { t } from "../lib/i18n";
+import { explainMatch } from "../lib/matchExplanation";
+import { formatCitationText } from "../lib/citation";
 
 interface MatchCardProps {
   match: MatchedSource;
@@ -148,12 +150,25 @@ export function MatchCard({
               />
             </button>
             {explanationOpen && (
-              <p
-                id={explanationId}
-                className="rounded-lg bg-brand-100/50 px-3 py-2.5 text-xs leading-relaxed text-ink-700"
-              >
-                {match.explanation}
-              </p>
+              <div id={explanationId} className="rounded-lg bg-brand-100/50 px-3 py-2.5 text-xs leading-relaxed text-ink-700">
+                {/* In the UI language when the backend sent explanation facts; the stored text otherwise. */}
+                <p>{explainMatch(match)}</p>
+                <p className="mt-2 border-t border-brand-200/60 pt-2 text-[11px] text-ink-500">
+                  <span className="font-semibold text-ink-700">{t("Source:")}</span>{" "}
+                  {match.sourceUrl ? (
+                    <a
+                      href={match.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-words text-brand-600 hover:underline"
+                    >
+                      {formatCitationText(match)}</a>
+                  ) : (
+                    <span className="break-words">{formatCitationText(match)}</span>
+                  )}
+                  {match.sourceDoi && <span className="break-words"> · DOI: {match.sourceDoi}</span>}
+                </p>
+              </div>
             )}
           </>
         )}

@@ -106,4 +106,6 @@ export const components: Record<string, string> = {
   "instead of confirming.": "thay vì xác nhận.",
   "{{plan}} plan": "Gói {{plan}}",
   "© 2026 Etymos. Made for Vietnamese students and researchers.": "© 2026 Etymos. Dành cho sinh viên và nhà nghiên cứu Việt Nam.",
+  "Source:":
+    "Nguồn:",
 };

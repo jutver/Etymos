@@ -95,4 +95,23 @@ export const lib: Record<string, string> = {
     "Các câu giữ một nhịp đều nhau, trong khi người viết thường xen kẽ câu dễ đoán và câu bất ngờ.",
   "No single measure stands out; the score comes from the three measures together.":
     "Không có thước đo nào nổi bật riêng; điểm số đến từ cả ba thước đo cộng lại.",
+  // lib/matchExplanation.ts
+  "This looks like a standard definition that many authors phrase similarly; it is usually acceptable if you cite where the definition comes from.":
+    "Đây có vẻ là một định nghĩa quen thuộc mà nhiều tác giả diễn đạt tương tự; thường vẫn chấp nhận được nếu bạn ghi rõ nguồn của định nghĩa.",
+  "It is among the strongest matches in your document.":
+    "Đây là một trong những đoạn trùng đáng chú ý nhất trong tài liệu của bạn.",
+  "It deserves a closer look.":
+    "Cần xem xét kỹ hơn.",
+  "This sentence is identical to the source{{title}}: every word matches, so it reads as copied word for word. If you want to keep it, put it in quotation marks and cite the source; otherwise say the idea in your own words and structure.":
+    "Câu này giống hệt nguồn{{title}}: từng từ đều trùng, nên đọc lên như sao chép nguyên văn. Nếu muốn giữ, hãy đặt trong dấu ngoặc kép và trích dẫn nguồn; nếu không, hãy diễn đạt lại ý bằng lời và cấu trúc của bạn.",
+  "Almost this whole sentence appears in the source{{title}} in the same words ({{shared}} of your {{total}} words in a row). That reads as direct copying. Quote and cite it, or restate the idea in your own words.":
+    "Gần như cả câu này xuất hiện trong nguồn{{title}} với đúng từ ngữ ({{shared}}/{{total}} từ liên tiếp trùng nhau). Đây là dấu hiệu sao chép trực tiếp. Hãy trích dẫn nguyên văn kèm nguồn, hoặc diễn đạt lại ý bằng lời của bạn.",
+  "Your text shares a {{shared}}-word run with the source{{title}}: \"{{phrase}}\". Reusing that many words in a row is a strong sign of direct copying, so quote and cite it or reword it.":
+    "Văn bản của bạn trùng với nguồn{{title}} một đoạn dài {{shared}} từ liên tiếp: \"{{phrase}}\". Trùng nhiều từ liền nhau như vậy là dấu hiệu mạnh của việc sao chép, hãy trích dẫn kèm nguồn hoặc viết lại.",
+  "Your text and the source{{title}} share the phrase \"{{phrase}}\" ({{shared}} words in a row), and the sentence as a whole is {{semantic}}% similar in meaning. Reword the surrounding sentence, or quote and cite the source.":
+    "Văn bản của bạn và nguồn{{title}} có chung cụm \"{{phrase}}\" ({{shared}} từ liên tiếp), và toàn câu giống nhau {{semantic}}% về nghĩa. Hãy viết lại phần câu xung quanh, hoặc trích dẫn kèm nguồn.",
+  "The wording differs from the source{{title}}, but the meaning is {{semantic}}% the same and the sentence follows the source's structure. Close paraphrases like this are still flagged: restructure the sentence in your own way and cite the source.":
+    "Từ ngữ khác với nguồn{{title}}, nhưng ý nghĩa giống {{semantic}}% và câu đi theo đúng cấu trúc của nguồn. Kiểu diễn đạt lại sát như vậy vẫn bị đánh dấu: hãy tổ chức lại câu theo cách riêng của bạn và trích dẫn nguồn.",
+  "({{semantic}}% similar in meaning to the source{{title}}.)":
+    "(Giống {{semantic}}% về nghĩa với nguồn{{title}}.)",
 };
