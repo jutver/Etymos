@@ -11,6 +11,7 @@ import {
   renameDocument,
   saveDocumentVersion,
 } from "../../lib/documentsQueries";
+import { loadLocalDocumentVersions, saveLocalDocumentVersion } from "../../lib/localDocumentVersions";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
@@ -228,7 +229,14 @@ export default function ReportPage() {
       () => {
         if (!cancelled) setVersions([]);
       },
-    );
+    ).then(() => {
+      // Plus the versions handleSave had to keep on this device because
+      // Supabase refused them (see lib/localDocumentVersions.ts).
+      const local = loadLocalDocumentVersions(id);
+      if (!cancelled && local.length > 0) {
+        setVersions((prev) => [...local, ...prev].slice(0, 20));
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -467,7 +475,25 @@ export default function ReportPage() {
       setVersions((prev) => [version, ...prev].slice(0, 20));
       setDirty(false);
       pushToast({ kind: "success", title: tr("Draft saved"), description: tr("A version was added to history.") });
-    } catch {
+    } catch (err) {
+      console.error("Saving document version to Supabase failed:", err);
+      // Keep the edit anyway: store the version on this device instead.
+      const localVersion = saveLocalDocumentVersion(id, {
+        label: tl("Version {{v}}", { v: versions.length + 1 }),
+        html,
+        wordCount: countWords(text),
+      });
+      if (localVersion) {
+        baselineTextRef.current = text;
+        setVersions((prev) => [localVersion, ...prev].slice(0, 20));
+        setDirty(false);
+        pushToast({
+          kind: "success",
+          title: tr("Draft saved"),
+          description: tr("A version was saved on this device."),
+        });
+        return;
+      }
       pushToast({ kind: "error", title: tr("Could not save"), description: tr("The version was not recorded.") });
     } finally {
       setSaving(false);

@@ -917,6 +917,14 @@ def build_structured_blocks(section_lines, body_size):
                 marks = _block_marks([line], text)
                 if marks:
                     block["marks"] = marks
+            else:
+                # Headings keep their marks too: a line read as a heading
+                # can later be shown as a plain paragraph
+                # (_front_matter_blocks, _enforce_heading_sequence), and
+                # its bold words must then still be bold.
+                marks = _block_marks([line], text)
+                if marks:
+                    block["marks"] = marks
             blocks.append(block)
 
     flush()
@@ -1315,6 +1323,14 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
                 "text": clean_text(inline_content),
                 "page": lines[heading["index"]]["page"] if lines else 1,
             })
+            # The text after the heading on the same line is the end of
+            # that line, so its bold/italic is matched as a suffix.
+            if lines:
+                inline_marks = _block_marks(
+                    [lines[heading["index"]]], blocks_by_section[section][-1]["text"]
+                )
+                if inline_marks:
+                    blocks_by_section[section][-1]["marks"] = inline_marks
 
         survivors = []
         for i in range(start, min(end, len(lines))):

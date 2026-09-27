@@ -60,3 +60,23 @@ def test_docx_runs_keep_bold_and_italic():
     assert text == "Mô hình PhoBERT-CNN đạt kết quả tốt nhất."
     assert _styled(text, block["marks"], "bold") == ["PhoBERT-CNN"]
     assert _styled(text, block["marks"], "italic") == ["tốt nhất"]
+
+
+def test_heading_line_keeps_marks_when_shown_as_paragraph():
+    from extractor import _enforce_heading_sequence, build_structured_blocks
+
+    line = {
+        "text": "1 Faculty of Information Science", "page": 1, "size": 14.0,
+        "font": "Bold", "words": 5, "bold": False,
+        "spans": [("1", False, False), ("Faculty", True, False), ("of Information Science", False, False)],
+    }
+    blocks = build_structured_blocks([line], body_size=10.0)
+    assert blocks[0]["type"] == "heading"
+    sections = {"introduction": [
+        {"type": "heading", "level": 2, "list_type": None, "text": "1 Introduction", "page": 1},
+        {**blocks[0], "level": 2},
+    ]}
+    _enforce_heading_sequence(sections, ["introduction"])
+    demoted = sections["introduction"][1]
+    assert demoted["type"] == "paragraph"
+    assert _styled(demoted["text"], demoted["marks"], "bold") == ["Faculty"]

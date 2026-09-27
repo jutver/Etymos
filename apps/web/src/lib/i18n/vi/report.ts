@@ -4,6 +4,7 @@ export const report: Record<string, string> = {
   "% in AI-looking paragraphs": "% nằm trong các đoạn có vẻ do AI viết",
   "% similar": "% tương đồng",
   "A version was added to history.": "Một phiên bản đã được thêm vào lịch sử.",
+  "A version was saved on this device.": "Một phiên bản đã được lưu trên thiết bị này.",
   "AI content": "Nội dung AI",
   "AI paraphrase": "Bản diễn đạt lại bằng AI",
   "AI-generated content": "Nội dung do AI tạo",
