@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_9aff7d02ba2ba2c04980042cbece3367ad919cd1",
+    "section": "abstract",
+    "chunk_id": "title_9aff7d02ba2ba2c04980042cbece3367ad919cd1_abstract_0",
+    "start_char": 0,
+    "end_char": 425,
+    "text": "The labels distribution in the ViHSD training set and the HSD-VLSP... | Download Scientific Diagram\nHowever, with the robust ability of BERTology, the advantage of popular text pre-processing methods is not as significant as traditional models. In this paper, we investigate the effect of text pre-processing methods to the BERTology models on the two Vietnamese hate speech detection datasets - the ViHSD and the UIT-ViCTSD."
+  }
+]

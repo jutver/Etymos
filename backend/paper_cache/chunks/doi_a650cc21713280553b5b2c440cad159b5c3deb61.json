@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_a650cc21713280553b5b2c440cad159b5c3deb61",
+    "section": "abstract",
+    "chunk_id": "doi_a650cc21713280553b5b2c440cad159b5c3deb61_abstract_0",
+    "start_char": 0,
+    "end_char": 622,
+    "text": "Low-Resource Hate Speech Detection in English-Swahili Code-Switched Text Using Fine-Tuning of Pre-trained Language Models\nThe use of social media in East Africa has grown rapidly, and with it, the spread of hate speech has become a serious\nconcern. This problem is even more complex in online spaces where people often switch between English and Swahili within the\nsame sentence or conversation. Such code-switching makes it difficult for existing systems to accurately detect harmful content,\nespecially because there is limited labeled data and much of the language used is informal and context-dependent. This study\nexp"
+  }
+]

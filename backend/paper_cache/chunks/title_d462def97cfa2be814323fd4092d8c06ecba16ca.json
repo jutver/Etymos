@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_d462def97cfa2be814323fd4092d8c06ecba16ca_abstract_0",
     "start_char": 0,
-    "end_char": 305,
-    "text": "A Large-scale Dataset for Hate Speech Detection on Vietnamese...\ndetection task, the datasets, especially large-scale datasets, play an important. role. To handle this, we introduce ViHSD - a large-scale dataset used for auto-. matically hate speech detection on Vietnamese social media texts to overcome."
+    "end_char": 274,
+    "text": "A Large-scale Dataset for Hate Speech Detection on Vietnamese...\nA human-annotated dataset named ViHSD for detecting hate speech on social media is introduced and evaluated using deep learning and transformer models.sonlam1102/vihsd-vietnamese-hate-speech-detection-dataset."
   }
 ]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_1cd2a8c6a036a36ccaefb8d4b6f587bb49706d73",
+    "section": "abstract",
+    "chunk_id": "title_1cd2a8c6a036a36ccaefb8d4b6f587bb49706d73_abstract_0",
+    "start_char": 0,
+    "end_char": 407,
+    "text": "ViSoBERT: A Pre-Trained Language Model for Vietnamese Social Media Text Processing\nOctober 17, 2023 - To evaluate ViSoBERT, we used five Vietnamese social media datasets available for research purposes, as summarized in Table 2. The downstream tasks include emotion recognition (UIT-VSMEC) Ho et al. (2020), hate speech detection (UIT-ViHSD) Luu et al. (2021), sentiment analysis (SA-VLSP2016) Nguyen et al."
+  }
+]

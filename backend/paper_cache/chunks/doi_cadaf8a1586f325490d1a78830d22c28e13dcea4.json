@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_cadaf8a1586f325490d1a78830d22c28e13dcea4",
+    "section": "abstract",
+    "chunk_id": "doi_cadaf8a1586f325490d1a78830d22c28e13dcea4_abstract_0",
+    "start_char": 0,
+    "end_char": 585,
+    "text": "Hate speech detection and racial bias mitigation in social media based on BERT model\nDisparate biases associated with datasets and trained classifiers in hateful and abusive content identification tasks have raised many concerns recently. Although the problem of biased datasets on abusive language detection has been addressed more frequently, biases arising from trained classifiers have not yet been a matter of concern. In this paper, we first introduce a transfer learning approach for hate speech detection based on an existing pre-trained language model called BERT (Bidirection"
+  }
+]

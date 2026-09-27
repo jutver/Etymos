@@ -100,7 +100,11 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
         experiment=experiment
     )
 
-    document = build_document(sections, structured_sections=structured["sections"])
+    document = build_document(
+        sections,
+        structured_sections=structured["sections"],
+        section_order=structured.get("section_order"),
+    )
     input_text = document["text"]
 
     print("\n===== TITLE =====")

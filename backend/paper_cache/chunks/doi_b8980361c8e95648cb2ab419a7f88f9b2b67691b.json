@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_b8980361c8e95648cb2ab419a7f88f9b2b67691b",
+    "section": "abstract",
+    "chunk_id": "doi_b8980361c8e95648cb2ab419a7f88f9b2b67691b_abstract_0",
+    "start_char": 0,
+    "end_char": 662,
+    "text": "Investigating the Predominance of Large Language Models in Low-Resource Bangla Language over Transformer Models for Hate Speech Detection: A Comparative Analysis\nThe rise in abusive language on social media is a significant threat to mental health and social cohesion. For Bengali speakers, the need for effective detection is critical. However, current methods fall short in addressing the massive volume of content. Improved techniques are urgently needed to combat online hate speech in Bengali. Traditional machine learning techniques, while useful, often require large, linguistically diverse datasets to train models effectively. This paper addresses the u"
+  }
+]

@@ -124,7 +124,9 @@ function buildPassagesFromBlocks(
 ): CheckedDocument["passages"] {
   return blocks
     .map((block, index) => {
-      const text = inputText.slice(block.start, block.end).trim();
+      // Section headings are zero-length and bring their own words in
+      // `block.text` (see BackendDocumentBlock.text).
+      const text = inputText.slice(block.start, block.end).trim() || block.text?.trim() || "";
       // An "image" block is zero-length by construction (backend/
       // document_model.py's _interleave_image_blocks — it has no text of
       // its own, only a position in reading order), so it would otherwise
@@ -162,6 +164,7 @@ function buildPassagesFromBlocks(
         page: block.page,
         tableRows: block.rows,
         imageUrl: block.image_url,
+        textMarks: block.marks,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);

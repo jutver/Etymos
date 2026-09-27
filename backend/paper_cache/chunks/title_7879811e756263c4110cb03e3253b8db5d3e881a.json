@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_7879811e756263c4110cb03e3253b8db5d3e881a_abstract_0",
     "start_char": 0,
-    "end_char": 270,
-    "text": "ViHateT5: Enhancing Hate Speech Detection in VietnameseWith...\n3.1 Automated Pre-training Data Creation. Vietnamese is a low-resource language, which results in a need for more extensive datasets for training targeted language models, particularly in specific NLP tasks."
+    "end_char": 277,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in VietnameseWith...\n• A domain-specific model named ViHateT5 is presented in this study to address HSD-related problems in the Vietnamese language.2021. A large-scale dataset for hate speech detection on vietnamese social media texts."
   }
 ]

@@ -4,7 +4,7 @@
     "section": "abstract",
     "chunk_id": "title_0e0fa1abb584204f44ce0d10fe9fe35e9e1a917b_abstract_0",
     "start_char": 0,
-    "end_char": 333,
-    "text": "(PDF) ViHateT5: Enhancing Hate Speech Detection in Vietnamese...\nmarily trained on formal textual datasets like. Wikipedia, which may not accurately capture. human behavior on online platforms. In this. research, we introduce VIHATET5, a T5-based. model pre-trained on our proposed large-scale. domain-specific dataset named VOZ-HSD."
+    "end_char": 238,
+    "text": "(PDF) ViHateT5: Enhancing Hate Speech Detection in Vietnamese...\nfocusing on the Vietnamese hate speech detection. task. We designate the final dataset as VOZ-HSD, indicating its purpose for hate speech detection and. its origin from VOZ."
   }
 ]

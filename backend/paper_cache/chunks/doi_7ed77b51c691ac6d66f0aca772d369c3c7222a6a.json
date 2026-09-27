@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_7ed77b51c691ac6d66f0aca772d369c3c7222a6a",
+    "section": "abstract",
+    "chunk_id": "doi_7ed77b51c691ac6d66f0aca772d369c3c7222a6a_abstract_0",
+    "start_char": 0,
+    "end_char": 584,
+    "text": "Hate Speech Detection Using Classical Machine Learning and Transformer-Based Models\nThe identification of hate speech and offensive speech in code-mixed texts, especially Hinglish (a mix of Hindi and English), is a highly challenging task with the inherent linguistic characteristics and colloquial nature of such texts. This paper explores the performance of state-of-the-art deep learning models, BERT (Bidirectional Encoder Representations from Transformers) and MuRIL (Multilingual Representations for Indian Languages), in overcoming the challenges. Both models are highly adapta"
+  }
+]

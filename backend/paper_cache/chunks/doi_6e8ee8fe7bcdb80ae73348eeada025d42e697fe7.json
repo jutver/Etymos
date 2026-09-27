@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_6e8ee8fe7bcdb80ae73348eeada025d42e697fe7",
+    "section": "abstract",
+    "chunk_id": "doi_6e8ee8fe7bcdb80ae73348eeada025d42e697fe7_abstract_0",
+    "start_char": 0,
+    "end_char": 606,
+    "text": "An Explainable AI Approach to Detecting Linguistic Markers of Mental Health Risk in Toxic Online Discourse\nOnline aggression, including cyberbullying and hate speech, is a significant public health concern, contributing to adverse mental health outcomes such as depression, anxiety, and suicidal ideation among social media users, and typically manifests in subtle and context-sensitive forms, such as sarcasm, emojis, and coded messages. These offensive remarks currently plague machine learning-based detection models since they are founded on one-layer linguistic features and have low interpretability."
+  }
+]

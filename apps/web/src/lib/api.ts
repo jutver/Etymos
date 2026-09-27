@@ -84,6 +84,14 @@ export interface BackendDocumentBlock {
    * `type: "image"` blocks that were successfully uploaded (see
    * backend/api/report_store.py's _extract_and_upload_images). */
   image_url?: string;
+  /** The block's own words when it has none in `input_text` - set on the
+   * zero-length section-heading blocks (backend/document_model.py's
+   * _interleave_section_headings). */
+  text?: string;
+  /** True for a section's own heading line kept from the original file. */
+  section_heading?: boolean;
+  /** Inline bold/italic ranges, offsets relative to this block's `start`. */
+  marks?: Array<{ start: number; end: number; style: "bold" | "italic" }>;
 }
 
 export interface BackendDocument {

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_ab2ff0c209c812deee64491f27cd57faaa795bfb",
+    "section": "abstract",
+    "chunk_id": "doi_ab2ff0c209c812deee64491f27cd57faaa795bfb_abstract_0",
+    "start_char": 0,
+    "end_char": 626,
+    "text": "A Comparative Study of Transformer-based Models for Hate-Speech Detection in English-Kiswahili Code-Switched Social Media Text\nThe transformer architecture, first introduced in 2017 by researchers at Google, has revolutionized natural language processing in various tasks, including text classification. This architecture formed the basis of future models such as those used in hate speech detection in code-switched text. In this research, we conduct a comparative study of transformer-based models for hate speech detection in English-Kiswahili code-switched text. First, the models were compared as feature extractors using"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_f9a3266c2d2bbbcb2e6937cd755045f8801ce96e",
+    "section": "abstract",
+    "chunk_id": "doi_f9a3266c2d2bbbcb2e6937cd755045f8801ce96e_abstract_0",
+    "start_char": 0,
+    "end_char": 610,
+    "text": "Abusive and Hate speech Classification in Arabic Text Using Pre-trained Language Models and Data Augmentation\nHateful content on social media is a worldwide problem that adversely affects not just the targeted individuals but also anyone whose content is accessible. The majority of studies that looked at the automatic identification of inappropriate content addressed the English language, given the availability of resources. Therefore, there are still a number of low-resource languages that need more attention from the community. This article focuses on the Arabic dialect, which has several specificitie"
+  }
+]

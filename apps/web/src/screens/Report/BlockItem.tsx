@@ -74,7 +74,9 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
     );
   }
 
-  const text = block.passage ? renderPassageText(block.passage.text, block.spans, colorIndexByMatch, muted) : "";
+  const text = block.passage
+    ? renderPassageText(block.passage.text, block.spans, colorIndexByMatch, muted, block.passage.textMarks)
+    : "";
   const editableProps = {
     contentEditable: !locked,
     suppressContentEditableWarning: true,

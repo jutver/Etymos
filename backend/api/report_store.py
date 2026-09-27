@@ -283,6 +283,10 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             if start is None or end is None:
                 continue
             text = document_text[start:end].strip()
+            # A section heading is zero-length too, but carries its words in
+            # "text" (see document_model._interleave_section_headings).
+            if not text and block.get("section_heading"):
+                text = (block.get("text") or "").strip()
             # An "image" block is zero-length by construction (see
             # document_model._interleave_image_blocks — it has no text of
             # its own, only a position) and must NOT be dropped here the
@@ -329,12 +333,26 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 "page": block.get("page"),
                 "table_rows": table_rows if table_rows is not None else None,
                 "image_url": block.get("image_url"),
+                # Inline bold/italic ranges (supabase/migrations/
+                # 20260927000000_document_passage_text_marks.sql).
+                "text_marks": block.get("marks") or None,
             })
 
         # Idempotent re-save, same pattern as document_matches above.
         client.table("document_passages").delete().eq("document_id", report_id).execute()
         if passage_rows:
-            client.table("document_passages").insert(passage_rows).execute()
+            try:
+                client.table("document_passages").insert(passage_rows).execute()
+            except Exception:
+                # Most likely the text_marks migration hasn't been applied
+                # yet: keep the passages, just without inline formatting.
+                logger.warning(
+                    "Inserting document_passages with text_marks failed for report_id=%s; "
+                    "retrying without inline formatting.", report_id, exc_info=True,
+                )
+                client.table("document_passages").insert(
+                    [{k: v for k, v in row.items() if k != "text_marks"} for row in passage_rows]
+                ).execute()
     except Exception:
         logger.exception("Failed to persist document_passages for report_id=%s", report_id)
 

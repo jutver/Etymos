@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_f92224c060691819c8892c14694e7784df9ff9c6",
+    "section": "abstract",
+    "chunk_id": "doi_f92224c060691819c8892c14694e7784df9ff9c6_abstract_0",
+    "start_char": 0,
+    "end_char": 570,
+    "text": "HateXplain: A Benchmark Dataset for Explainable Hate Speech Detection\nHate speech is a challenging issue plaguing the online social media. While better models for hate speech detection are continuously being developed, there is little research on the bias and interpretability aspects of hate speech. In this paper, we introduce HateXplain, the first benchmark hate speech dataset covering multiple aspects of the issue. Each post in our dataset is annotated from three different perspectives: the basic, commonly used 3-class classification (i.e., hate, offensive or no"
+  }
+]

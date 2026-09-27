@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_3817956003568907270bb49199575de0763a7b67",
+    "section": "abstract",
+    "chunk_id": "doi_3817956003568907270bb49199575de0763a7b67_abstract_0",
+    "start_char": 0,
+    "end_char": 620,
+    "text": "A ROBUST MACHINE LEARNING-BASED ENSEMBLE LEARNING FRAMEWORK FOR HATE SPEECH DETECTION IN LOW-RESOURCE SOCIAL MEDIA TEXT\nThe low-resource social media text i.e., Urdu tweets containing hate speech are identified with the help of a machine learning-based ensemble approach. The dataset used for this study consisted of 8,800 tweets and half of them were labeled as Hateful and the other half as No-Hate. In preprocessing, we took into account the features of Urdu normalizing the characters, eliminating frequent words, and filtering the punctuation. TF-IDF was used to extract features based on unigrams and bigrams and t"
+  }
+]

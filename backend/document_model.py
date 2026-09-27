@@ -59,6 +59,8 @@ SECTION_LABELS = {
     "conclusion": "Conclusion",
     "body": "Body",
     "input_text": "Text",
+    "front_matter": "Front matter",
+    "back_matter": "Back matter",
 }
 
 # Separator inserted between two consecutive sections in the canonical
@@ -158,6 +160,10 @@ def _interleave_image_blocks(
     for hint in struct_blocks:
         if (hint or {}).get("type") == "image":
             insertions.setdefault(text_count - 1, []).append(hint)
+        elif (hint or {}).get("section_heading"):
+            # Placed separately by _interleave_section_headings; it has no
+            # span in the section text, so it must not count as one here.
+            continue
         else:
             text_count += 1
 
@@ -198,7 +204,106 @@ def _interleave_image_blocks(
     return merged
 
 
-def build_document(sections: dict, structured_sections: dict | None = None) -> dict:
+def _interleave_section_headings(
+    section_blocks: list[dict],
+    struct_blocks: list[dict],
+    *,
+    name: str,
+    label: str,
+    section_start: int,
+    reliable: bool,
+) -> list[dict]:
+    """
+    Splice the section's own heading lines (hints flagged `section_heading`
+    by extractor.extract_structured_sections_from_pdf) back into the block
+    list, in their original reading order.
+
+    Like an image, a section heading has NO characters in the canonical
+    document text - it is deliberately left out of the matching text so
+    chunk/sentence offsets and similarity scores are unchanged. The block
+    therefore has a zero-length span (`start == end`) and carries its words
+    in `text` instead; consumers that read `input_text[start:end]` fall back
+    to that field (report_store, Analyzing/index.tsx).
+
+    When the text hints could not be zipped 1:1 (`reliable` is False) only
+    headings that precede every text hint are kept (at the section start):
+    guessing a mid-section position would misplace them.
+    """
+    text_blocks = [b for b in section_blocks if b.get("type") != "image"]
+    image_blocks = [b for b in section_blocks if b.get("type") == "image"]
+
+    def make_heading_block(hint: dict, heading_index: int) -> dict:
+        block = {
+            "block_id": f"{name}_heading_{heading_index}",
+            "section": name,
+            "label": label,
+            "type": "heading",
+            "index": heading_index,
+            "start": section_start,
+            "end": section_start,
+            "level": hint.get("level") or 2,
+            "text": hint.get("text") or "",
+            "section_heading": True,
+        }
+        if hint.get("page") is not None:
+            block["page"] = hint["page"]
+        return block
+
+    merged: list[dict] = []
+    heading_index = 0
+
+    if reliable:
+        ti = ii = 0
+        for hint in struct_blocks:
+            hint = hint or {}
+            if hint.get("section_heading"):
+                if hint.get("text"):
+                    merged.append(make_heading_block(hint, heading_index))
+                    heading_index += 1
+            elif hint.get("type") == "image":
+                if ii < len(image_blocks):
+                    merged.append(image_blocks[ii])
+                    ii += 1
+            elif ti < len(text_blocks):
+                merged.append(text_blocks[ti])
+                ti += 1
+        merged.extend(text_blocks[ti:])
+        merged.extend(image_blocks[ii:])
+    else:
+        for hint in struct_blocks:
+            hint = hint or {}
+            if not hint.get("section_heading"):
+                break
+            if hint.get("text"):
+                merged.append(make_heading_block(hint, heading_index))
+                heading_index += 1
+        merged.extend(section_blocks)
+
+    # Anchor each heading at the start of the block that follows it (or the
+    # end of the one before it), so its zero-length span sits at its place
+    # in the reading order.
+    for i, block in enumerate(merged):
+        if not block.get("section_heading"):
+            continue
+        following = next((b for b in merged[i + 1:] if not b.get("section_heading")), None)
+        preceding = next((b for b in reversed(merged[:i]) if not b.get("section_heading")), None)
+        if following is not None:
+            position = following["start"]
+        elif preceding is not None:
+            position = preceding["end"]
+        else:
+            position = section_start
+        block["start"] = position
+        block["end"] = position
+
+    return merged
+
+
+def build_document(
+    sections: dict,
+    structured_sections: dict | None = None,
+    section_order: list[str] | None = None,
+) -> dict:
     """
     Build the canonical document from a `sections` dict (as returned by
     extractor.extract_sections_from_pdf/flatten_structured_sections, or the
@@ -255,7 +360,14 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
     cursor = 0
     structured_sections = structured_sections or {}
 
-    for name in _ordered_section_names(sections):
+    ordered_names = _ordered_section_names(sections)
+    if section_order:
+        # The extractor's reading order of the original file wins; anything
+        # it didn't list keeps the canonical order after it.
+        listed = [name for name in section_order if name in sections]
+        ordered_names = listed + [name for name in ordered_names if name not in listed]
+
+    for name in ordered_names:
         raw = sections.get(name) or ""
         if not isinstance(raw, str):
             continue
@@ -288,7 +400,10 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
         # non-image zip 1:1 (unchanged behaviour for documents without
         # images) while still letting an image be positioned relative to
         # its neighbouring text, via `_interleave_image_blocks` below.
-        text_hints = [h for h in struct_blocks if (h or {}).get("type") != "image"]
+        text_hints = [
+            h for h in struct_blocks
+            if (h or {}).get("type") != "image" and not (h or {}).get("section_heading")
+        ]
         image_hints = [h for h in struct_blocks if (h or {}).get("type") == "image"]
         type_hints = text_hints if len(text_hints) == len(spans) else None
 
@@ -315,6 +430,10 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
                     block["rows"] = hint["rows"]
                 if hint.get("page") is not None:
                     block["page"] = hint["page"]
+                if hint.get("marks"):
+                    # Inline bold/italic, offsets relative to this block's
+                    # start (the hint text IS the block text).
+                    block["marks"] = hint["marks"]
             section_blocks.append(block)
 
         # Only interleave images when the text zip above was reliable
@@ -325,6 +444,13 @@ def build_document(sections: dict, structured_sections: dict | None = None) -> d
             section_blocks = _interleave_image_blocks(
                 section_blocks, struct_blocks,
                 name=name, label=section_label, section_start=start,
+            )
+
+        if any((h or {}).get("section_heading") for h in struct_blocks):
+            section_blocks = _interleave_section_headings(
+                section_blocks, struct_blocks,
+                name=name, label=section_label, section_start=start,
+                reliable=type_hints is not None,
             )
 
         blocks.extend(section_blocks)

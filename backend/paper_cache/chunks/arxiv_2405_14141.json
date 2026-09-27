@@ -269,7 +269,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_33",
     "start_char": 9000,
     "end_char": 9900,
-    "text": "onsistent with the original dataset structure. Process 1: Index spans retrieval from T5- based models’ output Data: [HATE] vcl [HATE] thật. Chịu luôn [HATE] đm m [HATE] !!! (Original text T : “vcl thật. Chịu luôn đm m!!!\") 1 Construct list H containing sub-strings covered by two [HATE] tokens; 2 From H , find the corresponding index spans I of each sub-string in the original text T ; 3 return I ; Next, we construct the binary form of indices by Process 2 . Also, note that this second process is also applied to the ground truth data in order to compute the evaluation metrics consistently. Process 2: Converting index spans for eval- uation computation the original text T ) 1 Calculate the length L of the original text T ; 2 Initialize the list F with ‘0’ elements corresponding to the length L ; 3 Replace elements in list F whose indices are in list index spans I to ‘1’; 4 return F ; Experi"
+    "text": "onsistent with the original dataset structure. Process 1: Index spans retrieval from T5- based models’ output Data: [HATE] vcl [HATE] thật. Chịu luôn [HATE] đm m [HATE] !!! (Original text T : “vcl thật. Chịu luôn đm m!!!\")\n\n1 Construct list H containing sub-strings\n\ncovered by two [HATE] tokens;\n\n2 From H , find the corresponding index spans\n\nI of each sub-string in the original text T ; 3 return I ; Next, we construct the binary form of indices by Process 2 . Also, note that this second process is also applied to the ground truth data in order to compute the evaluation metrics consistently. Process 2: Converting index spans for eval- uation computation the original text T ) 1 Calculate the length L of the original text T ;\n\n2 Initialize the list F with ‘0’ elements\n\ncorresponding to the length L ;\n\n3 Replace elements in list F whose indices are\n\nin list index spans I to ‘1’; 4 return F"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -277,7 +277,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_34",
     "start_char": 9750,
     "end_char": 10650,
-    "text": "t F with ‘0’ elements corresponding to the length L ; 3 Replace elements in list F whose indices are in list index spans I to ‘1’; 4 return F ; Experimental Results Table 3 shows the performance of V I H ATE T5 com- pared to other approaches across various HSD tasks. Through experiments conducted under iden- tical settings, V I H ATE T5 consistently outperforms other models, establishing itself as SOTA for most HSD-related tasks in Vietnamese. In the realm of sentence-level tasks, specifically hate speech detection on the ViHSD dataset and toxic speech detection on the ViCTSD dataset, our proposed V I H ATE T5 model demonstrates out- standing performance, surpassing previous models with MF1 scores of 68.67% and 71.63%, respec- tively. Meanwhile, for the remaining baseline mod- els, ViSoBERT achieves its highest performance on the hate speech detection task with an MF1 score of 67.71%, wh"
+    "text": "e list F with ‘0’ elements\n\ncorresponding to the length L ;\n\n3 Replace elements in list F whose indices are\n\nin list index spans I to ‘1’; 4 return F ; Experimental Results Table 3 shows the performance of V I H ATE T5 com- pared to other approaches across various HSD tasks. Through experiments conducted under iden- tical settings, V I H ATE T5 consistently outperforms other models, establishing itself as SOTA for most HSD-related tasks in Vietnamese. In the realm of sentence-level tasks, specifically hate speech detection on the ViHSD dataset and toxic speech detection on the ViCTSD dataset, our proposed V I H ATE T5 model demonstrates out- standing performance, surpassing previous models with MF1 scores of 68.67% and 71.63%, respec- tively. Meanwhile, for the remaining baseline mod- els, ViSoBERT achieves its highest performance on the hate speech detection task with an MF1 score of 67"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -285,7 +285,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_35",
     "start_char": 10500,
     "end_char": 11400,
-    "text": "hile, for the remaining baseline mod- els, ViSoBERT achieves its highest performance on the hate speech detection task with an MF1 score of 67.71%, whereas XLM-RoBERTa attains the highest MF1 score of 71.53% for toxic speech detection. In the domain of syllable-level tasks, such as hate spans detection, the V I H ATE T5 model showcases its effective ability to identify harmful segments by leveraging its text-to-text architecture, achieving the highest MF1 score of 86.37%. Additionally, ViSoBERT ranks second on the leaderboard with an MF1 score of 86.04%. Both models, being pre- trained specifically on social media domain data, yield consistent results on social media benchmark datasets, with a relatively small gap between them 9 . Discussion In this section, we delve into the comparison between the unified HSD-fine-tuned V I H ATE T5 model and other T5-based models fine-tuned on HSD-rela"
+    "text": "y. Meanwhile, for the remaining baseline mod- els, ViSoBERT achieves its highest performance on the hate speech detection task with an MF1 score of 67.71%, whereas XLM-RoBERTa attains the highest MF1 score of 71.53% for toxic speech detection. In the domain of syllable-level tasks, such as hate spans detection, the V I H ATE T5 model showcases its effective ability to identify harmful segments by leveraging its text-to-text architecture, achieving the highest MF1 score of 86.37%. Additionally, ViSoBERT ranks second on the leaderboard with an MF1 score of 86.04%. Both models, being pre- trained specifically on social media domain data, yield consistent results on social media benchmark datasets, with a relatively small gap between them 9 . Discussion In this section, we delve into the comparison between the unified HSD-fine-tuned V I H ATE T5 model and other T5-based models fine-tuned on"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -293,7 +293,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_36",
     "start_char": 11250,
     "end_char": 12150,
-    "text": "n In this section, we delve into the comparison between the unified HSD-fine-tuned V I H ATE T5 model and other T5-based models fine-tuned on HSD-related tasks in Vietnamese. Additionally, we explore the performance of our proposed pre- trained V I H ATE T5 model across different pre- training data settings. Furthermore, we assess the model’s ability to tackle syllable-level tasks. V I H ATE T5 vs. other T5-based models. The effectiveness of the T5 text-to-text architecture in addressing HSD tasks in Vietnamese has been demonstrated by V I H ATE T5. This study evalu- ates other T5-based models supporting Vietnamese for HSD tasks. We experiment with mT5-base, mT5-large ( Xue et al. , 2021 ) for multilingual mod- els, and ViT5-base, ViT5-large ( Phan et al. , 2022 ) for monolingual models. The fine-tuning phases of these models are conducted under the same set- tings as V I H ATE T5, liste"
+    "text": "iscussion In this section, we delve into the comparison between the unified HSD-fine-tuned V I H ATE T5 model and other T5-based models fine-tuned on HSD-related tasks in Vietnamese. Additionally, we explore the performance of our proposed pre- trained V I H ATE T5 model across different pre- training data settings. Furthermore, we assess the model’s ability to tackle syllable-level tasks. V I H ATE T5 vs. other T5-based models. The effectiveness of the T5 text-to-text architecture in addressing HSD tasks in Vietnamese has been demonstrated by V I H ATE T5. This study evalu- ates other T5-based models supporting Vietnamese for HSD tasks. We experiment with mT5-base, mT5-large ( Xue et al. , 2021 ) for multilingual mod- els, and ViT5-base, ViT5-large ( Phan et al. , 2022 ) for monolingual models. The fine-tuning phases of these models are conducted under the same set- tings as V I H ATE T"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -301,7 +301,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_37",
     "start_char": 12000,
     "end_char": 12900,
-    "text": "e ( Phan et al. , 2022 ) for monolingual models. The fine-tuning phases of these models are conducted under the same set- tings as V I H ATE T5, listed in Table 9 in Appendix B.2.2 . Due to resource limitations, the batch size for large versions is reduced. Table 4 compares the performance of V I H ATE T5 with other T5-based models across three benchmark HSD datasets in Vietnamese. 9 The performance of ViSoBERT reported by Nguyen et al. ( 2023 ) on similar tasks may slightly differ from our experi- ments due to variations in model settings during reproduction owing to resource constraints. Model Average MF1 Hate Speech Detection Toxic Speech Detection Hate Spans Detection Acc WF1 MF1 Acc WF1 MF1 Acc WF1 MF1 BERT (multilingual, cased) BERT (multilingual, uncased) DistilBERT (multilingual) XLM-RoBERTa PhoBERT PhoBERT_v2 viBERT ViSoBERT V I H ATE T5 (Ours) Table 3: Comparative performance r"
+    "text": "iT5-large ( Phan et al. , 2022 ) for monolingual models. The fine-tuning phases of these models are conducted under the same set- tings as V I H ATE T5, listed in Table 9 in Appendix B.2.2 . Due to resource limitations, the batch size for large versions is reduced. Table 4 compares the performance of V I H ATE T5 with other T5-based models across three benchmark HSD datasets in Vietnamese. 9 The performance of ViSoBERT reported by Nguyen et al. ( 2023 ) on similar tasks may slightly differ from our experi- ments due to variations in model settings during reproduction owing to resource constraints. Model Average MF1 Hate Speech Detection Toxic Speech Detection Hate Spans Detection Acc WF1 MF1 Acc WF1 MF1 Acc WF1 MF1 BERT (multilingual, cased) BERT (multilingual, uncased) DistilBERT (multilingual) XLM-RoBERTa PhoBERT PhoBERT_v2 viBERT ViSoBERT V I H ATE T5 (Ours) Table 3: Comparative perfo"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -309,7 +309,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_38",
     "start_char": 12750,
     "end_char": 13650,
-    "text": "multilingual, uncased) DistilBERT (multilingual) XLM-RoBERTa PhoBERT PhoBERT_v2 viBERT ViSoBERT V I H ATE T5 (Ours) Table 3: Comparative performance results of diverse models, including fine-tuned models from multilingual pre-trained language models, monolingual models, and our proposed V I H ATE T5 model. Evaluation metrics include Accuracy (Acc), Weighted F1-score (WF1), and Macro F1-score (MF1) across various hate speech detection (HSD)-related tasks. #archs ViHSD ViCTSD ViHOS Average mT5 base ViT5 base V I H ATE T5 base Table 4: V I H ATE T5 versus other T5-based models re- garding Vietnamese HSD-related task performance with Macro F1-score. The results attained highlight the superior per- formance of our proposed V I H ATE T5 model across various HSD-related tasks in comparison to other T5-based models supporting Vietnamese. The pri- mary reason for this disparity lies in the nature"
+    "text": ") BERT (multilingual, uncased) DistilBERT (multilingual) XLM-RoBERTa PhoBERT PhoBERT_v2 viBERT ViSoBERT V I H ATE T5 (Ours) Table 3: Comparative performance results of diverse models, including fine-tuned models from multilingual pre-trained language models, monolingual models, and our proposed V I H ATE T5 model. Evaluation metrics include Accuracy (Acc), Weighted F1-score (WF1), and Macro F1-score (MF1) across various hate speech detection (HSD)-related tasks. #archs ViHSD ViCTSD ViHOS Average mT5 base ViT5 base V I H ATE T5 base Table 4: V I H ATE T5 versus other T5-based models re- garding Vietnamese HSD-related task performance with Macro F1-score. The results attained highlight the superior per- formance of our proposed V I H ATE T5 model across various HSD-related tasks in comparison to other T5-based models supporting Vietnamese. The pri- mary reason for this disparity lies in th"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -317,7 +317,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_39",
     "start_char": 13500,
     "end_char": 14400,
-    "text": "oss various HSD-related tasks in comparison to other T5-based models supporting Vietnamese. The pri- mary reason for this disparity lies in the nature of HSD benchmark datasets, which predominantly consist of spoken textual data, such as users’ com- ments on the internet. These data exemplify social media characteristics, comprising informal written style texts accompanied by abbreviations, emojis, or teencode. In contrast, while mT5 and ViT5 were pre- trained on formal content sources such as news or wiki pages, V I H ATE T5 was pre-trained on a domain-specific social media pre-training dataset. This domain-specific pre-training dataset ensures that V I H ATE T5 is more adept at understanding and processing informal language used in social media contexts, thereby yielding superior performance on HSD tasks. How Pre-training Data Affects V I H ATE T5. The effectiveness of pre-training a t"
+    "text": "odel across various HSD-related tasks in comparison to other T5-based models supporting Vietnamese. The pri- mary reason for this disparity lies in the nature of HSD benchmark datasets, which predominantly consist of spoken textual data, such as users’ com- ments on the internet. These data exemplify social media characteristics, comprising informal written style texts accompanied by abbreviations, emojis, or teencode. In contrast, while mT5 and ViT5 were pre- trained on formal content sources such as news or wiki pages, V I H ATE T5 was pre-trained on a domain-specific social media pre-training dataset. This domain-specific pre-training dataset ensures that V I H ATE T5 is more adept at understanding and processing informal language used in social media contexts, thereby yielding superior performance on HSD tasks. How Pre-training Data Affects V I H ATE T5. The effectiveness of pre-trai"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -325,7 +325,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_40",
     "start_char": 14250,
     "end_char": 15150,
-    "text": "media contexts, thereby yielding superior performance on HSD tasks. How Pre-training Data Affects V I H ATE T5. The effectiveness of pre-training a transformer model on a domain-specific dataset was further validated by the ViSoBERT model, which demon- strated superior performance across various social media benchmark datasets ( Nguyen et al. , 2023 ). In this work, we assess how varying the data ratio in pre-training data affects our proposed models. This evaluation involves pre-training under differ- ent data conditions: utilizing full-data samples as in this study, employing a balanced-label pre-trained model with equal samples for both labels and uti- lizing a hate-only pre-trained model where only hate labels are retained for pre-training. Based on the generated labels, we conducted ex- periments to pre-train V I H ATE T5 under different data ratio conditions. The first condition u"
+    "text": "n social media contexts, thereby yielding superior performance on HSD tasks. How Pre-training Data Affects V I H ATE T5. The effectiveness of pre-training a transformer model on a domain-specific dataset was further validated by the ViSoBERT model, which demon- strated superior performance across various social media benchmark datasets ( Nguyen et al. , 2023 ). In this work, we assess how varying the data ratio in pre-training data affects our proposed models. This evaluation involves pre-training under differ- ent data conditions: utilizing full-data samples as in this study, employing a balanced-label pre-trained model with equal samples for both labels and uti- lizing a hate-only pre-trained model where only hate labels are retained for pre-training. Based on the generated labels, we conducted ex- periments to pre-train V I H ATE T5 under different data ratio conditions. The first con"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -333,7 +333,7 @@
     "chunk_id": "arxiv_2405_14141_experiment_41",
     "start_char": 15000,
     "end_char": 15900,
-    "text": "ning. Based on the generated labels, we conducted ex- periments to pre-train V I H ATE T5 under different data ratio conditions. The first condition used the entire dataset, while the second balanced the labels by reducing the number of CLEAN samples. The final condition exclusively pre-trained on HATE la- beled samples. Table 5 presents the performance of these models after fine-tuning them on downstream tasks. It is worth noting that due to the relatively small size of the training samples in the 100% ratio condition, which is not sufficient for pre-training from scratch, we opted to use the continual pre- training approach for all these experiments, utiliz- ing weights from the ViT5-base 10 . Ratio Samples Epochs ViHSD ViCTSD ViHOS Table 5: The performance of V I H ATE T5, measured by Macro F1-score, under various data pre-training condi- tions. The \"Ratio\" column indicates the percen"
+    "text": "pre-training. Based on the generated labels, we conducted ex- periments to pre-train V I H ATE T5 under different data ratio conditions. The first condition used the entire dataset, while the second balanced the labels by reducing the number of CLEAN samples. The final condition exclusively pre-trained on HATE la- beled samples. Table 5 presents the performance of these models after fine-tuning them on downstream tasks. It is worth noting that due to the relatively small size of the training samples in the 100% ratio condition, which is not sufficient for pre-training from scratch, we opted to use the continual pre- training approach for all these experiments, utiliz- ing weights from the ViT5-base 10 . Ratio Samples Epochs ViHSD ViCTSD ViHOS Table 5: The performance of V I H ATE T5, measured by Macro F1-score, under various data pre-training condi- tions. The \"Ratio\" column indicates th"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -341,23 +341,23 @@
     "chunk_id": "arxiv_2405_14141_experiment_42",
     "start_char": 15750,
     "end_char": 16650,
-    "text": "5: The performance of V I H ATE T5, measured by Macro F1-score, under various data pre-training condi- tions. The \"Ratio\" column indicates the percentage of hate data in the total dataset. The analysis reveals that pre-training with bal- anced or hate-labeled datasets does not improve model performance and can even lower MF1. How- ever, different pre-training conditions affect V I - H ATE T5 performance across various HSD tasks, suggesting additional pre-training on another T5 ar- 10 https://huggingface.co/VietAI/vit5-base chitecture model could be beneficial despite limited data. Also, increasing the number of pre-training epochs improves performance. Further research could explore resource-intensive setups to enhance V I H ATE T5 performance. ViHateT5 in Syllable-level Hate Speech Detec- tion. V I H ATE T5 has demonstrated its effectiveness in tackling syllable-level challenges, parti"
+    "text": "OS Table 5: The performance of V I H ATE T5, measured by Macro F1-score, under various data pre-training condi- tions. The \"Ratio\" column indicates the percentage of hate data in the total dataset. The analysis reveals that pre-training with bal- anced or hate-labeled datasets does not improve model performance and can even lower MF1. How- ever, different pre-training conditions affect V I - H ATE T5 performance across various HSD tasks, suggesting additional pre-training on another T5 ar- 10 https://huggingface.co/VietAI/vit5-base chitecture model could be beneficial despite limited data. Also, increasing the number of pre-training epochs improves performance. Further research could explore resource-intensive setups to enhance V I H ATE T5 performance. ViHateT5 in Syllable-level Hate Speech Detec- tion. V I H ATE T5 has demonstrated its effectiveness in tackling syllable-level challenge"
   },
   {
     "paper_id": "arxiv_2405_14141",
     "section": "experiment",
     "chunk_id": "arxiv_2405_14141_experiment_43",
     "start_char": 16500,
-    "end_char": 17355,
-    "text": "ance. ViHateT5 in Syllable-level Hate Speech Detec- tion. V I H ATE T5 has demonstrated its effectiveness in tackling syllable-level challenges, particularly in detecting hate speech spans within the ViHOS dataset. Leveraging an innovative architecture and training methodology derived from the T5 text- to-text transformer architecture, V I H ATE T5 sur- passes baseline methods relying on BERT-based models, which primarily encounter limitations due to their token-level processing approach. Operat- ing at the syllable level empowers V I H ATE T5 to pinpoint harmful spans within textual contexts ac- curately. Furthermore, its text-to-text framework presents V I H ATE T5 with opportunities to extend its capabilities to other tasks, such as hate speech detection question-answering or summarization, through adjustments to the prefix for fine-tuning."
+    "end_char": 17363,
+    "text": "performance. ViHateT5 in Syllable-level Hate Speech Detec- tion. V I H ATE T5 has demonstrated its effectiveness in tackling syllable-level challenges, particularly in detecting hate speech spans within the ViHOS dataset. Leveraging an innovative architecture and training methodology derived from the T5 text- to-text transformer architecture, V I H ATE T5 sur- passes baseline methods relying on BERT-based models, which primarily encounter limitations due to their token-level processing approach. Operat- ing at the syllable level empowers V I H ATE T5 to pinpoint harmful spans within textual contexts ac- curately. Furthermore, its text-to-text framework presents V I H ATE T5 with opportunities to extend its capabilities to other tasks, such as hate speech detection question-answering or summarization, through adjustments to the prefix for fine-tuning."
   },
   {
     "paper_id": "arxiv_2405_14141",
     "section": "experiment",
     "chunk_id": "arxiv_2405_14141_experiment_44",
     "start_char": 17250,
-    "end_char": 17355,
-    "text": "speech detection question-answering or summarization, through adjustments to the prefix for fine-tuning."
+    "end_char": 17363,
+    "text": "as hate speech detection question-answering or summarization, through adjustments to the prefix for fine-tuning."
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -365,7 +365,7 @@
     "chunk_id": "arxiv_2405_14141_conclusion_45",
     "start_char": 0,
     "end_char": 900,
-    "text": "Advancements in hate speech detection tasks in Vietnamese have recently gained notable progress thanks to the use of transformer models. However, these efforts remain fragmented due to the reliance on separate fine-tuned models for distinct tasks. Hence, our research aims to introduce a unified text-to-text transformer model, V I H ATE T5, with the potential to address prevailing issues in hate speech detection in Vietnamese and attain state- of-the-art performance. Moreover, V I H ATE T5’s pre-training on domain-specific datasets enables it to grasp the nuances of social media content in Vietnamese deeply. The open-source nature of both the dataset and the model facilitates researchers and developers in leveraging our work, fostering fur- ther advancements in Vietnamese NLP and online safety. Limitations Training a language model through pre-training demands a substantial volume of data"
+    "text": "Advancements in hate speech detection tasks in Vietnamese have recently gained notable progress thanks to the use of transformer models. However, these efforts remain fragmented due to the reliance on separate fine-tuned models for distinct tasks. Hence, our research aims to introduce a unified text-to-text transformer model, V I H ATE T5, with the potential to address prevailing issues in hate speech detection in Vietnamese and attain state- of-the-art performance. Moreover, V I H ATE T5’s pre-training on domain-specific datasets enables it to grasp the nuances of social media content in Vietnamese deeply. The open-source nature of both the dataset and the model facilitates researchers and developers in leveraging our work, fostering fur- ther advancements in Vietnamese NLP and online safety.\n\nLimitations\n\nTraining a language model through pre-training demands a substantial volume of da"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -373,7 +373,7 @@
     "chunk_id": "arxiv_2405_14141_conclusion_46",
     "start_char": 750,
     "end_char": 1650,
-    "text": "ther advancements in Vietnamese NLP and online safety. Limitations Training a language model through pre-training demands a substantial volume of data and compu- tational power. In this investigation, we built an initial pre-training dataset, VOZ-HSD, suitable for experimentation with the ViT5-base, based on the base version of T5 architecture. However, it might not be adequate for larger versions. Previous re- search ( Phan et al. , 2022 ) outlines the effectiveness of these large-setting models, demonstrating their performance relative to smaller versions like the T5-base, which is employed in this experiment. Ethical Statements The proposed V I H ATE T5 model is specifically de- signed to handle various hate speech detection tasks in the Vietnamese language. Trained on a substan- tial auto-labeled dataset VOZ-HSD, as discussed in Section 3.1 , the collected data undergoes metic- ulous"
+    "text": "ther advancements in Vietnamese NLP and online safety.\n\nLimitations\n\nTraining a language model through pre-training demands a substantial volume of data and compu- tational power. In this investigation, we built an initial pre-training dataset, VOZ-HSD, suitable for experimentation with the ViT5-base, based on the base version of T5 architecture. However, it might not be adequate for larger versions. Previous re- search ( Phan et al. , 2022 ) outlines the effectiveness of these large-setting models, demonstrating their performance relative to smaller versions like the T5-base, which is employed in this experiment.\n\nEthical Statements\n\nThe proposed V I H ATE T5 model is specifically de- signed to handle various hate speech detection tasks in the Vietnamese language. Trained on a substan- tial auto-labeled dataset VOZ-HSD, as discussed in Section 3.1 , the collected data undergoes metic- u"
   },
   {
     "paper_id": "arxiv_2405_14141",
@@ -381,182 +381,190 @@
     "chunk_id": "arxiv_2405_14141_conclusion_47",
     "start_char": 1500,
     "end_char": 2400,
-    "text": "Vietnamese language. Trained on a substan- tial auto-labeled dataset VOZ-HSD, as discussed in Section 3.1 , the collected data undergoes metic- ulous preprocessing to eliminate all user identities, safeguarding user privacy. With the rise of social media platforms and the corresponding increase in harmful content, there are unintended repercussions that require content moderation to protect users in online conversa- tions. The proposed V I H ATE T5 model aims to make a meaningful contribution by delivering ac- curate performance across various hate speech de- tection tasks in Vietnamese. This initiative seeks to enhance content moderation on social media, promoting transparency and fostering a healthier online environment. Acknowledgement This research was supported by The VNUHCM- University of Information Technology’s Scientific Research Support Fund. We would like to express our grati"
+    "text": "the Vietnamese language. Trained on a substan- tial auto-labeled dataset VOZ-HSD, as discussed in Section 3.1 , the collected data undergoes metic- ulous preprocessing to eliminate all user identities, safeguarding user privacy. With the rise of social media platforms and the corresponding increase in harmful content, there are unintended repercussions that require content moderation to protect users in online conversa- tions. The proposed V I H ATE T5 model aims to make a meaningful contribution by delivering ac- curate performance across various hate speech de- tection tasks in Vietnamese. This initiative seeks to enhance content moderation on social media, promoting transparency and fostering a healthier online environment.\n\nAcknowledgement\n\nThis research was supported by The VNUHCM- University of Information Technology’s Scientific Research Support Fund. We would like to express our"
   },
   {
     "paper_id": "arxiv_2405_14141",
     "section": "conclusion",
     "chunk_id": "arxiv_2405_14141_conclusion_48",
     "start_char": 2250,
-    "end_char": 2573,
-    "text": "This research was supported by The VNUHCM- University of Information Technology’s Scientific Research Support Fund. We would like to express our gratitude to the anonymous ACL reviewers for their valuable and constructive feedback. Their contributions have significantly enriched the qual- ity and thoroughness of our work."
+    "end_char": 2579,
+    "text": "ment\n\nThis research was supported by The VNUHCM- University of Information Technology’s Scientific Research Support Fund. We would like to express our gratitude to the anonymous ACL reviewers for their valuable and constructive feedback. Their contributions have significantly enriched the qual- ity and thoroughness of our work."
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_49",
+    "section": "front_matter",
+    "chunk_id": "arxiv_2405_14141_front_matter_49",
+    "start_char": 0,
+    "end_char": 213,
+    "text": "Luan Thanh Nguyen 1 , 2\n\n1 Faculty of Information Science and Engineering, University of Information Technology, Ho Chi Minh City, Vietnam 2 Vietnam National University, Ho Chi Minh City, Vietnam luannt@uit.edu.vn"
+  },
+  {
+    "paper_id": "arxiv_2405_14141",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_50",
     "start_char": 0,
     "end_char": 900,
-    "text": "V I H ATE T5: Enhancing Hate Speech Detection in Vietnamese\n\nWith a Unified Text-to-Text Transformer Model\n\nLuan Thanh Nguyen 1 , 2 1 Faculty of Information Science and Engineering, University of Information Technology, Ho Chi Minh City, Vietnam 2 Vietnam National University, Ho Chi Minh City, Vietnam luannt@uit.edu.vn Sindhu Abro, Sarang Shaikh, Zahid Hussain Khand, Ali Zafar, Sajid Khan, and Ghulam Mujtaba. 2020. Auto- matic hate speech detection using machine learning: A comparative study. International Journal of Ad- vanced Computer Science and Applications , 11(8). Esma A ¨ ımeur, Sabrine Amri, and Gilles Brassard. 2023. Fake news, disinformation and misinformation in so- cial media: a review. Social Network Analysis and Raza Ali, Umar Farooq, Umair Arshad, Waseem Shahzad, and Mirza Omer Beg. 2022. Hate speech detection on twitter using transfer learning. Com- puter Speech & Languag"
+    "text": "Sindhu Abro, Sarang Shaikh, Zahid Hussain Khand, Ali Zafar, Sajid Khan, and Ghulam Mujtaba. 2020. Auto- matic hate speech detection using machine learning: A comparative study. International Journal of Ad- vanced Computer Science and Applications , 11(8). Esma A ¨ ımeur, Sabrine Amri, and Gilles Brassard. 2023. Fake news, disinformation and misinformation in so- cial media: a review. Social Network Analysis and Raza Ali, Umar Farooq, Umair Arshad, Waseem Shahzad, and Mirza Omer Beg. 2022. Hate speech detection on twitter using transfer learning. Com- puter Speech & Language , 74:101365. Ayme Arango Monnar, Jorge Perez, Barbara Poblete, Magdalena Salda ˜ na, and Valentina Proust. 2022. Re- sources for multilingual hate speech detection . In Proceedings of the Sixth Workshop on Online Abuse and Harms (WOAH) , pages 122–130, Seattle, Wash- ington (Hybrid). Association for Computational Lin-"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_50",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_51",
     "start_char": 750,
     "end_char": 1650,
-    "text": "Farooq, Umair Arshad, Waseem Shahzad, and Mirza Omer Beg. 2022. Hate speech detection on twitter using transfer learning. Com- puter Speech & Language , 74:101365. Ayme Arango Monnar, Jorge Perez, Barbara Poblete, Magdalena Salda ˜ na, and Valentina Proust. 2022. Re- sources for multilingual hate speech detection . In Proceedings of the Sixth Workshop on Online Abuse and Harms (WOAH) , pages 122–130, Seattle, Wash- ington (Hybrid). Association for Computational Lin- guistics. Pinkesh Badjatiya, Shashank Gupta, Manish Gupta, and Vasudeva Varma. 2017. Deep learning for hate speech detection in tweets. In Proceedings of the 26th international conference on World Wide Web companion , pages 759–760. Irina Bigoulaeva, Viktor Hangya, and Alexander Fraser. 2021. Cross-lingual transfer learning for hate speech detection . In Proceedings of the First Workshop on Language Technology for Equality,"
+    "text": "Proceedings of the Sixth Workshop on Online Abuse and Harms (WOAH) , pages 122–130, Seattle, Wash- ington (Hybrid). Association for Computational Lin- guistics. Pinkesh Badjatiya, Shashank Gupta, Manish Gupta, and Vasudeva Varma. 2017. Deep learning for hate speech detection in tweets. In Proceedings of the 26th international conference on World Wide Web companion , pages 759–760. Irina Bigoulaeva, Viktor Hangya, and Alexander Fraser. 2021. Cross-lingual transfer learning for hate speech detection . In Proceedings of the First Workshop on Language Technology for Equality, Diversity and In- clusion , pages 15–25, Kyiv. Association for Compu- tational Linguistics. Alexander Brown. 2017. What is hate speech? part 1: The myth of hate. Law and Philosophy , 36:419–468. Tommaso Caselli, Valerio Basile, Jelena Mitrovi ´ c, and Michael Granitzer. 2021. HateBERT: Retraining BERT for abusive langua"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_51",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_52",
     "start_char": 1500,
     "end_char": 2400,
-    "text": "r Fraser. 2021. Cross-lingual transfer learning for hate speech detection . In Proceedings of the First Workshop on Language Technology for Equality, Diversity and In- clusion , pages 15–25, Kyiv. Association for Compu- tational Linguistics. Alexander Brown. 2017. What is hate speech? part 1: The myth of hate. Law and Philosophy , 36:419–468. Tommaso Caselli, Valerio Basile, Jelena Mitrovi ´ c, and Michael Granitzer. 2021. HateBERT: Retraining BERT for abusive language detection in English . In Proceedings of the 5th Workshop on Online Abuse and Harms (WOAH 2021) , pages 17–25, Online. As- sociation for Computational Linguistics. Alexis Conneau and Guillaume Lample. 2019. Cross- lingual language model pretraining. Advances in neural information processing systems , 32. Michael Desmond, Evelyn Duesterwald, Kristina Brimi- join, Michelle Brachman, and Qian Pan. 2021. Semi- automated data l"
+    "text": "hilosophy , 36:419–468. Tommaso Caselli, Valerio Basile, Jelena Mitrovi ´ c, and Michael Granitzer. 2021. HateBERT: Retraining BERT for abusive language detection in English . In Proceedings of the 5th Workshop on Online Abuse and Harms (WOAH 2021) , pages 17–25, Online. As- sociation for Computational Linguistics. Alexis Conneau and Guillaume Lample. 2019. Cross- lingual language model pretraining. Advances in neural information processing systems , 32. Michael Desmond, Evelyn Duesterwald, Kristina Brimi- join, Michelle Brachman, and Qian Pan. 2021. Semi- automated data labeling. In NeurIPS 2020 Com- petition and Demonstration Track , pages 156–169. PMLR. Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. BERT: Pre-training of deep bidirectional transformers for language under- standing . In Proceedings of the 2019 Conference of the North American Chapter of the Ass"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_52",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_53",
     "start_char": 2250,
     "end_char": 3150,
-    "text": "tion processing systems , 32. Michael Desmond, Evelyn Duesterwald, Kristina Brimi- join, Michelle Brachman, and Qian Pan. 2021. Semi- automated data labeling. In NeurIPS 2020 Com- petition and Demonstration Track , pages 156–169. PMLR. Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. BERT: Pre-training of deep bidirectional transformers for language under- standing . In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Tech- nologies, Volume 1 (Long and Short Papers) , pages 4171–4186, Minneapolis, Minnesota. Association for Computational Linguistics. B Ghafoori, Y Caspi, C Salgado, M Allwood, J Kreither, JL Tejada, T Hunt, L Waelde, O Slobodin, M Fai- ley, et al. 2019. Global perspectives on the trauma of hate-based violence: An international society for traumatic stress studies briefi"
+    "text": "ining of deep bidirectional transformers for language under- standing . In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Tech- nologies, Volume 1 (Long and Short Papers) , pages 4171–4186, Minneapolis, Minnesota. Association for Computational Linguistics. B Ghafoori, Y Caspi, C Salgado, M Allwood, J Kreither, JL Tejada, T Hunt, L Waelde, O Slobodin, M Fai- ley, et al. 2019. Global perspectives on the trauma of hate-based violence: An international society for traumatic stress studies briefing paper. International Society for Traumatic Stress Studies . Njagi Dennis Gitari, Zhang Zuping, Hanyurwimfura Damien, and Jun Long. 2015. A lexicon-based approach for hate speech detection. International Journal of Multimedia and Ubiquitous Engineering , Phu Gia Hoang, Canh Duc Luu, Khanh Quoc Tran, Kiet Van Nguyen, a"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_53",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_54",
     "start_char": 3000,
     "end_char": 3900,
-    "text": "bodin, M Fai- ley, et al. 2019. Global perspectives on the trauma of hate-based violence: An international society for traumatic stress studies briefing paper. International Society for Traumatic Stress Studies . Njagi Dennis Gitari, Zhang Zuping, Hanyurwimfura Damien, and Jun Long. 2015. A lexicon-based approach for hate speech detection. International Journal of Multimedia and Ubiquitous Engineering , Phu Gia Hoang, Canh Duc Luu, Khanh Quoc Tran, Kiet Van Nguyen, and Ngan Luu-Thuy Nguyen. 2023. ViHOS: Hate speech spans detection for Viet- namese . In Proceedings of the 17th Conference of the European Chapter of the Association for Com- putational Linguistics , pages 652–669, Dubrovnik, Croatia. Association for Computational Linguistics. Son T Luu, Kiet Van Nguyen, and Ngan Luu-Thuy Nguyen. 2021. A large-scale dataset for hate speech detection on vietnamese social media texts. In Ad- va"
+    "text": "te speech detection. International Journal of Multimedia and Ubiquitous Engineering , Phu Gia Hoang, Canh Duc Luu, Khanh Quoc Tran, Kiet Van Nguyen, and Ngan Luu-Thuy Nguyen. 2023. ViHOS: Hate speech spans detection for Viet- namese . In Proceedings of the 17th Conference of the European Chapter of the Association for Com- putational Linguistics , pages 652–669, Dubrovnik, Croatia. Association for Computational Linguistics. Son T Luu, Kiet Van Nguyen, and Ngan Luu-Thuy Nguyen. 2021. A large-scale dataset for hate speech detection on vietnamese social media texts. In Ad- vances and Trends in Artificial Intelligence. Artificial Intelligence Practices: 34th International Conference on Industrial, Engineering and Other Applications of Applied Intelligent Systems, IEA/AIE 2021, Kuala Lumpur, Malaysia, July 26–29, 2021, Proceedings, Part I 34 , pages 415–426. Springer. Sean MacAvaney, Hao-Ren"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_54",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_55",
     "start_char": 3750,
     "end_char": 4650,
-    "text": "on T Luu, Kiet Van Nguyen, and Ngan Luu-Thuy Nguyen. 2021. A large-scale dataset for hate speech detection on vietnamese social media texts. In Ad- vances and Trends in Artificial Intelligence. Artificial Intelligence Practices: 34th International Conference on Industrial, Engineering and Other Applications of Applied Intelligent Systems, IEA/AIE 2021, Kuala Lumpur, Malaysia, July 26–29, 2021, Proceedings, Part I 34 , pages 415–426. Springer. Sean MacAvaney, Hao-Ren Yao, Eugene Yang, Katina Russell, Nazli Goharian, and Ophir Frieder. 2019. Hate speech detection: Challenges and solutions. Marzieh Mozafari, Reza Farahbakhsh, and Noel Crespi. 2020. A bert-based transfer learning approach for hate speech detection in online social media. In Com- plex Networks and Their Applications VIII: Volume 1 Proceedings of the Eighth International Confer- ence on Complex Networks and Their Applications"
+    "text": "ntelligent Systems, IEA/AIE 2021, Kuala Lumpur, Malaysia, July 26–29, 2021, Proceedings, Part I 34 , pages 415–426. Springer. Sean MacAvaney, Hao-Ren Yao, Eugene Yang, Katina Russell, Nazli Goharian, and Ophir Frieder. 2019. Hate speech detection: Challenges and solutions. Marzieh Mozafari, Reza Farahbakhsh, and Noel Crespi. 2020. A bert-based transfer learning approach for hate speech detection in online social media. In Com- plex Networks and Their Applications VIII: Volume 1 Proceedings of the Eighth International Confer- ence on Complex Networks and Their Applications COMPLEX NETWORKS 2019 8 , pages 928–940. Springer. Dat Quoc Nguyen et al. 2020. PhoBERT: Pre-trained language models for Vietnamese. In Findings of the Association for Computational Linguistics: EMNLP Luan Nguyen, Kiet Nguyen, and Ngan Nguyen. 2022. SMTCE: A social media text classification evaluation benchmark and BERT"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_55",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_56",
     "start_char": 4500,
     "end_char": 5400,
-    "text": "- plex Networks and Their Applications VIII: Volume 1 Proceedings of the Eighth International Confer- ence on Complex Networks and Their Applications COMPLEX NETWORKS 2019 8 , pages 928–940. Springer. Dat Quoc Nguyen et al. 2020. PhoBERT: Pre-trained language models for Vietnamese. In Findings of the Association for Computational Linguistics: EMNLP Luan Nguyen, Kiet Nguyen, and Ngan Nguyen. 2022. SMTCE: A social media text classification evaluation benchmark and BERTology models for Vietnamese . In Proceedings of the 36th Pacific Asia Conference on Language, Information and Computation , pages 282–291, Manila, Philippines. Association for Com- putational Linguistics. Luan Thanh Nguyen, Kiet Van Nguyen, and Ngan Luu- Thuy Nguyen. 2021. Constructive and toxic speech detection for open-domain social media comments in vietnamese. In Advances and Trends in Artificial Intelligence. Artificial"
+    "text": "putational Linguistics: EMNLP Luan Nguyen, Kiet Nguyen, and Ngan Nguyen. 2022. SMTCE: A social media text classification evaluation benchmark and BERTology models for Vietnamese . In Proceedings of the 36th Pacific Asia Conference on Language, Information and Computation , pages 282–291, Manila, Philippines. Association for Com- putational Linguistics. Luan Thanh Nguyen, Kiet Van Nguyen, and Ngan Luu- Thuy Nguyen. 2021. Constructive and toxic speech detection for open-domain social media comments in vietnamese. In Advances and Trends in Artificial Intelligence. Artificial Intelligence Practices: 34th International Conference on Industrial, Engineering and Other Applications of Applied Intelligent Sys- tems, IEA/AIE 2021, Kuala Lumpur, Malaysia, July Springer. Nam Nguyen, Thang Phan, Duc-Vu Nguyen, and Kiet Nguyen. 2023. ViSoBERT: A pre-trained language model for Vietnamese social media t"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_56",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_57",
     "start_char": 5250,
     "end_char": 6150,
-    "text": "ructive and toxic speech detection for open-domain social media comments in vietnamese. In Advances and Trends in Artificial Intelligence. Artificial Intelligence Practices: 34th International Conference on Industrial, Engineering and Other Applications of Applied Intelligent Sys- tems, IEA/AIE 2021, Kuala Lumpur, Malaysia, July Springer. Nam Nguyen, Thang Phan, Duc-Vu Nguyen, and Kiet Nguyen. 2023. ViSoBERT: A pre-trained language model for Vietnamese social media text processing . In Proceedings of the 2023 Conference on Empiri- cal Methods in Natural Language Processing , pages 5191–5207, Singapore. Association for Computa- tional Linguistics. Daniel Nkemelu, Harshil Shah, Michael Best, and Irfan Essa. 2022. Tackling hate speech in low-resource languages with context experts. In Proceedings of the 2022 International Conference on Information and Communication Technologies and Developm"
+    "text": "sia, July Springer. Nam Nguyen, Thang Phan, Duc-Vu Nguyen, and Kiet Nguyen. 2023. ViSoBERT: A pre-trained language model for Vietnamese social media text processing . In Proceedings of the 2023 Conference on Empiri- cal Methods in Natural Language Processing , pages 5191–5207, Singapore. Association for Computa- tional Linguistics. Daniel Nkemelu, Harshil Shah, Michael Best, and Irfan Essa. 2022. Tackling hate speech in low-resource languages with context experts. In Proceedings of the 2022 International Conference on Information and Communication Technologies and Development , pages 1–11. Long Phan, Hieu Tran, Hieu Nguyen, and Trieu H. Trinh. 2022. Vit5: Pretrained text-to-text transformer for vietnamese language generation . Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu. 2023. Exploring the limits of transfe"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_57",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_58",
     "start_char": 6000,
     "end_char": 6900,
-    "text": "esource languages with context experts. In Proceedings of the 2022 International Conference on Information and Communication Technologies and Development , pages 1–11. Long Phan, Hieu Tran, Hieu Nguyen, and Trieu H. Trinh. 2022. Vit5: Pretrained text-to-text transformer for vietnamese language generation . Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu. 2023. Exploring the limits of transfer learning with a unified text-to-text trans- former . Tharindu Ranasinghe and Marcos Zampieri. 2023. A text-to-text model for multilingual offensive lan- guage identification. In Findings of the Association for Computational Linguistics: IJCNLP-AACL 2023 (Findings) , pages 375–384. Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. 2019. Distilbert, a distilled version of bert: smaller, faster, cheaper and lighte"
+    "text": "Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu. 2023. Exploring the limits of transfer learning with a unified text-to-text trans- former . Tharindu Ranasinghe and Marcos Zampieri. 2023. A text-to-text model for multilingual offensive lan- guage identification. In Findings of the Association for Computational Linguistics: IJCNLP-AACL 2023 (Findings) , pages 375–384. Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. 2019. Distilbert, a distilled version of bert: smaller, faster, cheaper and lighter. arXiv preprint arXiv:1910.01108 . Diptanu Sarkar, Marcos Zampieri, Tharindu Ranas- inghe, and Alexander Ororbia. 2021. fBERT: A neural transformer for identifying offensive content . In Findings of the Association for Computational Linguistics: EMNLP 2021 , pages 1792–1798, Punta Cana, Dominican Republic. Association"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_58",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_59",
     "start_char": 6750,
     "end_char": 7650,
-    "text": "384. Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. 2019. Distilbert, a distilled version of bert: smaller, faster, cheaper and lighter. arXiv preprint arXiv:1910.01108 . Diptanu Sarkar, Marcos Zampieri, Tharindu Ranas- inghe, and Alexander Ororbia. 2021. fBERT: A neural transformer for identifying offensive content . In Findings of the Association for Computational Linguistics: EMNLP 2021 , pages 1792–1798, Punta Cana, Dominican Republic. Association for Compu- tational Linguistics. Huy Quoc To, Kiet Van Nguyen, Ngan Luu-Thuy Nguyen, and Anh Gia-Tuan Nguyen. 2021. Monolin- gual vs multilingual bertology for vietnamese extrac- tive multi-document summarization. In Proceedings of the 35th Pacific Asia Conference on Language, Information and Computation , pages 692–699. Thi Oanh Tran, Phuong Le Hong, et al. 2020. Im- proving sequence tagging for vietnamese text using transf"
+    "text": "sive content . In Findings of the Association for Computational Linguistics: EMNLP 2021 , pages 1792–1798, Punta Cana, Dominican Republic. Association for Compu- tational Linguistics. Huy Quoc To, Kiet Van Nguyen, Ngan Luu-Thuy Nguyen, and Anh Gia-Tuan Nguyen. 2021. Monolin- gual vs multilingual bertology for vietnamese extrac- tive multi-document summarization. In Proceedings of the 35th Pacific Asia Conference on Language, Information and Computation , pages 692–699. Thi Oanh Tran, Phuong Le Hong, et al. 2020. Im- proving sequence tagging for vietnamese text using transformer-based neural models. In Proceedings of the 34th Pacific Asia conference on language, infor- mation and computation , pages 13–20. Xuan-Son Vu, Thanh Vu, Mai-Vu Tran, Thanh Le-Cong, and Huyen Nguyen. 2020. Hsd shared task in vlsp campaign 2019: Hate speech detection for social good. arXiv preprint arXiv:2007.06493"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_59",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_60",
     "start_char": 7500,
     "end_char": 8400,
-    "text": "Information and Computation , pages 692–699. Thi Oanh Tran, Phuong Le Hong, et al. 2020. Im- proving sequence tagging for vietnamese text using transformer-based neural models. In Proceedings of the 34th Pacific Asia conference on language, infor- mation and computation , pages 13–20. Xuan-Son Vu, Thanh Vu, Mai-Vu Tran, Thanh Le-Cong, and Huyen Nguyen. 2020. Hsd shared task in vlsp campaign 2019: Hate speech detection for social good. arXiv preprint arXiv:2007.06493 . Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya Siddhant, Aditya Barua, and Colin Raffel. 2021. mt5: A massively multilingual pre-trained text-to-text transformer . Steven Zimmerman, Udo Kruschwitz, and Chris Fox. 2018. Improving hate speech detection with deep learning ensembles. In Proceedings of the eleventh international conference on language resources and evaluation (LREC 2018) . A Fine-tuni"
+    "text": "Thanh Le-Cong, and Huyen Nguyen. 2020. Hsd shared task in vlsp campaign 2019: Hate speech detection for social good. arXiv preprint arXiv:2007.06493 . Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya Siddhant, Aditya Barua, and Colin Raffel. 2021. mt5: A massively multilingual pre-trained text-to-text transformer . Steven Zimmerman, Udo Kruschwitz, and Chris Fox. 2018. Improving hate speech detection with deep learning ensembles. In Proceedings of the eleventh international conference on language resources and evaluation (LREC 2018) .\n\nA Fine-tuning Hate Speech Classifier\n\nTo develop hate speech classifiers, we fine-tune existing pre-trained language models designed for the Vietnamese language. All experiments utilize a common set of pre-training language models. The training process is conducted over 3 epochs, employing a batch size of 16 for both training and"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_60",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_61",
     "start_char": 8250,
     "end_char": 9150,
-    "text": "n with deep learning ensembles. In Proceedings of the eleventh international conference on language resources and evaluation (LREC 2018) . A Fine-tuning Hate Speech Classifier To develop hate speech classifiers, we fine-tune existing pre-trained language models designed for the Vietnamese language. All experiments utilize a common set of pre-training language models. The training process is conducted over 3 epochs, employing a batch size of 16 for both training and evaluation phases. The maximum sequence length is defined as 128, and the learning rate is set to 1e-5. The remaining parameters adhere to recommendations from prior research. Table 6 provides an overview of the performance of various models in detecting hate speech in Vietnamese, utilizing two labels: HATE and NONE . Note that selecting the best model for our proposed system is based on its classification performance using th"
+    "text": "lize a common set of pre-training language models. The training process is conducted over 3 epochs, employing a batch size of 16 for both training and evaluation phases. The maximum sequence length is defined as 128, and the learning rate is set to 1e-5. The remaining parameters adhere to recommendations from prior research. Table 6 provides an overview of the performance of various models in detecting hate speech in Vietnamese, utilizing two labels: HATE and NONE . Note that selecting the best model for our proposed system is based on its classification performance using the Macro F1-score (MF1). The chosen hate speech classifier, ViSoBERT-HSD, is publicly available at HuggingFace 11 . Accuracy Weighted F1-score Macro F1-score Multilingual Pre-trained Models BERT (Multilingual, base, cased) ( Devlin et al. , 2019 ) BERT (Multilingual, base, uncased) ( Devlin et al. , 2019 ) DistilBERT ("
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_61",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_62",
     "start_char": 9000,
     "end_char": 9900,
-    "text": ", utilizing two labels: HATE and NONE . Note that selecting the best model for our proposed system is based on its classification performance using the Macro F1-score (MF1). The chosen hate speech classifier, ViSoBERT-HSD, is publicly available at HuggingFace 11 . Accuracy Weighted F1-score Macro F1-score Multilingual Pre-trained Models BERT (Multilingual, base, cased) ( Devlin et al. , 2019 ) BERT (Multilingual, base, uncased) ( Devlin et al. , 2019 ) DistilBERT (Multilingual) ( Sanh et al. , 2019 ) XLM-RoBERTa (base) ( Conneau and Lample , 2019 ) XLM-RoBERTa (large) ( Conneau and Lample , 2019 ) Monolingual Pre-trained Models PhoBERT (base) ( Nguyen et al. , 2020 ) PhoBERT (large) ( Nguyen et al. , 2020 ) PhoBERT_v2 (base) ( Nguyen et al. , 2020 ) viBERT ( Tran et al. , 2020 ) ViSoBERT ( Nguyen et al. , 2023 ) Table 6: Classification performances of various classifiers fine-tuned from"
+    "text": "Pre-trained Models BERT (Multilingual, base, cased) ( Devlin et al. , 2019 ) BERT (Multilingual, base, uncased) ( Devlin et al. , 2019 ) DistilBERT (Multilingual) ( Sanh et al. , 2019 ) XLM-RoBERTa (base) ( Conneau and Lample , 2019 ) XLM-RoBERTa (large) ( Conneau and Lample , 2019 ) Monolingual Pre-trained Models PhoBERT (base) ( Nguyen et al. , 2020 ) PhoBERT (large) ( Nguyen et al. , 2020 ) PhoBERT_v2 (base) ( Nguyen et al. , 2020 ) viBERT ( Tran et al. , 2020 ) ViSoBERT ( Nguyen et al. , 2023 ) Table 6: Classification performances of various classifiers fine-tuned from different pre-trained models on the task of hate speech classification in order to find the best one for automated data annotation.\n\nB Experimental Settings\n\nModel Pre-training We initially pre-train V I H ATE T5 from scratch on the VOZ-HSD dataset and its variants with different pre-training data settings with parame"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_62",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_63",
     "start_char": 9750,
     "end_char": 10650,
-    "text": ", 2020 ) viBERT ( Tran et al. , 2020 ) ViSoBERT ( Nguyen et al. , 2023 ) Table 6: Classification performances of various classifiers fine-tuned from different pre-trained models on the task of hate speech classification in order to find the best one for automated data annotation. B Experimental Settings Model Pre-training We initially pre-train V I H ATE T5 from scratch on the VOZ-HSD dataset and its variants with different pre-training data settings with parameters illustrated in Table 7 . Note that validation split means the ratio for the validation set taken from the original dataset. Name Initial Weights #archs Pre-training Data Valid Split Epochs l_r batch_size max_seq_len V I H ATE T5 From scratch base VOZ-HSD V I H ATE T5 ViT5-base base VOZ-HSD V I H ATE T5 ViT5-base base Balanced-label VOZ-HSD V I H ATE T5 ViT5-base base Hate-label VOZ-HSD Table 7: Model settings for pre-trainin"
+    "text": "raining We initially pre-train V I H ATE T5 from scratch on the VOZ-HSD dataset and its variants with different pre-training data settings with parameters illustrated in Table 7 . Note that validation split means the ratio for the validation set taken from the original dataset. Name Initial Weights #archs Pre-training Data Valid Split Epochs l_r batch_size max_seq_len V I H ATE T5 From scratch base VOZ-HSD V I H ATE T5 ViT5-base base VOZ-HSD V I H ATE T5 ViT5-base base Balanced-label VOZ-HSD V I H ATE T5 ViT5-base base Hate-label VOZ-HSD Table 7: Model settings for pre-training V I H ATE T5 variants. Note that all pre-trained models were trained on a limited-resource setting with a single GPU NVIDIA A6000. Model Fine-tuning BERT-based Models To establish BERT-based models as baselines for fine-tuning each dataset, we implement the experimental configurations outlined below, as depicted i"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_63",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_64",
     "start_char": 10500,
     "end_char": 11400,
-    "text": "base VOZ-HSD V I H ATE T5 ViT5-base base Balanced-label VOZ-HSD V I H ATE T5 ViT5-base base Hate-label VOZ-HSD Table 7: Model settings for pre-training V I H ATE T5 variants. Note that all pre-trained models were trained on a limited-resource setting with a single GPU NVIDIA A6000. Model Fine-tuning BERT-based Models To establish BERT-based models as baselines for fine-tuning each dataset, we implement the experimental configurations outlined below, as depicted in Table 8 . These settings adhere closely to those recommended in the original publications. 11 https://huggingface.co/tarudesu/ViSoBERT-HSD Dataset batch_size max_seq_len learning_rate weight_decay epochs ViHSD ViCTSD ViHOS Table 8: Fine-tuning parameters for BERT-based models on each HSD-related task. T5-based Models The model configurations for fine-tuning T5-based models, including our V I H ATE T5 utilized in this paper, are"
+    "text": "s To establish BERT-based models as baselines for fine-tuning each dataset, we implement the experimental configurations outlined below, as depicted in Table 8 . These settings adhere closely to those recommended in the original publications. 11 https://huggingface.co/tarudesu/ViSoBERT-HSD Dataset batch_size max_seq_len learning_rate weight_decay epochs ViHSD ViCTSD ViHOS Table 8: Fine-tuning parameters for BERT-based models on each HSD-related task. T5-based Models The model configurations for fine-tuning T5-based models, including our V I H ATE T5 utilized in this paper, are showcased in Table 9 . The difference in the value of batch size occurs because of the limitation of GPU resources, leading to reduce the batch size for the training phase. #archs batch_size max_seq_len learning_rate epochs mT5 base ViT5 base V I H ATE T5-based base Table 9: Fine-tuning parameters for T5-based mode"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_64",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_65",
     "start_char": 11250,
     "end_char": 12150,
-    "text": "ach HSD-related task. T5-based Models The model configurations for fine-tuning T5-based models, including our V I H ATE T5 utilized in this paper, are showcased in Table 9 . The difference in the value of batch size occurs because of the limitation of GPU resources, leading to reduce the batch size for the training phase. #archs batch_size max_seq_len learning_rate epochs mT5 base ViT5 base V I H ATE T5-based base Table 9: Fine-tuning parameters for T5-based models on the tasks of hate speech detection in Vietnamese. Note that V I H ATE T5-based indicates fine-tuned models from any variants of the pre-trained V I H ATE T5. C What is inside the VOZ-HSD dataset? Table 10 illustrates the distribution of topic text data within the VOZ-HSD dataset. It is evident that we have gathered a wide range of conversation topics, indicating that the dataset is not skewed towards any particular domain a"
+    "text": "phase. #archs batch_size max_seq_len learning_rate epochs mT5 base ViT5 base V I H ATE T5-based base Table 9: Fine-tuning parameters for T5-based models on the tasks of hate speech detection in Vietnamese. Note that V I H ATE T5-based indicates fine-tuned models from any variants of the pre-trained V I H ATE T5.\n\nC What is inside the VOZ-HSD dataset?\n\nTable 10 illustrates the distribution of topic text data within the VOZ-HSD dataset. It is evident that we have gathered a wide range of conversation topics, indicating that the dataset is not skewed towards any particular domain and closely reflects real-life textual content. Previous studies by Nguyen et al. ( 2023 ) have further demonstrated that even with a limited dataset size of only 1GB in an uncompressed format for pre-training a transformer on social media texts, the model can still exhibit strong performance across multiple tasks,"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_65",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_66",
     "start_char": 12000,
     "end_char": 12900,
-    "text": "et. It is evident that we have gathered a wide range of conversation topics, indicating that the dataset is not skewed towards any particular domain and closely reflects real-life textual content. Previous studies by Nguyen et al. ( 2023 ) have further demonstrated that even with a limited dataset size of only 1GB in an uncompressed format for pre-training a transformer on social media texts, the model can still exhibit strong performance across multiple tasks, achieving state-of-the-art results. No. Parent Thread N.o. Threads N.o. Comments Size (Uncompressed) Random conversation News Sports Cars 96MB Movies - Music - Books 52MB Bikes 41MB Fashion 19MB Food - Travel 19MB Other hobbies 6MB Total Table 10: The distribution of comments in terms of conversation topics in the VOZ-HSD datasets. D Actual examples in benchmarks dataset and their pre-processed representations for BERT-based basel"
+    "text": "in an uncompressed format for pre-training a transformer on social media texts, the model can still exhibit strong performance across multiple tasks, achieving state-of-the-art results. No. Parent Thread N.o. Threads N.o. Comments Size (Uncompressed) Random conversation News Sports Cars 96MB Movies - Music - Books 52MB Bikes 41MB Fashion 19MB Food - Travel 19MB Other hobbies 6MB Total Table 10: The distribution of comments in terms of conversation topics in the VOZ-HSD datasets.\n\nD Actual examples in benchmarks dataset and their pre-processed representations for BERT-based baseline models and our proposed V I H ATE T5\n\nExamples BERT-based Models T5-based Models Input Output Source Target Source Target ViHSD Original text CLEAN (0) OFFENSIVE (1) HATE (2) Text with specific prefix CLEAN OFFENSIVE HATE Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) ( Translated: From theory to practic"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_66",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_67",
     "start_char": 12750,
     "end_char": 13650,
-    "text": "s of conversation topics in the VOZ-HSD datasets. D Actual examples in benchmarks dataset and their pre-processed representations for BERT-based baseline models and our proposed V I H ATE T5 Examples BERT-based Models T5-based Models Input Output Source Target Source Target ViHSD Original text CLEAN (0) OFFENSIVE (1) HATE (2) Text with specific prefix CLEAN OFFENSIVE HATE Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) ( Translated: From theory to practice is a whole long story =))) CLEAN Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) hate-speech-detection: Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) CLEAN Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ ( Translated: Similar as two drops of water. But each one is a teardrop with a drop of shit too ) OFFENSIVE Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước s"
+    "text": "E (1) HATE (2) Text with specific prefix CLEAN OFFENSIVE HATE Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) ( Translated: From theory to practice is a whole long story =))) CLEAN Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) hate-speech-detection: Từlý thuyết đến thực hành là cả1 câu chuyện dài =)) CLEAN Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ ( Translated: Similar as two drops of water. But each one is a teardrop with a drop of shit too ) OFFENSIVE Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ hate-speech-detection: Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ OFFENSIVE Im mẹđi thằng mặt lon ( Translated: Shut up you big-faced idiot ) HATE Im mẹđi thằng mặt lon hate-speech-detection: Im mẹđi thằng mặt lon HATE ViCTSD Original text NONE (0) TOXIC (1)"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_67",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_68",
     "start_char": 13500,
     "end_char": 14400,
-    "text": "s of water. But each one is a teardrop with a drop of shit too ) OFFENSIVE Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ hate-speech-detection: Giống nhau như 2 giọt nước. Mà mỗi cái là 1 giọt nước mắt với 1 giọt nước sh!t thôi ạ OFFENSIVE Im mẹđi thằng mặt lon ( Translated: Shut up you big-faced idiot ) HATE Im mẹđi thằng mặt lon hate-speech-detection: Im mẹđi thằng mặt lon HATE ViCTSD Original text NONE (0) TOXIC (1) Text with specific prefix NONE TOXIC Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. ( Translated: A time to remember, with so many memories attached to his songs. ) NONE Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. toxic-speech-detecion: Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. NONE nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... ( Translated: A"
+    "text": "d: Shut up you big-faced idiot ) HATE Im mẹđi thằng mặt lon hate-speech-detection: Im mẹđi thằng mặt lon HATE ViCTSD Original text NONE (0) TOXIC (1) Text with specific prefix NONE TOXIC Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. ( Translated: A time to remember, with so many memories attached to his songs. ) NONE Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. toxic-speech-detecion: Một thời đểnhớ, bao kỷniệm gắn liền với những ca khúc của anh. NONE nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... ( Translated: After listening, rage surged through my veins. I feel like giving that guy a beating..... ) TOXIC nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... toxic-speech-detecion: nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... TOXIC ViHOS Original text IOB"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_68",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_69",
     "start_char": 14250,
     "end_char": 15150,
-    "text": "bao kỷniệm gắn liền với những ca khúc của anh. NONE nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... ( Translated: After listening, rage surged through my veins. I feel like giving that guy a beating..... ) TOXIC nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... toxic-speech-detecion: nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... TOXIC ViHOS Original text IOB Tags: O, B-T, I-T Text with specific prefix Text with [HATE] tokens Hãnh diện vềng thầy có tâm nhất của năm. ( Translated: Proud of the most dedicated teacher of the year. ) Hãnh diện vềng thầy có tâm nhất của năm. hate-spans-detection: Hãnh diện về ng thầy có tâm nhất của năm. Hãnh diện vềng thầy có tâm nhất của năm. Chương trình ln gì vậy ? :D ( Translated: What is this pussy program ? :D ) Chương trình ln gì vậy ? :D :))) O O B-T"
+    "text": "t trận quá..... toxic-speech-detecion: nghe xong máu điên trong người nổi lên. muốn đánh cho thằng cha một trận quá..... TOXIC ViHOS Original text IOB Tags: O, B-T, I-T Text with specific prefix Text with [HATE] tokens Hãnh diện vềng thầy có tâm nhất của năm. ( Translated: Proud of the most dedicated teacher of the year. ) Hãnh diện vềng thầy có tâm nhất của năm. hate-spans-detection: Hãnh diện về ng thầy có tâm nhất của năm. Hãnh diện vềng thầy có tâm nhất của năm. Chương trình ln gì vậy ? :D ( Translated: What is this pussy program ? :D ) Chương trình ln gì vậy ? :D :))) O O B-T O O O hate-spans-detection: Chương trình ln gì vậy ? :D :))) Chương trình [HATE] ln [HATE] gì vậy ? :D :))) t deo hieu no cuoi cl me gi nua ( Translated: I don’t fucking understand what the fuck he is laughing at ) t deo hieu no cuoi cl gi nua O B-T O O O B-T I-T O O hate-spans-detection: t deo hieu no cuoi cl"
   },
   {
     "paper_id": "arxiv_2405_14141",
-    "section": "body",
-    "chunk_id": "arxiv_2405_14141_body_69",
+    "section": "back_matter",
+    "chunk_id": "arxiv_2405_14141_back_matter_70",
     "start_char": 15000,
-    "end_char": 15687,
-    "text": "ện vềng thầy có tâm nhất của năm. Chương trình ln gì vậy ? :D ( Translated: What is this pussy program ? :D ) Chương trình ln gì vậy ? :D :))) O O B-T O O O hate-spans-detection: Chương trình ln gì vậy ? :D :))) Chương trình [HATE] ln [HATE] gì vậy ? :D :))) t deo hieu no cuoi cl me gi nua ( Translated: I don’t fucking understand what the fuck he is laughing at ) t deo hieu no cuoi cl gi nua O B-T O O O B-T I-T O O hate-spans-detection: t deo hieu no cuoi cl me gi nua t [HATE] deo [HATE] hieu no cuoi [HATE] cl me [HATE] gi nua Table 11: Examples from HSD benchmark datasets in experiments featuring diverse input and output data formats aligned with BERT-based and T5-based models."
+    "end_char": 15374,
+    "text": "fucking understand what the fuck he is laughing at ) t deo hieu no cuoi cl gi nua O B-T O O O B-T I-T O O hate-spans-detection: t deo hieu no cuoi cl me gi nua t [HATE] deo [HATE] hieu no cuoi [HATE] cl me [HATE] gi nua Table 11: Examples from HSD benchmark datasets in experiments featuring diverse input and output data formats aligned with BERT-based and T5-based models."
   }
 ]

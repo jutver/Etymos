@@ -33,6 +33,7 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from extractor import clean_text, LIST_MARKER_RE, BULLET_MARKER_CHARS, FALLBACK_SECTION
+from extractor import compute_text_marks
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,37 @@ def _strip_manual_marker(text: str) -> tuple[str, str | None]:
     return stripped, list_type
 
 
+def _paragraph_runs(paragraph: Paragraph) -> list[tuple[str, bool, bool]]:
+    """(text, bold, italic) for every run, in order - including runs inside
+    hyperlinks, which paragraph.text also includes."""
+    runs = []
+    try:
+        items = list(paragraph.iter_inner_content())
+    except AttributeError:
+        items = list(paragraph.runs)
+    for item in items:
+        item_runs = getattr(item, "runs", None)
+        for run in (item_runs if item_runs is not None else [item]):
+            style_name = ((run.style.name if run.style is not None else "") or "").lower()
+            runs.append((
+                run.text or "",
+                bool(run.bold) or "strong" in style_name,
+                bool(run.italic) or "emphasis" in style_name,
+            ))
+    return runs
+
+
+def _with_marks(block: dict, paragraph: Paragraph) -> dict:
+    try:
+        marks = compute_text_marks(_paragraph_runs(paragraph), "", block["text"])
+    except Exception:
+        logger.exception("Could not compute inline marks for a docx paragraph.")
+        marks = []
+    if marks:
+        block["marks"] = marks
+    return block
+
+
 def _paragraph_block(paragraph: Paragraph, page: int) -> dict | None:
     # clean_text() already collapses any manual-line-break "\n" python-docx
     # renders inside paragraph.text; the extra .replace is a defensive
@@ -134,17 +166,23 @@ def _paragraph_block(paragraph: Paragraph, page: int) -> dict | None:
     list_type = _list_type_from_style(paragraph)
     if list_type:
         stripped, manual_type = _strip_manual_marker(text)
-        return {
+        return _with_marks({
             "type": "list_item", "level": None,
             "list_type": manual_type or list_type,
             "text": stripped, "page": page,
-        }
+        }, paragraph)
 
     stripped, manual_type = _strip_manual_marker(text)
     if manual_type:
-        return {"type": "list_item", "level": None, "list_type": manual_type, "text": stripped, "page": page}
+        return _with_marks(
+            {"type": "list_item", "level": None, "list_type": manual_type, "text": stripped, "page": page},
+            paragraph,
+        )
 
-    return {"type": "paragraph", "level": None, "list_type": None, "text": text, "page": page}
+    return _with_marks(
+        {"type": "paragraph", "level": None, "list_type": None, "text": text, "page": page},
+        paragraph,
+    )
 
 
 # Maps the OOXML relationship part's content-type to a file extension for

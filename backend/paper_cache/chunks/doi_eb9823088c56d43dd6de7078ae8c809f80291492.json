@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_eb9823088c56d43dd6de7078ae8c809f80291492",
+    "section": "abstract",
+    "chunk_id": "doi_eb9823088c56d43dd6de7078ae8c809f80291492_abstract_0",
+    "start_char": 0,
+    "end_char": 559,
+    "text": "Hate and offensive speech detection on Arabic social media\nWe are witnessing an increasing proliferation of hate speech on social media targeting individuals for their protected characteristics. Our study aims to devise an effective Arabic hate and offensive speech detection framework to address this serious issue. First, we built a reliable Arabic textual corpus by crawling data from Twitter using four robust extraction strategies that we implement based on four types of hate: religion, ethnicity, nationality, and gender. Next, we label the corpus base"
+  }
+]

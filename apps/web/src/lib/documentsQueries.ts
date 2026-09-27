@@ -86,6 +86,9 @@ interface DocumentPassageRow {
   table_rows: string[][] | null;
   // Added by supabase/migrations/20260725000000_document_passage_image_url.sql.
   image_url: string | null;
+  // Added by supabase/migrations/20260927000000_document_passage_text_marks.sql.
+  // Optional: absent until that migration is applied.
+  text_marks?: DocPassage["textMarks"] | null;
 }
 
 function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
@@ -176,6 +179,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     page: p.page ?? undefined,
     tableRows: p.table_rows ?? undefined,
     imageUrl: p.image_url ?? undefined,
+    textMarks: p.text_marks ?? undefined,
   }));
 
   return {

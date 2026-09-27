@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_66e2c6c6a8c0679eeca5f9ae88d4aad7b3a9ce8a",
+    "section": "abstract",
+    "chunk_id": "doi_66e2c6c6a8c0679eeca5f9ae88d4aad7b3a9ce8a_abstract_0",
+    "start_char": 0,
+    "end_char": 625,
+    "text": "Generalizable Multilingual Hate Speech Detection on Low Resource Indian Languages using Fair Selection in Federated Learning\nSocial media, originally meant for peaceful communication, now faces issues with hate speech. Detecting hate speech from social media in Indian languages with linguistic diversity and cultural nuances presents a complex and challenging task. Furthermore, traditional methods involve sharing of users’ sensitive data with a server for model training making it undesirable and involving potential risk to their privacy remained under-studied. In this paper, we combined various low-resource language da"
+  }
+]

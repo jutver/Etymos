@@ -80,6 +80,14 @@ export interface PlanDefinition {
  * structure (plain pasted text), is a plain paragraph. */
 export type DocBlockType = "title" | "heading" | "paragraph" | "list_item" | "table" | "image";
 
+/** An inline formatting range inside a passage's `text` (offsets into it,
+ * end exclusive) - bold/italic kept from the original file. */
+export interface TextMark {
+  start: number;
+  end: number;
+  style: "bold" | "italic";
+}
+
 export interface DocPassage {
   id: string;
   text: string;
@@ -120,6 +128,10 @@ export interface DocPassage {
    * image extraction — the Document view falls back to a placeholder box
    * in that case (see DocumentCanvas's "image" case). */
   imageUrl?: string;
+  /** Bold/italic ranges from the original file (backend block "marks").
+   * Undefined for passages without inline formatting and for reports saved
+   * before this existed - the text then renders plain, as before. */
+  textMarks?: TextMark[];
 }
 
 export interface MatchedSource {

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_0229d6b1fcf8d3d6bfa2d34e178ad754489c2b64",
+    "section": "abstract",
+    "chunk_id": "doi_0229d6b1fcf8d3d6bfa2d34e178ad754489c2b64_abstract_0",
+    "start_char": 0,
+    "end_char": 622,
+    "text": "Detection of Hate Speech and Offensive Language CodeMix Text in Dravidian Languages Using Cost-Sensitive Learning Approach\nRecently, the emergence of social media has opened the way for online harassment in the form of hate speech and offensive language. An automated approach is needed to detect hate and offensive content from social media, which is indispensable. This task is challenging in the case of social media posts or comments in low-resourced CodeMix languages. This paper investigates the efficacy of various multilingual transformer-based embedding models with machine learning classifiers for detecting hate"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_aab6a2ff92529cdf494814298adc534a65bee9a2",
+    "section": "abstract",
+    "chunk_id": "title_aab6a2ff92529cdf494814298adc534a65bee9a2_abstract_0",
+    "start_char": 0,
+    "end_char": 617,
+    "text": "[Quick Review] ViHateT5: Enhancing Hate Speech Detection in Vietnamese With A Unified Text-to-Text Transformer Model\nMay 23, 2024 - Regarding this ACL 2024 paper, this review summarizes ViHateT5, a unified text-to-text transformer model for Vietnamese hate speech detection. Existing hate speech detection (HSD) systems for Vietnamese require specialized fine-tuned models, leading to complexity and fragmentation in multitasking setups. Current methodologies for Vietnamese HSD predominantly fine-tune general pre-trained models, which often fail to capture the nuances of human behavior and informal language on onl"
+  }
+]

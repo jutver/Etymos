@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_ba7533bfda0b3af28470e4bca086498baa156e68",
+    "section": "abstract",
+    "chunk_id": "title_ba7533bfda0b3af28470e4bca086498baa156e68_abstract_0",
+    "start_char": 0,
+    "end_char": 619,
+    "text": "Exploiting Unsupervised Pre-training and Automated Feature Engineering for Low-resource Hate Speech Detection in Polish\nThis paper presents our contribution to PolEval 2019 Task 6: Hate speech and bullying detection. We describe three parallel approaches that we followed: fine-tuning a pre-trained ULMFiT model to our classification task, fine-tuning a pre-trained BERT model to our classification task, and using the TPOT library to find the optimal pipeline. We present results achieved by these three tools and review their advantages and disadvantages in terms of user experience. Our team placed second in subtask"
+  }
+]

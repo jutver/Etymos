@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_affd8b65b35e7e02c678d4275eb332a7e3ea02d3",
+    "section": "abstract",
+    "chunk_id": "doi_affd8b65b35e7e02c678d4275eb332a7e3ea02d3_abstract_0",
+    "start_char": 0,
+    "end_char": 588,
+    "text": "A Deep Learning Approach for Automatic Hate Speech Detection in the Saudi Twittersphere\nWith the rise of hate speech phenomena in the Twittersphere, significant research efforts have been undertaken in order to provide automatic solutions for detecting hate speech, varying from simple machine learning models to more complex deep neural network models. Despite this, research works investigating hate speech problem in Arabic are still limited. This paper, therefore, aimed to investigate several neural network models based on convolutional neural network (CNN) and recurrent neural net"
+  }
+]

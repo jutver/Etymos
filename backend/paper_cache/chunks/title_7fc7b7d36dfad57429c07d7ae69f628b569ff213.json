@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_7fc7b7d36dfad57429c07d7ae69f628b569ff213",
+    "section": "abstract",
+    "chunk_id": "title_7fc7b7d36dfad57429c07d7ae69f628b569ff213_abstract_0",
+    "start_char": 0,
+    "end_char": 441,
+    "text": "[Literature Review] ViHateT5: Enhancing Hate Speech Detection in Vietnamese With A Unified Text-to-Text Transformer Model\nThis model leverages a T5-based ... (HSD) in Vietnamese contexts, especially in the face of existing limitations in current methodologies that rely primarily on fine-tuning general pre-trained models. ### Core Methodology #### 1. Dataset Creation The authors developed an extensive dataset named VOZ-HSD, comprising ..."
+  }
+]

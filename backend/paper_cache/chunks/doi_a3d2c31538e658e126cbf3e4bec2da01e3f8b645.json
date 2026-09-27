@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_a3d2c31538e658e126cbf3e4bec2da01e3f8b645",
+    "section": "abstract",
+    "chunk_id": "doi_a3d2c31538e658e126cbf3e4bec2da01e3f8b645_abstract_0",
+    "start_char": 0,
+    "end_char": 538,
+    "text": "Language Models are Few-Shot Learners\nRecent work has demonstrated substantial gains on many NLP tasks and benchmarks by pre-training on a large corpus of text followed by fine-tuning on a specific task. While typically task-agnostic in architecture, this method still requires task-specific fine-tuning datasets of thousands or tens of thousands of examples. By contrast, humans can generally perform a new language task from only a few examples or from simple instructions - something which current NLP systems still largely struggle to"
+  }
+]

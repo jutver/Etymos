@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_3d30f8b7f5cdcca5343ff78f8f3a8b6dd2335564",
+    "section": "abstract",
+    "chunk_id": "title_3d30f8b7f5cdcca5343ff78f8f3a8b6dd2335564_abstract_0",
+    "start_char": 0,
+    "end_char": 378,
+    "text": "Paper page - ViHateT5: Enhancing Hate Speech Detection in Vietnamese With A Unified Text-to-Text Transformer Model\nIn this research, we introduce ... dataset named VOZ-HSD. By harnessing the power of a text-to-text architecture, ViHateT5 can tackle multiple tasks using a unified model and achieve state-of-the-art performance across all standard HSD benchmarks in Vietnamese..."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_d014947704c77a31aada323f196d381c6088283f",
+    "section": "abstract",
+    "chunk_id": "title_d014947704c77a31aada323f196d381c6088283f_abstract_0",
+    "start_char": 0,
+    "end_char": 449,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With a Unified Text-to-Text Transformer Model — Lacuna\nThey used a high-performing \"AI Data Annotator\" (a fine-tuned ViSoBERT model) to automatically label this massive corpus, creating the VOZ-HSD dataset. This domain-specific pre-training allows the model to learn the specific vocabulary and linguistic patterns of Vietnamese internet trolls before being fine-tuned for specific benchmarks."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_f5eccbef93f6b1eb9facd0a119e235beba2ed2a7",
+    "section": "abstract",
+    "chunk_id": "title_f5eccbef93f6b1eb9facd0a119e235beba2ed2a7_abstract_0",
+    "start_char": 0,
+    "end_char": 436,
+    "text": "A Large-Scale Dataset for Hate Speech Detection on Vietnamese Social Media Texts | Request PDF\nJuly 19, 2021 - However, with the robust ability of BERTology, the advantage of popular text pre-processing methods is not as significant as traditional models. In this paper, we investigate the effect of text pre-processing methods to the BERTology models on the two Vietnamese hate speech detection datasets - the ViHSD and the UIT-ViCTSD."
+  }
+]

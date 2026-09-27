@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_727618ec7c77639fb0a0dbc322436bf0e3d53774",
+    "section": "abstract",
+    "chunk_id": "doi_727618ec7c77639fb0a0dbc322436bf0e3d53774_abstract_0",
+    "start_char": 0,
+    "end_char": 577,
+    "text": "BanTH: A Multi-label Hate Speech Detection Dataset for Transliterated Bangla\nThe proliferation of transliterated texts in digital spaces has emphasized the need for detecting and classifying hate speech in languages beyond English, particularly in low-resource languages. As online discourse can perpetuate discrimination based on target groups, e.g. gender, religion, and origin, multi-label classification of hateful content can help in comprehending hate motivation and enhance content moderation. While previous efforts have focused on monolingual or binary hate classifica"
+  }
+]

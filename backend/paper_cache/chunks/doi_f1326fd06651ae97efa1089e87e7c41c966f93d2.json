@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_f1326fd06651ae97efa1089e87e7c41c966f93d2",
+    "section": "abstract",
+    "chunk_id": "doi_f1326fd06651ae97efa1089e87e7c41c966f93d2_abstract_0",
+    "start_char": 0,
+    "end_char": 580,
+    "text": "PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization\nRecent work pre-training Transformers with self-supervised objectives on large text corpora has shown great success when fine-tuned on downstream NLP tasks including text summarization. However, pre-training objectives tailored for abstractive text summarization have not been explored. Furthermore there is a lack of systematic evaluation across diverse domains. In this work, we propose pre-training large Transformer-based encoder-decoder models on massive text corpora with a new self-supervised"
+  }
+]

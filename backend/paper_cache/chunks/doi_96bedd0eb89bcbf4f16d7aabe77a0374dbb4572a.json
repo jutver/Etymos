@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_96bedd0eb89bcbf4f16d7aabe77a0374dbb4572a",
+    "section": "abstract",
+    "chunk_id": "doi_96bedd0eb89bcbf4f16d7aabe77a0374dbb4572a_abstract_0",
+    "start_char": 0,
+    "end_char": 548,
+    "text": "Hate speech detection: Challenges and solutions\nAs online content continues to grow, so does the spread of hate speech. We identify and examine challenges faced by online automatic approaches for hate speech detection in text. Among these difficulties are subtleties in language, differing definitions on what constitutes hate speech, and limitations of data availability for training and testing of these systems. Furthermore, many recent approaches suffer from an interpretability problem-that is, it can be difficult to understand why the system"
+  }
+]

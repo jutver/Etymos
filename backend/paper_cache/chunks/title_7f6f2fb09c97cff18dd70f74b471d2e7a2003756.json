@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_7f6f2fb09c97cff18dd70f74b471d2e7a2003756",
+    "section": "abstract",
+    "chunk_id": "title_7f6f2fb09c97cff18dd70f74b471d2e7a2003756_abstract_0",
+    "start_char": 0,
+    "end_char": 458,
+    "text": "ViHateT5: Enhancing Hate Speech Detection in Vietnamese With a Unified Text-to-Text Transformer Model - ACL Anthology\nIn this research, we introduce ViHateT5, a T5-based model pre-trained on our proposed large-scale domain-specific dataset named VOZ-HSD. By harnessing the power of a text-to-text architecture, ViHateT5 can tackle multiple tasks using a unified model and achieve state-of-the-art performance across all standard HSD benchmarks in Vietnamese."
+  }
+]

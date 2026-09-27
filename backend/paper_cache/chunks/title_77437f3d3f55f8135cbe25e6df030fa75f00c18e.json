@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "title_77437f3d3f55f8135cbe25e6df030fa75f00c18e",
+    "section": "abstract",
+    "chunk_id": "title_77437f3d3f55f8135cbe25e6df030fa75f00c18e_abstract_0",
+    "start_char": 0,
+    "end_char": 579,
+    "text": "(PDF) ViToSA: Audio-Based Toxic Spans Detection on Vietnamese Speech Utterances\nMay 31, 2025 - In this paper, we present the first monolingual pre-trained language model for Vietnamese social media texts, ViSoBERT, which is pre-trained on a large-scale corpus of high-quality and diverse Vietnamese social media texts using XLM-R architecture. Moreover, we explored our pre-trained model on five important natural language downstream tasks on Vietnamese social media texts: emotion recognition , hate speech detection, sentiment analysis , spam reviews detection, and hate speech"
+  }
+]

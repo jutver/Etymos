@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_e16dce74c58a88d13f417f70e59eb56aa8c70ecd",
+    "section": "abstract",
+    "chunk_id": "doi_e16dce74c58a88d13f417f70e59eb56aa8c70ecd_abstract_0",
+    "start_char": 0,
+    "end_char": 656,
+    "text": "Indonesian Hate Speech Detection: A Cross-Validated Benchmark of Machine Learning and Pre-trained Transformer Models with Statistical Significance Analysis\nAutomated hate speech detection in Indonesian social media remains a persistent challenge due to dataset fragmentation, heterogeneous annotation schemes, and the lack of reproducible cross-model benchmarks with formal statistical validation. This study presents a cross-validated benchmark that systematically evaluates seven models — one majority baseline, three classical machine learning models (Logistic Regression, SVM, Random Forest), and three transformer-based pre-trained language models (Di"
+  }
+]

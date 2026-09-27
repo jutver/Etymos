@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_c826a780031e4694607df2d7c8a15e0479bb56d5",
+    "section": "abstract",
+    "chunk_id": "doi_c826a780031e4694607df2d7c8a15e0479bb56d5_abstract_0",
+    "start_char": 0,
+    "end_char": 588,
+    "text": "COVID-HateBERT: a Pre-trained Language Model for COVID-19 related Hate Speech Detection\nWith the dramatic growth of hate speech on social media during the COVID-19 pandemic, there is an urgent need to detect various hate speech effectively. Existing methods only achieve high performance when the training and testing data come from the same data distribution. The models trained on the traditional hateful dataset cannot fit well on COVID-19 related dataset. Meanwhile, manually annotating the hate speech dataset for supervised learning is time-consuming. Here, we propose COVID-HateBER"
+  }
+]

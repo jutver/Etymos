@@ -5,6 +5,6 @@
     "chunk_id": "title_07e0421cfadb0318bcf8b89cc293abdd46640197_abstract_0",
     "start_char": 0,
     "end_char": 310,
-    "text": "tarudesu/ViHateT5-base · Hugging Face\nViHateT5 is the state-of-the-art pre-trained text-to-text transformer model for Vietnamese (HSD tasks). Note the this checkpoint need to be fine-tuned on downstream tasks, especially hate speech detection ones (ViHateT5-HSD is the fine-tuned model mentioned in the paper)."
+    "text": "tarudesu/ViHateT5-base · Hugging Face\nViHateT5 is the state-of-the-art pre-trained text-to-text transformer model for Vietnamese (HSD tasks).The pre-training dataset named VOZ-HSD is available at HERE. Kindly CITE our paper if you use ViHateT5 to generate published results or integrate it into other software."
   }
 ]

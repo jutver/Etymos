@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_683e4fb19650b26f269111804d81f41b87a7c456",
+    "section": "abstract",
+    "chunk_id": "doi_683e4fb19650b26f269111804d81f41b87a7c456_abstract_0",
+    "start_char": 0,
+    "end_char": 648,
+    "text": "Adversarially Robust Multitask Learning for Offensive and Hate Speech Detection in Arabic Text Using Transformer-Based Models and RNN Architectures\nOffensive language and hate speech have a detrimental effect on victims and have become a significant problem on social media platforms. Recent research has developed automated techniques for detecting Arabic offensive language and hate speech but remains limited, and further research is required compared to the research on high-resource languages such as English due to limited resources, annotated corpora, and morphological analysis. Most social media users who use profanities attempt to modify"
+  }
+]

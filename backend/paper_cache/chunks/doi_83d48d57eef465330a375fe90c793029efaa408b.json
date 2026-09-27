@@ -1,0 +1,10 @@
+[
+  {
+    "paper_id": "doi_83d48d57eef465330a375fe90c793029efaa408b",
+    "section": "abstract",
+    "chunk_id": "doi_83d48d57eef465330a375fe90c793029efaa408b_abstract_0",
+    "start_char": 0,
+    "end_char": 601,
+    "text": "Enhanced Detection of Hate Speech in Dravidian Languages in Social Media Using Ensemble Transformers\nAim/Purpose: This study aims to propose an efficient implementation of identifying and detecting offensive and hate comments on social media platforms for Dravidian languages.\n\nBackground: There has been a notable increase in hate comments on social media platforms in recent years. Hate language and hate speech are expressions of conflicts that arise between different groups, both within and across civilizations. This toxic behavior has a detrimental impact on individuals, resulting in disagreem"
+  }
+]
