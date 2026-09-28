@@ -95,7 +95,7 @@ export function SourcesSidebar({
         onClick={onToggle}
         aria-expanded={false}
         aria-controls="report-sources-panel"
-        className="hidden shrink-0 flex-col items-center gap-2 border-l border-line bg-white px-2 py-4 text-ink-500 transition-colors hover:text-ink-900 lg:flex"
+        className="hidden w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-white px-2 py-4 text-ink-500 transition-colors hover:text-ink-900 lg:flex"
       >
         <Sidebar size={18} />
         <span className="text-xs font-bold tabular-nums">{matches.length}</span>
@@ -187,7 +187,7 @@ export function SourcesSidebar({
               }}
               placeholder={t("Search title, author or text…")}
               autoComplete="off"
-              className="h-9 w-full rounded-[var(--radius-input)] border border-line bg-white pl-8 pr-8 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
+              className="h-11 w-full rounded-[var(--radius-input)] border border-line bg-white pl-9 pr-10 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
             />
             {query && (
               <button

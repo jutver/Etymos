@@ -118,10 +118,10 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+    <div className="studio-page collection-editorial history-shell mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("History")}</h1>
+          <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR WRITING JOURNEY")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("History")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">
             {credits > 0
               ? t("Credit-pack checks are kept for {{historyRetentionLabel}}.", { historyRetentionLabel: historyRetentionLabel(plan, true) })
@@ -141,7 +141,7 @@ export default function HistoryPage() {
         </div>
       )}
 
-      <div className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white">
+      <div className="studio-card mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white">
         <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:w-72">
             <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />

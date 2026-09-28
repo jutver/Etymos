@@ -14,7 +14,7 @@ export default function PaymentSuccessPage() {
   const { pending, loading } = useMyPendingRequest();
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-68px)] max-w-lg flex-col items-center justify-center px-5 py-16 text-center">
+    <div className="studio-page mx-auto flex min-h-[calc(100dvh-68px)] max-w-lg flex-col items-center justify-center px-5 py-16 text-center">
       <motion.div
         initial={{ scale: 0.7, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -33,7 +33,7 @@ export default function PaymentSuccessPage() {
             : t("Your request is waiting for admin approval.")}
       </p>
 
-      <div className="mt-7 w-full rounded-[var(--radius-card-lg)] border border-line bg-white p-6 text-left">
+      <div className="studio-card mt-7 w-full rounded-[var(--radius-card-lg)] border border-line bg-white p-6 text-left">
         <div className="flex items-center justify-between">
           <span className="text-sm text-ink-500">{t("Status")}</span>
           <span className="rounded-full bg-brand-100 px-2.5 py-1 text-xs font-bold text-brand-700">

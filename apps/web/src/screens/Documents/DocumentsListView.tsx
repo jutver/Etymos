@@ -47,7 +47,7 @@ export function DocumentsListView({
   }
 
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-[var(--radius-card-lg)] border border-line bg-white">
+    <div className="studio-card divide-y divide-line overflow-hidden rounded-[var(--radius-card-lg)] border border-line bg-white">
       <button
         type="button"
         onClick={onCreateProject}

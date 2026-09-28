@@ -31,7 +31,7 @@ export function BannedScreen({ reason, bannedUntil }: { reason: string | null; b
             : t("Sign-in is disabled until an administrator lifts this suspension.")}
         </p>
 
-        <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
+        <div className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-5 py-3.5 text-sm text-severity-high">
             <Warning size={20} weight="fill" className="mt-0.5 shrink-0" />
             <div>
@@ -89,7 +89,7 @@ export function DeletionConfirmScreen() {
         <p className="mt-1.5 text-sm text-ink-500">
           {t("An administrator has requested deletion of your account. Click confirm to proceed, or contact support if this is a mistake.")}</p>
 
-        <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
+        <div className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-5 py-3.5 text-sm text-severity-high">
             <Warning size={20} weight="fill" className="mt-0.5 shrink-0" />
             <div>

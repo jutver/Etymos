@@ -102,7 +102,7 @@ export default function VerifyStudentPage() {
 
   if (submitted || (!checkingExisting && existingStatus === "pending")) {
     return (
-      <div className="mx-auto max-w-xl px-5 py-14 sm:px-8">
+      <div className="studio-page mx-auto max-w-xl px-5 py-14 sm:px-8">
         <div className="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-600">
           <Clock size={24} weight="fill" />
         </div>
@@ -115,7 +115,7 @@ export default function VerifyStudentPage() {
             : t("We already have a verification request from you and it's currently being reviewed by an admin. Your account will be updated automatically once a decision is made.")}
         </p>
 
-        <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
+        <div className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface-tint px-5 py-3.5">
             <CheckCircle size={22} weight="fill" className="shrink-0 text-brand-600" />
             <div className="min-w-0">
@@ -186,7 +186,7 @@ export default function VerifyStudentPage() {
         </div>
       )}
 
-      <div className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
+      <div className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)]">
         {file ? (
           <div className="flex items-center justify-between rounded-[var(--radius-card)] border border-line bg-surface-tint px-5 py-3.5">
             <div className="flex min-w-0 items-center gap-3">

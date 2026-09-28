@@ -292,21 +292,24 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col px-5 py-6 sm:px-8 lg:h-[calc(100dvh-68px)] lg:overflow-hidden">
+    <div className="studio-page upload-editorial mx-auto flex max-w-7xl flex-col px-5 py-8 sm:px-8">
       <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Check a new document")}</h1>
+          <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR WRITING WORKSPACE")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Check a new document")}</h1>
           <p className="mt-1.5 text-body text-ink-600">
             {t("Upload one or more files or paste your text. We'll scan the web and academic papers.")}</p>
         </div>
       </div>
 
-      <div className="mt-6 grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-[1.7fr_1fr] lg:overflow-hidden">
+      <div className="mt-6 grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Main upload card */}
-        <div className="flex flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-7 lg:h-full lg:overflow-hidden">
-          <div className="flex shrink-0 gap-1 rounded-full bg-surface-muted p-1">
+        <div className="studio-card flex flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-7 lg:min-h-[640px]">
+          <div role="tablist" aria-label="Document input method" className="flex shrink-0 gap-1 rounded-full bg-surface-muted p-1">
             <button
               onClick={() => setTab("file")}
+              role="tab"
+              aria-selected={tab === "file"}
+              aria-controls="upload-files-panel"
               className={cn(
                 "flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
                 tab === "file" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
@@ -315,6 +318,9 @@ export default function UploadPage() {
               {t("Upload files")}</button>
             <button
               onClick={() => setTab("paste")}
+              role="tab"
+              aria-selected={tab === "paste"}
+              aria-controls="paste-text-panel"
               className={cn(
                 "flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
                 tab === "paste" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
@@ -325,6 +331,8 @@ export default function UploadPage() {
 
           {tab === "file" ? (
             <div
+              id="upload-files-panel"
+              role="tabpanel"
               onDragOver={(e) => {
                 e.preventDefault();
                 setDragActive(true);
@@ -343,12 +351,21 @@ export default function UploadPage() {
               {files.length === 0 ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Browse files to upload"
                   className={cn(
-                    "flex flex-1 min-h-[22rem] cursor-pointer flex-col items-center justify-center gap-4 rounded-[var(--radius-card)] border-2 border-dashed px-6 text-center transition-colors",
+                    "flex flex-1 min-h-[22rem] cursor-pointer flex-col items-center justify-center gap-4 rounded-[var(--radius-card)] studio-dropzone border-2 border-dashed px-6 text-center transition-colors",
                     dragActive ? "border-brand-500 bg-brand-100/40" : "border-line hover:border-brand-300 hover:bg-surface-tint",
                   )}
                 >
-                  <div className="flex size-16 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+                  <div className="upload-document-icon flex size-16 items-center justify-center rounded-full bg-brand-100 text-brand-600">
                     <UploadSimple size={30} weight="bold" />
                   </div>
                   <div>
@@ -365,9 +382,8 @@ export default function UploadPage() {
                 <div className="flex flex-1 min-h-0 flex-col gap-3">
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {files.map((f, i) => (
-                      <button
+                      <div
                         key={`${f.name}-${i}`}
-                        onClick={() => setPreviewIndex(i)}
                         className={cn(
                           "flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-left transition-colors",
                           i === activePreviewIndex
@@ -375,14 +391,21 @@ export default function UploadPage() {
                             : "border-line bg-white hover:border-brand-300",
                         )}
                       >
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewIndex(i)}
+                          aria-pressed={i === activePreviewIndex}
+                          aria-label={`Preview ${f.name}`}
+                          className="flex min-w-0 items-center gap-2"
+                        >
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
                           <FileText size={13} weight="bold" />
                         </span>
                         <span className="max-w-[10rem] truncate text-xs font-semibold text-ink-900">{f.name}</span>
                         <span className="text-[0.6875rem] text-ink-400">{(f.size / 1024).toFixed(0)}{" "}{t("KB")}</span>
-                        <span
-                          role="button"
-                          tabIndex={-1}
+                        </button>
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             removeFile(i);
@@ -391,8 +414,8 @@ export default function UploadPage() {
                           className="ml-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-white hover:text-severity-high"
                         >
                           <X size={12} />
-                        </span>
-                      </button>
+                        </button>
+                      </div>
                     ))}
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -428,6 +451,7 @@ export default function UploadPage() {
                 type="file"
                 multiple
                 accept=".pdf,.doc,.docx,.txt"
+                aria-label="Upload documents"
                 className="hidden"
                 onChange={(e) => {
                   handleFiles(e.target.files);
@@ -436,8 +460,10 @@ export default function UploadPage() {
               />
             </div>
           ) : (
-            <div className="mt-6 flex flex-1 min-h-0 flex-col">
+            <div id="paste-text-panel" role="tabpanel" className="mt-6 flex flex-1 min-h-0 flex-col">
+              <label htmlFor="document-text" className="sr-only">Document text</label>
               <textarea
+                id="document-text"
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
                 placeholder={t("Paste your document text here...")}
@@ -482,13 +508,15 @@ export default function UploadPage() {
             <div className="relative">
               <button
                 onClick={() => setLangOpen((v) => !v)}
+                aria-expanded={langOpen}
+                aria-controls="language-options"
                 className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
               >
                 {t(languages.find((l) => l.id === language)?.label)}
                 <CaretDown size={14} className={cn("transition-transform", langOpen && "rotate-180")} />
               </button>
               {langOpen && (
-                <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-40 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
+                <div id="language-options" role="menu" className="studio-card absolute bottom-[calc(100%+6px)] left-0 z-20 w-40 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
                   {languages.map((l) => (
                     <button
                       key={l.id}
@@ -496,6 +524,8 @@ export default function UploadPage() {
                         setLanguage(l.id);
                         setLangOpen(false);
                       }}
+                      role="menuitemradio"
+                      aria-checked={language === l.id}
                       className={cn(
                         "block w-full rounded-lg px-3 py-2 text-left text-sm font-medium",
                         language === l.id ? "bg-brand-100 text-brand-700" : "text-ink-700 hover:bg-surface-tint",
@@ -511,6 +541,8 @@ export default function UploadPage() {
             <div className="relative">
               <button
                 onClick={() => setProjectOpen((v) => !v)}
+                aria-expanded={projectOpen}
+                aria-controls="project-options"
                 className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
               >
                 <FolderSimple size={15} />
@@ -518,7 +550,7 @@ export default function UploadPage() {
                 <CaretDown size={14} className={cn("transition-transform", projectOpen && "rotate-180")} />
               </button>
               {projectOpen && (
-                <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-64 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
+                <div id="project-options" className="studio-card absolute bottom-[calc(100%+6px)] left-0 z-20 w-64 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
                   <input
                     autoFocus
                     value={projectQuery}
@@ -584,7 +616,7 @@ export default function UploadPage() {
             )}
           </div>
 
-          <div className="flex flex-1 min-h-0 flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-5">
+          <div className="studio-card flex flex-1 min-h-0 flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-5">
             <div className="flex shrink-0 items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500">
                 <ClockCounterClockwise size={14} />
@@ -630,7 +662,7 @@ export default function UploadPage() {
                 <button
                   key={b.source}
                   onClick={() => confirmBalanceChoice(b.source)}
-                  className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left transition-colors hover:border-brand-400 hover:bg-brand-100/30"
+                  className="studio-card flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left transition-colors hover:border-brand-400 hover:bg-brand-100/30"
                 >
                   <span className="flex items-center gap-3">
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">

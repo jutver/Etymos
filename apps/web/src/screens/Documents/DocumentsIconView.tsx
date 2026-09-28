@@ -103,7 +103,7 @@ export function DocumentsIconView({
                   }}
                   onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : openDoc(doc))}
                   className={cn(
-                    "group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
+                    "studio-card group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
                     docSelected ? "border-brand-400 ring-2 ring-brand-200" : "border-line",
                   )}
                 >
@@ -138,7 +138,7 @@ export function DocumentsIconView({
       <button
         type="button"
         onClick={onCreateProject}
-        className="flex aspect-square flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border border-dashed border-brand-300 bg-white p-4 text-center transition-colors hover:bg-surface-tint"
+        className="studio-card flex aspect-square flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border border-dashed border-brand-300 bg-white p-4 text-center transition-colors hover:bg-surface-tint"
       >
         <span className="flex size-12 items-center justify-center rounded-xl border border-dashed border-brand-300 text-brand-500">
           <FolderPlus size={22} />
@@ -158,7 +158,7 @@ export function DocumentsIconView({
             }}
             onClick={() => (manageMode && !group.isDefault ? onToggleSelectProject(group.name) : onOpenFolder(group.name))}
             className={cn(
-              "group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
+              "studio-card group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
               isSelected ? "border-brand-400 ring-2 ring-brand-200" : "border-line",
             )}
           >

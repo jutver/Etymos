@@ -42,7 +42,7 @@ export function ContextMenu({ open, onClose, position, children }: ContextMenuPr
           exit={{ opacity: 0, scale: 0.97 }}
           transition={{ duration: 0.12 }}
           style={{ left: Math.max(8, clampedX), top: Math.max(8, clampedY) }}
-          className="fixed z-50 w-56 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
+          className="studio-card fixed z-50 w-56 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
         >
           {children}
         </motion.div>

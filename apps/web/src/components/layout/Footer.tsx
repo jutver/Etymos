@@ -5,14 +5,15 @@ import { t } from "../../lib/i18n";
 
 export function Footer() {
   return (
-    <footer className="border-t border-navy-700/60 bg-navy-900 text-white/70">
+    <footer className="editorial-footer border-t border-navy-700/60 bg-navy-900 text-white/70">
       <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <Logo variant="light" />
+          <Logo variant="light" /><p className="footer-statement">Thoughtful writing.<br /><em>Original by you.</em></p>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
             {t("Vietnamese-first plagiarism detection, built to be affordable for every student and researcher.")}</p>
           <a
             href="mailto:hello@etymos.vn"
+            aria-label="Email Etymos support"
             className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-white/70 hover:text-white"
           >
             <EnvelopeSimple size={16} />

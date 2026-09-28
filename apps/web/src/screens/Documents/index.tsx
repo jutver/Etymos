@@ -285,10 +285,10 @@ export default function DocumentsPage() {
   const selectionCount = selectedDocs.size + selectedProjects.size;
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+    <div className="studio-page collection-editorial library-shell mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Documents")}</h1>
+          <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR RESEARCH LIBRARY")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Documents")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">{t("Organize your checks into projects, Finder-style.")}</p>
         </div>
         <div className="flex items-center gap-2">

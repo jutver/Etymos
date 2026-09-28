@@ -135,11 +135,11 @@ export default function AccountProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-10 sm:px-8">
-      <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Profile")}</h1>
+    <div className="studio-page collection-editorial mx-auto max-w-2xl px-5 py-10 sm:px-8">
+      <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR PERSONAL SPACE")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Profile")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">{t("Manage your name, password, and account links.")}</p>
 
-      <section className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+      <section className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex items-center gap-2 text-ink-900">
           <User size={18} weight="bold" />
           <h2 className="text-sm font-bold uppercase tracking-wide">{t("Display name")}</h2>
@@ -155,7 +155,7 @@ export default function AccountProfilePage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+      <section className="studio-card mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex items-center gap-2 text-ink-900">
           <LockKey size={18} weight="bold" />
           <h2 className="text-sm font-bold uppercase tracking-wide">{t("Change password")}</h2>

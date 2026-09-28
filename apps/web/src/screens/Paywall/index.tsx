@@ -42,7 +42,7 @@ export default function PaywallPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-14 sm:px-8">
+    <div className="studio-page mx-auto max-w-4xl px-5 py-14 sm:px-8">
       <div className="text-center">
         <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-severity-moderate-bg text-severity-moderate">
           <ShieldWarning size={28} weight="fill" />
@@ -57,7 +57,7 @@ export default function PaywallPage() {
       </div>
 
       {pending && (
-        <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
+        <div className="studio-card mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>

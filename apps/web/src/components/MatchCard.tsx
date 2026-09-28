@@ -66,7 +66,7 @@ export function MatchCard({
       id={`match-${match.id}`}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "scroll-mt-4 rounded-[var(--radius-card)] border bg-white transition-all",
+        "studio-card scroll-mt-4 rounded-[var(--radius-card)] border bg-white transition-all",
         selected
           ? "border-brand-400 shadow-[0_0_0_3px_rgba(30,79,196,0.10)]"
           : "border-line hover:border-ink-300",

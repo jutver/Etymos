@@ -7,12 +7,17 @@ import { PageLoader } from "../ui/PageLoader";
 
 export function PublicShell() {
   return (
-    <div className="min-h-dvh bg-white">
+    <div className="public-shell min-h-dvh bg-white">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <PublicNav />
       {/* Nav and footer stay put while the route chunk loads. */}
-      <Suspense fallback={<PageLoader />}>
-        <Outlet />
-      </Suspense>
+      <main id="main-content" tabIndex={-1}>
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
+      </main>
       <Footer />
       <ToastViewport />
     </div>

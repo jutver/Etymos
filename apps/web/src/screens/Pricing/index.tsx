@@ -82,8 +82,8 @@ export default function PricingPage() {
 
   return (
     <div>
-      <section className="mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
-        <h1 className="text-h1 font-bold tracking-tight text-navy-900">
+      <section className="studio-page mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
+        <p aria-hidden="true" className="editorial-kicker mb-3">{t("A PLAN FOR YOUR NEXT CHAPTER")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">
           {t("Simple, honest pricing")}</h1>
         <p className="mx-auto mt-3 max-w-md text-body-lg text-ink-600">
           {t("Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.")}</p>
@@ -112,7 +112,7 @@ export default function PricingPage() {
       </section>
 
       {pending && (
-        <div className="mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
+        <div className="studio-card mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
@@ -153,7 +153,7 @@ export default function PricingPage() {
               return (
                 <div
                   key={pack.id}
-                  className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
+                  className="studio-card relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
                 >
                   {pack.badge && (
                     <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">
@@ -230,7 +230,7 @@ export default function PricingPage() {
           {t("Frequently asked questions")}</h2>
         <div className="mt-8 flex flex-col gap-2">
           {faqs.map((f, i) => (
-            <div key={f.q} className="rounded-[var(--radius-card)] border border-line bg-white">
+            <div key={f.q} className="studio-card rounded-[var(--radius-card)] border border-line bg-white">
               <button
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"

@@ -56,7 +56,7 @@ export function SourceComparisonModal({
               <OverlapText text={match.userSnippet} otherText={match.sourceSnippet} />
             </div>
           </div>
-          <div className="rounded-[var(--radius-card)] border border-line bg-white p-5">
+          <div className="studio-card rounded-[var(--radius-card)] border border-line bg-white p-5">
             <p className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
               {match.sourceAuthor}
             </p>

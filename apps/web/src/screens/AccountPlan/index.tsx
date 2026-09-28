@@ -81,12 +81,12 @@ export default function AccountPlanPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
-      <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Plan")}</h1>
+    <div className="studio-page collection-editorial mx-auto max-w-5xl px-5 py-10 sm:px-8">
+      <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR MEMBERSHIP")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Plan")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">{t("Usage, billing, and subscription in one place.")}</p>
 
       {pending && (
-        <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5">
+        <div className="studio-card mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5">
           <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
           <div>
             <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
@@ -97,7 +97,7 @@ export default function AccountPlanPage() {
         </div>
       )}
 
-      <section className="mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+      <section className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Current plan")}</p>
@@ -122,7 +122,7 @@ export default function AccountPlanPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+      <section className="studio-card mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink-900">
           <ShieldCheck size={17} weight="bold" />
           {t("Subscription management")}</h2>
@@ -226,7 +226,7 @@ export default function AccountPlanPage() {
           {creditPacks.map((pack) => (
             <div
               key={pack.id}
-              className="relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
+              className="studio-card relative flex flex-col items-center rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center"
             >
               {pack.badge && (
                 <span className="absolute -top-3 rounded-full brand-gradient px-3 py-1 text-[0.6875rem] font-bold text-white">

@@ -46,7 +46,7 @@ export function PlanCard({
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-[var(--radius-card-lg)] border bg-white p-7",
+        "studio-plan studio-card relative flex flex-col rounded-[var(--radius-card-lg)] border bg-white p-7",
         plan.mostPopular
           ? "border-brand-500 shadow-[0_20px_48px_-16px_rgba(30,79,196,0.35)]"
           : "border-line shadow-[var(--shadow-card)]",

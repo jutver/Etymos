@@ -63,8 +63,8 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
-      <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+    <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
+      <div className="studio-page mx-auto flex size-14 items-center justify-center rounded-full bg-brand-100 text-brand-600">
         <EnvelopeSimple size={28} weight="fill" />
       </div>
 

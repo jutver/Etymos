@@ -10,6 +10,7 @@ import { report } from "./vi/report";
 import { landing } from "./vi/landing";
 import { account } from "./vi/account";
 import { billing } from "./vi/billing";
+import { editorial } from "./vi/editorial";
 
 export const vi: Record<string, string> = {
   ...common,
@@ -20,4 +21,5 @@ export const vi: Record<string, string> = {
   ...landing,
   ...account,
   ...billing,
+  ...editorial,
 };

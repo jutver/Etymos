@@ -58,7 +58,7 @@ export default function WaitlistPage() {
       </header>
 
       <div className="flex flex-1 items-start justify-center px-5 pb-16 sm:px-8">
-        <div className="w-full max-w-md rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
+        <div className="studio-card w-full max-w-md rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
           <div
             className={
               rejected
