@@ -12,6 +12,7 @@ import {
   ListNumbers,
   LockSimple,
   PaintBucket,
+  PencilSimple,
   Table,
   TextAlignCenter,
   TextAlignJustify,
@@ -179,13 +180,17 @@ function Divider() {
   return <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-line" />;
 }
 
+export type ReportView = "document" | "original" | "edit";
+
 export interface FormatToolbarProps {
   locked: boolean;
   onRequestUnlock: () => void;
-  /** Only rendered when the document actually has an original PDF to show. */
+  /** The Original tab is only rendered when the document actually has an original PDF to show. */
   hasOriginal: boolean;
-  view: "document" | "original";
-  onViewChange: (view: "document" | "original") => void;
+  /** "document" is the read-only extracted text, "edit" the same text made
+   * editable with the formatting tools. */
+  view: ReportView;
+  onViewChange: (view: ReportView) => void;
   /** Plagiarism highlights on/off in the Document view. The switch only
    * renders when `onToggleHighlights` is provided and the Document view is
    * showing (the Original view has its own highlight layer). */
@@ -225,29 +230,26 @@ export function FormatToolbar({
         aria-controls="report-document-editor"
         className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-xl border border-line/80 bg-white/95 px-2 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-md"
       >
-        {hasOriginal && (
-          <>
-            <div className="flex items-center rounded-full bg-surface-muted p-0.5">
-              {(["document", "original"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => onViewChange(v)}
-                  aria-pressed={view === v}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    view === v ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-900",
-                  )}
-                >
-                  {v === "document" ? t("Document") : t("Original")}
-                </button>
-              ))}
-            </div>
-            <Divider />
-          </>
-        )}
+        <div className="flex items-center rounded-full bg-surface-muted p-0.5">
+          {(hasOriginal ? (["document", "original", "edit"] as const) : (["document", "edit"] as const)).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onViewChange(v)}
+              aria-pressed={view === v}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                view === v ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-900",
+              )}
+            >
+              {v === "edit" && <PencilSimple size={12} weight="bold" />}
+              {v === "document" ? t("Document") : v === "original" ? t("Original") : t("Edit")}
+            </button>
+          ))}
+        </div>
+        <Divider />
 
-        {view === "document" && onToggleHighlights && (
+        {view !== "original" && onToggleHighlights && (
           <>
             <button
               type="button"

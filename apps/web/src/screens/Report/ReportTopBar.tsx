@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ArrowsClockwise,
   ClockCounterClockwise,
   DownloadSimple,
   FloppyDisk,
@@ -164,14 +163,13 @@ export interface ReportTopBarProps {
   onRename: (next: string) => void;
   onGoHome: () => void;
   locked: boolean;
-  onToggleLock: () => void;
+  /** Omit to hide the lock button (the Report screen edits via the Edit tab). */
+  onToggleLock?: () => void;
   dirty: boolean;
   saving: boolean;
   onSave: () => void;
   versions: DocumentVersion[];
   onRestoreVersion: (version: DocumentVersion) => void;
-  rechecking: boolean;
-  onRecheck: () => void;
   exporting: boolean;
   onExport: () => void;
   exportLocked: boolean;
@@ -190,8 +188,6 @@ export function ReportTopBar({
   onSave,
   versions,
   onRestoreVersion,
-  rechecking,
-  onRecheck,
   exporting,
   onExport,
   exportLocked,
@@ -223,18 +219,19 @@ export function ReportTopBar({
             )}
           </VersionHistoryMenu>
 
-          <BarIconButton
-            label={locked ? t("Unlock editing") : t("Lock editing")}
-            active={!locked}
-            onClick={onToggleLock}
-            aria-pressed={!locked}
-          >
-            {locked ? <LockSimple size={18} weight="fill" /> : <LockSimpleOpen size={18} />}
-          </BarIconButton>
-
-          <BarIconButton label={rechecking ? t("Rechecking…") : t("Recheck document")} onClick={onRecheck}>
-            <ArrowsClockwise size={18} className={cn(rechecking && "animate-spin motion-reduce:animate-none")} />
-          </BarIconButton>
+          {/* Editing now happens in the toolbar's "Edit" tab, so the Report
+              screen no longer passes a lock toggle; the button stays for any
+              caller that still does. */}
+          {onToggleLock && (
+            <BarIconButton
+              label={locked ? t("Unlock editing") : t("Lock editing")}
+              active={!locked}
+              onClick={onToggleLock}
+              aria-pressed={!locked}
+            >
+              {locked ? <LockSimple size={18} weight="fill" /> : <LockSimpleOpen size={18} />}
+            </BarIconButton>
+          )}
 
           <BarIconButton
             label={exportLocked ? t("Export PDF — upgrade to unlock") : t("Export PDF")}

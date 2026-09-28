@@ -19,7 +19,7 @@ import { SourceComparisonModal } from "./SourceComparisonModal";
 import { CitationDialog } from "../../components/CitationDialog";
 import { RewritePanel } from "./RewritePanel";
 import { ReportTopBar } from "./ReportTopBar";
-import { FormatToolbar } from "./FormatToolbar";
+import { FormatToolbar, type ReportView } from "./FormatToolbar";
 import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
 import { SourcesSidebar } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
@@ -29,6 +29,7 @@ import { aiFlaggedPassageIds, buildMatchFocusMap, buildRenderedPassages, countWo
 import { isOverLimit } from "./renderPassageText";
 import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
+import { applySavedVersion } from "./applySavedVersion";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
 
@@ -81,7 +82,9 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [refetchNonce, setRefetchNonce] = useState(0);
+  // Nothing bumps this since the "Recheck document" button was removed; it
+  // stays 0 so the cached report is used, as before.
+  const [refetchNonce] = useState(0);
 
   useEffect(() => {
     if (!id || (cachedDoc && refetchNonce === 0)) return;
@@ -161,6 +164,9 @@ export default function ReportPage() {
 
   // --- Editor state --------------------------------------------------------
   const editorRef = useRef<HTMLDivElement>(null);
+  // The read-only Document tab's own editor — `editorRef` is always the Edit
+  // tab's, which is what Save, rewrites and version restores work on.
+  const documentViewEditorRef = useRef<HTMLDivElement>(null);
   // Lets FormatToolbar's "Insert table" button ask the canvas to add a
   // structural block — no longer possible via `document.execCommand` now
   // that the document is a real block array (see DocumentCanvas.tsx).
@@ -181,7 +187,6 @@ export default function ReportPage() {
   const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
   const [rewriteMatch, setRewriteMatch] = useState<MatchedSource | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [locked, setLocked] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -189,7 +194,15 @@ export default function ReportPage() {
   // Default to the Original PDF view with plagiarism highlighted directly on
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
-  const [view, setView] = useState<"document" | "original">("original");
+  const [view, setView] = useState<ReportView>("original");
+  // Only the Edit tab lets the user type; Document and Original are read-only.
+  const locked = view !== "edit";
+  // Document and Edit show the extracted text; Original swaps in the PDF
+  // viewer. They are two separate editors: Document always shows the text as
+  // it was checked, Edit shows the user's (saved) edits. The Edit editor stays
+  // mounted, hidden, while Document is showing, so unsaved typing survives a
+  // look at the unedited text.
+  const showsText = view !== "original";
   const [stats, setStats] = useState({ words: 0, characters: 0 });
   const [pageState, setPageState] = useState({ page: 1, pageCount: 1 });
   const [originalPageState, setOriginalPageState] = useState({ page: 1, pageCount: 1 });
@@ -242,6 +255,34 @@ export default function ReportPage() {
     };
   }, [id]);
 
+  // Show the latest saved version in the Document/Edit editor, not the text
+  // from the check: the editor is rebuilt from `doc.passages` whenever it
+  // mounts (reload, or coming back from the Original tab). Skipped while the
+  // editor holds unsaved typing so that is never overwritten.
+  const latestSavedHtml = versions[0]?.html;
+  // The editor element this effect last saw. A different one means the editor
+  // was just (re)mounted — e.g. the page opened on the Original tab, where the
+  // baseline above was read while no editor existed — so nothing can have
+  // been typed into it yet and its fresh text is the baseline.
+  const syncedEditorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!showsText || !editor) return;
+    if (syncedEditorRef.current !== editor) {
+      syncedEditorRef.current = editor;
+      baselineTextRef.current = editor.innerText;
+      setStats({ words: countWords(editor.innerText), characters: editor.innerText.length });
+      setDirty(false);
+    }
+    if (!latestSavedHtml) return;
+    if (editor.innerText !== baselineTextRef.current) return;
+    if (!applySavedVersion(editor, latestSavedHtml)) return;
+    const text = editor.innerText;
+    baselineTextRef.current = text;
+    setStats({ words: countWords(text), characters: text.length });
+    setDirty(false);
+  }, [showsText, latestSavedHtml, doc?.id, resetKey]);
+
   const visibleMatches = useMemo(
     () =>
       doc ? (isFree ? doc.matches.filter((m) => m.detectionType === "traditional") : doc.matches) : [],
@@ -291,6 +332,9 @@ export default function ReportPage() {
     setStats({ words: countWords(text), characters: text.length });
     setDirty(text !== baselineTextRef.current);
   }, []);
+
+  // The Document tab is read-only, so it has nothing to report.
+  const ignoreInput = useCallback(() => {}, []);
 
   const handlePageChange = useCallback((page: number, pageCount: number) => {
     setPageState({ page, pageCount });
@@ -403,22 +447,18 @@ export default function ReportPage() {
     });
   }
 
-  // The Original view has no editable text, so accepting from there switches to
-  // the Document view first and applies the rewrite once the editor is mounted.
+  // Only the Edit view has editable text, so accepting from another view switches to
+  // the Edit view first and applies the rewrite once the editor is mounted.
   const pendingRewriteRef = useRef<{ match: MatchedSource; rewritten: string } | null>(null);
 
-  // Reading mode is a deliberate "don't change my document" lock, so neither
-  // opening a rewrite nor accepting one may edit through it: tell the user what
-  // to do instead. (The Original view has no lock control of its own — the
-  // lock lives on the Document view's toolbar — so the hint differs there.)
+  // Document and Original are read-only views, so neither opening a rewrite
+  // nor accepting one may edit through them: tell the user to switch to the
+  // Edit tab instead.
   function notifyReadingMode() {
     pushToast({
       kind: "warning",
       title: tr("You're in reading mode"),
-      description:
-        view === "original"
-          ? tr("The document can't be edited in reading mode. Switch to the Document tab and choose \"Reading mode — unlock to edit\", then try again.")
-          : tr("The document can't be edited in reading mode. Choose \"Reading mode — unlock to edit\" in the toolbar to switch modes, then continue rewriting."),
+      description: tr("The document can only be edited in the Edit tab. Switch to it in the toolbar, then try again."),
     });
   }
 
@@ -429,9 +469,9 @@ export default function ReportPage() {
       return false;
     }
     trackEvent("rewrite_accepted");
-    if (view !== "document") {
+    if (view !== "edit") {
       pendingRewriteRef.current = { match, rewritten };
-      setView("document");
+      setView("edit");
       return true;
     }
     replaceFlaggedPassage(match, rewritten);
@@ -439,7 +479,7 @@ export default function ReportPage() {
   }
 
   useEffect(() => {
-    if (view !== "document" || !pendingRewriteRef.current) return;
+    if (view !== "edit" || !pendingRewriteRef.current) return;
     const { match, rewritten } = pendingRewriteRef.current;
     pendingRewriteRef.current = null;
     replaceFlaggedPassage(match, rewritten);
@@ -501,17 +541,14 @@ export default function ReportPage() {
   }
 
   function handleRestoreVersion(version: DocumentVersion) {
-    if (editorRef.current) editorRef.current.innerHTML = version.html;
+    // Block by block first, so the Document tab stays read-only afterwards;
+    // the whole-HTML swap is kept for snapshots with no matching blocks.
+    if (editorRef.current && !applySavedVersion(editorRef.current, version.html)) {
+      editorRef.current.innerHTML = version.html;
+    }
     baselineTextRef.current = editorRef.current?.innerText ?? "";
     setDirty(false);
     pushToast({ kind: "info", title: tl("Restored {{label}}", { label: version.label }) });
-  }
-
-  function handleRecheck() {
-    if (loading) return;
-    setRefetchNonce((n) => n + 1);
-    setResolvedIds(new Set());
-    pushToast({ kind: "info", title: tr("Rechecking"), description: tr("Pulling the latest match results.") });
   }
 
   function handleCite(match: MatchedSource) {
@@ -584,14 +621,11 @@ export default function ReportPage() {
         onRename={handleRename}
         onGoHome={() => navigate("/upload")}
         locked={locked}
-        onToggleLock={() => setLocked((v) => !v)}
         dirty={dirty}
         saving={saving}
         onSave={handleSave}
         versions={versions}
         onRestoreVersion={handleRestoreVersion}
-        rechecking={loading}
-        onRecheck={handleRecheck}
         exporting={exporting}
         onExport={handleExport}
         exportLocked={isFree}
@@ -607,7 +641,7 @@ export default function ReportPage() {
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <FormatToolbar
             locked={locked}
-            onRequestUnlock={() => setLocked(false)}
+            onRequestUnlock={() => setView("edit")}
             hasOriginal={hasOriginal}
             view={view}
             onViewChange={setView}
@@ -618,7 +652,7 @@ export default function ReportPage() {
               // also drops any focused source rather than fighting it.
               setActiveMatchId(null);
             }}
-            focusActive={view === "document" && focusMatchId !== null}
+            focusActive={showsText && focusMatchId !== null}
             onClearFocus={clearSelection}
             onInsertTable={() => canvasRef.current?.insertTable()}
           />
@@ -642,7 +676,30 @@ export default function ReportPage() {
               />
             </div>
           ) : (
-            <div className="relative flex min-h-0 flex-1 flex-col">
+            <>
+            {view === "document" && (
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                {/* The text exactly as checked: never takes saved edits, always read-only. */}
+                <DocumentCanvas
+                  rendered={rendered}
+                  colorIndexByMatch={colorIndexByMatch}
+                  activeMatchId={focusMatchId}
+                  focusTick={focusTick}
+                  showHighlights={showHighlights}
+                  onSelectMatch={handleSelectMatch}
+                  onClearSelection={clearSelection}
+                  locked
+                  onInput={ignoreInput}
+                  onPageChange={handlePageChange}
+                  resetKey={resetKey}
+                  editorRef={documentViewEditorRef}
+                  overLimitOffset={overLimitOffset}
+                  aiFlaggedPassageIds={aiFlaggedIds}
+                  activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
+                />
+              </div>
+            )}
+            <div className={cn("relative min-h-0 flex-1 flex-col", view === "edit" ? "flex" : "hidden")}>
               <DocumentCanvas
                 ref={canvasRef}
                 rendered={rendered}
@@ -662,9 +719,10 @@ export default function ReportPage() {
                 activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
               />
             </div>
+            </>
           )}
 
-          {view === "document" ? (
+          {view === "edit" ? (
             <WordCountPill
               words={stats.words}
               characters={stats.characters}
@@ -677,8 +735,8 @@ export default function ReportPage() {
             <WordCountPill
               words={originalStats.words}
               characters={originalStats.characters}
-              page={originalPageState.page}
-              pageCount={originalPageState.pageCount}
+              page={view === "document" ? pageState.page : originalPageState.page}
+              pageCount={view === "document" ? pageState.pageCount : originalPageState.pageCount}
               dirty={false}
               locked
             />
@@ -689,7 +747,7 @@ export default function ReportPage() {
           matches={visibleMatches}
           lockedCount={lockedMatches.length}
           activeMatchId={activeMatchId}
-          locatedIds={view === "document" ? locatedIds : undefined}
+          locatedIds={showsText ? locatedIds : undefined}
           resolvedIds={resolvedIds}
           explanationLocked={isFree}
           rewriteLocked={plan !== "professional"}

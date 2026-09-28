@@ -39,6 +39,7 @@ export const report: Record<string, string> = {
   "Delete column": "Xóa cột",
   "Delete row": "Xóa hàng",
   "Document": "Tài liệu",
+  "Edit": "Chỉnh sửa",
   "Document formatting": "Định dạng tài liệu",
   "Document name": "Tên tài liệu",
   "Document text": "Nội dung tài liệu",
@@ -89,13 +90,9 @@ export const report: Record<string, string> = {
   "Paragraphs that look machine-written": "Các đoạn có vẻ do máy viết",
   "Passage replaced": "Đã thay thế đoạn văn",
   "Plagiarism": "Đạo văn",
-  "Pulling the latest match results.": "Đang lấy kết quả trùng khớp mới nhất.",
   "Quote": "Trích dẫn",
   "Reading": "Đọc",
   "Reading mode — unlock to edit": "Chế độ đọc — mở khóa để chỉnh sửa",
-  "Recheck document": "Kiểm tra lại tài liệu",
-  "Rechecking": "Đang kiểm tra lại",
-  "Rechecking…": "Đang kiểm tra lại…",
   "Red": "Đỏ",
   "Redo": "Làm lại",
   "Regenerate": "Tạo lại",
@@ -124,10 +121,8 @@ export const report: Record<string, string> = {
   "Teal": "Xanh ngọc",
   "Text colour": "Màu chữ",
   "Text colour {{label}}": "Màu chữ {{label}}",
-  "The document can't be edited in reading mode. Choose \"Reading mode — unlock to edit\" in the toolbar to switch modes, then continue rewriting.":
-    "Không thể chỉnh sửa tài liệu ở chế độ đọc. Hãy chọn \"Chế độ đọc — mở khóa để chỉnh sửa\" trên thanh công cụ để đổi chế độ, rồi tiếp tục viết lại.",
-  "The document can't be edited in reading mode. Switch to the Document tab and choose \"Reading mode — unlock to edit\", then try again.":
-    "Không thể chỉnh sửa tài liệu ở chế độ đọc. Hãy chuyển sang tab Tài liệu và chọn \"Chế độ đọc — mở khóa để chỉnh sửa\", rồi thử lại.",
+  "The document can only be edited in the Edit tab. Switch to it in the toolbar, then try again.":
+    "Chỉ có thể chỉnh sửa tài liệu ở tab Chỉnh sửa. Hãy chuyển sang tab đó trên thanh công cụ, rồi thử lại.",
   "The flagged sentence now reads as your rewrite. Save to keep this version.":
     "Câu bị đánh dấu giờ đã là bản viết lại của bạn. Hãy lưu để giữ phiên bản này.",
   "The new name is shown locally but could not be saved.": "Tên mới chỉ hiển thị tại máy này và chưa được lưu.",
