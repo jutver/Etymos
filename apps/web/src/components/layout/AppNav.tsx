@@ -99,7 +99,7 @@ export function AppNav() {
             </button>
 
             {menuOpen && (
-              <div className="studio-card absolute right-0 top-[calc(100%+10px)] lg:bottom-[calc(100%+10px)] lg:top-auto w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)]">
+              <div className="studio-card absolute right-0 top-[calc(100%+10px)] z-50 w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)] lg:bottom-[calc(100%+10px)] lg:left-0 lg:right-auto lg:top-auto lg:w-full">
                 <div className="px-3 py-2.5">
                   <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
                   <p className="truncate text-xs text-ink-500">{user?.email ?? t("{{plan}} plan", { plan: planLabel(plan) })}</p>
