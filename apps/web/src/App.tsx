@@ -34,7 +34,7 @@ import {
   EmailVerifiedPage,
   ForgotPasswordPage,
   ResetPasswordPage,
-  RecoveryEmailVerifyPage,
+  RecoverAccountPage,
   WaitlistPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
@@ -148,7 +148,7 @@ function App() {
           <Route path="/email-verified" element={<EmailVerifiedPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/recovery-email/verify" element={<RecoveryEmailVerifyPage />} />
+          <Route path="/recover-account" element={<RecoverAccountPage />} />
         </Route>
 
         <Route element={<RequireAuth />}>

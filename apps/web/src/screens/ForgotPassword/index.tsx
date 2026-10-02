@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Envelope, WarningCircle } from "@phosphor-icons/react";
+import { Envelope, EnvelopeSimple, WarningCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
 import { AuthResultCard } from "../../components/auth/AuthResultCard";
-import { requestResetViaRecoveryEmail } from "../../lib/api";
 import { t } from "../../lib/i18n";
 
 /** Supabase refuses a second reset email to the same user within 60 seconds;
@@ -38,15 +37,12 @@ export default function ForgotPasswordPage() {
     inFlight.current = true;
     setError(null);
     setSending(true);
-    // Both halves run for every request so the response never reveals which
-    // kind of address (if any) matched: Supabase handles login emails, the
-    // backend handles confirmed recovery emails.
-    const [{ error: resetError }] = await Promise.all([
-      supabase.auth.resetPasswordForEmail(address, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      }),
-      requestResetViaRecoveryEmail(address),
-    ]);
+    // Login emails only. Supabase answers the same whether or not an account
+    // exists, so the page never reveals that. Recovery emails use a code on
+    // /recover-account instead.
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(address, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     inFlight.current = false;
     setSending(false);
 
@@ -77,14 +73,17 @@ export default function ForgotPasswordPage() {
             <Button size="lg" fullWidth loading={sending} disabled={cooldown > 0} onClick={() => void sendLink(sentTo)}>
               {cooldown > 0 ? t("Send again in {{seconds}}s", { seconds: cooldown }) : t("Send again")}
             </Button>
-            <Link to="/login" className="text-sm font-semibold text-brand-600 hover:underline">
+            <Link to="/recover-account" className="text-sm font-semibold text-brand-600 hover:underline">
+              {t("Can't access this email? Use your recovery email")}
+            </Link>
+            <Link to="/login" className="text-sm font-semibold text-ink-600 hover:underline">
               {t("Back to Login")}
             </Link>
           </>
         }
       >
         <p>
-          {t("If an account uses {{email}} as its login email or confirmed recovery email, we've sent it a link to choose a new password.", {
+          {t("If an Etymos account uses {{email}}, we've sent it a link to choose a new password.", {
             email: sentTo,
           })}
         </p>
@@ -98,7 +97,7 @@ export default function ForgotPasswordPage() {
     <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
       <h1 className="text-h3 font-bold tracking-tight text-navy-900">{t("Forgot your password?")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
-        {t("Enter your login email or confirmed recovery email and we'll send you a link to choose a new one.")}
+        {t("Enter the email you log in with and we'll send you a link to choose a new one.")}
       </p>
 
       {error && (
@@ -129,6 +128,14 @@ export default function ForgotPasswordPage() {
           {t("Send reset link")}
         </Button>
       </form>
+
+      <Link
+        to="/recover-account"
+        className="mt-4 flex items-center justify-center gap-2 rounded-[var(--radius-control)] border border-line px-4 py-3 text-sm font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:bg-surface-muted"
+      >
+        <EnvelopeSimple size={17} className="text-brand-600" />
+        {t("Can't access this email? Use your recovery email")}
+      </Link>
 
       <p className="mt-6 text-center text-sm text-ink-600">
         {t("Remembered it?")}{" "}

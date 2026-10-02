@@ -100,16 +100,16 @@ class FakeDB:
     def __init__(self):
         self.tables: dict = {}
         self.generated: list = []
-        users = {"user-1": "owner@example.com", "user-2": "other@example.com"}
+        users = {"user-1": "owner@example.com", "user-2": "work@example.com", "user-3": "third@example.com"}
         db = self
 
         class _Admin:
             def get_user_by_id(self, uid):
-                return SimpleNamespace(user=SimpleNamespace(email=users[uid]))
+                return SimpleNamespace(user=SimpleNamespace(email=users[uid], user_metadata={"display_name": f"Name {uid}"}))
 
             def generate_link(self, params):
                 db.generated.append(params)
-                return SimpleNamespace(properties=SimpleNamespace(action_link="https://supabase.test/verify?token=abc"))
+                return SimpleNamespace(properties=SimpleNamespace(hashed_token="hashed-abc"))
 
         self.auth = SimpleNamespace(admin=_Admin())
 
@@ -135,8 +135,12 @@ def env(monkeypatch):
     return SimpleNamespace(client=TestClient(app), db=db, sent=sent, current=current)
 
 
-def _token_from(sent_item) -> str:
-    return re.search(r"#token=([\w-]+)", sent_item[1].button_url).group(1)
+def _code_from(sent_item) -> str:
+    return sent_item[1].code
+
+
+def _verified(email="backup@example.com", user_id="user-1"):
+    return {"user_id": user_id, "email": email, "verified_at": "2026-10-01T00:00:00+00:00"}
 
 
 # --- helpers ---------------------------------------------------------------
@@ -163,23 +167,22 @@ def test_client_ip_trusts_cloudflare_header_only_from_loopback():
     assert rate_limit.client_ip(_request("198.51.100.4", "203.0.113.9")) == "198.51.100.4"
 
 
-# --- set / verify ----------------------------------------------------------
+# --- confirming the address (signed in) ----------------------------------
 
 
-def test_set_sends_verify_link_in_fragment_and_is_pending(env):
+def test_set_emails_a_confirm_code_and_is_pending(env):
     r = env.client.put("/api/account/recovery-email", json={"email": "Backup@Example.com", "locale": "en"})
-    assert r.status_code == 200
     assert r.json() == {"email": "backup@example.com", "verified": False, "pending": True}
     to, content, lang = env.sent[0]
     assert to == "backup@example.com" and lang == "en"
-    assert "/recovery-email/verify#token=" in content.button_url
+    assert content.button_url is None and len(_code_from(env.sent[0])) == 6
     stored = env.db.tables["recovery_emails"][0]
-    assert stored["verify_token_hash"] == recovery_email.hash_token(_token_from(env.sent[0]))
+    assert stored["verify_code_hash"] == recovery_email.hash_code("confirm", "user-1", _code_from(env.sent[0]))
 
 
 def test_cannot_use_login_email_as_recovery(env):
     r = env.client.put("/api/account/recovery-email", json={"email": "OWNER@example.com"})
-    assert r.status_code == 400
+    assert r.status_code == 400 and r.json()["detail"] == "same_as_login"
 
 
 def test_resend_to_same_address_is_throttled(env):
@@ -188,57 +191,126 @@ def test_resend_to_same_address_is_throttled(env):
     assert r.status_code == 429
 
 
-def test_verify_marks_verified_and_token_is_single_use(env):
+def test_correct_code_confirms_and_cannot_be_reused(env):
     env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
-    token = _token_from(env.sent[0])
-    assert env.client.post("/api/account/recovery-email/verify", json={"token": token}).json()["verified"] is True
+    code = _code_from(env.sent[0])
+    assert env.client.post("/api/account/recovery-email/confirm", json={"code": code}).json()["verified"] is True
     assert env.client.get("/api/account/recovery-email").json()["verified"] is True
-    assert env.client.post("/api/account/recovery-email/verify", json={"token": token}).status_code == 404
+    assert env.client.post("/api/account/recovery-email/confirm", json={"code": code}).status_code == 400
 
 
-def test_verify_rejects_expired_token(env):
+def test_wrong_code_then_lockout_after_max_attempts(env):
+    env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
+    real = _code_from(env.sent[0])
+    wrong = "000000" if real != "000000" else "111111"
+    for _ in range(recovery_email.MAX_ATTEMPTS - 1):
+        r = env.client.post("/api/account/recovery-email/confirm", json={"code": wrong})
+        assert r.status_code == 400 and r.json()["detail"] == "wrong_code"
+    r = env.client.post("/api/account/recovery-email/confirm", json={"code": wrong})
+    assert r.status_code == 429
+    # The code is discarded: even the right one no longer works.
+    assert env.client.post("/api/account/recovery-email/confirm", json={"code": real}).json()["detail"] == "no_code"
+
+
+def test_expired_code_is_rejected(env):
     env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
     env.db.tables["recovery_emails"][0]["verify_expires_at"] = (
         datetime.now(timezone.utc) - timedelta(seconds=1)
     ).isoformat()
-    r = env.client.post("/api/account/recovery-email/verify", json={"token": _token_from(env.sent[0])})
+    r = env.client.post("/api/account/recovery-email/confirm", json={"code": _code_from(env.sent[0])})
     assert r.status_code == 410
 
 
-def test_verify_rejects_address_already_verified_by_another_account(env):
-    env.db.tables["recovery_emails"] = [
-        {"user_id": "user-2", "email": "backup@example.com", "verified_at": "2026-10-01T00:00:00+00:00"}
-    ]
+def test_several_accounts_can_confirm_the_same_address(env):
+    env.db.tables["recovery_emails"] = [_verified(user_id="user-2")]
     env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
-    r = env.client.post("/api/account/recovery-email/verify", json={"token": _token_from(env.sent[0])})
-    assert r.status_code == 409
+    r = env.client.post("/api/account/recovery-email/confirm", json={"code": _code_from(env.sent[0])})
+    assert r.status_code == 200 and r.json()["verified"] is True
 
 
-# --- forgot password via recovery address ---------------------------------
+def test_code_must_be_six_digits(env):
+    assert env.client.post("/api/account/recovery-email/confirm", json={"code": "12ab56"}).status_code == 422
 
 
-def test_forgot_sends_supabase_recovery_link_to_verified_address(env):
-    env.db.tables["recovery_emails"] = [
-        {"user_id": "user-1", "email": "backup@example.com", "verified_at": "2026-10-01T00:00:00+00:00"}
-    ]
-    r = env.client.post("/api/auth/forgot-password", json={"email": "Backup@example.com", "locale": "vi"})
+# --- recovering the account (signed out) ---------------------------------
+
+
+def test_request_sends_reset_code_to_confirmed_address(env):
+    env.db.tables["recovery_emails"] = [_verified()]
+    r = env.client.post("/api/auth/recovery/request", json={"email": "Backup@example.com", "locale": "vi"})
     assert r.status_code == 202
-    assert env.db.generated[0]["type"] == "recovery"
-    assert env.db.generated[0]["email"] == "owner@example.com"
-    assert env.db.generated[0]["options"]["redirect_to"].endswith("/reset-password")
-    to, content, _ = env.sent[0]
-    assert to == "backup@example.com" and content.button_url == "https://supabase.test/verify?token=abc"
+    to, content, lang = env.sent[0]
+    assert to == "backup@example.com" and lang == "vi" and len(content.code) == 6
 
 
-@pytest.mark.parametrize("verified_at", [None])
-def test_forgot_ignores_unverified_address(env, verified_at):
-    env.db.tables["recovery_emails"] = [{"user_id": "user-1", "email": "backup@example.com", "verified_at": verified_at}]
-    assert env.client.post("/api/auth/forgot-password", json={"email": "backup@example.com"}).status_code == 202
-    assert env.sent == [] and env.db.generated == []
-
-
-def test_forgot_gives_same_answer_for_unknown_and_invalid_addresses(env):
-    a = env.client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
-    b = env.client.post("/api/auth/forgot-password", json={"email": "garbage"})
-    assert a.status_code == b.status_code == 202 and a.json() == b.json()
+def test_request_ignores_unconfirmed_and_unknown_addresses_with_same_answer(env):
+    env.db.tables["recovery_emails"] = [{"user_id": "user-1", "email": "backup@example.com", "verified_at": None}]
+    a = env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    b = env.client.post("/api/auth/recovery/request", json={"email": "nobody@example.com"})
+    c = env.client.post("/api/auth/recovery/request", json={"email": "garbage"})
+    assert a.status_code == b.status_code == c.status_code == 202 and a.json() == b.json() == c.json()
     assert env.sent == []
+
+
+def _verify(env, code, user_id=None, email="backup@example.com"):
+    body = {"email": email, "code": code}
+    if user_id:
+        body["user_id"] = user_id
+    return env.client.post("/api/auth/recovery/verify", json=body)
+
+
+def test_correct_code_lists_accounts_then_recovers_the_chosen_one(env):
+    env.db.tables["recovery_emails"] = [_verified(user_id="user-1"), _verified(user_id="user-2")]
+    env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    assert len(env.sent) == 1  # one email for the address, not one per account
+    assert "owner@example.com" in env.sent[0][1].paragraphs[0] and "work@example.com" in env.sent[0][1].paragraphs[0]
+    code = _code_from(env.sent[0])
+
+    listed = _verify(env, code)
+    assert listed.status_code == 200
+    assert listed.json() == {
+        "accounts": [
+            {"user_id": "user-1", "email": "owner@example.com", "name": "Name user-1"},
+            {"user_id": "user-2", "email": "work@example.com", "name": "Name user-2"},
+        ]
+    }
+    assert env.db.generated == []  # listing doesn't spend the code or mint anything
+
+    chosen = _verify(env, code, user_id="user-2")
+    assert chosen.json() == {"token_hash": "hashed-abc"}
+    assert env.db.generated == [{"type": "recovery", "email": "work@example.com"}]
+    # Spent for every account on the address.
+    assert _verify(env, code).status_code == 400
+    assert _verify(env, code, user_id="user-1").status_code == 400
+
+
+def test_cannot_choose_an_account_the_code_does_not_cover(env):
+    env.db.tables["recovery_emails"] = [_verified(user_id="user-1")]
+    env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    code = _code_from(env.sent[0])
+    # user-3 confirmed the address after the code went out.
+    env.db.tables["recovery_emails"].append(_verified(user_id="user-3"))
+    assert [a["user_id"] for a in _verify(env, code).json()["accounts"]] == ["user-1"]
+    assert _verify(env, code, user_id="user-3").status_code == 400
+    assert _verify(env, code, user_id="someone-else").status_code == 400
+    assert env.db.generated == []
+
+
+def test_verify_gives_one_generic_error_for_every_failure(env):
+    env.db.tables["recovery_emails"] = [_verified()]
+    env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    real = _code_from(env.sent[0])
+    wrong = "000000" if real != "000000" else "111111"
+    unknown = env.client.post("/api/auth/recovery/verify", json={"email": "nobody@example.com", "code": real})
+    bad = env.client.post("/api/auth/recovery/verify", json={"email": "backup@example.com", "code": wrong})
+    assert unknown.status_code == bad.status_code == 400
+    assert unknown.json() == bad.json() == {"detail": "invalid_code"}
+    assert env.db.generated == []
+
+
+def test_confirm_code_cannot_be_used_to_reset(env):
+    env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
+    confirm_code = _code_from(env.sent[0])
+    env.client.post("/api/account/recovery-email/confirm", json={"code": confirm_code})
+    r = _verify(env, confirm_code)
+    assert r.status_code == 400 and env.db.generated == []

@@ -1,26 +1,42 @@
 """
 recovery_email.py
 -----------------
-A user's optional second address for password recovery.
+A user's optional second address, used to get back into the account when
+the login email itself is unreachable. Supabase Auth only ever emails the
+login address, so this module owns the whole recovery-email path, and both
+of its flows authenticate with a 6-digit one-time code sent to that address:
 
-Supabase Auth only ever emails a user's primary address, so this module
-owns the whole recovery-email path:
+Confirming the address (signed in, profile page):
+  GET    /api/account/recovery-email           status
+  PUT    /api/account/recovery-email           set/replace it, emails a confirm code
+  POST   /api/account/recovery-email/confirm   check the code -> address confirmed
+  DELETE /api/account/recovery-email           remove it
 
-  GET    /api/account/recovery-email          status for the signed-in user
-  PUT    /api/account/recovery-email          set/replace it, emails a verify link
-  DELETE /api/account/recovery-email          remove it
-  POST   /api/account/recovery-email/verify   redeem a verify link (no session needed)
-  POST   /api/auth/forgot-password            send a reset link to a VERIFIED recovery address
+Recovering the account (signed out, /recover-account):
+  POST   /api/auth/recovery/request            email a reset code to a CONFIRMED address
+  POST   /api/auth/recovery/verify             check the code -> the accounts it covers,
+                                               or, with user_id, -> Supabase recovery token
 
-An address is only usable for resets once its owner clicked the verify link,
-so a typo can never route someone's reset links to a stranger. Verify tokens
-are random, single-use, stored hashed, and expire after LINK_TTL_MINUTES —
-the same 30-minute window Supabase is configured with for its own links.
+One address may be the confirmed recovery email of several accounts. A
+request sends ONE code covering all of them; verifying it without a user_id
+lists those accounts (login email + name) so the user can pick one, and
+verifying again with the chosen user_id spends the code. The list is only
+revealed after a correct code — that is, to whoever controls the inbox —
+never to someone who merely typed the address.
 
-The reset link itself is minted by Supabase (admin generate_link, type
-"recovery", for the account's primary email) so it lands on the same
-/reset-password page and expires under the same Supabase setting as a reset
-requested for the primary address.
+Codes expire after CODE_TTL_MINUTES, allow MAX_ATTEMPTS wrong guesses before
+being discarded, are stored hashed, and are scoped to one purpose — a confirm
+code can't reset a password and vice versa.
+
+The chosen account's code is exchanged for a Supabase recovery token_hash (admin
+generate_link, type "recovery", for the account's login email). The browser
+redeems it with supabase.auth.verifyOtp, which signs it into a short-lived
+recovery session that may set a new password — the same session a normal
+"forgot password" link creates.
+
+The signed-out endpoints never reveal whether an address belongs to an
+account: request always answers 202, and verify gives one generic error for
+an unknown address, a wrong code, an expired code or too many attempts.
 
 Rows live in public.recovery_emails, which has RLS on and no policies: only
 this service-role backend can read or write them.
@@ -30,6 +46,7 @@ this service-role backend can read or write them.
 # and FastAPI resolves string annotations against the wrapper's module, so
 # the request-body models would silently turn into query parameters (422).
 import hashlib
+import hmac
 import logging
 import os
 import re
@@ -42,7 +59,7 @@ from pydantic import BaseModel, Field
 
 import mailer
 from auth import AuthedUser, verify_supabase_jwt
-from email_templates import LINK_TTL_MINUTES, recovery_reset_email, recovery_verify_email
+from email_templates import LINK_TTL_MINUTES, recovery_confirm_code_email, recovery_reset_code_email
 from rate_limit import ip_key, limiter
 from supabase_client import get_client
 
@@ -51,15 +68,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 TABLE = "recovery_emails"
-PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "https://www.etymos.site").rstrip("/")
-LINK_TTL = timedelta(minutes=LINK_TTL_MINUTES)
+CODE_TTL_MINUTES = LINK_TTL_MINUTES
+CODE_TTL = timedelta(minutes=CODE_TTL_MINUTES)
+MAX_ATTEMPTS = 5
 # Minimum gap between two emails to the same recovery address, whichever
-# endpoint triggers them — stops the endpoints being used to flood an inbox.
+# flow triggers them — stops the endpoints being used to flood an inbox.
 RESEND_INTERVAL = timedelta(seconds=60)
-RATE_LIMIT_FORGOT_PASSWORD = os.getenv("RATE_LIMIT_FORGOT_PASSWORD", "10/hour")
+RATE_LIMIT_RECOVERY_REQUEST = os.getenv("RATE_LIMIT_RECOVERY_REQUEST", "10/hour")
 RATE_LIMIT_RECOVERY_VERIFY = os.getenv("RATE_LIMIT_RECOVERY_VERIFY", "30/hour")
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+Purpose = Literal["confirm", "reset"]
 
 
 class RecoveryEmailIn(BaseModel):
@@ -67,13 +87,20 @@ class RecoveryEmailIn(BaseModel):
     locale: Literal["vi", "en"] = "vi"
 
 
-class VerifyIn(BaseModel):
-    token: str = Field(min_length=20, max_length=200)
+class CodeIn(BaseModel):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
-class ForgotIn(BaseModel):
+class RecoveryRequestIn(BaseModel):
     email: str = Field(max_length=254)
     locale: Literal["vi", "en"] = "vi"
+
+
+class RecoveryVerifyIn(BaseModel):
+    email: str = Field(max_length=254)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    # Omitted: list the accounts the code covers. Set: recover that account.
+    user_id: Optional[str] = Field(default=None, max_length=64)
 
 
 def normalize_email(raw: str) -> Optional[str]:
@@ -83,8 +110,13 @@ def normalize_email(raw: str) -> Optional[str]:
     return email
 
 
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+def new_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_code(purpose: Purpose, user_id: str, code: str) -> str:
+    """Bound to purpose and account, so a hash can't be replayed across either."""
+    return hashlib.sha256(f"{purpose}:{user_id}:{code}".encode("utf-8")).hexdigest()
 
 
 def _now() -> datetime:
@@ -115,6 +147,11 @@ def _row_for_user(client, user_id: str) -> Optional[dict]:
     return res.data[0] if res.data else None
 
 
+def _verified_rows_for_email(client, email: str) -> list[dict]:
+    res = client.table(TABLE).select("*").eq("email", email).not_.is_("verified_at", "null").execute()
+    return res.data or []
+
+
 def _status(row: Optional[dict]) -> dict:
     if not row:
         return {"email": None, "verified": False, "pending": False}
@@ -127,6 +164,41 @@ def _recently_sent(row: Optional[dict]) -> bool:
     return sent is not None and _now() - sent < RESEND_INTERVAL
 
 
+_COLUMNS = {
+    "confirm": ("verify_code_hash", "verify_expires_at", "verify_attempts"),
+    "reset": ("reset_code_hash", "reset_expires_at", "reset_attempts"),
+}
+
+
+def _cleared(purpose: Purpose) -> dict:
+    hash_col, exp_col, att_col = _COLUMNS[purpose]
+    return {hash_col: None, exp_col: None, att_col: 0}
+
+
+def _check_code(client, row: dict, purpose: Purpose, code: str) -> str:
+    """Returns "ok", "none", "expired", "too_many" or "wrong", and keeps the
+    row's attempt counter / code in step with the outcome."""
+    hash_col, exp_col, att_col = _COLUMNS[purpose]
+    stored = row.get(hash_col)
+    if not stored:
+        return "none"
+    expires = _parse_ts(row.get(exp_col))
+    if expires is None or expires <= _now():
+        client.table(TABLE).update(_cleared(purpose)).eq("user_id", row["user_id"]).execute()
+        return "expired"
+    if hmac.compare_digest(stored, hash_code(purpose, row["user_id"], code)):
+        return "ok"
+    attempts = int(row.get(att_col) or 0) + 1
+    if attempts >= MAX_ATTEMPTS:
+        client.table(TABLE).update(_cleared(purpose)).eq("user_id", row["user_id"]).execute()
+        return "too_many"
+    client.table(TABLE).update({att_col: attempts}).eq("user_id", row["user_id"]).execute()
+    return "wrong"
+
+
+# --- Confirming the address (signed in) ----------------------------------
+
+
 @router.get("/api/account/recovery-email")
 def get_recovery_email(user: AuthedUser = Depends(verify_supabase_jwt)):
     return _status(_row_for_user(_client(), user.user_id))
@@ -134,14 +206,14 @@ def get_recovery_email(user: AuthedUser = Depends(verify_supabase_jwt)):
 
 @router.put("/api/account/recovery-email")
 def set_recovery_email(body: RecoveryEmailIn, user: AuthedUser = Depends(verify_supabase_jwt)):
-    """Set (or re-send the verify link for) the caller's recovery address.
-    Replacing a verified address un-verifies it until the new one is
-    confirmed — the old address stops working for resets immediately."""
+    """Set (or re-send the code for) the caller's recovery address.
+    Replacing a confirmed address un-confirms it until the new one is
+    confirmed — the old address stops working for recovery immediately."""
     email = normalize_email(body.email)
     if email is None:
-        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+        raise HTTPException(status_code=400, detail="invalid_email")
     if user.email and email == user.email.lower():
-        raise HTTPException(status_code=400, detail="Use a different address from your login email.")
+        raise HTTPException(status_code=400, detail="same_as_login")
     if not mailer.is_configured():
         raise HTTPException(status_code=503, detail="Email sending is not configured on this server.")
 
@@ -150,32 +222,56 @@ def set_recovery_email(body: RecoveryEmailIn, user: AuthedUser = Depends(verify_
     if row and row["email"] == email and row.get("verified_at"):
         return _status(row)
     if row and row["email"] == email and _recently_sent(row):
-        raise HTTPException(status_code=429, detail="We just sent a link to this address. Wait a minute before asking again.")
+        raise HTTPException(status_code=429, detail="recently_sent")
 
-    token = secrets.token_urlsafe(32)
+    code = new_code()
     now = _now()
     client.table(TABLE).upsert(
         {
             "user_id": user.user_id,
             "email": email,
             "verified_at": None,
-            "verify_token_hash": hash_token(token),
-            "verify_expires_at": (now + LINK_TTL).isoformat(),
+            "verify_code_hash": hash_code("confirm", user.user_id, code),
+            "verify_expires_at": (now + CODE_TTL).isoformat(),
+            "verify_attempts": 0,
+            **_cleared("reset"),
             "last_sent_at": now.isoformat(),
             "updated_at": now.isoformat(),
         },
         on_conflict="user_id",
     ).execute()
 
-    # In the URL fragment, not the query: fragments never reach server logs
-    # or Referer headers.
-    url = f"{PUBLIC_APP_URL}/recovery-email/verify#token={token}"
     try:
-        mailer.send_email(email, recovery_verify_email(body.locale, account_email=user.email or "", url=url), body.locale)
+        mailer.send_email(
+            email, recovery_confirm_code_email(body.locale, account_email=user.email or "", code=code), body.locale
+        )
     except Exception:
-        logger.exception("Failed to send recovery verification email for user_id=%s", user.user_id)
-        raise HTTPException(status_code=502, detail="We couldn't send the verification email. Try again in a few minutes.")
+        logger.exception("Failed to send recovery confirm code for user_id=%s", user.user_id)
+        raise HTTPException(status_code=502, detail="send_failed")
     return {"email": email, "verified": False, "pending": True}
+
+
+@router.post("/api/account/recovery-email/confirm")
+def confirm_recovery_email(body: CodeIn, user: AuthedUser = Depends(verify_supabase_jwt)):
+    client = _client()
+    row = _row_for_user(client, user.user_id)
+    if row is None or row.get("verified_at"):
+        raise HTTPException(status_code=400, detail="no_code")
+
+    result = _check_code(client, row, "confirm", body.code)
+    if result == "none":
+        raise HTTPException(status_code=400, detail="no_code")
+    if result == "expired":
+        raise HTTPException(status_code=410, detail="expired")
+    if result == "too_many":
+        raise HTTPException(status_code=429, detail="too_many_attempts")
+    if result == "wrong":
+        raise HTTPException(status_code=400, detail="wrong_code")
+
+    client.table(TABLE).update(
+        {"verified_at": _now().isoformat(), **_cleared("confirm"), "updated_at": _now().isoformat()}
+    ).eq("user_id", user.user_id).execute()
+    return {"email": row["email"], "verified": True, "pending": False}
 
 
 @router.delete("/api/account/recovery-email")
@@ -184,82 +280,109 @@ def delete_recovery_email(user: AuthedUser = Depends(verify_supabase_jwt)):
     return _status(None)
 
 
-@router.post("/api/account/recovery-email/verify")
-@limiter.limit(RATE_LIMIT_RECOVERY_VERIFY, key_func=ip_key)
-def verify_recovery_email(request: Request, body: VerifyIn):
-    """Redeem a verify link. Needs no session: the token itself proves the
-    click came from the inbox, and it may be opened on another device."""
-    client = _client()
-    res = client.table(TABLE).select("*").eq("verify_token_hash", hash_token(body.token)).limit(1).execute()
-    row = res.data[0] if res.data else None
-    if row is None:
-        raise HTTPException(status_code=404, detail="invalid")
-    expires = _parse_ts(row.get("verify_expires_at"))
-    if expires is None or expires <= _now():
-        raise HTTPException(status_code=410, detail="expired")
-
-    taken = (
-        client.table(TABLE)
-        .select("user_id")
-        .eq("email", row["email"])
-        .not_.is_("verified_at", "null")
-        .neq("user_id", row["user_id"])
-        .limit(1)
-        .execute()
-    )
-    if taken.data:
-        raise HTTPException(status_code=409, detail="in_use")
-
-    client.table(TABLE).update(
-        {
-            "verified_at": _now().isoformat(),
-            "verify_token_hash": None,
-            "verify_expires_at": None,
-            "updated_at": _now().isoformat(),
-        }
-    ).eq("user_id", row["user_id"]).execute()
-    return {"email": row["email"], "verified": True, "pending": False}
+# --- Recovering the account (signed out) ---------------------------------
 
 
-def _send_reset_via_recovery(email: str, locale: Literal["vi", "en"]) -> None:
+def _accounts(client, rows: list[dict]) -> list[dict]:
+    """Login email + display name for each row's account, skipping accounts
+    that no longer exist."""
+    accounts = []
+    for row in rows:
+        try:
+            user = client.auth.admin.get_user_by_id(row["user_id"]).user
+        except Exception:
+            logger.exception("Couldn't load account user_id=%s", row["user_id"])
+            continue
+        if user is None or not user.email:
+            continue
+        name = (user.user_metadata or {}).get("display_name") or ""
+        accounts.append({"user_id": row["user_id"], "email": user.email, "name": name})
+    return sorted(accounts, key=lambda a: a["email"])
+
+
+def _send_reset_code(email: str, locale: Literal["vi", "en"]) -> None:
     """Runs after the response is sent, so neither the response nor its
-    timing reveals whether `email` belongs to anyone."""
+    timing reveals whether `email` belongs to anyone. One code is stored
+    (hashed per account) on every account using this recovery address."""
     try:
         client = get_client()
         if client is None or not mailer.is_configured():
             return
-        res = client.table(TABLE).select("*").eq("email", email).not_.is_("verified_at", "null").limit(1).execute()
-        row = res.data[0] if res.data else None
-        if row is None or _recently_sent(row):
+        rows = _verified_rows_for_email(client, email)
+        if not rows or any(_recently_sent(r) for r in rows):
             return
-        account = client.auth.admin.get_user_by_id(row["user_id"]).user
-        if account is None or not account.email:
+        accounts = _accounts(client, rows)
+        if not accounts:
             return
-        link = client.auth.admin.generate_link(
-            {
-                "type": "recovery",
-                "email": account.email,
-                "options": {"redirect_to": f"{PUBLIC_APP_URL}/reset-password"},
-            }
-        )
+        code = new_code()
+        now = _now()
+        for row in rows:
+            client.table(TABLE).update(
+                {
+                    "reset_code_hash": hash_code("reset", row["user_id"], code),
+                    "reset_expires_at": (now + CODE_TTL).isoformat(),
+                    "reset_attempts": 0,
+                    "last_sent_at": now.isoformat(),
+                }
+            ).eq("user_id", row["user_id"]).execute()
         mailer.send_email(
             email,
-            recovery_reset_email(locale, account_email=account.email, url=link.properties.action_link),
+            recovery_reset_code_email(locale, account_emails=[a["email"] for a in accounts], code=code),
             locale,
         )
-        client.table(TABLE).update({"last_sent_at": _now().isoformat()}).eq("user_id", row["user_id"]).execute()
     except Exception:
-        logger.exception("Failed to send a password reset to a recovery address")
+        logger.exception("Failed to send an account recovery code")
 
 
-@router.post("/api/auth/forgot-password", status_code=202)
-@limiter.limit(RATE_LIMIT_FORGOT_PASSWORD, key_func=ip_key)
-def forgot_password(request: Request, body: ForgotIn, background: BackgroundTasks):
-    """The recovery-address half of "Forgot password". The web app calls
-    Supabase's resetPasswordForEmail for the same address in parallel, which
-    covers the case where it is a primary login email. Always 202, whether
-    or not anything was sent."""
+@router.post("/api/auth/recovery/request", status_code=202)
+@limiter.limit(RATE_LIMIT_RECOVERY_REQUEST, key_func=ip_key)
+def request_recovery_code(request: Request, body: RecoveryRequestIn, background: BackgroundTasks):
+    """Always 202, whether or not anything was sent."""
     email = normalize_email(body.email)
     if email is not None:
-        background.add_task(_send_reset_via_recovery, email, body.locale)
+        background.add_task(_send_reset_code, email, body.locale)
     return {"ok": True}
+
+
+@router.post("/api/auth/recovery/verify")
+@limiter.limit(RATE_LIMIT_RECOVERY_VERIFY, key_func=ip_key)
+def verify_recovery_code(request: Request, body: RecoveryVerifyIn):
+    """Without user_id: a correct code returns {"accounts": [...]} and stays
+    valid so the user can pick one. With user_id: the code is spent and that
+    account's recovery token returned as {"token_hash": ...}."""
+    invalid = HTTPException(status_code=400, detail="invalid_code")
+    email = normalize_email(body.email)
+    if email is None:
+        raise invalid
+    client = _client()
+    rows = _verified_rows_for_email(client, email)
+    if not rows:
+        raise invalid
+    # Same code on every row; checking each keeps their attempt counters in
+    # step, so a wrong guess counts once against the whole address.
+    results = [_check_code(client, row, "reset", body.code) for row in rows]
+    # Only accounts this code was issued for — not one that confirmed the
+    # address after the code went out.
+    covered = [row for row, result in zip(rows, results) if result == "ok"]
+    if not covered:
+        raise invalid
+
+    if body.user_id is None:
+        accounts = _accounts(client, covered)
+        if not accounts:
+            raise invalid
+        return {"accounts": accounts}
+
+    chosen = next((r for r in covered if r["user_id"] == body.user_id), None)
+    if chosen is None:
+        raise invalid
+    # Single use: the code is spent for every account before the token is minted.
+    for row in rows:
+        client.table(TABLE).update(_cleared("reset")).eq("user_id", row["user_id"]).execute()
+    try:
+        account = client.auth.admin.get_user_by_id(chosen["user_id"]).user
+        link = client.auth.admin.generate_link({"type": "recovery", "email": account.email})
+    except Exception:
+        logger.exception("Failed to mint a recovery token for user_id=%s", chosen["user_id"])
+        raise HTTPException(status_code=502, detail="recovery_failed")
+    return {"token_hash": link.properties.hashed_token}

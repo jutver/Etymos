@@ -210,57 +210,76 @@ def render_text(content: EmailContent, lang: Lang) -> str:
 # --- Backend-sent emails --------------------------------------------------
 
 
-def recovery_verify_email(lang: Lang, *, account_email: str, url: str) -> EmailContent:
+def code_expiry_note(lang: Lang) -> str:
+    if lang == "vi":
+        return f"Mã có hiệu lực trong <strong>{LINK_TTL_MINUTES} phút</strong> và chỉ dùng được một lần. Không chia sẻ mã này với bất kỳ ai."
+    return f"The code is valid for <strong>{LINK_TTL_MINUTES} minutes</strong> and works once. Never share it with anyone."
+
+
+def recovery_confirm_code_email(lang: Lang, *, account_email: str, code: str) -> EmailContent:
     a = f"<strong>{esc(account_email)}</strong>"
     if lang == "vi":
         return EmailContent(
-            subject="Xác nhận email khôi phục của bạn",
-            preheader="Xác nhận địa chỉ này để dùng làm email khôi phục cho tài khoản Etymos.",
+            subject=f"{code} là mã xác nhận email khôi phục Etymos",
+            preheader="Nhập mã này trong trang hồ sơ Etymos để xác nhận email khôi phục.",
             heading="Xác nhận email khôi phục",
             paragraphs=[
-                f"Tài khoản Etymos {a} vừa chọn địa chỉ này làm email khôi phục.",
-                "Sau khi xác nhận, bạn có thể dùng email này để đặt lại mật khẩu nếu không truy cập được email chính.",
+                f"Tài khoản Etymos {a} vừa chọn địa chỉ này làm email khôi phục. Nhập mã dưới đây vào cửa sổ xác nhận trong trang hồ sơ.",
             ],
-            button_label="Xác nhận email khôi phục",
-            button_url=url,
-            notes=[expiry_note(lang), "Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email — sẽ không có gì thay đổi."],
+            code=esc(code),
+            code_label="Mã xác nhận của bạn:",
+            notes=[code_expiry_note(lang), "Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email — sẽ không có gì thay đổi."],
         )
     return EmailContent(
-        subject="Confirm your recovery email",
-        preheader="Confirm this address as the recovery email for your Etymos account.",
+        subject=f"{code} is your Etymos recovery email code",
+        preheader="Enter this code on your Etymos profile page to confirm your recovery email.",
         heading="Confirm your recovery email",
         paragraphs=[
-            f"The Etymos account {a} just chose this address as its recovery email.",
-            "Once confirmed, you can use it to reset your password if you lose access to your main email.",
+            f"The Etymos account {a} just chose this address as its recovery email. Enter the code below in the confirmation window on your profile page.",
         ],
-        button_label="Confirm recovery email",
-        button_url=url,
-        notes=[expiry_note(lang), "If you didn't request this, ignore this email — nothing will change."],
+        code=esc(code),
+        code_label="Your confirmation code:",
+        notes=[code_expiry_note(lang), "If you didn't request this, ignore this email — nothing will change."],
     )
 
 
-def recovery_reset_email(lang: Lang, *, account_email: str, url: str) -> EmailContent:
-    a = f"<strong>{esc(account_email)}</strong>"
+def recovery_reset_code_email(lang: Lang, *, account_emails: list[str], code: str) -> EmailContent:
+    many = len(account_emails) > 1
+    names = ", ".join(f"<strong>{esc(e)}</strong>" for e in account_emails)
     if lang == "vi":
-        return EmailContent(
-            subject="Đặt lại mật khẩu Etymos",
-            preheader="Dùng liên kết này để đặt mật khẩu mới cho tài khoản Etymos.",
-            heading="Đặt lại mật khẩu",
-            paragraphs=[
-                f"Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản {a}. Email này được gửi tới địa chỉ khôi phục bạn đã xác nhận.",
-            ],
-            button_label="Đặt mật khẩu mới",
-            button_url=url,
-            notes=[expiry_note(lang), "Nếu bạn không yêu cầu, hãy bỏ qua email này — mật khẩu của bạn sẽ không thay đổi."],
+        target = (
+            f"một tài khoản Etymos qua email khôi phục này (email này được liên kết với {len(account_emails)} tài khoản: {names})"
+            if many
+            else f"tài khoản {names}"
         )
+        return EmailContent(
+            subject=f"{code} là mã khôi phục tài khoản Etymos",
+            preheader="Nhập mã này để đặt mật khẩu mới cho tài khoản Etymos.",
+            heading="Khôi phục tài khoản",
+            paragraphs=[
+                f"Chúng tôi nhận được yêu cầu khôi phục {target}. Nhập mã dưới đây trên trang khôi phục"
+                + (", chọn tài khoản," if many else "")
+                + " rồi đặt mật khẩu mới.",
+            ],
+            code=esc(code),
+            code_label="Mã khôi phục của bạn:",
+            notes=[code_expiry_note(lang), "Nếu bạn không yêu cầu, hãy bỏ qua email này — tài khoản của bạn vẫn an toàn."],
+        )
+    target = (
+        f"an Etymos account through this recovery email, which is linked to {len(account_emails)} accounts: {names}"
+        if many
+        else f"the account {names}"
+    )
     return EmailContent(
-        subject="Reset your Etymos password",
-        preheader="Use this link to choose a new password for your Etymos account.",
-        heading="Reset your password",
+        subject=f"{code} is your Etymos account recovery code",
+        preheader="Enter this code to choose a new password for your Etymos account.",
+        heading="Recover your account",
         paragraphs=[
-            f"We received a request to reset the password for {a}. We sent it to the recovery address you confirmed.",
+            f"We received a request to recover {target}. Enter the code below on the recovery page"
+            + (", choose the account," if many else "")
+            + " and set a new password.",
         ],
-        button_label="Choose a new password",
-        button_url=url,
-        notes=[expiry_note(lang), "If you didn't ask for this, ignore this email — your password won't change."],
+        code=esc(code),
+        code_label="Your recovery code:",
+        notes=[code_expiry_note(lang), "If you didn't ask for this, ignore this email — your account is still safe."],
     )

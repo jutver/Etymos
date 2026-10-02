@@ -4,6 +4,7 @@ import { Button } from "../../components/ui/Button";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { RecoveryCodeDialog } from "./RecoveryCodeDialog";
 import { t, tr } from "../../lib/i18n";
 import {
   ApiError,
@@ -31,6 +32,7 @@ export default function AccountProfilePage() {
   const [recoveryLoadFailed, setRecoveryLoadFailed] = useState(false);
   const [savingRecovery, setSavingRecovery] = useState(false);
   const [removingRecovery, setRemovingRecovery] = useState(false);
+  const [codeDialog, setCodeDialog] = useState<{ open: boolean; justSent: boolean }>({ open: false, justSent: false });
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -62,36 +64,60 @@ export default function AccountProfilePage() {
 
   function recoveryErrorMessage(err: unknown): string {
     if (err instanceof ApiError) {
-      if (err.status === 429) return tr("We just sent a link to this address. Wait a minute before asking again.");
-      if (err.status === 400 && /login email/i.test(err.message)) return tr("Use a different address from your login email.");
-      if (err.status === 400) return tr("Enter a valid email address.");
+      if (err.message === "same_as_login") return tr("Use a different address from your login email.");
+      if (err.message === "invalid_email") return tr("Enter a valid email address.");
+      if (err.message === "recently_sent") return tr("We just sent a code to this address. Wait a minute before asking again.");
       if (err.status >= 500) return tr("We couldn't send the email right now. Try again in a few minutes.");
     }
     return err instanceof Error ? err.message : tr("Something went wrong.");
   }
 
+  /** Saves the address; the backend emails it a code, and the pop-up opens
+   * so the user can confirm it right away. */
   async function saveRecoveryEmail() {
+    const email = recoveryEmail.trim();
     setSavingRecovery(true);
     try {
-      const status = await saveRecoveryEmailApi(recoveryEmail.trim());
+      const status = await saveRecoveryEmailApi(email);
       setRecoveryStatus(status);
       setRecoveryEmail(status.email ?? "");
-      pushToast(
-        status.verified
-          ? { kind: "success", title: tr("This recovery email is already confirmed") }
-          : {
-              kind: "success",
-              title: tr("Confirmation link sent"),
-              description: t("Open the email we sent to {{email}} and click the link within 30 minutes.", {
-                email: status.email ?? "",
-              }),
-            },
-      );
+      if (status.verified) {
+        pushToast({ kind: "success", title: tr("This recovery email is already confirmed") });
+      } else {
+        setCodeDialog({ open: true, justSent: true });
+      }
     } catch (err) {
-      pushToast({ kind: "error", title: tr("Couldn't update recovery email"), description: recoveryErrorMessage(err) });
+      // A code for this same address went out under a minute ago: it's still
+      // valid, so let the user type it instead of showing an error.
+      if (err instanceof ApiError && err.message === "recently_sent" && recoveryStatus?.email === email.toLowerCase()) {
+        setCodeDialog({ open: true, justSent: true });
+      } else {
+        pushToast({ kind: "error", title: tr("Couldn't update recovery email"), description: recoveryErrorMessage(err) });
+      }
     } finally {
       setSavingRecovery(false);
     }
+  }
+
+  async function resendRecoveryCode() {
+    if (!recoveryStatus?.email) return;
+    try {
+      setRecoveryStatus(await saveRecoveryEmailApi(recoveryStatus.email));
+    } catch (err) {
+      throw new Error(recoveryErrorMessage(err));
+    }
+  }
+
+  function handleRecoveryConfirmed(status: RecoveryEmailStatus) {
+    setRecoveryStatus(status);
+    setCodeDialog({ open: false, justSent: false });
+    pushToast({
+      kind: "success",
+      title: tr("Recovery email confirmed"),
+      description: t("You can now use {{email}} to recover your account if you lose access to your login email.", {
+        email: status.email ?? "",
+      }),
+    });
   }
 
   async function removeRecovery() {
@@ -255,7 +281,7 @@ export default function AccountProfilePage() {
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <h2 className="text-sm font-bold uppercase tracking-wide text-ink-900">{t("Recovery email")}</h2>
         <p className="mt-1 text-xs text-ink-500">
-          {t("A second address for resetting your password if you can't get into your login email. We'll email it a confirmation link first.")}
+          {t("A second address for recovering your account if you can't get into your login email. We'll email it a 6-digit code to confirm it first.")}
         </p>
 
         {recoveryStatus?.email && (
@@ -271,11 +297,18 @@ export default function AccountProfilePage() {
             </span>
             <span className="text-ink-600">
               {recoveryStatus.verified
-                ? t("{{email}} can be used to reset your password.", { email: recoveryStatus.email })
-                : t("Click the link we sent to {{email}}. It expires 30 minutes after sending.", {
-                    email: recoveryStatus.email,
-                  })}
+                ? t("{{email}} can be used to recover your account.", { email: recoveryStatus.email })
+                : t("Enter the code we sent to {{email}} to finish.", { email: recoveryStatus.email })}
             </span>
+            {recoveryStatus.pending && (
+              <button
+                type="button"
+                onClick={() => setCodeDialog({ open: true, justSent: false })}
+                className="font-semibold text-brand-600 hover:underline"
+              >
+                {t("Enter code")}
+              </button>
+            )}
           </div>
         )}
         {recoveryLoadFailed && (
@@ -295,9 +328,7 @@ export default function AccountProfilePage() {
             disabled={!recoveryEmail.trim() || recoveryLoadFailed}
             onClick={saveRecoveryEmail}
           >
-            {recoveryStatus?.pending && recoveryEmail.trim().toLowerCase() === recoveryStatus.email
-              ? t("Resend link")
-              : t("Save")}
+            {t("Save")}
           </Button>
         </div>
         {recoveryStatus?.email && (
@@ -305,6 +336,14 @@ export default function AccountProfilePage() {
             {t("Remove recovery email")}
           </Button>
         )}
+        <RecoveryCodeDialog
+          open={codeDialog.open}
+          justSent={codeDialog.justSent}
+          email={recoveryStatus?.email ?? ""}
+          onClose={() => setCodeDialog({ open: false, justSent: false })}
+          onConfirmed={handleRecoveryConfirmed}
+          onResend={resendRecoveryCode}
+        />
       </section>
 
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">

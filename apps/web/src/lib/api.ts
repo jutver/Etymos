@@ -349,8 +349,8 @@ export function getRecoveryEmail(): Promise<RecoveryEmailStatus> {
   return requestJson<RecoveryEmailStatus>("/api/account/recovery-email");
 }
 
-/** Saves the address and emails it a 30-minute verify link. It can't be used
- * for password resets until that link is clicked. */
+/** Saves the address and emails it a 6-digit confirmation code (valid 30
+ * minutes). It can't be used for account recovery until the code is confirmed. */
 export function setRecoveryEmail(email: string): Promise<RecoveryEmailStatus> {
   return requestJson<RecoveryEmailStatus>("/api/account/recovery-email", {
     method: "PUT",
@@ -362,30 +362,44 @@ export function removeRecoveryEmail(): Promise<RecoveryEmailStatus> {
   return requestJson<RecoveryEmailStatus>("/api/account/recovery-email", { method: "DELETE" });
 }
 
-/** Redeems a verify link. No session needed — the token is the proof. Throws
- * ApiError: 404 invalid/used, 410 expired, 409 address taken by another account. */
-export async function verifyRecoveryEmail(token: string): Promise<RecoveryEmailStatus> {
-  const response = await fetch(buildUrl("/api/account/recovery-email/verify"), {
+/** Checks the 6-digit code emailed to the pending recovery address. ApiError
+ * detail: wrong_code, expired, too_many_attempts, no_code, in_use. */
+export function confirmRecoveryEmail(code: string): Promise<RecoveryEmailStatus> {
+  return requestJson<RecoveryEmailStatus>("/api/account/recovery-email/confirm", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ code }),
   });
-  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
-  return response.json() as Promise<RecoveryEmailStatus>;
 }
 
-/** The recovery-address half of "Forgot password": if `email` is someone's
- * confirmed recovery address, the backend emails it a reset link. Answers
- * the same either way, and failures are swallowed — the primary-address
- * half (Supabase) still runs and the UI never reveals which one matched. */
-export async function requestResetViaRecoveryEmail(email: string): Promise<void> {
-  try {
-    await fetch(buildUrl("/api/auth/forgot-password"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, locale: getLanguage() }),
-    });
-  } catch {
-    // Backend unreachable — the Supabase request covers login emails.
-  }
+async function postPublic<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
+  return response.json() as Promise<T>;
+}
+
+/** Account recovery, step 1: if `email` is a confirmed recovery address, the
+ * backend emails it a 6-digit code. Answers the same either way. */
+export function requestRecoveryCode(email: string): Promise<{ ok: boolean }> {
+  return postPublic("/api/auth/recovery/request", { email, locale: getLanguage() });
+}
+
+export interface RecoveryAccount {
+  user_id: string;
+  email: string;
+  name: string;
+}
+
+/** Account recovery, step 2. Without `userId`, a correct code returns the
+ * accounts using this recovery email ({ accounts }) and stays valid. With
+ * the chosen `userId`, the code is spent and that account's Supabase
+ * recovery token_hash returned, to redeem with `supabase.auth.verifyOtp`.
+ * Any failure is ApiError 400 "invalid_code" (or 429 when rate limited). */
+export function verifyRecoveryCode(email: string, code: string): Promise<{ accounts: RecoveryAccount[] }>;
+export function verifyRecoveryCode(email: string, code: string, userId: string): Promise<{ token_hash: string }>;
+export function verifyRecoveryCode(email: string, code: string, userId?: string) {
+  return postPublic("/api/auth/recovery/verify", userId ? { email, code, user_id: userId } : { email, code });
 }
