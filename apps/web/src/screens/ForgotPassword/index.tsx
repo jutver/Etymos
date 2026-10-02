@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Envelope, WarningCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
@@ -22,6 +22,10 @@ export default function ForgotPasswordPage() {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  // Synchronous guard: a double click or Enter+click can fire two submits
+  // before `sending` re-renders the button as disabled, and each one makes
+  // Supabase mint a new token and send another email.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -30,6 +34,8 @@ export default function ForgotPasswordPage() {
   }, [cooldown]);
 
   async function sendLink(address: string) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setSending(true);
     // Both halves run for every request so the response never reveals which
@@ -41,6 +47,7 @@ export default function ForgotPasswordPage() {
       }),
       requestResetViaRecoveryEmail(address),
     ]);
+    inFlight.current = false;
     setSending(false);
 
     if (resetError) {
