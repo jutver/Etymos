@@ -25,6 +25,9 @@ export const SignupPage = lazy(() => import("../../screens/Signup"));
 export const VerifyEmailPage = lazy(() => import("../../screens/VerifyEmail"));
 export const AuthCallbackPage = lazy(() => import("../../screens/AuthCallback"));
 export const EmailVerifiedPage = lazy(() => import("../../screens/EmailVerified"));
+export const ForgotPasswordPage = lazy(() => import("../../screens/ForgotPassword"));
+export const ResetPasswordPage = lazy(() => import("../../screens/ResetPassword"));
+export const RecoveryEmailVerifyPage = lazy(() => import("../../screens/RecoveryEmailVerify"));
 
 // Authenticated app
 export const UploadPage = lazy(() => import("../../screens/Upload"));

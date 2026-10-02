@@ -1,0 +1,4 @@
+Paste each line's subject into the Subject field of that Supabase email template.
+
+confirm_signup: Xác nhận email Etymos · Confirm your Etymos email
+recovery: Đặt lại mật khẩu Etymos · Reset your Etymos password

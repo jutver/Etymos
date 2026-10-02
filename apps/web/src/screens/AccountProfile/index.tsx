@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeSlash, LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { t, tr } from "../../lib/i18n";
+import {
+  ApiError,
+  getRecoveryEmail,
+  removeRecoveryEmail,
+  setRecoveryEmail as saveRecoveryEmailApi,
+  type RecoveryEmailStatus,
+} from "../../lib/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -19,8 +26,11 @@ export default function AccountProfilePage() {
   const [name, setName] = useState(displayNameFor(user));
   const [savingName, setSavingName] = useState(false);
 
-  const [recoveryEmail, setRecoveryEmail] = useState((user?.user_metadata?.recovery_email as string) ?? "");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryEmailStatus | null>(null);
+  const [recoveryLoadFailed, setRecoveryLoadFailed] = useState(false);
   const [savingRecovery, setSavingRecovery] = useState(false);
+  const [removingRecovery, setRemovingRecovery] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -41,15 +51,60 @@ export default function AccountProfilePage() {
     );
   }
 
+  useEffect(() => {
+    getRecoveryEmail()
+      .then((status) => {
+        setRecoveryStatus(status);
+        setRecoveryEmail(status.email ?? "");
+      })
+      .catch(() => setRecoveryLoadFailed(true));
+  }, []);
+
+  function recoveryErrorMessage(err: unknown): string {
+    if (err instanceof ApiError) {
+      if (err.status === 429) return tr("We just sent a link to this address. Wait a minute before asking again.");
+      if (err.status === 400 && /login email/i.test(err.message)) return tr("Use a different address from your login email.");
+      if (err.status === 400) return tr("Enter a valid email address.");
+      if (err.status >= 500) return tr("We couldn't send the email right now. Try again in a few minutes.");
+    }
+    return err instanceof Error ? err.message : tr("Something went wrong.");
+  }
+
   async function saveRecoveryEmail() {
     setSavingRecovery(true);
-    const { error } = await supabase.auth.updateUser({ data: { recovery_email: recoveryEmail } });
-    setSavingRecovery(false);
-    pushToast(
-      error
-        ? { kind: "error", title: tr("Couldn't update recovery email"), description: error.message }
-        : { kind: "success", title: tr("Recovery email updated") },
-    );
+    try {
+      const status = await saveRecoveryEmailApi(recoveryEmail.trim());
+      setRecoveryStatus(status);
+      setRecoveryEmail(status.email ?? "");
+      pushToast(
+        status.verified
+          ? { kind: "success", title: tr("This recovery email is already confirmed") }
+          : {
+              kind: "success",
+              title: tr("Confirmation link sent"),
+              description: t("Open the email we sent to {{email}} and click the link within 30 minutes.", {
+                email: status.email ?? "",
+              }),
+            },
+      );
+    } catch (err) {
+      pushToast({ kind: "error", title: tr("Couldn't update recovery email"), description: recoveryErrorMessage(err) });
+    } finally {
+      setSavingRecovery(false);
+    }
+  }
+
+  async function removeRecovery() {
+    setRemovingRecovery(true);
+    try {
+      setRecoveryStatus(await removeRecoveryEmail());
+      setRecoveryEmail("");
+      pushToast({ kind: "success", title: tr("Recovery email removed") });
+    } catch (err) {
+      pushToast({ kind: "error", title: tr("Couldn't update recovery email"), description: recoveryErrorMessage(err) });
+    } finally {
+      setRemovingRecovery(false);
+    }
   }
 
   async function savePassword() {
@@ -200,7 +255,33 @@ export default function AccountProfilePage() {
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <h2 className="text-sm font-bold uppercase tracking-wide text-ink-900">{t("Recovery email")}</h2>
         <p className="mt-1 text-xs text-ink-500">
-          {t("Used to help you get back into your account if you lose access.")}</p>
+          {t("A second address for resetting your password if you can't get into your login email. We'll email it a confirmation link first.")}
+        </p>
+
+        {recoveryStatus?.email && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span
+              className={
+                recoveryStatus.verified
+                  ? "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700"
+                  : "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800"
+              }
+            >
+              {recoveryStatus.verified ? t("Confirmed") : t("Waiting for confirmation")}
+            </span>
+            <span className="text-ink-600">
+              {recoveryStatus.verified
+                ? t("{{email}} can be used to reset your password.", { email: recoveryStatus.email })
+                : t("Click the link we sent to {{email}}. It expires 30 minutes after sending.", {
+                    email: recoveryStatus.email,
+                  })}
+            </span>
+          </div>
+        )}
+        {recoveryLoadFailed && (
+          <p className="mt-4 text-xs text-severity-high">{t("Couldn't load your recovery email. Reload the page to try again.")}</p>
+        )}
+
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <input
             type="email"
@@ -209,9 +290,21 @@ export default function AccountProfilePage() {
             placeholder="you@backup-email.com"
             className="flex-1 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
-          <Button loading={savingRecovery} onClick={saveRecoveryEmail}>
-            {t("Save")}</Button>
+          <Button
+            loading={savingRecovery}
+            disabled={!recoveryEmail.trim() || recoveryLoadFailed}
+            onClick={saveRecoveryEmail}
+          >
+            {recoveryStatus?.pending && recoveryEmail.trim().toLowerCase() === recoveryStatus.email
+              ? t("Resend link")
+              : t("Save")}
+          </Button>
         </div>
+        {recoveryStatus?.email && (
+          <Button variant="ghost" size="sm" loading={removingRecovery} onClick={removeRecovery} className="mt-2 self-start">
+            {t("Remove recovery email")}
+          </Button>
+        )}
       </section>
 
       <section className="mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">

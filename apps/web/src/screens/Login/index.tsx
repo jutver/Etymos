@@ -82,7 +82,16 @@ export default function LoginPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-ink-700">{t("Password")}</span>
+          <span className="flex items-baseline justify-between gap-3">
+            <span className="text-xs font-semibold text-ink-700">{t("Password")}</span>
+            <Link
+              to="/forgot-password"
+              state={{ email }}
+              className="text-xs font-semibold text-brand-600 hover:underline"
+            >
+              {t("Forgot password?")}
+            </Link>
+          </span>
           <div className="relative">
             <LockKey size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300" />
             <input

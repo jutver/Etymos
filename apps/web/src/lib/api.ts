@@ -1,5 +1,5 @@
 import { supabase } from "@etymos/shared";
-import { tr, t } from "./i18n";
+import { getLanguage, tr, t } from "./i18n";
 
 export interface BackendJob {
   job_id: string;
@@ -335,4 +335,57 @@ export async function pollJob(jobId: string, onProgress?: (job: BackendJob) => v
   }
 
   return job;
+}
+
+// --- Recovery email (backend/api/recovery_email.py) ------------------------
+
+export interface RecoveryEmailStatus {
+  email: string | null;
+  verified: boolean;
+  pending: boolean;
+}
+
+export function getRecoveryEmail(): Promise<RecoveryEmailStatus> {
+  return requestJson<RecoveryEmailStatus>("/api/account/recovery-email");
+}
+
+/** Saves the address and emails it a 30-minute verify link. It can't be used
+ * for password resets until that link is clicked. */
+export function setRecoveryEmail(email: string): Promise<RecoveryEmailStatus> {
+  return requestJson<RecoveryEmailStatus>("/api/account/recovery-email", {
+    method: "PUT",
+    body: JSON.stringify({ email, locale: getLanguage() }),
+  });
+}
+
+export function removeRecoveryEmail(): Promise<RecoveryEmailStatus> {
+  return requestJson<RecoveryEmailStatus>("/api/account/recovery-email", { method: "DELETE" });
+}
+
+/** Redeems a verify link. No session needed — the token is the proof. Throws
+ * ApiError: 404 invalid/used, 410 expired, 409 address taken by another account. */
+export async function verifyRecoveryEmail(token: string): Promise<RecoveryEmailStatus> {
+  const response = await fetch(buildUrl("/api/account/recovery-email/verify"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
+  return response.json() as Promise<RecoveryEmailStatus>;
+}
+
+/** The recovery-address half of "Forgot password": if `email` is someone's
+ * confirmed recovery address, the backend emails it a reset link. Answers
+ * the same either way, and failures are swallowed — the primary-address
+ * half (Supabase) still runs and the UI never reveals which one matched. */
+export async function requestResetViaRecoveryEmail(email: string): Promise<void> {
+  try {
+    await fetch(buildUrl("/api/auth/forgot-password"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, locale: getLanguage() }),
+    });
+  } catch {
+    // Backend unreachable — the Supabase request covers login emails.
+  }
 }

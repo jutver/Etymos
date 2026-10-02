@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@etymos/shared";
+import { useLanguage } from "./i18n";
 import { t } from "./i18n";
 
 interface AuthContextValue {
@@ -20,12 +21,14 @@ const AuthContext = createContext<AuthContextValue>({ session: null, user: null,
  * both from one snapshot keeps callers simple.
  */
 export const initialAuthRedirect = (() => {
-  if (typeof window === "undefined") return { hasSession: false, errorCode: null, errorDescription: null };
+  if (typeof window === "undefined") return { hasSession: false, type: null, errorCode: null, errorDescription: null };
   const params = new URLSearchParams(window.location.search);
   new URLSearchParams(window.location.hash.slice(1)).forEach((value, key) => params.set(key, value));
   const hasError = params.has("error") || params.has("error_code") || params.has("error_description");
   return {
     hasSession: !hasError && (params.has("access_token") || params.has("code")),
+    /** "signup", "recovery", "email_change", "magiclink"... — which email link this was. */
+    type: params.get("type"),
     errorCode: hasError ? (params.get("error_code") ?? params.get("error") ?? "unknown") : null,
     errorDescription: params.get("error_description"),
   };
@@ -76,6 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interval = window.setInterval(heartbeat, 60_000);
     return () => window.clearInterval(interval);
   }, [session?.user?.id]);
+
+  // Mirror the UI language into user_metadata.locale: Supabase's auth email
+  // templates (supabase/templates/) branch on `.Data.locale`, so a password
+  // reset arrives in the language the user last used the app in. Covers
+  // Google sign-ups and accounts created before the field existed.
+  const language = useLanguage();
+  const storedLocale = session?.user?.user_metadata?.locale as string | undefined;
+  useEffect(() => {
+    if (!session?.user?.id || storedLocale === language) return;
+    supabase.auth.updateUser({ data: { locale: language } }).then(({ error }) => {
+      if (error) console.warn("Couldn't save language preference:", error.message);
+    });
+  }, [session?.user?.id, storedLocale, language]);
 
   return (
     <AuthContext.Provider value={{ session, user: session?.user ?? null, loading }}>

@@ -14,10 +14,9 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
@@ -30,6 +29,8 @@ from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_fla
 from ai_explain import register_flag as register_explain_flag
 from report_enrichment import register_flags as register_enrichment_flags
 from citations import DEFAULT_REFERENCE_HEADING, add_citation
+from rate_limit import limiter
+from recovery_email import router as recovery_email_router
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
 from usage import ensure_quota_available, record_check_used
@@ -87,21 +88,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cấu hình rate limiting (slowapi), keyed by verified user_id when
-# available (request.state.user, set by auth.verify_supabase_jwt), else by
-# client IP. Limits are configurable via env vars, not hardcoded magic
-# numbers.
-def _rate_limit_key(request: Request) -> str:
-    user = getattr(request.state, "user", None)
-    if user is not None:
-        return f"user:{user.user_id}"
-    return f"ip:{get_remote_address(request)}"
-
-
-limiter = Limiter(key_func=_rate_limit_key)
+# Cấu hình rate limiting (slowapi). The limiter lives in rate_limit.py so
+# route modules outside this file (recovery_email.py) share the instance
+# slowapi's middleware enforces. Limits are configurable via env vars.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.include_router(recovery_email_router)
 
 RATE_LIMIT_CHECK_PDF = os.getenv("RATE_LIMIT_CHECK_PDF", "10/hour")
 RATE_LIMIT_CHECK_TEXT = os.getenv("RATE_LIMIT_CHECK_TEXT", "20/hour")
