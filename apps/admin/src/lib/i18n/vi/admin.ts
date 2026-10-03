@@ -384,4 +384,7 @@ export const admin: Record<string, string> = {
   "Needs review": "Cần xem xét",
   "Bank transfer": "Chuyển khoản",
   "App-access requests from new sign-ups.": "Yêu cầu truy cập ứng dụng từ người dùng mới đăng ký.",
+  "Plan ends": "Gói kết thúc",
+  "Free has no end date.": "Gói Miễn phí không có ngày kết thúc.",
+  "End of that day, Vietnam time. Leave blank for no end date.": "Cuối ngày đó, giờ Việt Nam. Để trống nếu không có ngày kết thúc.",
 };

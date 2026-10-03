@@ -14,6 +14,7 @@ installed:
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -348,3 +349,99 @@ def test_users_cannot_read_the_ledger_but_admins_can(db):
     assert as_user(db, admin, "select count(*) from public.payment_transactions")[0][0] > 0
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         as_user(db, admin, "update public.payment_transactions set status = 'resolved'")
+
+
+# --- subscription terms (20261005000000_plan_expiry.sql) -------------------
+
+
+def plan_state(db, user_id: str) -> dict:
+    cur = db.execute(
+        """select plan_tier, billing_cycle, plan_expires_at, checks_used_this_period,
+                  plan_expires_at - now() as remaining
+           from public.profiles where id = %s""",
+        (user_id,),
+    )
+    cols = [c.name for c in cur.description]
+    return dict(zip(cols, cur.fetchone()))
+
+
+def buy_plan(db, user_id: str, tier: str = "professional", cycle: str = "monthly") -> None:
+    _, code = make_order(db, user_id, kind="plan", plan_tier=tier, billing_cycle=cycle, amount=1000)
+    assert webhook(db, amount=1000, code=code)["status"] == "matched"
+
+
+def test_first_plan_purchase_starts_a_term(db):
+    uid = make_user(db)
+    buy_plan(db, uid, cycle="monthly")
+    s = plan_state(db, uid)
+    assert s["plan_tier"] == "professional" and s["billing_cycle"] == "monthly"
+    assert 27 <= s["remaining"].days <= 31
+
+    uid2 = make_user(db)
+    buy_plan(db, uid2, cycle="annual")
+    assert 364 <= plan_state(db, uid2)["remaining"].days <= 366
+
+
+def test_renewing_the_same_plan_adds_to_the_end_and_keeps_usage(db):
+    uid = make_user(db)
+    buy_plan(db, uid, cycle="monthly")
+    db.execute("update public.profiles set checks_used_this_period = 4 where id = %s", (uid,))
+    first_end = plan_state(db, uid)["plan_expires_at"]
+
+    buy_plan(db, uid, cycle="annual")
+    s = plan_state(db, uid)
+    assert s["plan_expires_at"] - first_end > timedelta(days=364)
+    assert s["billing_cycle"] == "annual"
+    assert s["checks_used_this_period"] == 4
+
+
+def test_switching_plans_starts_fresh(db):
+    uid = make_user(db)
+    buy_plan(db, uid, tier="student", cycle="annual")
+    db.execute("update public.profiles set checks_used_this_period = 3 where id = %s", (uid,))
+    buy_plan(db, uid, tier="professional", cycle="monthly")
+    s = plan_state(db, uid)
+    assert s["plan_tier"] == "professional" and s["checks_used_this_period"] == 0
+    assert 27 <= s["remaining"].days <= 31
+
+
+def test_buying_after_the_term_lapsed_starts_fresh(db):
+    uid = make_user(db)
+    buy_plan(db, uid)
+    db.execute("update public.profiles set plan_expires_at = now() - interval '2 days' where id = %s", (uid,))
+    buy_plan(db, uid)
+    assert 27 <= plan_state(db, uid)["remaining"].days <= 31
+
+
+def test_lapsed_plans_drop_to_free(db):
+    lapsed, active, comped = make_user(db), make_user(db), make_user(db)
+    for uid in (lapsed, active):
+        buy_plan(db, uid)
+    db.execute("update public.profiles set plan_expires_at = now() - interval '1 minute' where id = %s", (lapsed,))
+    db.execute("update public.profiles set plan_tier = 'professional', plan_expires_at = null where id = %s", (comped,))
+
+    assert db.execute("select public.expire_lapsed_plans()").fetchone()[0] >= 1
+    assert plan_state(db, lapsed)["plan_tier"] == "free"
+    assert plan_state(db, lapsed)["plan_expires_at"] is not None  # kept: "ended on …"
+    assert plan_state(db, active)["plan_tier"] == "professional"
+    assert plan_state(db, comped)["plan_tier"] == "professional"  # no end date
+
+
+def test_users_cannot_extend_their_own_term(db):
+    uid = make_user(db)
+    buy_plan(db, uid)
+    with pytest.raises(psycopg.errors.RaiseException, match="Not allowed"):
+        as_user(db, uid, "update public.profiles set plan_expires_at = now() + interval '10 years' where id = %s returning id", (uid,))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_user(db, uid, "select public.expire_lapsed_plans()")
+
+
+def test_notification_log_is_backend_only(db):
+    admin, uid = make_user(db, admin=True), make_user(db)
+    db.execute("insert into public.notification_log (kind, ref) values ('plan_ended', %s)", (uid,))
+    assert as_user(db, uid, "select count(*) from public.notification_log")[0][0] == 0
+    assert as_user(db, admin, "select count(*) from public.notification_log")[0][0] >= 1
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_user(db, uid, "insert into public.notification_log (kind, ref) values ('x', 'y')")
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute("insert into public.notification_log (kind, ref) values ('plan_ended', %s)", (uid,))

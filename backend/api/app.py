@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 import sys
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from rate_limit import limiter
 from recovery_email import router as recovery_email_router
 from payments import router as payments_router
+import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
 from usage import ensure_quota_available, record_check_used
@@ -60,6 +61,8 @@ async def lifespan(_: FastAPI):
         register_explain_flag()
     except Exception:
         logger.exception("AI detection/explanation flag registration failed; using code defaults.")
+    # Expiry reminders, receipts the webhook missed, verification results...
+    notifications.start_scheduler()
     yield
 
 
@@ -607,8 +610,23 @@ def remove_report(report_id: str, user: AuthedUser = Depends(verify_supabase_jwt
     return {"deleted": True, "report_id": report_id}
 
 
+RATE_LIMIT_PASSWORD_NOTICE = os.getenv("RATE_LIMIT_PASSWORD_NOTICE", "5/hour")
+
+
+@app.post("/api/account/password-changed")
+@limiter.limit(RATE_LIMIT_PASSWORD_NOTICE)
+def password_changed(request: Request, background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)):
+    """Called by the web app right after supabase.auth.updateUser({password})
+    succeeds, so the account's own address gets a "your password was
+    changed" email. Supabase doesn't tell the backend about password
+    changes. The mail only ever goes to the caller's own login email, and
+    the rate limit stops it being used to flood that inbox."""
+    background.add_task(notifications.notify_password_changed, user.user_id, user.email)
+    return {"ok": True}
+
+
 @app.delete("/api/account")
-def delete_account(user: AuthedUser = Depends(verify_supabase_jwt)):
+def delete_account(background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)):
     """
     Self-service account deletion (PLAN.md decision: "user deletes their
     own account from AccountProfile, backend strictly checks the caller's
@@ -632,11 +650,12 @@ def delete_account(user: AuthedUser = Depends(verify_supabase_jwt)):
     except Exception:
         logger.exception("Failed to delete account for user_id=%s", user.user_id)
         raise HTTPException(status_code=500, detail="Failed to delete account.")
+    background.add_task(notifications.notify_account_deleted, user.email)
     return {"deleted": True, "user_id": user.user_id}
 
 
 @app.delete("/api/admin/users/{target_user_id}")
-def force_delete_user(target_user_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
+def force_delete_user(target_user_id: str, background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)):
     """
     Admin-triggered account deletion that skips the user-confirmation dialog
     entirely (CHANGES_I_WANT.md Admin Portal #3: "force delete mode ... will
@@ -654,10 +673,18 @@ def force_delete_user(target_user_id: str, user: AuthedUser = Depends(verify_sup
     client = get_client()
     if client is None:
         raise HTTPException(status_code=500, detail="Account deletion is not configured on this server.")
+    # Read the address first: the profile is gone once the user is deleted.
+    target_email = None
+    try:
+        rows = client.table("profiles").select("email").eq("id", target_user_id).limit(1).execute().data
+        target_email = rows[0].get("email") if rows else None
+    except Exception:
+        logger.exception("Couldn't read email for user_id=%s before deletion", target_user_id)
     _purge_user_storage(client, target_user_id)
     try:
         client.auth.admin.delete_user(target_user_id)
     except Exception:
         logger.exception("Admin %s failed to force-delete user_id=%s", user.user_id, target_user_id)
         raise HTTPException(status_code=500, detail="Failed to delete account.")
+    background.add_task(notifications.notify_account_deleted, target_email)
     return {"deleted": True, "user_id": target_user_id}

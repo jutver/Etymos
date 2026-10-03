@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from slowapi.middleware import SlowAPIMiddleware
 
+import notifications
 import payments
 import rate_limit
 from auth import AuthedUser, verify_supabase_jwt
@@ -102,6 +103,7 @@ class FakeDB:
         self.code_collisions = 0
         self.rpc_calls: list = []
         self.rpc_error: Exception | None = None
+        self.rpc_result: dict = {"status": "matched", "duplicate": False}
         self.tables: dict = {
             "plan_definitions": [
                 {"id": "student", "price_monthly": 69000, "price_annual": 690000, "requires_verification": True},
@@ -137,7 +139,7 @@ class FakeDB:
                         if r["id"] == params["p_event_id"]:
                             r.update(status="success", paid_amount=0, paid_at="2026-10-04T03:00:00+00:00")
                     return SimpleNamespace(data=True)
-                return SimpleNamespace(data={"status": "matched", "duplicate": False})
+                return SimpleNamespace(data=db.rpc_result)
 
         return _Call()
 
@@ -490,3 +492,27 @@ def test_webhook_handles_missing_code_and_odd_dates(env):
 def test_webhook_prefers_sepay_code_field(env):
     _post_webhook(env, _sepay(code="ETMHJKMNPQR", content="ETM7K2QF9XA"))
     assert env.db.rpc_calls[0][1]["p_tx"]["payment_code"] == "ETMHJKMNPQR"
+
+
+def test_webhook_emails_receipt_or_admin_after_settling(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(notifications, "notify_payment_receipt", lambda oid: calls.append(("receipt", oid)))
+    monkeypatch.setattr(notifications, "notify_admin_transfer", lambda tid: calls.append(("admin", tid)))
+
+    env.db.rpc_result = {"status": "matched", "checkout_event_id": "order-7", "transaction_id": "tx-1", "duplicate": False}
+    _post_webhook(env, _sepay())
+    env.db.rpc_result = {"status": "underpaid", "checkout_event_id": "order-8", "transaction_id": "tx-2", "duplicate": False}
+    _post_webhook(env, _sepay(id=2))
+    env.db.rpc_result = {"status": "ignored", "checkout_event_id": None, "transaction_id": "tx-3", "duplicate": False}
+    _post_webhook(env, _sepay(id=3, transferType="out"))
+    assert calls == [("receipt", "order-7"), ("admin", "tx-2")]
+
+
+def test_free_order_emails_a_receipt(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(notifications, "notify_payment_receipt", lambda oid: calls.append(oid))
+    env.db.tables["discount_codes"].append(
+        {"id": "dc-1", "code": "FREE", "discount_type": "percent", "amount": 100, "active": True}
+    )
+    order = env.client.post("/api/payments/orders", json={**PACK, "discount_code": "FREE"}).json()
+    assert calls == [order["id"]]

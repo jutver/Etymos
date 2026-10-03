@@ -41,9 +41,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+import notifications
 from auth import AuthedUser, verify_supabase_jwt
 from rate_limit import limiter
 from supabase_client import get_client
@@ -334,7 +335,9 @@ def quote(request: Request, body: ItemIn, user: AuthedUser = Depends(verify_supa
 
 @router.post("/api/payments/orders")
 @limiter.limit(RATE_LIMIT_PAYMENT_ORDER)
-def create_order(request: Request, body: ItemIn, user: AuthedUser = Depends(verify_supabase_jwt)):
+def create_order(
+    request: Request, body: ItemIn, background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)
+):
     account = bank_account()
     if account is None:
         raise HTTPException(status_code=503, detail="payments_not_configured")
@@ -380,6 +383,7 @@ def create_order(request: Request, body: ItemIn, user: AuthedUser = Depends(veri
         # Fully discounted: nothing to transfer, complete it now.
         client.rpc("complete_free_checkout", {"p_event_id": row["id"]}).execute()
         row = _own_order(client, user.user_id, row["id"])
+        background.add_task(notifications.notify_payment_receipt, row["id"])
 
     logger.info("Order %s created for user_id=%s: %s VND", row["id"], user.user_id, priced.amount)
     return order_out(row)
@@ -467,7 +471,7 @@ def _authorized(request: Request, expected: str) -> bool:
 
 
 @router.post("/api/payments/sepay/webhook")
-def sepay_webhook(request: Request, body: SepayWebhookIn):
+def sepay_webhook(request: Request, body: SepayWebhookIn, background: BackgroundTasks):
     expected = os.getenv("SEPAY_WEBHOOK_API_KEY", "").strip()
     if not expected:
         # Never accept unauthenticated money notifications.
@@ -511,4 +515,11 @@ def sepay_webhook(request: Request, body: SepayWebhookIn):
         (result or {}).get("status"),
         " (repeat delivery)" if (result or {}).get("duplicate") else "",
     )
+    # Emails go out after SePay has its answer. Both are claimed once in
+    # notification_log, so a repeat delivery (or the scheduler) can't resend.
+    result = result or {}
+    if result.get("status") == "matched" and result.get("checkout_event_id"):
+        background.add_task(notifications.notify_payment_receipt, result["checkout_event_id"])
+    elif result.get("status") in notifications.ATTENTION_STATUSES and result.get("transaction_id"):
+        background.add_task(notifications.notify_admin_transfer, result["transaction_id"])
     return {"success": True}

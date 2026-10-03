@@ -24,6 +24,7 @@ narrow race; accepted tradeoff in exchange for never charging a failed job.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -76,6 +77,16 @@ class ProfileUsage:
     premium_credits: int
     checks_used_this_period: int
     plan_period_start: Optional[str]
+    plan_expires_at: Optional[str] = None
+
+    @property
+    def effective_plan_tier(self) -> str:
+        """The plan in force right now. A paid plan whose term has ended counts
+        as Free immediately, even before expire_lapsed_plans() (pg_cron, every
+        10 minutes) writes the downgrade."""
+        if self.plan_tier != "free" and _has_lapsed(self.plan_expires_at):
+            return "free"
+        return self.plan_tier
 
 
 def _fetch_profile_usage(user_id: str) -> Optional[ProfileUsage]:
@@ -85,7 +96,7 @@ def _fetch_profile_usage(user_id: str) -> Optional[ProfileUsage]:
     try:
         resp = (
             client.table("profiles")
-            .select("plan_tier, standard_credits, premium_credits, checks_used_this_period, plan_period_start")
+            .select("plan_tier, standard_credits, premium_credits, checks_used_this_period, plan_period_start, plan_expires_at")
             .eq("id", user_id)
             .single()
             .execute()
@@ -104,7 +115,21 @@ def _fetch_profile_usage(user_id: str) -> Optional[ProfileUsage]:
         premium_credits=int(data.get("premium_credits") or 0),
         checks_used_this_period=int(data.get("checks_used_this_period") or 0),
         plan_period_start=data.get("plan_period_start"),
+        plan_expires_at=data.get("plan_expires_at"),
     )
+
+
+def _has_lapsed(plan_expires_at: Optional[str]) -> bool:
+    """True once a paid term's end has passed. No end date = never lapses."""
+    if not plan_expires_at:
+        return False
+    try:
+        end = datetime.fromisoformat(re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], plan_expires_at.replace("Z", "+00:00")))
+    except ValueError:
+        return False
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= end
 
 
 def _period_elapsed(plan_period_start: Optional[str]) -> bool:
@@ -150,8 +175,10 @@ def ensure_quota_available(user_id: str, balance_source: str) -> None:
         return
 
     # balance_source == "plan"
-    used = 0 if _period_elapsed(usage.plan_period_start) else usage.checks_used_this_period
-    limit = _get_plan_doc_limit(usage.plan_tier)
+    # A lapsed plan restarts on Free with a clean count, as expire_lapsed_plans() will write.
+    lapsed = usage.effective_plan_tier != usage.plan_tier
+    used = 0 if lapsed or _period_elapsed(usage.plan_period_start) else usage.checks_used_this_period
+    limit = _get_plan_doc_limit(usage.effective_plan_tier)
     if limit is not None and used >= limit:
         raise HTTPException(
             status_code=402,

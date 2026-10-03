@@ -480,3 +480,16 @@ export function getPaymentOrder(orderId: string): Promise<PaymentOrder> {
 export function cancelPaymentOrder(orderId: string): Promise<PaymentOrder> {
   return requestJson<PaymentOrder>(`/api/payments/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" });
 }
+
+// --- Account notices ---------------------------------------------------------
+
+/** Tells the backend the password was just changed, so the login email gets a
+ * "your password was changed" notice. Best-effort: never throws. Call it
+ * while the session is still valid (before any sign-out). */
+export async function notifyPasswordChanged(): Promise<void> {
+  try {
+    await requestJson<{ ok: boolean }>("/api/account/password-changed", { method: "POST" });
+  } catch (err) {
+    console.warn("Password-change notice failed", err);
+  }
+}

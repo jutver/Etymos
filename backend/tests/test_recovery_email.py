@@ -18,6 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 
 import mailer
+import notifications
 import rate_limit
 import recovery_email
 from auth import AuthedUser, verify_supabase_jwt
@@ -314,3 +315,25 @@ def test_confirm_code_cannot_be_used_to_reset(env):
     env.client.post("/api/account/recovery-email/confirm", json={"code": confirm_code})
     r = _verify(env, confirm_code)
     assert r.status_code == 400 and env.db.generated == []
+
+
+def test_login_email_is_told_about_recovery_email_changes(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(notifications, "notify_recovery_email_added", lambda *a: calls.append(("added",) + a))
+    monkeypatch.setattr(notifications, "notify_recovery_email_removed", lambda *a: calls.append(("removed",) + a))
+
+    env.client.put("/api/account/recovery-email", json={"email": "backup@example.com"})
+    env.client.post("/api/account/recovery-email/confirm", json={"code": _code_from(env.sent[0])})
+    assert calls == [("added", "user-1", "owner@example.com", "backup@example.com")]
+
+    # Replacing a confirmed address reports the old one and the pending new one.
+    env.client.put("/api/account/recovery-email", json={"email": "other@example.com"})
+    assert calls[-1] == ("removed", "user-1", "owner@example.com", "backup@example.com", "other@example.com")
+
+    # Removing an unconfirmed address says nothing; removing a confirmed one does.
+    env.client.delete("/api/account/recovery-email")
+    assert len(calls) == 2
+    env.client.put("/api/account/recovery-email", json={"email": "third@example.com"})
+    env.client.post("/api/account/recovery-email/confirm", json={"code": _code_from(env.sent[-1])})
+    env.client.delete("/api/account/recovery-email")
+    assert calls[-1] == ("removed", "user-1", "owner@example.com", "third@example.com", None)

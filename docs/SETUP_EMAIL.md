@@ -30,6 +30,40 @@ one code for the address; after it's entered, `/recover-account` lists those
 accounts (login email and name) to choose from. The list appears only after
 a correct code, so typing someone's address reveals nothing.
 
+## Notification emails
+
+The backend also sends account and billing notices
+(`backend/api/notifications.py`, templates in `email_templates.py`). They all
+use the same layout as the auth emails.
+
+| Email | To | When |
+|---|---|---|
+| Password changed | Login email | Right after a password change (profile page or reset link) |
+| Recovery email added | Login email | A recovery email is confirmed with its code |
+| Recovery email changed | Login email | A confirmed recovery email is removed or replaced |
+| Account deleted | Login email | After self-service deletion or an admin force-delete |
+| Payment received | Login email | An order is paid (SePay webhook, admin link, or a 100% discount) |
+| Plan ends in 3 days / tomorrow | Login email | 3 days and 1 day before a paid term ends; not sent again after renewing |
+| Plan ended | Login email | When a term ends and the account drops to Free |
+| Student verification approved / rejected | Login email | An admin reviews the request |
+| Transfer needs attention | Admins | A SePay transfer is unmatched, underpaid, paid twice, or for a declined order |
+
+The time-based ones (expiry reminders, plan ended, verification results) and
+anything the immediate path missed are picked up by a scheduler thread inside
+the API process, every 5 minutes. Each email is recorded in
+`public.notification_log` by `(kind, ref)` before it is sent, so nothing goes
+out twice, even with several backend processes. The scheduler only looks back
+a day or two, so turning it on never emails old history.
+
+Optional `backend/.env` settings:
+
+```bash
+ADMIN_ALERT_EMAILS='you@example.com, partner@example.com'  # default: every profile with role admin
+ADMIN_APP_URL='https://<admin portal URL>'                  # adds an "Open Revenue → Transactions" button
+NOTIFY_INTERVAL_SECONDS='300'                                # scheduler interval (min 60)
+NOTIFICATIONS_SCHEDULER='off'                                # disable the scheduler (e.g. a second API process)
+```
+
 ## One-time setup
 
 ### 1. Database

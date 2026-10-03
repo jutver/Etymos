@@ -117,6 +117,12 @@ export function AppNav() {
                   className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                 >
                   {t("My Plan")}</Link>
+                <Link
+                  to="/account/payments"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                >
+                  {t("Payment history")}</Link>
                 <div className="h-px bg-line" />
                 <button
                   onClick={async () => {

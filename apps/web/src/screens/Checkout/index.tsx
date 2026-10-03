@@ -34,6 +34,7 @@ import {
   isDiscountError,
   orderMatches,
   paymentErrorMessage as errorMessage,
+  planPurchaseEffect,
   timeLeft,
   toPaymentItem,
 } from "../../lib/payments";
@@ -51,6 +52,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const item = useAppStore((s) => s.pendingCheckoutItem);
   const syncFromProfile = useAppStore((s) => s.syncFromProfile);
+  const currentPlan = useAppStore((s) => s.plan);
+  const currentPlanEnds = useAppStore((s) => s.planExpiresAt);
   const { user } = useAuth();
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
@@ -184,6 +187,10 @@ export default function CheckoutPage() {
       />
     );
   }
+
+  const effect = item.kind === "plan" ? planPurchaseEffect(currentPlan, currentPlanEnds, item) : null;
+  const currentPlanName = t(plans.find((p) => p.id === currentPlan)?.name ?? currentPlan);
+  const day = (d: Date | string) => new Date(d).toLocaleDateString(currentLocale(), { dateStyle: "long" });
 
   const listAmount = quote?.list_amount ?? null;
   const amount = quote?.amount ?? null;
@@ -362,6 +369,27 @@ export default function CheckoutPage() {
             {t("Scan the QR with your banking app, or with MoMo or ZaloPay. No card details needed.")}</p>
         </div>
       </div>
+
+      {effect && (
+        <p
+          className={cn(
+            "mt-4 rounded-[var(--radius-card)] border px-4 py-3 text-sm",
+            effect.kind === "replace" ? "border-severity-moderate-line bg-severity-moderate-bg text-ink-700" : "border-line bg-white text-ink-600",
+          )}
+        >
+          {effect.kind === "renew"
+            ? t("Renewal: your plan will run until {{date}}. The new term is added to the end of the current one.", { date: day(effect.endsAt) })
+            : effect.kind === "replace"
+              ? effect.currentEndsAt
+                ? t("This replaces your {{current}} plan (active until {{currentEnd}}) from today. Time left on it isn't carried over. The new plan runs until {{date}}.", {
+                    current: currentPlanName,
+                    currentEnd: day(effect.currentEndsAt),
+                    date: day(effect.endsAt),
+                  })
+                : t("This replaces your {{current}} plan from today. The new plan runs until {{date}}.", { current: currentPlanName, date: day(effect.endsAt) })
+              : t("Your plan starts as soon as the payment arrives and runs until {{date}}. Nothing renews automatically.", { date: day(effect.endsAt) })}
+        </p>
+      )}
 
       {(submitError || quoteError) && (
         <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-severity-high-line bg-severity-high-bg px-4 py-3.5 text-sm text-severity-high">

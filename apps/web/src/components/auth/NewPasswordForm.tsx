@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Eye, EyeSlash, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { Button } from "../ui/Button";
+import { notifyPasswordChanged } from "../../lib/api";
 import { t } from "../../lib/i18n";
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -39,8 +40,10 @@ export function NewPasswordForm({ email, onDone }: { email: string; onDone: () =
     // Show the success state first: signing out empties the auth context,
     // which would otherwise flash the "link can't be used" state.
     onDone();
-    // Ends the recovery session and any other session on any device, so
+    // Email the account about the change while this session can still call
+    // the backend, then end it and every other session on any device, so
     // whoever triggered the reset (or stole the old password) is logged out.
+    await notifyPasswordChanged();
     await supabase.auth.signOut({ scope: "global" });
   }
 

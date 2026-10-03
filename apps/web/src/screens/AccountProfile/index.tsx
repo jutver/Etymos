@@ -9,6 +9,7 @@ import { t, tr } from "../../lib/i18n";
 import {
   ApiError,
   getRecoveryEmail,
+  notifyPasswordChanged,
   removeRecoveryEmail,
   setRecoveryEmail as saveRecoveryEmailApi,
   type RecoveryEmailStatus,
@@ -173,6 +174,7 @@ export default function AccountProfilePage() {
     setNewPassword("");
     setConfirmPassword("");
     pushToast({ kind: "success", title: tr("Password updated") });
+    void notifyPasswordChanged();
   }
 
   async function deleteAccount() {

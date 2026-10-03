@@ -58,6 +58,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 import mailer
+import notifications
 from auth import AuthedUser, verify_supabase_jwt
 from email_templates import LINK_TTL_MINUTES, recovery_confirm_code_email, recovery_reset_code_email
 from rate_limit import ip_key, limiter
@@ -203,7 +204,9 @@ def get_recovery_email(user: AuthedUser = Depends(verify_supabase_jwt)):
 
 
 @router.put("/api/account/recovery-email")
-def set_recovery_email(body: RecoveryEmailIn, user: AuthedUser = Depends(verify_supabase_jwt)):
+def set_recovery_email(
+    body: RecoveryEmailIn, background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)
+):
     """Set (or re-send the code for) the caller's recovery address.
     Replacing a confirmed address un-confirms it until the new one is
     confirmed — the old address stops working for recovery immediately."""
@@ -244,11 +247,18 @@ def set_recovery_email(body: RecoveryEmailIn, user: AuthedUser = Depends(verify_
     except Exception:
         logger.exception("Failed to send recovery confirm code for user_id=%s", user.user_id)
         raise HTTPException(status_code=502, detail="send_failed")
+    if row and row.get("verified_at") and row["email"] != email:
+        # A confirmed address was just replaced: tell the login email.
+        background.add_task(
+            notifications.notify_recovery_email_removed, user.user_id, user.email, row["email"], email
+        )
     return {"email": email, "verified": False, "pending": True}
 
 
 @router.post("/api/account/recovery-email/confirm")
-def confirm_recovery_email(body: CodeIn, user: AuthedUser = Depends(verify_supabase_jwt)):
+def confirm_recovery_email(
+    body: CodeIn, background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)
+):
     client = _client()
     row = _row_for_user(client, user.user_id)
     if row is None or row.get("verified_at"):
@@ -267,12 +277,17 @@ def confirm_recovery_email(body: CodeIn, user: AuthedUser = Depends(verify_supab
     client.table(TABLE).update(
         {"verified_at": _now().isoformat(), **_cleared("confirm"), "updated_at": _now().isoformat()}
     ).eq("user_id", user.user_id).execute()
+    background.add_task(notifications.notify_recovery_email_added, user.user_id, user.email, row["email"])
     return {"email": row["email"], "verified": True, "pending": False}
 
 
 @router.delete("/api/account/recovery-email")
-def delete_recovery_email(user: AuthedUser = Depends(verify_supabase_jwt)):
-    _client().table(TABLE).delete().eq("user_id", user.user_id).execute()
+def delete_recovery_email(background: BackgroundTasks, user: AuthedUser = Depends(verify_supabase_jwt)):
+    client = _client()
+    row = _row_for_user(client, user.user_id)
+    client.table(TABLE).delete().eq("user_id", user.user_id).execute()
+    if row and row.get("verified_at"):
+        background.add_task(notifications.notify_recovery_email_removed, user.user_id, user.email, row["email"], None)
     return _status(None)
 
 

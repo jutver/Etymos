@@ -40,8 +40,9 @@ FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Aria
 
 @dataclass
 class EmailContent:
-    """Copy for one email. Values are inserted as-is, so callers must pass
-    already-escaped text (see `esc`)."""
+    """Copy for one email. `subject` and `preheader` are plain text (escaped
+    when rendered); every other field is HTML, so callers must escape user
+    data in it (see `esc`)."""
 
     subject: str
     preheader: str
@@ -52,6 +53,8 @@ class EmailContent:
     code: Optional[str] = None
     code_label: Optional[str] = None
     notes: list[str] = field(default_factory=list)
+    # Label/value rows (receipts, alerts), shown under the paragraphs.
+    details: list[tuple[str, str]] = field(default_factory=list)
 
 
 esc = html.escape
@@ -91,11 +94,27 @@ def _code(label: Optional[str], code: str) -> str:
 </table>"""
 
 
+def _details(rows: list[tuple[str, str]]) -> str:
+    cells = "".join(
+        f"""<tr>
+  <td style="padding:9px 0;border-bottom:1px solid {LINE};font-family:{FONT};font-size:14px;color:{MUTED}">{label}</td>
+  <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-family:{FONT};font-size:14px;font-weight:600;color:{NAVY}">{value}</td>
+</tr>"""
+        for label, value in rows
+    )
+    return f"""
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 6px">
+  {cells}
+</table>"""
+
+
 def render_email(content: EmailContent) -> str:
     body = "".join(
         f'<p style="margin:0 0 14px;font-family:{FONT};font-size:15px;line-height:1.65;color:{INK}">{p}</p>'
         for p in content.paragraphs
     )
+    if content.details:
+        body += _details(content.details)
     if content.button_label and content.button_url:
         body += _button(content.button_label, content.button_url)
     if content.code:
@@ -121,10 +140,10 @@ def render_email(content: EmailContent) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
-<title>{content.subject}</title>
+<title>{esc(content.subject)}</title>
 </head>
 <body style="margin:0;padding:0;background:{PAGE};-webkit-text-size-adjust:100%">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{content.preheader}&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(content.preheader)}&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="{PAGE}" style="background:{PAGE}">
   <tr>
     <td align="center" style="padding:40px 16px">
@@ -183,6 +202,8 @@ def render_text(content: EmailContent) -> str:
 
     lines = [strip(content.heading), ""]
     lines += [strip(p) for p in content.paragraphs]
+    if content.details:
+        lines += [""] + [f"{strip(k)}: {strip(v)}" for k, v in content.details]
     if content.button_url:
         lines += ["", f"{strip(content.button_label or '')}: {content.button_url}"]
     if content.code:
@@ -235,4 +256,177 @@ def recovery_reset_code_email(*, account_emails: list[str], code: str) -> EmailC
         code=esc(code),
         code_label="Your recovery code:",
         notes=[code_expiry_note(), "If you didn't ask for this, ignore this email — your account is still safe."],
+    )
+
+
+# --- Account and billing notifications (backend/api/notifications.py) -----
+#
+# Every value passed in is plain text; these functions escape it.
+
+
+def _when(dt: str) -> str:
+    return esc(dt)
+
+
+def password_changed_email(*, account_email: str, changed_at: str) -> EmailContent:
+    return EmailContent(
+        subject="Your Etymos password was changed",
+        preheader="If this wasn't you, reset your password now.",
+        heading="Your password was changed",
+        paragraphs=[
+            f"The password for <strong>{esc(account_email)}</strong> was changed on {_when(changed_at)}.",
+            "If you did this, there's nothing else to do. If you didn't, reset your password right away and check that your recovery email is still yours.",
+        ],
+        button_label="Reset password",
+        button_url=f"{APP_URL}/forgot-password",
+        notes=["For your security, every device that was signed in has been signed out."],
+    )
+
+
+def recovery_email_added_email(*, account_email: str, recovery_email: str) -> EmailContent:
+    return EmailContent(
+        subject="A recovery email was added to your Etymos account",
+        preheader=f"{recovery_email} can now be used to recover your account.",
+        heading="Recovery email added",
+        paragraphs=[
+            f"<strong>{esc(recovery_email)}</strong> is now the recovery email for <strong>{esc(account_email)}</strong>. "
+            "If you ever lose access to your login email, a code sent there lets you set a new password.",
+            "If you didn't add it, someone may have access to your account: change your password and remove this address from your profile.",
+        ],
+        button_label="Review your profile",
+        button_url=f"{APP_URL}/account/profile",
+    )
+
+
+def recovery_email_removed_email(*, account_email: str, old_email: str, new_email: Optional[str]) -> EmailContent:
+    change = (
+        f"was replaced with <strong>{esc(new_email)}</strong> (waiting for confirmation)"
+        if new_email
+        else "was removed"
+    )
+    return EmailContent(
+        subject="Your Etymos recovery email was changed",
+        preheader="If this wasn't you, secure your account now.",
+        heading="Recovery email changed",
+        paragraphs=[
+            f"The recovery email <strong>{esc(old_email)}</strong> for <strong>{esc(account_email)}</strong> {change}. "
+            "It can no longer be used to recover the account.",
+            "If you didn't do this, change your password right away and set your recovery email again.",
+        ],
+        button_label="Review your profile",
+        button_url=f"{APP_URL}/account/profile",
+    )
+
+
+def payment_receipt_email(
+    *, item: str, amount: str, order_code: str, paid_at: str, result: str
+) -> EmailContent:
+    return EmailContent(
+        subject=f"Payment received: {item}",
+        preheader=f"We received {amount} for {item}.",
+        heading="Payment received",
+        paragraphs=[f"Thank you! {esc(result)}"],
+        details=[
+            ("Item", esc(item)),
+            ("Amount paid", esc(amount)),
+            ("Order code", esc(order_code)),
+            ("Paid on", _when(paid_at)),
+        ],
+        button_label="View payment history",
+        button_url=f"{APP_URL}/account/payments",
+        notes=["Keep this email as your receipt."],
+    )
+
+
+def plan_expiring_email(*, plan_name: str, ends_at: str, days_left: int, cycle: str) -> EmailContent:
+    when = "tomorrow" if days_left <= 1 else f"in {days_left} days"
+    term = "year" if cycle == "annual" else "month"
+    return EmailContent(
+        subject=f"Your Etymos {plan_name} plan ends {when}",
+        preheader=f"Renew before {ends_at} to keep your plan.",
+        heading=f"Your {esc(plan_name)} plan ends {when}",
+        paragraphs=[
+            f"Your {esc(plan_name)} plan is active until <strong>{_when(ends_at)}</strong>. After that your account moves to the Free plan.",
+            f"Renew any time before then: another {term} is added to the end of your current term, so you don't lose any days.",
+        ],
+        button_label="Renew plan",
+        button_url=f"{APP_URL}/account/plan",
+        notes=["Plans are paid by bank transfer, so nothing is charged automatically."],
+    )
+
+
+def plan_ended_email(*, ended_at: str) -> EmailContent:
+    return EmailContent(
+        subject="Your Etymos plan has ended",
+        preheader="Your account is now on the Free plan.",
+        heading="Your plan has ended",
+        paragraphs=[
+            f"Your paid plan ended on {_when(ended_at)}, and your account is now on the Free plan. "
+            "Your documents and reports are still there, and any credits you bought are unaffected.",
+            "Pick a plan again whenever you need more checks.",
+        ],
+        button_label="Choose a plan",
+        button_url=f"{APP_URL}/pricing",
+    )
+
+
+def verification_result_email(*, approved: bool) -> EmailContent:
+    if approved:
+        return EmailContent(
+            subject="You're verified as a student on Etymos",
+            preheader="You can now choose the Standard plan.",
+            heading="Student status verified",
+            paragraphs=[
+                "Good news: we've verified your student status. You can now choose the Standard plan for students.",
+            ],
+            button_label="See plans",
+            button_url=f"{APP_URL}/pricing",
+        )
+    return EmailContent(
+        subject="We couldn't verify your student status",
+        preheader="Please send a clearer document and try again.",
+        heading="Student verification wasn't approved",
+        paragraphs=[
+            "We couldn't verify your student status from the document you sent. This usually happens when the "
+            "document is unclear, expired, or doesn't show your name and school.",
+            "You can send a new document at any time.",
+        ],
+        button_label="Try again",
+        button_url=f"{APP_URL}/verify-student",
+        notes=[f"Questions? Write to {SUPPORT_EMAIL}."],
+    )
+
+
+def account_deleted_email(*, account_email: str) -> EmailContent:
+    return EmailContent(
+        subject="Your Etymos account has been deleted",
+        preheader="Your account and its documents are gone.",
+        heading="Your account has been deleted",
+        paragraphs=[
+            f"The Etymos account <strong>{esc(account_email)}</strong> has been deleted, together with its documents and reports. This can't be undone.",
+            "Payment records are kept for accounting. You're welcome to sign up again any time.",
+        ],
+        notes=[f"If you didn't ask for this, contact {SUPPORT_EMAIL} right away."],
+    )
+
+
+def admin_transfer_alert_email(
+    *, amount: str, status_label: str, note: str, content: str, reference: str, received_at: str, admin_url: Optional[str]
+) -> EmailContent:
+    return EmailContent(
+        subject=f"[Etymos admin] Transfer needs attention: {amount} ({status_label})",
+        preheader=note or status_label,
+        heading="A transfer needs attention",
+        paragraphs=[
+            f"SePay reported a transfer that couldn't be settled automatically: <strong>{esc(status_label)}</strong>. {esc(note)}",
+            "Link it to the order it paid for, or mark it resolved once the money is refunded or explained.",
+        ],
+        details=[
+            ("Amount", esc(amount)),
+            ("Transfer content", esc(content) or "—"),
+            ("Bank reference", esc(reference) or "—"),
+            ("Received", _when(received_at)),
+        ],
+        button_label="Open Revenue → Transactions" if admin_url else None,
+        button_url=f"{admin_url.rstrip('/')}/revenue/transactions" if admin_url else None,
     )

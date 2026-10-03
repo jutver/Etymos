@@ -182,12 +182,38 @@ After deploying, run these checks:
 - **The SePay log.** In the SePay dashboard (WebHooks → log), every delivery
   should show HTTP 200 with `{"success": true}`.
 
+## Subscriptions
+
+Plans are prepaid terms (`supabase/migrations/20261005000000_plan_expiry.sql`):
+
+- Buying a plan starts a term of 1 month or 1 year (`profiles.plan_expires_at`).
+- Buying the **same** plan while it's active renews it: the new term is added
+  to the end of the current one and usage carries on. My Plan and the plan
+  card show a **Renew** button for this.
+- Buying a **different** plan replaces the current one from today; checkout
+  warns that time left on the old plan isn't carried over.
+- When a term ends, the account drops to Free: pg_cron runs
+  `expire_lapsed_plans()` every 10 minutes, and the backend and web app treat
+  a lapsed plan as Free immediately.
+- Admins can change the end date (or clear it for "no end date") on the
+  user's page in the admin portal.
+
+When the migration shipped, existing paid plans got an end date from their
+latest paid order (or 30 days for plans granted by hand), never less than 7
+days away.
+
+**No automatic charging.** Bank transfers are pushed by the customer, so
+nothing can be charged on renewal. Auto-charge would need a gateway that
+stores a card or wallet token (e.g. MoMo/ZaloPay recurring payments or a card
+gateway), which requires a merchant contract.
+
+Customers get an email 3 days and 1 day before a term ends, and when it
+ends (see `SETUP_EMAIL.md` → Notification emails). They see every order
+under **My Plan → Payment history**
+(`/account/payments`, also in the account menu).
+
 ## Known limits
 
-- Paid plans don't expire or renew. This was already true before payments
-  were automated. A monthly plan stays active until changed by hand. Adding
-  `plan_expires_at` plus renewal reminders is the next step for
-  subscriptions.
 - Bank transfers can't be refunded automatically. Refund from the bank, then
   resolve the transfer in the admin portal.
 - Matching relies on the payment code in the transfer content. Customers who

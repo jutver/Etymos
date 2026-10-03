@@ -3,7 +3,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ApiError, type PaymentOrder } from "./api";
 import { setLanguage } from "./i18n";
-import { describeOrder, isDiscountError, orderMatches, paymentErrorMessage, timeLeft, toPaymentItem } from "./payments";
+import {
+  addTerm,
+  describeOrder,
+  isDiscountError,
+  orderMatches,
+  paymentErrorMessage,
+  planPurchaseEffect,
+  subscriptionStatus,
+  timeLeft,
+  toPaymentItem,
+} from "./payments";
 
 const order = (over: Partial<PaymentOrder> = {}): PaymentOrder => ({
   id: "o1",
@@ -99,5 +109,61 @@ describe("timeLeft", () => {
     expect(timeLeft(expires, at("2026-10-04T03:30:00Z"))).toBeNull();
     expect(timeLeft(expires, at("2026-10-04T04:00:00Z"))).toBeNull();
     expect(timeLeft(null, Date.now())).toBeNull();
+  });
+});
+
+describe("subscriptionStatus", () => {
+  const now = new Date("2026-10-04T00:00:00Z").getTime();
+
+  it("reports free, with when a paid plan ended", () => {
+    expect(subscriptionStatus("free", null, now)).toEqual({ kind: "free", endedAt: null });
+    expect(subscriptionStatus("free", "2026-09-30T00:00:00Z", now)).toEqual({ kind: "free", endedAt: "2026-09-30T00:00:00Z" });
+  });
+
+  it("counts days left and flags the last week", () => {
+    expect(subscriptionStatus("professional", "2026-11-04T00:00:00Z", now)).toMatchObject({ kind: "active", daysLeft: 31 });
+    expect(subscriptionStatus("professional", "2026-10-10T12:00:00Z", now)).toMatchObject({ kind: "ending_soon", daysLeft: 7 });
+  });
+
+  it("has no end for admin-granted plans", () => {
+    expect(subscriptionStatus("student", null, now)).toEqual({ kind: "no_end" });
+  });
+});
+
+describe("addTerm", () => {
+  it("adds calendar months and years like Postgres intervals", () => {
+    expect(addTerm(new Date("2026-01-31T10:00:00Z"), "monthly").toISOString()).toBe("2026-02-28T10:00:00.000Z");
+    expect(addTerm(new Date("2026-10-04T10:00:00Z"), "monthly").toISOString()).toBe("2026-11-04T10:00:00.000Z");
+    expect(addTerm(new Date("2028-02-29T10:00:00Z"), "annual").toISOString()).toBe("2029-02-28T10:00:00.000Z");
+  });
+});
+
+describe("planPurchaseEffect", () => {
+  const now = new Date("2026-10-04T00:00:00Z").getTime();
+  const monthly = { plan: "professional", billingCycle: "monthly" as const };
+
+  it("starts a term from the free plan", () => {
+    expect(planPurchaseEffect("free", null, monthly, now)).toEqual({ kind: "start", endsAt: new Date("2026-11-04T00:00:00Z") });
+  });
+
+  it("renews the same active plan from its end date", () => {
+    expect(planPurchaseEffect("professional", "2026-10-20T00:00:00Z", { ...monthly, billingCycle: "annual" }, now)).toEqual({
+      kind: "renew",
+      endsAt: new Date("2027-10-20T00:00:00Z"),
+    });
+  });
+
+  it("starts fresh when the same plan has no end date or already lapsed", () => {
+    expect(planPurchaseEffect("professional", null, monthly, now).kind).toBe("start");
+    expect(planPurchaseEffect("professional", "2026-10-01T00:00:00Z", monthly, now).kind).toBe("start");
+  });
+
+  it("replaces a different paid plan from now", () => {
+    expect(planPurchaseEffect("student", "2027-01-01T00:00:00Z", monthly, now)).toEqual({
+      kind: "replace",
+      currentPlan: "student",
+      currentEndsAt: "2027-01-01T00:00:00Z",
+      endsAt: new Date("2026-11-04T00:00:00Z"),
+    });
   });
 });

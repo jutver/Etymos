@@ -241,4 +241,5 @@ stderr_logfile_maxbytes=10MB
 `https://www.etymos.site,https://etymos.site`), `SMTP_HOST`, `SMTP_PORT`,
 `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — see
 `SETUP_EMAIL.md` for the SMTP ones. `SEPAY_WEBHOOK_API_KEY`, `SEPAY_BANK`,
-`SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME` — see `SETUP_PAYMENTS.md`.
+`SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME` — see `SETUP_PAYMENTS.md`. Optional notification settings (`ADMIN_ALERT_EMAILS`,
+`ADMIN_APP_URL`, ...) — see `SETUP_EMAIL.md`.

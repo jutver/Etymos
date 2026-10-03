@@ -15,6 +15,8 @@ export interface Profile {
   premium_credits: number;
   checks_used_this_period: number;
   plan_period_start: string;
+  /** End of the paid term; null on a paid plan = no end date. */
+  plan_expires_at: string | null;
   student_verified: boolean;
   access_status: AccessStatus;
   access_requested_at: string | null;

@@ -109,6 +109,8 @@ interface AppState {
   checkedDocuments: Record<string, CheckedDocument>;
   hasCompletedFirstCheck: boolean;
   planPeriodStart: string;
+  /** End of the current paid term; see MyProfile.planExpiresAt. */
+  planExpiresAt: string | null;
   pendingCheckoutItem: CheckoutItem | null;
   hasPendingCheck: boolean;
   pendingDocLabel: string | null;
@@ -129,6 +131,7 @@ interface AppState {
     premiumCredits: number;
     checksUsedThisPeriod: number;
     planPeriodStart: string;
+    planExpiresAt: string | null;
     studentVerified: boolean;
   }) => void;
   /** Cosmetic local mirror of the server-side deduction in
@@ -157,7 +160,6 @@ interface AppState {
    * each one. Runs after fetchHistory, i.e. on every Documents/History mount
    * and after a full page reload. */
   reconcileCheckingDocuments: () => Promise<void>;
-  cancelSubscription: () => void;
   recordCheckedDocument: (doc: CheckedDocument) => void;
   markFirstCheckComplete: () => void;
   moveToTrash: (id: string) => Promise<void>;
@@ -222,6 +224,7 @@ export const useAppStore = create<AppState>()(
       checkedDocuments: {},
       hasCompletedFirstCheck: false,
       planPeriodStart: new Date().toISOString(),
+      planExpiresAt: null,
       pendingCheckoutItem: null,
       hasPendingCheck: false,
       pendingDocLabel: null,
@@ -268,6 +271,7 @@ export const useAppStore = create<AppState>()(
           premiumCredits: profile.premiumCredits,
           checksUsedThisPeriod: profile.checksUsedThisPeriod,
           planPeriodStart: profile.planPeriodStart,
+          planExpiresAt: profile.planExpiresAt,
           studentVerified: profile.studentVerified,
         }),
 
@@ -478,9 +482,6 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      cancelSubscription: () =>
-        set({ plan: "free", checksUsedThisPeriod: 0, planPeriodStart: new Date().toISOString() }),
-
       recordCheckedDocument: (doc) =>
         set((s) => ({ checkedDocuments: { ...s.checkedDocuments, [doc.id]: doc } })),
 
@@ -595,6 +596,7 @@ export const useAppStore = create<AppState>()(
         selectedBalance: s.selectedBalance,
         hasCompletedFirstCheck: s.hasCompletedFirstCheck,
         planPeriodStart: s.planPeriodStart,
+        planExpiresAt: s.planExpiresAt,
         studentVerified: s.studentVerified,
         knownProjects: s.knownProjects,
       }),

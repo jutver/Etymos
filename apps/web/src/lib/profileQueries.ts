@@ -11,8 +11,13 @@ import { supabase } from "@etymos/shared";
 import type { AccessStatus, BillingCycle, PlanTier } from "@etymos/shared";
 
 export interface MyProfile {
+  /** The plan in force now: a paid plan whose term has ended reads as
+   * "free" even before the server-side job writes the downgrade. */
   plan: PlanTier;
   billingCycle: BillingCycle | null;
+  /** End of the paid term (null = no end date, or free). Kept after a plan
+   * lapses so the UI can say when it ended. */
+  planExpiresAt: string | null;
   standardCredits: number;
   premiumCredits: number;
   checksUsedThisPeriod: number;
@@ -38,6 +43,7 @@ export interface MyProfile {
 interface ProfileRow {
   plan_tier: PlanTier;
   billing_cycle: BillingCycle | null;
+  plan_expires_at: string | null;
   standard_credits: number;
   premium_credits: number;
   checks_used_this_period: number;
@@ -58,7 +64,7 @@ export async function fetchMyProfile(userId: string): Promise<MyProfile> {
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "plan_tier, billing_cycle, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified, access_status, access_requested_at, access_reviewed_at, access_note, role, banned_permanent, banned_until, ban_reason, deletion_requested_at",
+      "plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified, access_status, access_requested_at, access_reviewed_at, access_note, role, banned_permanent, banned_until, ban_reason, deletion_requested_at",
     )
     .eq("id", userId)
     .single();
@@ -66,9 +72,11 @@ export async function fetchMyProfile(userId: string): Promise<MyProfile> {
 
   const row = data as ProfileRow;
   const isBanned = !!row.banned_permanent || (!!row.banned_until && new Date(row.banned_until).getTime() > Date.now());
+  const lapsed = !!row.plan_expires_at && new Date(row.plan_expires_at).getTime() <= Date.now();
   return {
-    plan: row.plan_tier,
-    billingCycle: row.billing_cycle,
+    plan: lapsed ? "free" : row.plan_tier,
+    billingCycle: lapsed ? null : row.billing_cycle,
+    planExpiresAt: row.plan_expires_at,
     standardCredits: row.standard_credits,
     premiumCredits: row.premium_credits,
     checksUsedThisPeriod: row.checks_used_this_period,

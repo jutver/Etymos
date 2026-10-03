@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  ArrowClockwise,
   CalendarBlank,
-  Check,
-  CreditCard,
   GraduationCap,
+  Receipt,
   ShieldCheck,
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
-import { PAYMENT_METHODS } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
-import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
-import { t, tr, tn, currentLocale } from "../../lib/i18n";
+import { subscriptionStatus } from "../../lib/payments";
+import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
+import { t, tn, currentLocale } from "../../lib/i18n";
 
 export default function AccountPlanPage() {
   const navigate = useNavigate();
@@ -28,18 +28,16 @@ export default function AccountPlanPage() {
   const studentVerified = useAppStore((s) => s.studentVerified);
   const planResetInfo = useAppStore((s) => s.planResetInfo);
   const rolloverPlanPeriodIfNeeded = useAppStore((s) => s.rolloverPlanPeriodIfNeeded);
-  const pushToast = useAppStore((s) => s.pushToast);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
-  const cancelSubscriptionAction = useAppStore((s) => s.cancelSubscription);
+  const planExpiresAt = useAppStore((s) => s.planExpiresAt);
+  const currentCycle = useAppStore((s) => s.billingCycle);
 
   useEffect(() => {
     rolloverPlanPeriodIfNeeded();
   }, [rolloverPlanPeriodIfNeeded]);
 
   const { daysLeft, resetDate } = planResetInfo();
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [method, setMethod] = useState<PaymentMethod>("vnpay");
-  const [methodOpen, setMethodOpen] = useState(false);
+  const status = subscriptionStatus(plan, planExpiresAt);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
@@ -63,11 +61,13 @@ export default function AccountPlanPage() {
     ...plans.filter((p) => p.id !== "free").map((p) => annualSavingsPercent(p.priceMonthly, p.priceAnnual)),
   );
 
-  function cancelSubscription() {
-    cancelSubscriptionAction();
-    setConfirmCancel(false);
-    pushToast({ kind: "info", title: tr("Subscription canceled"), description: tr("You're back on the Free plan.") });
+  function renew() {
+    if (plan === "free") return;
+    selectCheckoutItem({ kind: "plan", plan, billingCycle: currentCycle });
+    navigate("/checkout");
   }
+
+  const formatDay = (iso: string) => new Date(iso).toLocaleDateString(currentLocale(), { dateStyle: "long" });
 
   function buyPack(packId: CreditPack["id"]) {
     selectCheckoutItem({ kind: "pack", packId });
@@ -110,57 +110,48 @@ export default function AccountPlanPage() {
           <ShieldCheck size={17} weight="bold" />
           {t("Subscription management")}</h2>
 
-        <div className="mt-4 flex items-center justify-between rounded-[var(--radius-control)] border border-line px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-ink-900">{t("Payment method")}</p>
-            <p className="text-xs text-ink-500">
-              {t(PAYMENT_METHODS.find((m) => m.id === method)?.label)}{" "}{t("on file (demo)")}</p>
-          </div>
-          <Button variant="outline" size="sm" iconLeft={<CreditCard size={15} />} onClick={() => setMethodOpen((v) => !v)}>
-            {t("Manage")}</Button>
-        </div>
-
-        {methodOpen && (
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {PAYMENT_METHODS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setMethod(m.id)}
-                className={cn(
-                  "flex items-center gap-3 rounded-[var(--radius-card)] border-2 p-3.5 text-left transition-colors",
-                  method === m.id ? "border-brand-500 bg-brand-100/30" : "border-line hover:border-brand-300",
-                )}
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-line">
-                  <img src={m.logo} alt={t(m.label)} className="size-6 object-contain" />
-                </span>
-                <span className="text-sm font-semibold text-ink-900">{t(m.label)}</span>
-                {method === m.id && <Check size={15} weight="bold" className="ml-auto text-brand-600" />}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {plan !== "free" ? (
-          <div className="mt-5">
-            {confirmCancel ? (
-              <div className="flex items-center gap-3 rounded-[var(--radius-control)] border border-severity-high-line bg-severity-high-bg px-4 py-3 text-sm text-severity-high">
-                <WarningCircle size={18} weight="fill" className="shrink-0" />
-                <span className="flex-1">{t("Cancel your subscription? You'll drop to the Free plan immediately.")}</span>
-                <Button size="sm" variant="danger" onClick={cancelSubscription}>
-                  {t("Confirm")}</Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmCancel(false)}>
-                  {t("Keep plan")}</Button>
-              </div>
-            ) : (
-              <Button variant="outline" onClick={() => setConfirmCancel(true)}>
-                {t("Cancel subscription")}</Button>
-            )}
-          </div>
+        {status.kind === "free" ? (
+          <p className="mt-4 text-sm text-ink-500">
+            {status.endedAt
+              ? t("Your paid plan ended on {{date}}. Choose a plan below to subscribe again.", { date: formatDay(status.endedAt) })
+              : t("You're on the Free plan. Choose a plan below to unlock more checks.")}
+          </p>
         ) : (
-          <p className="mt-5 text-sm text-ink-500">
-            {t("You're on the Free plan. Choose a plan below to unlock unlimited checks.")}</p>
+          <>
+            <div
+              className={cn(
+                "mt-4 flex flex-col gap-3 rounded-[var(--radius-control)] border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+                status.kind === "ending_soon" ? "border-severity-moderate-line bg-severity-moderate-bg" : "border-line",
+              )}
+            >
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                  {status.kind === "ending_soon" && <WarningCircle size={16} weight="fill" className="text-severity-moderate" />}
+                  {status.kind === "no_end"
+                    ? t("Active, no end date")
+                    : t("Active until {{date}}", { date: formatDay(status.endsAt) })}
+                </p>
+                <p className="text-xs text-ink-500">
+                  {currentCycle === "annual" ? t("Yearly plan") : t("Monthly plan")}
+                  {status.kind !== "no_end" && (
+                    <> · {tn(status.daysLeft, "{{count}} day left", "{{count}} days left")}</>
+                  )}
+                </p>
+              </div>
+              {status.kind !== "no_end" && (
+                <Button size="sm" onClick={renew} iconLeft={<ArrowClockwise size={15} weight="bold" />}>
+                  {t("Renew")}</Button>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-ink-500">
+              {t("Plans are paid in advance by bank transfer, so nothing is ever charged automatically. Renewing adds another term to the end of your current one; if you don't renew, your account moves to the Free plan when the term ends.")}</p>
+          </>
         )}
+
+        <div className="mt-5 border-t border-line pt-4">
+          <Button as="link" to="/account/payments" variant="outline" size="sm" iconLeft={<Receipt size={15} />}>
+            {t("Payment history")}</Button>
+        </div>
       </section>
 
       <section className="mt-10">

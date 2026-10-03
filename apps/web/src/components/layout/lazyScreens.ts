@@ -41,6 +41,7 @@ export const CheckoutPage = lazy(() => import("../../screens/Checkout"));
 export const PaymentSuccessPage = lazy(() => import("../../screens/PaymentSuccess"));
 export const AccountProfilePage = lazy(() => import("../../screens/AccountProfile"));
 export const AccountPlanPage = lazy(() => import("../../screens/AccountPlan"));
+export const PaymentHistoryPage = lazy(() => import("../../screens/PaymentHistory"));
 export const VerifyStudentPage = lazy(() => import("../../screens/VerifyStudent"));
 
 /**

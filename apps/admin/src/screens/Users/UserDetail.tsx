@@ -32,6 +32,7 @@ const BILLING_OPTIONS: BillingCycle[] = ["monthly", "annual"];
 const FIELD_LABELS: Record<string, string> = {
   plan_tier: tr("Plan tier"),
   billing_cycle: tr("Billing cycle"),
+  plan_expires_at: tr("Plan ends"),
   standard_credits: tr("Standard credits"),
   premium_credits: tr("Premium credits"),
   student_verified: tr("Student verified"),
@@ -54,8 +55,19 @@ function formatAuditValue(value: unknown): string {
 
 type EditableProfileFields = Pick<
   Profile,
-  "plan_tier" | "billing_cycle" | "standard_credits" | "premium_credits" | "student_verified"
+  "plan_tier" | "billing_cycle" | "plan_expires_at" | "standard_credits" | "premium_credits" | "student_verified"
 >;
+
+/** Vietnam calendar day (yyyy-mm-dd) of a timestamp, for the date input. */
+function toVNDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(new Date(iso).getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** A date input's day as the end of that day in Vietnam time; blank = no end date. */
+function fromVNDate(day: string): string | null {
+  return day ? new Date(`${day}T23:59:59+07:00`).toISOString() : null;
+}
 
 /** Diffs only the fields that actually changed, for a compact audit_log metadata payload. */
 function diffProfileFields(before: EditableProfileFields, after: EditableProfileFields) {
@@ -90,6 +102,7 @@ export default function UserDetailPage() {
 
   const [planTier, setPlanTier] = useState<PlanTier>("free");
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [planEnds, setPlanEnds] = useState("");
   const [standardCredits, setStandardCredits] = useState(0);
   const [premiumCredits, setPremiumCredits] = useState(0);
   const [studentVerified, setStudentVerified] = useState(false);
@@ -126,6 +139,7 @@ export default function UserDetailPage() {
         setProfile(p);
         setPlanTier(p.plan_tier);
         setBillingCycle(p.billing_cycle ?? "monthly");
+        setPlanEnds(toVNDate(p.plan_expires_at));
         setStandardCredits(p.standard_credits);
         setPremiumCredits(p.premium_credits);
         setStudentVerified(p.student_verified);
@@ -172,6 +186,7 @@ export default function UserDetailPage() {
       const before: EditableProfileFields = {
         plan_tier: profile.plan_tier,
         billing_cycle: profile.billing_cycle,
+        plan_expires_at: profile.plan_expires_at,
         standard_credits: profile.standard_credits,
         premium_credits: profile.premium_credits,
         student_verified: profile.student_verified,
@@ -179,6 +194,12 @@ export default function UserDetailPage() {
       const after: EditableProfileFields = {
         plan_tier: planTier,
         billing_cycle: billingCycle,
+        // Untouched (same day shown) keeps the exact stored time; Free keeps
+        // the old value so a lapsed account still shows when it ended.
+        plan_expires_at:
+          planTier === "free" || planEnds === toVNDate(profile.plan_expires_at)
+            ? profile.plan_expires_at
+            : fromVNDate(planEnds),
         standard_credits: standardCredits,
         premium_credits: premiumCredits,
         student_verified: studentVerified,
@@ -442,6 +463,20 @@ export default function UserDetailPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan ends")}</label>
+            <input
+              type="date"
+              value={planTier === "free" ? "" : planEnds}
+              disabled={planTier === "free"}
+              onChange={(e) => setPlanEnds(e.target.value)}
+              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent disabled:opacity-50"
+            />
+            <p className="mt-1 text-caption text-fg-subtle">
+              {planTier === "free" ? t("Free has no end date.") : t("End of that day, Vietnam time. Leave blank for no end date.")}
+            </p>
           </div>
 
           <div>

@@ -22,12 +22,14 @@ export function PlanCard({
   const studentVerified = useAppStore((s) => s.studentVerified);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const isCurrent = currentPlan === plan.id;
+  // The paid plan you're on can be renewed: paying again adds a term to the end.
+  const canRenew = isCurrent && plan.id !== "free";
   const price = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
   const hasDiscount = discountedPrice !== undefined && discountedPrice < price;
   const needsVerification = plan.requiresVerification && !studentVerified;
 
   function handleSelect() {
-    if (plan.id === "free" || isCurrent) {
+    if (plan.id === "free" || (isCurrent && !canRenew)) {
       navigate("/upload");
       return;
     }
@@ -97,9 +99,11 @@ export function PlanCard({
         variant={plan.mostPopular ? "primary" : isCurrent ? "outline" : "secondary"}
         fullWidth
         className="mt-6"
-        disabled={isCurrent}
+        disabled={isCurrent && !canRenew}
       >
-        {isCurrent
+        {canRenew
+          ? t("Renew {{name}}", { name: t(plan.name) })
+          : isCurrent
           ? t("Current plan")
           : plan.id === "free"
             ? t("Start for free")

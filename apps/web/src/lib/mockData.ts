@@ -1,4 +1,4 @@
-import type { CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
+import type { CreditPack, PlanDefinition } from "@etymos/shared";
 import { tr } from "./i18n";
 
 export const PLANS: PlanDefinition[] = [
@@ -72,14 +72,6 @@ export const CREDIT_PACKS: CreditPack[] = [
     price: 29000,
   },
 ];
-
-export const PAYMENT_METHODS: {
-  id: PaymentMethod;
-  label: string;
-  logo: string;
-  comingSoon?: boolean;
-  hasQr?: boolean;
-}[] = [{ id: "vnpay", label: tr("VietQR"), logo: "/assets/logo/vnpay.png", hasQr: true }];
 
 export const COMPETITORS = [
   {

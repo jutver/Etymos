@@ -28,6 +28,7 @@ import {
   PaymentSuccessPage,
   AccountProfilePage,
   AccountPlanPage,
+  PaymentHistoryPage,
   VerifyStudentPage,
   VerifyEmailPage,
   AuthCallbackPage,
@@ -168,6 +169,7 @@ function App() {
             <Route path="/payment-success" element={<PaymentSuccessPage />} />
             <Route path="/account/profile" element={<AccountProfilePage />} />
             <Route path="/account/plan" element={<AccountPlanPage />} />
+            <Route path="/account/payments" element={<PaymentHistoryPage />} />
             <Route path="/verify-student" element={<VerifyStudentPage />} />
           </Route>
         </Route>

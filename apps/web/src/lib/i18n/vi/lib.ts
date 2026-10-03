@@ -69,7 +69,6 @@ export const lib: Record<string, string> = {
   "University plagiarism tools": "Công cụ đạo văn của trường đại học",
   "Untitled document": "Tài liệu chưa đặt tên",
   "Verification required": "Cần xác minh",
-  "VietQR": "VietQR",
   "Vietnamese users": "Người dùng Việt Nam",
   "Vietnamese-optimized, Explainable AI, AI Rewrite": "Tối ưu cho tiếng Việt, AI giải thích được, Viết lại bằng AI",
   "Weak Vietnamese semantic detection": "Phát hiện ngữ nghĩa tiếng Việt yếu",
