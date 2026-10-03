@@ -22,7 +22,7 @@ import ssl
 from email.message import EmailMessage
 from email.utils import make_msgid
 
-from email_templates import EmailContent, Lang, render_email, render_text
+from email_templates import EmailContent, render_email, render_text
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def is_configured() -> bool:
     return bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
 
 
-def send_email(to: str, content: EmailContent, lang: Lang) -> None:
+def send_email(to: str, content: EmailContent) -> None:
     host = os.getenv("SMTP_HOST")
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
@@ -49,8 +49,8 @@ def send_email(to: str, content: EmailContent, lang: Lang) -> None:
     msg["From"] = sender
     msg["To"] = to
     msg["Message-ID"] = make_msgid(domain=user.split("@")[-1])
-    msg.set_content(render_text(content, lang))
-    msg.add_alternative(render_email(content, lang), subtype="html")
+    msg.set_content(render_text(content))
+    msg.add_alternative(render_email(content), subtype="html")
 
     context = ssl.create_default_context()
     if port == 465:

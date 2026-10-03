@@ -1,11 +1,11 @@
-{{ if eq (printf "%v" .Data.locale) "en" }}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
-<title>Xác nhận email Etymos · Confirm your Etymos email</title>
+<title>Confirm your Etymos email</title>
 </head>
 <body style="margin:0;padding:0;background:#f3f6fb;-webkit-text-size-adjust:100%">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">Confirm your email to activate your Etymos account.&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>
@@ -37,15 +37,7 @@
     </td>
   </tr>
 </table>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 4px">
-  <tr>
-    <td style="padding:16px 20px;background:#eef3ff;border-radius:10px">
-      <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;color:#7a8699">Or enter this code on the verification page:</p>
-      <p style="margin:0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:8px;color:#142b4a">{{ .Token }}</p>
-    </td>
-  </tr>
-</table>
-                  <p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">This link and code expire in <strong>30 minutes</strong>.</p><p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">If you didn't sign up for Etymos, you can ignore this email.</p>
+                  <p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">This link expires in <strong>30 minutes</strong>.</p><p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">If you didn't sign up for Etymos, you can ignore this email.</p>
                 </td>
               </tr>
               
@@ -75,81 +67,3 @@
 </table>
 </body>
 </html>
-{{ else }}<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light only">
-<title>Xác nhận email Etymos · Confirm your Etymos email</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f6fb;-webkit-text-size-adjust:100%">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">Xác nhận email để kích hoạt tài khoản Etymos.&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f3f6fb" style="background:#f3f6fb">
-  <tr>
-    <td align="center" style="padding:40px 16px">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px">
-        <tr>
-          <td style="padding:0 8px 20px">
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-              <tr>
-                <td style="vertical-align:middle;padding-right:10px"><img src="https://www.etymos.site/assets/logo/etymos-mark-email.png" width="40" height="34" alt="" style="display:block;border:0;outline:none"></td>
-                <td style="vertical-align:middle;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:21px;font-weight:700;letter-spacing:-0.3px;color:#142b4a">Etymos</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td bgcolor="#ffffff" style="background:#ffffff;border:1px solid #e3e8f2;border-radius:16px;border-top:4px solid #1d4ed8">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-              <tr>
-                <td style="padding:36px 40px 0">
-                  <h1 style="margin:0 0 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:23px;line-height:1.3;font-weight:700;letter-spacing:-0.3px;color:#142b4a">Xác nhận địa chỉ email</h1>
-                  <p style="margin:0 0 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.65;color:#3f4b5f">Chào mừng bạn đến với Etymos! Nhấn nút bên dưới để xác nhận <strong>{{ .Email }}</strong> và kích hoạt tài khoản.</p>
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 8px">
-  <tr>
-    <td align="center" bgcolor="#1d4ed8" style="border-radius:10px">
-      <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 30px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:600;line-height:1;color:#ffffff;text-decoration:none;border-radius:10px">Xác nhận email</a>
-    </td>
-  </tr>
-</table>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 4px">
-  <tr>
-    <td style="padding:16px 20px;background:#eef3ff;border-radius:10px">
-      <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;color:#7a8699">Hoặc nhập mã này trên trang xác minh:</p>
-      <p style="margin:0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:8px;color:#142b4a">{{ .Token }}</p>
-    </td>
-  </tr>
-</table>
-                  <p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">Liên kết và mã này sẽ hết hạn sau <strong>30 phút</strong>.</p><p style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#7a8699">Nếu bạn không đăng ký Etymos, hãy bỏ qua email này.</p>
-                </td>
-              </tr>
-              
-<tr>
-  <td style="padding:20px 40px 0">
-    <p style="margin:0 0 6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.5;color:#7a8699">Nút không hoạt động? Sao chép liên kết này vào trình duyệt:</p>
-    <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.5;word-break:break-all"><a href="{{ .ConfirmationURL }}" style="color:#1d4ed8;text-decoration:underline">{{ .ConfirmationURL }}</a></p>
-  </td>
-</tr>
-              <tr><td style="padding:32px 40px 0"><div style="height:1px;background:#e3e8f2;line-height:1px;font-size:0">&nbsp;</div></td></tr>
-              <tr>
-                <td style="padding:18px 40px 32px">
-                  <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.6;color:#7a8699">Email này được gửi tự động từ Etymos — vui lòng không trả lời. Cần hỗ trợ? Liên hệ <a href="mailto:support@etymos.site" style="color:#1d4ed8;text-decoration:none">support@etymos.site</a>.</p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td align="center" style="padding:20px 8px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;color:#7a8699">
-            <a href="https://www.etymos.site" style="color:#7a8699;text-decoration:none">Etymos</a> &middot; Kiểm tra đạo văn học thuật
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>
-{{ end }}

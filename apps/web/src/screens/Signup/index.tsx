@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Envelope, Eye, EyeSlash, Info, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
-import { getLanguage, t, tr } from "../../lib/i18n";
+import { t, tr } from "../../lib/i18n";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -33,9 +33,7 @@ export default function SignupPage() {
       password,
       // Confirmation link lands on the "email verified" page. The URL must be
       // in Supabase's Redirect URLs allowlist or Supabase falls back to Site URL.
-      // `locale` picks the language of Supabase's auth emails (see
-      // supabase/templates/); AuthProvider keeps it in sync afterwards.
-      options: { emailRedirectTo: `${window.location.origin}/email-verified`, data: { locale: getLanguage() } },
+      options: { emailRedirectTo: `${window.location.origin}/email-verified` },
     });
 
     if (signUpError) {

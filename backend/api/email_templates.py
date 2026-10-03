@@ -19,9 +19,7 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass, field
-from typing import Literal, Optional
-
-Lang = Literal["vi", "en"]
+from typing import Optional
 
 APP_URL = "https://www.etymos.site"
 LOGO_URL = f"{APP_URL}/assets/logo/etymos-mark-email.png"
@@ -42,8 +40,8 @@ FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Aria
 
 @dataclass
 class EmailContent:
-    """Copy for one email in one language. Values are inserted as-is, so
-    callers must pass already-escaped text (see `esc`)."""
+    """Copy for one email. Values are inserted as-is, so callers must pass
+    already-escaped text (see `esc`)."""
 
     subject: str
     preheader: str
@@ -58,23 +56,12 @@ class EmailContent:
 
 esc = html.escape
 
-_CHROME = {
-    "vi": {
-        "fallback": "Nút không hoạt động? Sao chép liên kết này vào trình duyệt:",
-        "footer": "Email này được gửi tự động từ Etymos — vui lòng không trả lời. Cần hỗ trợ? Liên hệ",
-        "tagline": "Kiểm tra đạo văn học thuật",
-    },
-    "en": {
-        "fallback": "Button not working? Copy this link into your browser:",
-        "footer": "This is an automated email from Etymos — please don't reply. Need help? Contact",
-        "tagline": "Academic plagiarism checking",
-    },
-}
+FALLBACK_LABEL = "Button not working? Copy this link into your browser:"
+FOOTER = "This is an automated email from Etymos — please don't reply. Need help? Contact"
+TAGLINE = "Academic plagiarism checking"
 
 
-def expiry_note(lang: Lang) -> str:
-    if lang == "vi":
-        return f"Liên kết này sẽ hết hạn sau <strong>{LINK_TTL_MINUTES} phút</strong>."
+def expiry_note() -> str:
     return f"This link expires in <strong>{LINK_TTL_MINUTES} minutes</strong>."
 
 
@@ -104,8 +91,7 @@ def _code(label: Optional[str], code: str) -> str:
 </table>"""
 
 
-def render_email(content: EmailContent, lang: Lang) -> str:
-    chrome = _CHROME[lang]
+def render_email(content: EmailContent) -> str:
     body = "".join(
         f'<p style="margin:0 0 14px;font-family:{FONT};font-size:15px;line-height:1.65;color:{INK}">{p}</p>'
         for p in content.paragraphs
@@ -123,13 +109,13 @@ def render_email(content: EmailContent, lang: Lang) -> str:
         fallback = f"""
 <tr>
   <td style="padding:20px 40px 0">
-    <p style="margin:0 0 6px;font-family:{FONT};font-size:12px;line-height:1.5;color:{MUTED}">{chrome["fallback"]}</p>
+    <p style="margin:0 0 6px;font-family:{FONT};font-size:12px;line-height:1.5;color:{MUTED}">{FALLBACK_LABEL}</p>
     <p style="margin:0;font-family:{FONT};font-size:12px;line-height:1.5;word-break:break-all"><a href="{content.button_url}" style="color:{BRAND};text-decoration:underline">{content.button_url}</a></p>
   </td>
 </tr>"""
 
     return f"""<!DOCTYPE html>
-<html lang="{lang}">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -167,7 +153,7 @@ def render_email(content: EmailContent, lang: Lang) -> str:
               <tr><td style="padding:32px 40px 0"><div style="height:1px;background:{LINE};line-height:1px;font-size:0">&nbsp;</div></td></tr>
               <tr>
                 <td style="padding:18px 40px 32px">
-                  <p style="margin:0;font-family:{FONT};font-size:12px;line-height:1.6;color:{MUTED}">{chrome["footer"]} <a href="mailto:{SUPPORT_EMAIL}" style="color:{BRAND};text-decoration:none">{SUPPORT_EMAIL}</a>.</p>
+                  <p style="margin:0;font-family:{FONT};font-size:12px;line-height:1.6;color:{MUTED}">{FOOTER} <a href="mailto:{SUPPORT_EMAIL}" style="color:{BRAND};text-decoration:none">{SUPPORT_EMAIL}</a>.</p>
                 </td>
               </tr>
             </table>
@@ -175,7 +161,7 @@ def render_email(content: EmailContent, lang: Lang) -> str:
         </tr>
         <tr>
           <td align="center" style="padding:20px 8px 0;font-family:{FONT};font-size:12px;color:{MUTED}">
-            <a href="{APP_URL}" style="color:{MUTED};text-decoration:none">Etymos</a> &middot; {chrome["tagline"]}
+            <a href="{APP_URL}" style="color:{MUTED};text-decoration:none">Etymos</a> &middot; {TAGLINE}
           </td>
         </tr>
       </table>
@@ -187,7 +173,7 @@ def render_email(content: EmailContent, lang: Lang) -> str:
 """
 
 
-def render_text(content: EmailContent, lang: Lang) -> str:
+def render_text(content: EmailContent) -> str:
     """Plain-text alternative: spam filters penalise HTML-only mail, and some
     readers (and screen-reader setups) prefer text."""
     import re
@@ -210,26 +196,12 @@ def render_text(content: EmailContent, lang: Lang) -> str:
 # --- Backend-sent emails --------------------------------------------------
 
 
-def code_expiry_note(lang: Lang) -> str:
-    if lang == "vi":
-        return f"Mã có hiệu lực trong <strong>{LINK_TTL_MINUTES} phút</strong> và chỉ dùng được một lần. Không chia sẻ mã này với bất kỳ ai."
+def code_expiry_note() -> str:
     return f"The code is valid for <strong>{LINK_TTL_MINUTES} minutes</strong> and works once. Never share it with anyone."
 
 
-def recovery_confirm_code_email(lang: Lang, *, account_email: str, code: str) -> EmailContent:
+def recovery_confirm_code_email(*, account_email: str, code: str) -> EmailContent:
     a = f"<strong>{esc(account_email)}</strong>"
-    if lang == "vi":
-        return EmailContent(
-            subject=f"{code} là mã xác nhận email khôi phục Etymos",
-            preheader="Nhập mã này trong trang hồ sơ Etymos để xác nhận email khôi phục.",
-            heading="Xác nhận email khôi phục",
-            paragraphs=[
-                f"Tài khoản Etymos {a} vừa chọn địa chỉ này làm email khôi phục. Nhập mã dưới đây vào cửa sổ xác nhận trong trang hồ sơ.",
-            ],
-            code=esc(code),
-            code_label="Mã xác nhận của bạn:",
-            notes=[code_expiry_note(lang), "Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email — sẽ không có gì thay đổi."],
-        )
     return EmailContent(
         subject=f"{code} is your Etymos recovery email code",
         preheader="Enter this code on your Etymos profile page to confirm your recovery email.",
@@ -239,32 +211,13 @@ def recovery_confirm_code_email(lang: Lang, *, account_email: str, code: str) ->
         ],
         code=esc(code),
         code_label="Your confirmation code:",
-        notes=[code_expiry_note(lang), "If you didn't request this, ignore this email — nothing will change."],
+        notes=[code_expiry_note(), "If you didn't request this, ignore this email — nothing will change."],
     )
 
 
-def recovery_reset_code_email(lang: Lang, *, account_emails: list[str], code: str) -> EmailContent:
+def recovery_reset_code_email(*, account_emails: list[str], code: str) -> EmailContent:
     many = len(account_emails) > 1
     names = ", ".join(f"<strong>{esc(e)}</strong>" for e in account_emails)
-    if lang == "vi":
-        target = (
-            f"một tài khoản Etymos qua email khôi phục này (email này được liên kết với {len(account_emails)} tài khoản: {names})"
-            if many
-            else f"tài khoản {names}"
-        )
-        return EmailContent(
-            subject=f"{code} là mã khôi phục tài khoản Etymos",
-            preheader="Nhập mã này để đặt mật khẩu mới cho tài khoản Etymos.",
-            heading="Khôi phục tài khoản",
-            paragraphs=[
-                f"Chúng tôi nhận được yêu cầu khôi phục {target}. Nhập mã dưới đây trên trang khôi phục"
-                + (", chọn tài khoản," if many else "")
-                + " rồi đặt mật khẩu mới.",
-            ],
-            code=esc(code),
-            code_label="Mã khôi phục của bạn:",
-            notes=[code_expiry_note(lang), "Nếu bạn không yêu cầu, hãy bỏ qua email này — tài khoản của bạn vẫn an toàn."],
-        )
     target = (
         f"an Etymos account through this recovery email, which is linked to {len(account_emails)} accounts: {names}"
         if many
@@ -281,5 +234,5 @@ def recovery_reset_code_email(lang: Lang, *, account_emails: list[str], code: st
         ],
         code=esc(code),
         code_label="Your recovery code:",
-        notes=[code_expiry_note(lang), "If you didn't ask for this, ignore this email — your account is still safe."],
+        notes=[code_expiry_note(), "If you didn't ask for this, ignore this email — your account is still safe."],
     )

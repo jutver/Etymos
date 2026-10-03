@@ -1,49 +1,44 @@
-import { useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { EnvelopeSimple, ArrowClockwise, CheckCircle } from "@phosphor-icons/react";
-import { Button } from "../../components/ui/Button";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ArrowClockwise, CheckCircle } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
+import { Button } from "../../components/ui/Button";
+import { AuthResultCard } from "../../components/auth/AuthResultCard";
 import { t } from "../../lib/i18n";
+
+/** Supabase refuses a second confirmation email to the same address within
+ * 60 seconds; the resend button waits the same amount. */
+const RESEND_COOLDOWN_SECONDS = 60;
 
 interface LocationState {
   email?: string;
 }
 
+/**
+ * Shown right after an email + password sign-up. Confirmation is link-only:
+ * the email's button opens /email-verified, which confirms the address. This
+ * page just says where the link went and lets the user resend it.
+ */
 export default function VerifyEmailPage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const email = (location.state as LocationState)?.email ?? "";
-
-  const [code, setCode] = useState("");
-  const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Sign-up just sent the first email, so resending starts on cooldown.
+  const [cooldown, setCooldown] = useState(email ? RESEND_COOLDOWN_SECONDS : 0);
+  const inFlight = useRef(false);
 
-  async function handleVerify(e: FormEvent) {
-    e.preventDefault();
-    if (!email || code.length < 6) return;
-
-    setVerifying(true);
-    setError(null);
-
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "signup",
-    });
-
-    setVerifying(false);
-    if (verifyError) {
-      setError(verifyError.message);
-      return;
-    }
-    navigate("/upload", { replace: true });
-  }
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
 
   async function handleResend() {
-    if (!email) return;
+    if (!email || inFlight.current) return;
+    inFlight.current = true;
     setResending(true);
     setError(null);
     setResent(false);
@@ -54,74 +49,65 @@ export default function VerifyEmailPage() {
       options: { emailRedirectTo: `${window.location.origin}/email-verified` },
     });
 
+    inFlight.current = false;
     setResending(false);
     if (resendError) {
-      setError(resendError.message);
+      setError(
+        resendError.status === 429 ? t("Too many requests. Please wait a minute and try again.") : resendError.message,
+      );
       return;
     }
     setResent(true);
+    setCooldown(RESEND_COOLDOWN_SECONDS);
   }
 
   return (
-    <div className="studio-card rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
-      <div className="studio-page mx-auto flex size-14 items-center justify-center rounded-full bg-brand-100 text-brand-600">
-        <EnvelopeSimple size={28} weight="fill" />
-      </div>
-
-      <h1 className="mt-5 text-center text-h3 font-bold tracking-tight text-navy-900">
-        {t("Check your email")}</h1>
-
-      <p className="mt-2.5 text-center text-sm leading-relaxed text-ink-600">
-        {t("We've sent a 6-digit verification code to")}{" "}
-        {email ? (
-          <span className="font-semibold text-navy-900">{email}</span>
-        ) : (
-          t("your email address")
-        )}
-        {t(". Enter it below to activate your account.")}</p>
-
-      <form onSubmit={handleVerify} className="mt-6 flex flex-col gap-3">
-        <input
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          placeholder="123456"
-          className="w-full rounded-[var(--radius-control)] border border-line bg-white py-2.5 px-4 text-center text-lg font-semibold tracking-[0.4em] placeholder:tracking-normal placeholder:text-ink-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
-        />
-
-        {error && <p className="text-center text-sm text-severity-high">{error}</p>}
-
-        {resent && (
-          <div className="flex items-center justify-center gap-2 text-sm text-green-600">
-            <CheckCircle size={16} weight="fill" />
-            <span>{t("Verification code resent!")}</span>
-          </div>
-        )}
-
-        <Button type="submit" size="lg" fullWidth loading={verifying} disabled={!email || code.length < 6}>
-          {t("Verify email")}</Button>
-      </form>
-
-      <Button
-        variant="outline"
-        size="lg"
-        fullWidth
-        loading={resending}
-        onClick={handleResend}
-        disabled={!email}
-        className="mt-3"
-        iconLeft={<ArrowClockwise size={16} />}
-      >
-        {t("Resend code")}</Button>
-
-      <p className="mt-6 text-center text-sm text-ink-600">
-        {t("Already verified?")}{" "}
-        <Link to="/login" className="font-semibold text-brand-600 hover:underline">
-          {t("Log in")}</Link>
+    <AuthResultCard
+      tone="info"
+      title={t("Check your email")}
+      actions={
+        <>
+          {email && (
+            <Button
+              variant="outline"
+              size="lg"
+              fullWidth
+              loading={resending}
+              disabled={cooldown > 0}
+              onClick={handleResend}
+              iconLeft={<ArrowClockwise size={16} />}
+            >
+              {cooldown > 0 ? t("Resend email in {{seconds}}s", { seconds: cooldown }) : t("Resend email")}
+            </Button>
+          )}
+          <p className="text-sm text-ink-600">
+            {t("Already confirmed?")}{" "}
+            <Link to="/login" className="font-semibold text-brand-600 hover:underline">
+              {t("Log in")}
+            </Link>
+          </p>
+          <p className="text-sm text-ink-600">
+            {t("Wrong email?")}{" "}
+            <Link to="/signup" className="font-semibold text-brand-600 hover:underline">
+              {t("Sign up again")}
+            </Link>
+          </p>
+        </>
+      }
+    >
+      <p>
+        {email
+          ? t("We've sent a confirmation link to {{email}}. Click it to activate your account.", { email })
+          : t("We've sent a confirmation link to your email address. Click it to activate your account.")}
       </p>
-    </div>
+      <p className="mt-2">{t("The link expires in 30 minutes. Can't find it? Check your spam folder.")}</p>
+      {resent && (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-green-700">
+          <CheckCircle size={16} weight="fill" />
+          {t("We sent a new link. Use the latest one.")}
+        </p>
+      )}
+      {error && <p className="mt-3 text-severity-high">{error}</p>}
+    </AuthResultCard>
   );
 }

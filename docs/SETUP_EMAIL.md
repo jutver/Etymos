@@ -8,7 +8,7 @@ depends on. Mail goes out through the iNET OneMail mailbox
 
 | Flow | Page | Who sends | Proof |
 |---|---|---|---|
-| Confirm signup | `/signup` → `/email-verified` | Supabase (template `confirm_signup`) | Link (or code) |
+| Confirm signup | `/signup` → `/verify-email` ("check your email") → link → `/email-verified` | Supabase (template `confirm_signup`) | Link |
 | Forgot password, login email | `/forgot-password` → `/reset-password` | Supabase (template `recovery`) | Link |
 | Confirm a recovery email | Profile → pop-up | Backend `PUT /api/account/recovery-email` | 6-digit code |
 | Recover account via recovery email | `/recover-account` | Backend `POST /api/auth/recovery/request` | 6-digit code |
@@ -87,6 +87,4 @@ changing it, regenerate the Supabase templates and paste them again:
 python3 backend/scripts/build_email_templates.py            # supabase/templates/*.html
 python3 backend/scripts/build_email_templates.py --preview /tmp/mail   # filled-in previews to open in a browser
 ```
-Templates pick Vietnamese or English from `user_metadata.locale`, which the
-web app keeps equal to the language the user last chose; Vietnamese is the
-fallback.
+All emails are in English, whatever language the user picked in the app.

@@ -123,7 +123,7 @@ def env(monkeypatch):
     sent: list = []
     monkeypatch.setattr(recovery_email, "get_client", lambda: db)
     monkeypatch.setattr(mailer, "is_configured", lambda: True)
-    monkeypatch.setattr(mailer, "send_email", lambda to, content, lang: sent.append((to, content, lang)))
+    monkeypatch.setattr(mailer, "send_email", lambda to, content: sent.append((to, content)))
 
     current = {"user": AuthedUser(user_id="user-1", email="owner@example.com", role="user", is_admin=False)}
     app = FastAPI()
@@ -171,10 +171,10 @@ def test_client_ip_trusts_cloudflare_header_only_from_loopback():
 
 
 def test_set_emails_a_confirm_code_and_is_pending(env):
-    r = env.client.put("/api/account/recovery-email", json={"email": "Backup@Example.com", "locale": "en"})
+    r = env.client.put("/api/account/recovery-email", json={"email": "Backup@Example.com"})
     assert r.json() == {"email": "backup@example.com", "verified": False, "pending": True}
-    to, content, lang = env.sent[0]
-    assert to == "backup@example.com" and lang == "en"
+    to, content = env.sent[0]
+    assert to == "backup@example.com"
     assert content.button_url is None and len(_code_from(env.sent[0])) == 6
     stored = env.db.tables["recovery_emails"][0]
     assert stored["verify_code_hash"] == recovery_email.hash_code("confirm", "user-1", _code_from(env.sent[0]))
@@ -237,10 +237,10 @@ def test_code_must_be_six_digits(env):
 
 def test_request_sends_reset_code_to_confirmed_address(env):
     env.db.tables["recovery_emails"] = [_verified()]
-    r = env.client.post("/api/auth/recovery/request", json={"email": "Backup@example.com", "locale": "vi"})
+    r = env.client.post("/api/auth/recovery/request", json={"email": "Backup@example.com"})
     assert r.status_code == 202
-    to, content, lang = env.sent[0]
-    assert to == "backup@example.com" and lang == "vi" and len(content.code) == 6
+    to, content = env.sent[0]
+    assert to == "backup@example.com" and len(content.code) == 6
 
 
 def test_request_ignores_unconfirmed_and_unknown_addresses_with_same_answer(env):

@@ -84,7 +84,6 @@ Purpose = Literal["confirm", "reset"]
 
 class RecoveryEmailIn(BaseModel):
     email: str = Field(max_length=254)
-    locale: Literal["vi", "en"] = "vi"
 
 
 class CodeIn(BaseModel):
@@ -93,7 +92,6 @@ class CodeIn(BaseModel):
 
 class RecoveryRequestIn(BaseModel):
     email: str = Field(max_length=254)
-    locale: Literal["vi", "en"] = "vi"
 
 
 class RecoveryVerifyIn(BaseModel):
@@ -242,9 +240,7 @@ def set_recovery_email(body: RecoveryEmailIn, user: AuthedUser = Depends(verify_
     ).execute()
 
     try:
-        mailer.send_email(
-            email, recovery_confirm_code_email(body.locale, account_email=user.email or "", code=code), body.locale
-        )
+        mailer.send_email(email, recovery_confirm_code_email(account_email=user.email or "", code=code))
     except Exception:
         logger.exception("Failed to send recovery confirm code for user_id=%s", user.user_id)
         raise HTTPException(status_code=502, detail="send_failed")
@@ -300,7 +296,7 @@ def _accounts(client, rows: list[dict]) -> list[dict]:
     return sorted(accounts, key=lambda a: a["email"])
 
 
-def _send_reset_code(email: str, locale: Literal["vi", "en"]) -> None:
+def _send_reset_code(email: str) -> None:
     """Runs after the response is sent, so neither the response nor its
     timing reveals whether `email` belongs to anyone. One code is stored
     (hashed per account) on every account using this recovery address."""
@@ -325,11 +321,7 @@ def _send_reset_code(email: str, locale: Literal["vi", "en"]) -> None:
                     "last_sent_at": now.isoformat(),
                 }
             ).eq("user_id", row["user_id"]).execute()
-        mailer.send_email(
-            email,
-            recovery_reset_code_email(locale, account_emails=[a["email"] for a in accounts], code=code),
-            locale,
-        )
+        mailer.send_email(email, recovery_reset_code_email(account_emails=[a["email"] for a in accounts], code=code))
     except Exception:
         logger.exception("Failed to send an account recovery code")
 
@@ -340,7 +332,7 @@ def request_recovery_code(request: Request, body: RecoveryRequestIn, background:
     """Always 202, whether or not anything was sent."""
     email = normalize_email(body.email)
     if email is not None:
-        background.add_task(_send_reset_code, email, body.locale)
+        background.add_task(_send_reset_code, email)
     return {"ok": True}
 
 

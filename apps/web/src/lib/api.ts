@@ -1,5 +1,5 @@
 import { supabase } from "@etymos/shared";
-import { getLanguage, tr, t } from "./i18n";
+import { tr, t } from "./i18n";
 
 export interface BackendJob {
   job_id: string;
@@ -354,7 +354,7 @@ export function getRecoveryEmail(): Promise<RecoveryEmailStatus> {
 export function setRecoveryEmail(email: string): Promise<RecoveryEmailStatus> {
   return requestJson<RecoveryEmailStatus>("/api/account/recovery-email", {
     method: "PUT",
-    body: JSON.stringify({ email, locale: getLanguage() }),
+    body: JSON.stringify({ email }),
   });
 }
 
@@ -384,7 +384,7 @@ async function postPublic<T>(path: string, body: unknown): Promise<T> {
 /** Account recovery, step 1: if `email` is a confirmed recovery address, the
  * backend emails it a 6-digit code. Answers the same either way. */
 export function requestRecoveryCode(email: string): Promise<{ ok: boolean }> {
-  return postPublic("/api/auth/recovery/request", { email, locale: getLanguage() });
+  return postPublic("/api/auth/recovery/request", { email });
 }
 
 export interface RecoveryAccount {

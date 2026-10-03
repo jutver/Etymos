@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@etymos/shared";
-import { useLanguage } from "./i18n";
 import { t } from "./i18n";
 
 interface AuthContextValue {
@@ -79,19 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interval = window.setInterval(heartbeat, 60_000);
     return () => window.clearInterval(interval);
   }, [session?.user?.id]);
-
-  // Mirror the UI language into user_metadata.locale: Supabase's auth email
-  // templates (supabase/templates/) branch on `.Data.locale`, so a password
-  // reset arrives in the language the user last used the app in. Covers
-  // Google sign-ups and accounts created before the field existed.
-  const language = useLanguage();
-  const storedLocale = session?.user?.user_metadata?.locale as string | undefined;
-  useEffect(() => {
-    if (!session?.user?.id || storedLocale === language) return;
-    supabase.auth.updateUser({ data: { locale: language } }).then(({ error }) => {
-      if (error) console.warn("Couldn't save language preference:", error.message);
-    });
-  }, [session?.user?.id, storedLocale, language]);
 
   return (
     <AuthContext.Provider value={{ session, user: session?.user ?? null, loading }}>
