@@ -240,4 +240,5 @@ stderr_logfile_maxbytes=10MB
 `GEMINI_API_KEY`, `ALLOWED_ORIGINS` (e.g.
 `https://www.etymos.site,https://etymos.site`), `SMTP_HOST`, `SMTP_PORT`,
 `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — see
-`SETUP_EMAIL.md` for the SMTP ones.
+`SETUP_EMAIL.md` for the SMTP ones. `SEPAY_WEBHOOK_API_KEY`, `SEPAY_BANK`,
+`SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME` — see `SETUP_PAYMENTS.md`.

@@ -5,7 +5,6 @@ import {
   Check,
   CreditCard,
   GraduationCap,
-  HourglassMedium,
   ShieldCheck,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -16,7 +15,6 @@ import { PAYMENT_METHODS } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
-import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PaymentMethod, PlanDefinition } from "@etymos/shared";
 import { t, tr, tn, currentLocale } from "../../lib/i18n";
@@ -33,9 +31,6 @@ export default function AccountPlanPage() {
   const pushToast = useAppStore((s) => s.pushToast);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const cancelSubscriptionAction = useAppStore((s) => s.cancelSubscription);
-  // Upgrades/credit purchases go through admin approval, so an outstanding
-  // request blocks starting another one.
-  const { pending } = useMyPendingRequest();
 
   useEffect(() => {
     rolloverPlanPeriodIfNeeded();
@@ -75,7 +70,6 @@ export default function AccountPlanPage() {
   }
 
   function buyPack(packId: CreditPack["id"]) {
-    if (pending) return;
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -85,17 +79,6 @@ export default function AccountPlanPage() {
       <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR MEMBERSHIP")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Plan")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">{t("Usage, billing, and subscription in one place.")}</p>
 
-      {pending && (
-        <div className="studio-card mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5">
-          <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
-          <div>
-            <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
-            <p className="mt-0.5 text-sm text-ink-500">
-              {t(describePurchaseRequest(pending))}{t(", requested")}{" "}
-              {new Date(pending.createdAt).toLocaleDateString(currentLocale())}{t(". An admin confirms your payment before the change is applied — you can't submit another request until then.")}</p>
-          </div>
-        </div>
-      )}
 
       <section className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -205,18 +188,11 @@ export default function AccountPlanPage() {
             </button>
           </div>
         </div>
-        {pending ? (
-          // PlanCard routes straight to checkout; while a request is pending
-          // there is nothing to choose, so the grid is replaced outright.
-          <p className="mt-5 rounded-[var(--radius-card)] border border-dashed border-line bg-surface-tint px-5 py-6 text-center text-sm text-ink-500">
-            {t("Plan changes are paused while your {{request}} request is under review.", { request: describePurchaseRequest(pending) })}</p>
-        ) : (
-          <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
-            {plans.map((p) => (
-              <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
-            ))}
-          </div>
-        )}
+        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
+          {plans.map((p) => (
+            <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
+          ))}
+        </div>
       </section>
 
       <section className="mt-10">
@@ -240,10 +216,9 @@ export default function AccountPlanPage() {
                 variant="secondary"
                 fullWidth
                 className="mt-5"
-                disabled={!!pending}
                 onClick={() => buyPack(pack.id)}
               >
-                {pending ? t("Request pending") : t("Buy credits")}
+                {t("Buy credits")}
               </Button>
             </div>
           ))}

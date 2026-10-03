@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CaretDown, Check, HourglassMedium, Minus } from "@phosphor-icons/react";
+import { CaretDown, Check, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
 import { FEATURE_MATRIX } from "../../lib/mockData";
@@ -8,7 +8,6 @@ import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from
 import type { ActivePlanDiscount } from "../../lib/configQueries";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
-import { describePurchaseRequest, useMyPendingRequest } from "../../lib/purchaseRequests";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
@@ -29,8 +28,8 @@ const faqs = [
     a: tr("Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Standard, 12 months on Premium)."),
   },
   {
-    q: tr("Is paying with VNPay, MoMo, or ZaloPay secure?"),
-    a: tr("Yes. All three are established Vietnamese payment processors. Etymos never stores your card or wallet credentials directly."),
+    q: tr("How do I pay?"),
+    a: tr("By bank transfer: scan the VietQR at checkout with any banking app, or with MoMo or ZaloPay. Your plan or credits are added automatically within a minute of the transfer. Etymos never sees your card or bank login."),
   },
   {
     q: tr("What's the difference between subscribing and buying credits?"),
@@ -47,8 +46,6 @@ export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
-  // Null for signed-out visitors — this page is public.
-  const { pending } = useMyPendingRequest();
 
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
@@ -75,7 +72,6 @@ export default function PricingPage() {
   );
 
   function buyPack(packId: CreditPack["id"]) {
-    if (pending) return;
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
@@ -111,16 +107,6 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {pending && (
-        <div className="studio-card mx-auto mt-8 flex max-w-2xl items-start gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left">
-          <HourglassMedium size={20} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
-          <div>
-            <p className="text-sm font-semibold text-navy-900">{t("Your upgrade request is awaiting approval")}</p>
-            <p className="mt-0.5 text-sm text-ink-500">
-              {t(describePurchaseRequest(pending))}{" "}{t("— an admin confirms it before your access changes. You can't submit another request until then.")}</p>
-          </div>
-        </div>
-      )}
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
@@ -176,10 +162,9 @@ export default function PricingPage() {
                     variant="secondary"
                     fullWidth
                     className="mt-5"
-                    disabled={!!pending}
                     onClick={() => buyPack(pack.id)}
                   >
-                    {pending ? t("Request pending") : t("Buy credits")}
+                    {t("Buy credits")}
                   </Button>
                 </div>
               );

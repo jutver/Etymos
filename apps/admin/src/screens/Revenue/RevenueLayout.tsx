@@ -3,14 +3,17 @@ import { cn } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
 
 const TABS = [
-  { to: "/waitlist/access", label: tr("Access") },
+  { to: "/revenue/overview", label: tr("Overview") },
+  { to: "/revenue/transactions", label: tr("Transactions") },
+  { to: "/revenue/orders", label: tr("Orders") },
 ];
 
-export function WaitlistLayout() {
+export function RevenueLayout() {
   return (
     <div>
-      <h1 className="text-h1 font-semibold text-fg">{t("Waitlist")}</h1>
-      <p className="mt-1 text-body text-fg-muted">{t("App-access requests from new sign-ups.")}</p>
+      <h1 className="text-h1 font-semibold text-fg">{t("Revenue")}</h1>
+      <p className="mt-1 text-body text-fg-muted">
+        {t("Payments received through SePay bank transfers, and the orders they paid for.")}</p>
 
       <div className="mt-5 flex gap-1 border-b border-border">
         {TABS.map((tab) => (
@@ -20,9 +23,7 @@ export function WaitlistLayout() {
             className={({ isActive }) =>
               cn(
                 "border-b-2 px-3 py-2 text-body font-medium transition-colors",
-                isActive
-                  ? "border-accent text-accent"
-                  : "border-transparent text-fg-muted hover:text-fg",
+                isActive ? "border-accent text-accent" : "border-transparent text-fg-muted hover:text-fg",
               )
             }
           >

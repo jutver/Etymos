@@ -17,10 +17,13 @@ import AnnouncementsPage from "./screens/Config/Announcements";
 import SystemHealthPage from "./screens/Config/SystemHealth";
 import { WaitlistLayout } from "./screens/Waitlist/WaitlistLayout";
 import AccessPage from "./screens/Waitlist/Access";
-import PurchasesPage from "./screens/Waitlist/Purchases";
 import { PricingLayout } from "./screens/Pricing/PricingLayout";
 import PlansAndPacksPage from "./screens/Pricing/PlansAndPacks";
 import DiscountsPage from "./screens/Pricing/Discounts";
+import { RevenueLayout } from "./screens/Revenue/RevenueLayout";
+import RevenueOverviewPage from "./screens/Revenue/Overview";
+import RevenueTransactionsPage from "./screens/Revenue/Transactions";
+import RevenueOrdersPage from "./screens/Revenue/Orders";
 
 function App() {
   // Re-render every screen when the UI language changes (t() reads it at call time).
@@ -33,6 +36,12 @@ function App() {
       <Route element={<RequireAdmin />}>
         <Route element={<AdminShell />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/revenue" element={<RevenueLayout />}>
+            <Route index element={<Navigate to="/revenue/overview" replace />} />
+            <Route path="overview" element={<RevenueOverviewPage />} />
+            <Route path="transactions" element={<RevenueTransactionsPage />} />
+            <Route path="orders" element={<RevenueOrdersPage />} />
+          </Route>
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/users/:id" element={<UserDetailPage />} />
@@ -42,7 +51,6 @@ function App() {
           <Route path="/waitlist" element={<WaitlistLayout />}>
             <Route index element={<Navigate to="/waitlist/access" replace />} />
             <Route path="access" element={<AccessPage />} />
-            <Route path="purchases" element={<PurchasesPage />} />
           </Route>
           <Route path="/pricing" element={<PricingLayout />}>
             <Route index element={<Navigate to="/pricing/plans" replace />} />

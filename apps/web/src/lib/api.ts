@@ -403,3 +403,80 @@ export function verifyRecoveryCode(email: string, code: string, userId: string):
 export function verifyRecoveryCode(email: string, code: string, userId?: string) {
   return postPublic("/api/auth/recovery/verify", userId ? { email, code, user_id: userId } : { email, code });
 }
+
+// --- Payments (backend/api/payments.py) ------------------------------------
+
+export type PaymentItem =
+  | { kind: "plan"; plan_tier: "student" | "professional"; billing_cycle: "monthly" | "annual" }
+  | { kind: "pack"; pack_id: "pack-standard" | "pack-premium"; quantity: number };
+
+export interface PaymentDiscount {
+  source: "auto" | "code";
+  type: "percent" | "fixed";
+  value: number;
+}
+
+export interface PaymentQuote {
+  list_amount: number;
+  amount: number;
+  discount: PaymentDiscount | null;
+}
+
+export interface PaymentTransfer {
+  bank: string;
+  account_number: string;
+  account_name: string;
+  amount: number;
+  /** Transfer content: the order's payment code. */
+  content: string;
+  qr_url: string;
+}
+
+export interface PaymentOrder {
+  id: string;
+  status: "pending" | "success" | "declined" | "cancelled";
+  kind: "plan" | "pack";
+  plan_tier: "student" | "professional" | null;
+  billing_cycle: "monthly" | "annual" | null;
+  pack_id: "pack-standard" | "pack-premium" | null;
+  quantity: number;
+  amount: number;
+  list_amount: number;
+  payment_code: string | null;
+  created_at: string;
+  expires_at: string | null;
+  paid_at: string | null;
+  /** Bank transfer details; null once the order is paid, cancelled or expired. */
+  transfer: PaymentTransfer | null;
+}
+
+/** Server-side price for an item. ApiError detail on a bad discount code:
+ * discount_invalid, discount_inactive, discount_not_started,
+ * discount_expired, discount_limit_reached, discount_already_used. */
+export function quotePayment(item: PaymentItem, discountCode?: string): Promise<PaymentQuote> {
+  return requestJson<PaymentQuote>("/api/payments/quote", {
+    method: "POST",
+    body: JSON.stringify({ ...item, discount_code: discountCode || null }),
+  });
+}
+
+/** Creates an order to pay by bank transfer. Any earlier unpaid order is
+ * cancelled. A fully discounted order comes back already `success`. */
+export function createPaymentOrder(item: PaymentItem, discountCode?: string): Promise<PaymentOrder> {
+  return requestJson<PaymentOrder>("/api/payments/orders", {
+    method: "POST",
+    body: JSON.stringify({ ...item, discount_code: discountCode || null }),
+  });
+}
+
+export async function getActivePaymentOrder(): Promise<PaymentOrder | null> {
+  return (await requestJson<{ order: PaymentOrder | null }>("/api/payments/orders/active")).order;
+}
+
+export function getPaymentOrder(orderId: string): Promise<PaymentOrder> {
+  return requestJson<PaymentOrder>(`/api/payments/orders/${encodeURIComponent(orderId)}`);
+}
+
+export function cancelPaymentOrder(orderId: string): Promise<PaymentOrder> {
+  return requestJson<PaymentOrder>(`/api/payments/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" });
+}

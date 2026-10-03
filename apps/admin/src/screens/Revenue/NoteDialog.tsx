@@ -1,41 +1,50 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { X } from "@phosphor-icons/react";
 import { t } from "../../lib/i18n";
 
-interface ReviewNoteDialogProps {
+interface NoteDialogProps {
   title: string;
-  description: string;
+  description: ReactNode;
+  placeholder: string;
   confirmLabel: string;
+  /** Disable confirm until something is typed. */
+  required?: boolean;
   pending?: boolean;
+  /** Extra content between the description and the note (e.g. an order lookup). */
+  children?: ReactNode;
+  confirmDisabled?: boolean;
   onCancel: () => void;
   onConfirm: (note: string) => void;
 }
 
-/** Reason prompt for rejecting an access request — persists an optional
- * free-text note alongside the reviewer id so the decision is auditable.
- *
- * This note is NOT internal. `access_note` is rendered verbatim to the
- * rejected user on the web app's /waitlist screen, so the field is labelled
- * as user-visible here — an admin must not be able to write private triage
- * commentary into it by mistake. */
-export function ReviewNoteDialog({
+/** Modal with an internal note for the payment ledger. Notes here are only
+ * ever shown to admins. */
+export function NoteDialog({
   title,
   description,
+  placeholder,
   confirmLabel,
-  pending,
+  required = false,
+  pending = false,
+  children,
+  confirmDisabled = false,
   onCancel,
   onConfirm,
-}: ReviewNoteDialogProps) {
+}: NoteDialogProps) {
   const [note, setNote] = useState("");
+  const blocked = pending || confirmDisabled || (required && !note.trim());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={onCancel}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className="w-full max-w-md overflow-hidden rounded-card border border-border bg-surface shadow-pop"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          <p className="text-body font-medium text-fg">{t(title)}</p>
+          <p className="text-body font-medium text-fg">{title}</p>
           <button
             type="button"
             onClick={onCancel}
@@ -47,12 +56,13 @@ export function ReviewNoteDialog({
         </div>
 
         <div className="p-5">
-          <p className="text-caption text-fg-muted">{t(description)}</p>
+          <div className="text-caption text-fg-muted">{description}</div>
+          {children}
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder={t("Reason (optional)…")}
+            placeholder={placeholder}
             className="mt-3 w-full resize-none rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
           />
           <div className="mt-4 flex justify-end gap-2">
@@ -64,11 +74,11 @@ export function ReviewNoteDialog({
               {t("Cancel")}</button>
             <button
               type="button"
-              disabled={pending}
+              disabled={blocked}
               onClick={() => onConfirm(note)}
-              className="cursor-pointer rounded-control border border-destructive/40 bg-destructive-bg px-3 py-1.5 text-caption font-medium text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="cursor-pointer rounded-control border border-accent/40 bg-accent-bg px-3 py-1.5 text-caption font-medium text-accent transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {t(confirmLabel)}
+              {confirmLabel}
             </button>
           </div>
         </div>

@@ -1,8 +1,5 @@
 // Account, plan management, student verification, waitlist and sign-in/up screens.
 export const account: Record<string, string> = {
-  ", requested": ", yêu cầu ngày",
-  ". An admin confirms your payment before the change is applied — you can't submit another request until then.":
-    ". Quản trị viên sẽ xác nhận thanh toán của bạn trước khi thay đổi được áp dụng — bạn không thể gửi yêu cầu khác cho đến lúc đó.",
   "Access not granted": "Chưa được cấp quyền truy cập",
   "Account": "Tài khoản",
   "Already have an account?": "Đã có tài khoản?",
@@ -67,13 +64,11 @@ export const account: Record<string, string> = {
   "Passwords don't match.": "Mật khẩu không khớp.",
   "Payment method": "Phương thức thanh toán",
   "Permanently delete your account and sign out. This can't be undone.": "Xóa vĩnh viễn tài khoản của bạn và đăng xuất. Hành động này không thể hoàn tác.",
-  "Plan changes are paused while your {{request}} request is under review.": "Việc đổi gói tạm dừng trong khi yêu cầu {{request}} của bạn đang được xem xét.",
   "Please upload a clearer document and resubmit for review.": "Vui lòng tải lên tài liệu rõ hơn và gửi lại để được xem xét.",
   "Re-enter your password": "Nhập lại mật khẩu của bạn",
   "Ready to submit": "Sẵn sàng gửi",
   "Recovery email": "Email khôi phục",
   "Rejected": "Bị từ chối",
-  "Request pending": "Yêu cầu đang chờ",
   "Requested": "Đã yêu cầu",
   "Reviewed": "Đã xem xét",
   "Save up to {{percent}}%": "Tiết kiệm đến {{percent}}%",
@@ -119,7 +114,6 @@ export const account: Record<string, string> = {
   "Your password": "Mật khẩu của bạn",
   "Your previous submission was rejected": "Lần gửi trước của bạn đã bị từ chối",
   "Your student status has already been approved — no further action is needed.": "Tình trạng sinh viên của bạn đã được duyệt — không cần làm thêm gì.",
-  "Your upgrade request is awaiting approval": "Yêu cầu nâng cấp của bạn đang chờ duyệt",
   "on file (demo)": "đã lưu (demo)",
   "or": "hoặc",
   "{{used}} of {{limit}} checks used this cycle.": "Đã dùng {{used}}/{{limit}} lượt kiểm tra trong chu kỳ này.",

@@ -1,11 +1,13 @@
 export type PlanTier = "free" | "student" | "professional";
 export type BillingCycle = "monthly" | "annual";
-export type PaymentMethod = "vnpay" | "momo" | "zalopay";
+/** "sepay": bank transfer confirmed automatically by SePay. The others are
+ * older manual requests that an admin approved by hand. */
+export type PaymentMethod = "vnpay" | "momo" | "zalopay" | "sepay";
 export type CreditPackId = "pack-standard" | "pack-premium";
 export type SourceKind = "web" | "academic";
 export type AccessStatus = "waitlisted" | "approved" | "rejected";
 export type CheckoutKind = "plan" | "pack";
-export type CheckoutStatus = "success" | "declined" | "pending";
+export type CheckoutStatus = "success" | "declined" | "pending" | "cancelled";
 export type Severity = "high" | "moderate" | "low";
 export type Language = "vi" | "en" | "fr" | "ja";
 
@@ -51,6 +53,12 @@ export interface CheckoutEventRow {
   reviewed_by: string | null;
   review_note: string | null;
   created_at: string;
+  /** SePay orders only: the code the bank transfer must carry. */
+  payment_code?: string | null;
+  list_amount?: number | null;
+  expires_at?: string | null;
+  paid_at?: string | null;
+  paid_amount?: number | null;
 }
 
 export interface CreditPack {

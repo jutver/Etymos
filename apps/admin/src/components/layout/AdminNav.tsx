@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   ChartLineUp,
+  Wallet,
   Pulse,
   Users,
   ShieldWarning,
@@ -20,6 +21,7 @@ import { LanguageSwitcher } from "../LanguageSwitcher";
 
 const NAV_ITEMS = [
   { to: "/", label: tr("Dashboard"), icon: ChartLineUp, end: true },
+  { to: "/revenue", label: tr("Revenue"), icon: Wallet },
   { to: "/activity", label: tr("Activity"), icon: Pulse },
   { to: "/users", label: tr("Users"), icon: Users },
   { to: "/moderation", label: tr("Moderation"), icon: ShieldWarning },

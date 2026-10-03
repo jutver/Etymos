@@ -122,10 +122,10 @@ export default function DashboardPage() {
             icon={Hourglass}
           />
         </Link>
-        <Link to="/waitlist/purchases" className="block transition-opacity hover:opacity-80">
+        <Link to="/revenue/transactions" className="block transition-opacity hover:opacity-80">
           <StatCard
-            label={t("Pending purchases")}
-            value={loading ? "…" : String(metrics?.purchaseQueueDepth ?? 0)}
+            label={t("Transfers needing attention")}
+            value={loading ? "…" : String(metrics?.paymentAttentionDepth ?? 0)}
             icon={Receipt}
           />
         </Link>

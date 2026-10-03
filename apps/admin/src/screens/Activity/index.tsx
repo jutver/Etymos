@@ -51,6 +51,7 @@ const EVENT_LABELS: Record<string, string> = {
   paywall_viewed: tr("Saw the paywall"),
   checkout_started: tr("Started checkout"),
   purchase_requested: tr("Submitted purchase request"),
+  purchase_completed: tr("Paid for a purchase"),
 };
 
 function eventLabel(event: string): string {

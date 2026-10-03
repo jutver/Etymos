@@ -107,8 +107,9 @@ export interface DashboardMetrics {
   verificationQueueDepth: number;
   /** Count of profiles still waiting on app access. Live queue depth, not range-scoped. */
   accessQueueDepth: number;
-  /** Count of pending checkout_events awaiting approval. Live queue depth, not range-scoped. */
-  purchaseQueueDepth: number;
+  /** SePay transfers the webhook couldn't settle (Revenue → Transactions →
+   * Needs attention). Live queue depth, not range-scoped. */
+  paymentAttentionDepth: number;
 }
 
 const SEVERITY_ORDER = ["clean", "low", "moderate", "high", "unscored"];
@@ -125,7 +126,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     plansRes,
     verificationQueueRes,
     accessQueueRes,
-    purchaseQueueRes,
+    paymentAttentionRes,
   ] = await Promise.all([
     supabase.from("profiles").select("id, plan_tier, billing_cycle").limit(FETCH_LIMIT),
     supabase.from("profiles").select("created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
@@ -145,7 +146,10 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     supabase.from("plan_definitions").select("id, price_monthly, price_annual"),
     supabase.from("student_verification_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("access_status", "waitlisted"),
-    supabase.from("checkout_events").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase
+      .from("payment_transactions")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["unmatched", "underpaid", "duplicate", "review"]),
   ]);
 
   if (profilesRes.error) throw profilesRes.error;
@@ -155,7 +159,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   if (plansRes.error) throw plansRes.error;
   if (verificationQueueRes.error) throw verificationQueueRes.error;
   if (accessQueueRes.error) throw accessQueueRes.error;
-  if (purchaseQueueRes.error) throw purchaseQueueRes.error;
+  if (paymentAttentionRes.error) throw paymentAttentionRes.error;
 
   const profiles = profilesRes.data ?? [];
   const signups = signupsRes.data ?? [];
@@ -212,6 +216,6 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     documentsInRange: documents.length,
     verificationQueueDepth: verificationQueueRes.count ?? 0,
     accessQueueDepth: accessQueueRes.count ?? 0,
-    purchaseQueueDepth: purchaseQueueRes.count ?? 0,
+    paymentAttentionDepth: paymentAttentionRes.count ?? 0,
   };
 }
