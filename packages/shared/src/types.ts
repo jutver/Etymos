@@ -233,6 +233,10 @@ export interface AiSegmentFeatures {
   topOneShare?: number;
   /** Spread of per-sentence meanNll ("burstiness"). Lower = more even rhythm. */
   sentenceSpread?: number;
+  /** Binoculars score (detector mode 2). Lower = more machine-like. */
+  binoculars?: number;
+  /** Fine-tuned classifier's 1 - P(human), 0-1 (detector mode 3). Higher = more machine-like. */
+  classifierAiScore?: number;
 }
 
 export type AiDetectionLevel = "low" | "possible" | "likely";
@@ -261,6 +265,10 @@ export type AiDetection =
       segments: AiDetectionSegment[];
       reasons: string[];
       disclaimer: string;
+      /** Detector mode 1: the text is outside what the detector was calibrated
+       * on (not English / too short), so the UI shows "not enough evidence to
+       * judge" instead of `overallScore`. */
+      inconclusive?: boolean;
     };
 
 export interface CheckedDocument {

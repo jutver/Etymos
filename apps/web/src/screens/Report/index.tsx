@@ -21,7 +21,7 @@ import { RewritePanel } from "./RewritePanel";
 import { ReportTopBar } from "./ReportTopBar";
 import { FormatToolbar, type ReportView } from "./FormatToolbar";
 import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
-import { SourcesSidebar } from "./SourcesSidebar";
+import { SourcesSidebar, type SidebarTab } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
 import { AiContentChip } from "./AiContentChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
@@ -36,6 +36,12 @@ import { t as tl, tr } from "../../lib/i18n";
 // Private Storage bucket the backend uploads original PDFs into (see
 // backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
 const DOCUMENTS_BUCKET = "documents";
+
+// Stable empties for the highlight kind that is switched off (see
+// highlightMode), so the PDF viewer doesn't re-search on every render.
+const NO_MATCHES: MatchedSource[] = [];
+const NO_AI_SEGMENTS: { id: string; start: number; end: number; excerpt: string; score: number }[] = [];
+const NO_PASSAGE_IDS = new Set<string>();
 // Short-lived on purpose (regenerated fresh every time this screen loads a
 // historical document — see the signed-URL effect below), matching the
 // pattern already used in apps/admin/src/lib/verificationQueries.ts.
@@ -178,6 +184,9 @@ export default function ReportPage() {
   // but the two are mutually exclusive in the UI (picking one clears the
   // other) so the Document view never has to show two kinds of focus at once.
   const [activeAiSegmentId, setActiveAiSegmentId] = useState<string | null>(null);
+  // Sidebar tab, lifted here so the document shows only that tab's
+  // highlights: "sources" -> matched passages, "ai" -> AI-flagged paragraphs.
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("sources");
   // Bumped on every selection so picking the same source again scrolls again.
   const [focusTick, setFocusTick] = useState(0);
   // Plagiarism highlights on/off in the Document view (presentational only).
@@ -317,6 +326,21 @@ export default function ReportPage() {
     [doc?.passages, flaggedAiSegments],
   );
   const aiFlaggedIds = useMemo(() => aiFlaggedPassageIds(aiSegmentToPassage), [aiSegmentToPassage]);
+
+  // One kind of highlight at a time. With no AI result the sidebar has no AI
+  // tab, so the document stays on source highlights.
+  const highlightMode: SidebarTab = doc?.aiDetection?.available ? sidebarTab : "sources";
+  const shownMatches = highlightMode === "ai" ? NO_MATCHES : visibleMatches;
+  const shownAiSegments = highlightMode === "ai" ? flaggedAiSegments : NO_AI_SEGMENTS;
+  const shownAiFlaggedIds = highlightMode === "ai" ? aiFlaggedIds : NO_PASSAGE_IDS;
+  const showSourceHighlights = showHighlights && highlightMode === "sources";
+
+  const handleSidebarTabChange = useCallback((next: SidebarTab) => {
+    setSidebarTab(next);
+    // Drop the other tab's focus, whose highlight is no longer drawn.
+    if (next === "ai") setActiveMatchId(null);
+    else setActiveAiSegmentId(null);
+  }, []);
 
   // Sidebar order is the source of truth for both the highlight colour and the
   // number badge, so the two views can never disagree.
@@ -662,7 +686,7 @@ export default function ReportPage() {
               <PlagiarismPdfViewer
                 pdfUrl={effectivePdfUrl ?? ""}
                 unavailableMessage={tl(pdfFetchError) ?? undefined}
-                matches={visibleMatches}
+                matches={shownMatches}
                 activeMatchId={activeMatchId}
                 onMatchClick={(matchId) => {
                   setActiveMatchId(matchId);
@@ -670,7 +694,7 @@ export default function ReportPage() {
                 }}
                 onPageChange={handleOriginalPageChange}
                 overLimitOffset={overLimitOffset}
-                aiSegments={flaggedAiSegments}
+                aiSegments={shownAiSegments}
                 activeAiSegmentId={activeAiSegmentId}
                 onAiSegmentClick={handleSelectAiSegment}
               />
@@ -685,7 +709,7 @@ export default function ReportPage() {
                   colorIndexByMatch={colorIndexByMatch}
                   activeMatchId={focusMatchId}
                   focusTick={focusTick}
-                  showHighlights={showHighlights}
+                  showHighlights={showSourceHighlights}
                   onSelectMatch={handleSelectMatch}
                   onClearSelection={clearSelection}
                   locked
@@ -694,7 +718,7 @@ export default function ReportPage() {
                   resetKey={resetKey}
                   editorRef={documentViewEditorRef}
                   overLimitOffset={overLimitOffset}
-                  aiFlaggedPassageIds={aiFlaggedIds}
+                  aiFlaggedPassageIds={shownAiFlaggedIds}
                   activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
                 />
               </div>
@@ -706,7 +730,7 @@ export default function ReportPage() {
                 colorIndexByMatch={colorIndexByMatch}
                 activeMatchId={focusMatchId}
                 focusTick={focusTick}
-                showHighlights={showHighlights}
+                showHighlights={showSourceHighlights}
                 onSelectMatch={handleSelectMatch}
                 onClearSelection={clearSelection}
                 locked={locked}
@@ -715,7 +739,7 @@ export default function ReportPage() {
                 resetKey={resetKey}
                 editorRef={editorRef}
                 overLimitOffset={overLimitOffset}
-                aiFlaggedPassageIds={aiFlaggedIds}
+                aiFlaggedPassageIds={shownAiFlaggedIds}
                 activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
               />
             </div>
@@ -754,6 +778,8 @@ export default function ReportPage() {
           aiDetection={doc.aiDetection}
           activeAiSegmentId={activeAiSegmentId}
           onAiSegmentClick={handleSelectAiSegment}
+          tab={sidebarTab}
+          onTabChange={handleSidebarTabChange}
           onSelect={handleSelectMatch}
           onViewComparison={(match) => {
             trackEvent("source_comparison_opened");

@@ -3,7 +3,7 @@ import { Robot, Sparkle, X } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import type { AiDetection } from "@etymos/shared";
 import { Modal } from "../../components/ui/Modal";
-import { aiLevelLabel, translateAiText } from "../../lib/aiDetection";
+import { aiDetectionLabel, aiLevelLabel, translateAiText } from "../../lib/aiDetection";
 import { trackEvent } from "../../lib/analytics";
 import { t, currentLocale } from "../../lib/i18n";
 
@@ -50,10 +50,15 @@ export function AiContentChip({ detection, locked, onUpgrade }: AiContentChipPro
   }
 
   const score = Math.round(detection.overallScore);
-  const flagged = detection.segments
-    .filter((s) => s.score >= 60)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  // Detector mode 1: outside the calibration (not English / too short) —
+  // show "not enough evidence" instead of a reassuring low number.
+  const inconclusive = detection.inconclusive === true;
+  const flagged = inconclusive
+    ? []
+    : detection.segments
+        .filter((s) => s.score >= 60)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
 
   return (
     <>
@@ -63,14 +68,14 @@ export function AiContentChip({ detection, locked, onUpgrade }: AiContentChipPro
           setOpen(true);
           trackEvent("ai_detection_opened");
         }}
-        title={t("{{aiLevelLabel}} — click for details", { aiLevelLabel: aiLevelLabel(detection.level) })}
+        title={t("{{aiLevelLabel}} — click for details", { aiLevelLabel: inconclusive ? aiDetectionLabel(detection) : aiLevelLabel(detection.level) })}
         className={cn(
           "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums transition-colors hover:brightness-95 sm:inline-flex",
-          LEVEL_CHIP[detection.level],
+          inconclusive ? LEVEL_CHIP.low : LEVEL_CHIP[detection.level],
         )}
       >
         <Robot size={13} weight="bold" />
-        {score}{t("% AI")}</button>
+        {inconclusive ? t("AI: inconclusive") : <>{score}{t("% AI")}</>}</button>
 
       <Modal open={open} onClose={() => setOpen(false)} maxWidth="max-w-lg" labelledBy="ai-content-title">
         <div className="p-6">
@@ -82,7 +87,7 @@ export function AiContentChip({ detection, locked, onUpgrade }: AiContentChipPro
               <div>
                 <h2 id="ai-content-title" className="text-h3 font-bold tracking-tight text-navy-900">
                   {t("AI-generated content")}</h2>
-                <p className="text-sm text-ink-500">{aiLevelLabel(detection.level)}</p>
+                <p className="text-sm text-ink-500">{inconclusive ? aiDetectionLabel(detection) : aiLevelLabel(detection.level)}</p>
               </div>
             </div>
             <button
@@ -95,7 +100,12 @@ export function AiContentChip({ detection, locked, onUpgrade }: AiContentChipPro
             </button>
           </div>
 
-          <div className="mt-5">
+          {inconclusive && (
+            <p className="mt-5 rounded-[var(--radius-input)] border border-line bg-surface-muted px-3 py-2 text-sm text-ink-700">
+              {t("We can't tell whether this text was AI-written: it is not English or is too short for the detector's calibration, so no percentage is shown.")}</p>
+          )}
+
+          {!inconclusive && <div className="mt-5">
             <div className="flex items-baseline justify-between">
               <span className="text-3xl font-extrabold tabular-nums text-ai-flag">{score}%</span>
               <span className="text-xs text-ink-500">
@@ -105,9 +115,9 @@ export function AiContentChip({ detection, locked, onUpgrade }: AiContentChipPro
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-ai-flag-bg" role="presentation">
               <div className="h-full rounded-full bg-ai-flag" style={{ width: `${Math.min(100, Math.max(2, score))}%` }} />
             </div>
-          </div>
+          </div>}
 
-          {detection.confidence === "low" && (
+          {detection.confidence === "low" && !inconclusive && (
             <p className="mt-4 rounded-[var(--radius-input)] border border-line bg-surface-muted px-3 py-2 text-xs text-ink-600">
               {t("Lower confidence: this text is short or not in English, and the detector was tuned on English. Treat the number as a hint only.")}</p>
           )}

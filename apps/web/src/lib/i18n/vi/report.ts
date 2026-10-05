@@ -170,6 +170,23 @@ export const report: Record<string, string> = {
     "Bộ phát hiện này được hiệu chỉnh trên tiếng Anh; kết quả với ngôn ngữ khác kém tin cậy hơn.",
   "Not enough running text to analyse (paragraphs under 40 words are skipped).":
     "Không đủ văn bản liền mạch để phân tích (các đoạn dưới 40 từ bị bỏ qua).",
+  "Not enough evidence to judge: the detector was calibrated on English academic writing, and this text is not English or is too short, so no percentage is shown.":
+    "Chưa đủ cơ sở để kết luận: bộ phát hiện được hiệu chỉnh trên văn học thuật tiếng Anh, còn văn bản này không phải tiếng Anh hoặc quá ngắn, nên không hiển thị phần trăm.",
+  "Method: Binoculars (two-model cross-perplexity). Its threshold has not yet been calibrated for this model pair, so treat the number as a hint.":
+    "Phương pháp: Binoculars (cross-perplexity giữa hai mô hình). Ngưỡng của nó chưa được hiệu chỉnh cho cặp mô hình này, vì vậy chỉ nên xem con số như một gợi ý.",
+  "Binoculars score ≈ {{score}}, below the {{threshold}} threshold: relative to how surprising the topic is, the wording is as predictable as a language model's own output.":
+    "Điểm Binoculars ≈ {{score}}, thấp hơn ngưỡng {{threshold}}: so với độ lạ của chủ đề, câu chữ dễ đoán ngang với văn do chính mô hình ngôn ngữ viết ra.",
+  "Binoculars score ≈ {{score}}, above the {{threshold}} threshold, which is typical of human writing.":
+    "Điểm Binoculars ≈ {{score}}, cao hơn ngưỡng {{threshold}}, điều thường thấy ở văn do người viết.",
+  "AI: inconclusive": "AI: chưa đủ cơ sở",
+  "Classifier estimate: {{human}}% human, {{ai}}% raw AI, {{edited}}% AI-edited, {{humanized}}% humanized AI text.":
+    "Ước tính của bộ phân loại: {{human}}% người viết, {{ai}}% AI nguyên bản, {{edited}}% AI chỉnh sửa, {{humanized}}% văn AI đã được \"nhân hóa\".",
+  "Method: VietBinoculars (PhoGPT-4B model pair). Well-known text the model has memorised, such as Wikipedia passages, famous literature or textbook definitions, can be wrongly flagged as AI.":
+    "Phương pháp: VietBinoculars (cặp mô hình PhoGPT-4B). Văn bản quen thuộc mà mô hình đã học thuộc, như đoạn trích Wikipedia, tác phẩm văn học nổi tiếng hay định nghĩa trong giáo trình, có thể bị nhận nhầm là do AI viết.",
+  "Method: a fine-tuned AI-text classifier (DeBERTa-v3), trained on English only.":
+    "Phương pháp: bộ phân loại văn bản AI đã tinh chỉnh (DeBERTa-v3), chỉ được huấn luyện trên tiếng Anh.",
+  "We can't tell whether this text was AI-written: it is not English or is too short for the detector's calibration, so no percentage is shown.":
+    "Chưa thể xác định văn bản này có do AI viết hay không: văn bản không phải tiếng Anh hoặc quá ngắn so với phạm vi hiệu chỉnh của bộ phát hiện, nên không hiển thị phần trăm.",
   "This is a statistical estimate, not proof. Edited AI text and very formulaic human writing can be misjudged, so use it as a prompt to review the flagged paragraphs, not as a verdict.":
     "Đây là ước tính thống kê, không phải bằng chứng. Văn bản AI đã chỉnh sửa và văn người viết rất khuôn mẫu đều có thể bị đánh giá sai, vì vậy hãy dùng kết quả này để xem lại các đoạn được đánh dấu, không phải như một kết luận.",
 };

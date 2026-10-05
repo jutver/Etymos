@@ -329,7 +329,94 @@ def section_from_heading(text):
         "bibliography": "references",
     }
 
-    return mapping.get(compact)
+    exact = mapping.get(compact)
+    if exact:
+        return exact
+
+    # Fallback for headings the exact table misses: longer English titles
+    # ("Results under Exact Forecasts", "Materials and Methods") and
+    # Vietnamese ones ("Giới thiệu", "Kết luận").
+    return keyword_section_from_heading(raw)
+
+
+# Keyword fallback for section_from_heading(). Matched against the heading
+# lowercased with Vietnamese diacritics removed; checked in order, so the
+# more specific buckets come first.
+SECTION_KEYWORDS = [
+    ("references", ["references", "bibliography", "tai lieu tham khao"]),
+    ("abstract", ["abstract", "tom tat"]),
+    ("conclusion", ["conclusion", "concluding", "ket luan", "tong ket"]),
+    ("introduction", ["introduction", "gioi thieu", "mo dau", "dat van de"]),
+    ("related_work", [
+        "related work", "background", "literature", "prior work",
+        "research context", "tong quan", "co so ly thuyet",
+        "nghien cuu lien quan", "cong trinh lien quan",
+    ]),
+    ("method", [
+        "method", "approach", "framework", "architecture", "system model",
+        "proposed", "phuong phap", "mo hinh", "de xuat",
+    ]),
+    ("experiment", [
+        "experiment", "result", "evaluation", "discussion",
+        "thuc nghiem", "ket qua", "danh gia", "thao luan",
+    ]),
+]
+
+# "Chương 1.", "Phần II", "Chapter 3:" before the heading's own words.
+_CHAPTER_PREFIX_RE = re.compile(
+    r"^(chuong|phan|chapter|part|section)\s+([0-9]+|[ivxlc]+)\s*[.:\-]?\s*"
+)
+
+
+def _fold_heading_keep_prefix(text):
+    """Lowercase, Vietnamese diacritics removed ("Chương" -> "chuong")."""
+    import unicodedata
+
+    text = normalize_heading_text(text).lower().replace("đ", "d")
+    text = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+
+
+def _fold_heading(text):
+    text = _fold_heading_keep_prefix(text)
+    text = strip_major_marker(text)
+    text = _CHAPTER_PREFIX_RE.sub("", text)
+    text = re.sub(r"[^\w\s]", " ", text)
+    return " ".join(text.split())
+
+
+def keyword_section_from_heading(text, prefix_only=False):
+    folded = _fold_heading(text)
+
+    if not folded:
+        return None
+
+    for section, keywords in SECTION_KEYWORDS:
+        for kw in keywords:
+            if prefix_only:
+                # Word prefix: "method" covers "methods", "methodology".
+                if folded.startswith(kw):
+                    return section
+            elif re.search(r"\b" + re.escape(kw), folded):
+                return section
+
+    return None
+
+
+def is_keyword_plain_heading(line, text, body_size):
+    """
+    Unnumbered heading that is not in is_valid_plain_heading()'s exact list
+    ("MỞ ĐẦU", "Chương 1. Tổng quan", "Kết luận và hướng phát triển").
+    Needs heading styling (bold or larger than body) and must START with a
+    section keyword, so body lines like "kết quả cho thấy ..." are skipped.
+    """
+    if len(text.split()) > 8 or text.rstrip().endswith((".", ",", ";")):
+        return None
+
+    if not (_looks_bold(line) or line.get("size", 0) > body_size + 0.5):
+        return None
+
+    return keyword_section_from_heading(text, prefix_only=True)
 
 
 def extract_inline_abstract(text):
@@ -392,6 +479,23 @@ def is_probable_title_or_author(line, body_size):
     lower = text.strip().lower()
 
     if lower == "abstract" or lower.startswith("abstract "):
+        return False
+
+    # A numbered section heading on page 1 ("1. Introduction" set at 14pt
+    # over 11pt body) is bigger than body text but is not the title.
+    if is_valid_major_heading(text) and section_from_heading(text):
+        return False
+
+    # Same for any numbered heading ("1. Bối cảnh chung") or one opening
+    # with a section word ("Introduction", "TÓM TẮT") that is clearly
+    # smaller than a title (titles run ~1.6x body size and up).
+    if line["size"] < body_size * 1.6 and (
+        is_valid_major_heading(text)
+        or (len(text.split()) <= 8 and keyword_section_from_heading(text, prefix_only=True))
+        or _CHAPTER_PREFIX_RE.match(_fold_heading_keep_prefix(text))
+        # A bare "1." whose heading words sit on the next line.
+        or (len(text.split()) == 1 and is_major_marker(text))
+    ):
         return False
 
     if line["page"] == 1 and line["size"] > body_size + 2:
@@ -615,6 +719,15 @@ def build_heading_candidates(lines):
                 "level": "plain"
             }
 
+        elif is_keyword_plain_heading(line, text, body_size):
+            candidate = {
+                "index": i,
+                "text": text,
+                "section": is_keyword_plain_heading(line, text, body_size),
+                "inline_content": "",
+                "level": "plain"
+            }
+
         if candidate:
             key = f"{candidate['index']}::{candidate['text'].lower()}"
 
@@ -622,7 +735,253 @@ def build_heading_candidates(lines):
                 seen.add(key)
                 raw_candidates.append(candidate)
 
-    return filter_and_fix_headings(raw_candidates)
+    return filter_and_fix_headings(
+        infer_unknown_sections(raw_candidates, lines, body_size)
+    )
+
+
+# Usual order of the parts of a paper / report, used to place a heading
+# whose own words name no known section ("3. Building the Prototype").
+SECTION_RANK = {
+    "abstract": 0, "introduction": 1, "related_work": 2, "method": 3,
+    "experiment": 4, "result": 4, "conclusion": 5, "references": 6,
+}
+CONTENT_SECTIONS = {
+    "introduction", "related_work", "method", "experiment", "result", "conclusion",
+}
+
+
+def _is_styled_heading_line(line, body_size):
+    return _looks_bold(line) or line.get("size", 0) > body_size + 0.5
+
+
+def _has_heading_words(text):
+    return re.search(r"[^\W\d_]{3}", strip_major_marker(normalize_heading_text(text))) is not None
+
+
+def _positional_section(prev_section, next_section, is_last, has_conclusion, total):
+    """
+    Section for an unrecognized top-level heading, from the recognized (or
+    already placed) heading before it and the next recognized one after it.
+    """
+    if prev_section in (None, "abstract"):
+        return "introduction"
+
+    if is_last and not has_conclusion and total >= 3 and next_section in (None, "references"):
+        return "conclusion"
+
+    nxt = SECTION_RANK.get(next_section, 99)
+
+    if prev_section == "introduction":
+        if nxt <= 2:
+            return "introduction"
+        return "related_work" if nxt == 3 else "method"
+
+    if prev_section == "related_work":
+        return "related_work" if nxt <= 2 else "method"
+
+    if prev_section == "method":
+        return "method" if nxt <= 4 else "experiment"
+
+    if prev_section in ("experiment", "result"):
+        return "experiment"
+
+    return prev_section
+
+
+def _assign_positions(sequence, after_sequence_section, has_conclusion, before_section=None):
+    known_next = [None] * len(sequence)
+    upcoming = after_sequence_section
+    for k in range(len(sequence) - 1, -1, -1):
+        known_next[k] = upcoming
+        section = sequence[k]["section"]
+        if section not in (None, "unknown"):
+            upcoming = section
+
+    prev_section = before_section
+    for k, c in enumerate(sequence):
+        if c["section"] in (None, "unknown"):
+            c["section"] = _positional_section(
+                prev_section,
+                known_next[k],
+                k == len(sequence) - 1,
+                has_conclusion,
+                len(sequence),
+            )
+            c["inferred"] = True
+        prev_section = c["section"]
+
+
+def _style_heading_candidates(lines, body_size, taken, keyword_candidates):
+    """
+    Unnumbered headings recognized by their look alone: the one font style
+    (size, bold) used for a handful of short lines, as top-level headings
+    are. When some headings were recognized by keyword, their style wins.
+    """
+    texts = Counter(normalize_heading_text(l["text"]).lower() for l in lines)
+    title_lines = _title_line_indices(lines)
+    title_lines |= set(_title_continuation_indices(lines, title_lines))
+    pool = []
+
+    for i, line in enumerate(lines):
+        if i in taken:
+            continue
+
+        text = normalize_heading_text(line["text"]).strip()
+        words = text.split()
+
+        if not words or len(words) > 12 or texts[text.lower()] > 1:
+            continue
+        if text.endswith((".", ",", ";", ":")) or not text[0].isupper() and not text[0].isdigit():
+            continue
+        if not _has_heading_words(text) or is_table_or_equation_like(text):
+            continue
+        if SUBSECTION_HEADING_RE.match(text) or is_heavy_math_line(text):
+            continue
+        if not _is_styled_heading_line(line, body_size):
+            continue
+        # Title / author lines. Not is_probable_title_or_author(): its
+        # "short line on page 1" rule would drop every page-1 heading.
+        if i in title_lines or "@" in text:
+            continue
+        if line["page"] == 1 and line.get("size", 0) >= body_size * 1.6:
+            continue
+
+        pool.append((i, line, text))
+
+    if not pool:
+        return []
+
+    def style(line):
+        return (round(line.get("size", 0)), bool(_looks_bold(line)))
+
+    tiers = Counter(style(line) for _, line, _ in pool)
+    keyword_styles = Counter(style(lines[c["index"]]) for c in keyword_candidates)
+
+    if keyword_styles:
+        chosen = keyword_styles.most_common(1)[0][0]
+    else:
+        ranked = sorted(tiers, key=lambda s: (-s[0], not s[1]))
+        chosen = next((s for s in ranked if 2 <= tiers[s] <= 30), None)
+
+    if chosen is None:
+        return []
+
+    return [
+        {
+            "index": i,
+            "text": text,
+            "section": "unknown",
+            "inline_content": "",
+            "level": "major",
+        }
+        for i, line, text in pool
+        if style(line) == chosen
+    ]
+
+
+def infer_unknown_sections(candidates, lines, body_size):
+    """
+    Give a section to headings whose wording names none, so any document
+    (not only papers titled "Introduction / Method / ...") is split into
+    parts:
+
+    1. Numbered documents: top-level headings that count up 1, 2, 3 ... and
+       are styled as headings form the outline; an unrecognized one is
+       placed by its position between recognized ones (first -> introduction,
+       last -> conclusion, between -> related work / method / experiment).
+    2. Unnumbered documents: keyword headings ("Introduction") plus lines
+       in the same heading style form the outline, placed the same way.
+
+    Recognized headings keep their section; lines that are not part of the
+    outline stay "unknown" and are dropped by filter_and_fix_headings().
+    """
+    candidates = sorted(candidates, key=lambda c: c["index"])
+
+    for c in candidates:
+        # "TÓM TẮT" (keyword plain heading) is the abstract just like the
+        # "Abstract" line build_heading_candidates() marks major itself.
+        if c["section"] == "abstract":
+            c["level"] = "major"
+
+    abstract = next((c for c in candidates if c["section"] == "abstract"), None)
+    references = next((c for c in candidates if c["section"] == "references"), None)
+    known_numbers = {
+        _leading_section_number(c["text"])
+        for c in candidates
+        if c["section"] not in (None, "unknown")
+    }
+
+    # 1. Numbered outline.
+    sequence = []
+    last = 0
+    for c in candidates:
+        if c["level"] != "major" or c["section"] in ("abstract", "references"):
+            continue
+        if references is not None and c["index"] > references["index"]:
+            break
+
+        number = _leading_section_number(c["text"])
+        if number is None:
+            continue
+
+        if c["section"] not in (None, "unknown"):
+            sequence.append(c)
+            last = max(last, number)
+            continue
+
+        if (
+            number == last + 1
+            and number not in known_numbers
+            and (abstract is None or c["index"] > abstract["index"])
+            and _is_styled_heading_line(lines[c["index"]], body_size)
+            and _has_heading_words(c["text"])
+        ):
+            sequence.append(c)
+            last = number
+
+    has_conclusion = any(c["section"] == "conclusion" for c in candidates)
+
+    if len(sequence) >= 2:
+        _assign_positions(
+            sequence,
+            "references" if references is not None else None,
+            has_conclusion,
+            "abstract" if abstract is not None else None,
+        )
+        return candidates
+
+    # 2. Unnumbered outline.
+    keyword_plain = [
+        c for c in candidates
+        if c["level"] == "plain" and c["section"] in CONTENT_SECTIONS
+    ]
+    taken = {c["index"] for c in candidates}
+    taken |= {c["second_index"] for c in candidates if c.get("second_index") is not None}
+    styled = _style_heading_candidates(lines, body_size, taken, keyword_plain)
+
+    if references is not None:
+        styled = [c for c in styled if c["index"] < references["index"]]
+    if abstract is not None:
+        styled = [c for c in styled if c["index"] > abstract["index"]]
+
+    outline = sorted(keyword_plain + styled, key=lambda c: c["index"])
+
+    if len(outline) < 2:
+        return candidates
+
+    for c in keyword_plain:
+        # Kept even next to the (major) Abstract heading.
+        c["level"] = "major"
+
+    _assign_positions(
+        outline,
+        "references" if references is not None else None,
+        has_conclusion,
+        "abstract" if abstract is not None else None,
+    )
+
+    return candidates + styled
 
 
 def filter_and_fix_headings(candidates):

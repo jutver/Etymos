@@ -27,6 +27,8 @@ function parseSegmentFeatures(raw: unknown): AiSegmentFeatures | undefined {
     meanNll: optionalNum(f.mean_nll),
     topOneShare: optionalNum(f.top1_frac),
     sentenceSpread: optionalNum(f.sent_std),
+    binoculars: optionalNum(f.binoculars),
+    classifierAiScore: optionalNum(f.ai_score),
   };
   return Object.values(features).some((v) => v !== undefined) ? features : undefined;
 }
@@ -68,12 +70,18 @@ export function parseAiDetection(raw: unknown): AiDetection | undefined {
     segments,
     reasons: Array.isArray(r.reasons) ? r.reasons.filter((x): x is string => typeof x === "string") : [],
     disclaimer: typeof r.disclaimer === "string" ? r.disclaimer : "",
+    ...(r.inconclusive === true ? { inconclusive: true } : {}),
   };
 }
 
 /** Human label for a level, used by the chip and the detail dialog. */
 export function aiLevelLabel(level: AiDetectionLevel): string {
   return level === "likely" ? t("Likely AI-written") : level === "possible" ? t("Possibly AI-assisted") : t("Mostly human-written");
+}
+
+/** Label for a detection result: "not enough evidence" when it is inconclusive (detector mode 1). */
+export function aiDetectionLabel(detection: { level: AiDetectionLevel; inconclusive?: boolean }): string {
+  return detection.inconclusive ? t("Not enough evidence to judge") : aiLevelLabel(detection.level);
 }
 
 // The detector's reasons and disclaimer are written by the backend in English
@@ -103,6 +111,23 @@ const REASON_PATTERNS: readonly { re: RegExp; key: string; params: readonly stri
     key: tr("About {{percent}}% of the analysed text sits in paragraphs that individually look machine-written."),
     params: ["percent"],
   },
+  {
+    re: /^Binoculars score ≈ ([\d.]+), below the ([\d.]+) threshold: relative to how surprising the topic is, the wording is as predictable as a language model's own output\.$/,
+    key: tr(
+      "Binoculars score ≈ {{score}}, below the {{threshold}} threshold: relative to how surprising the topic is, the wording is as predictable as a language model's own output.",
+    ),
+    params: ["score", "threshold"],
+  },
+  {
+    re: /^Binoculars score ≈ ([\d.]+), above the ([\d.]+) threshold, which is typical of human writing\.$/,
+    key: tr("Binoculars score ≈ {{score}}, above the {{threshold}} threshold, which is typical of human writing."),
+    params: ["score", "threshold"],
+  },
+  {
+    re: /^Classifier estimate: (\d+)% human, (\d+)% raw AI, (\d+)% AI-edited, (\d+)% humanized AI text\.$/,
+    key: tr("Classifier estimate: {{human}}% human, {{ai}}% raw AI, {{edited}}% AI-edited, {{humanized}}% humanized AI text."),
+    params: ["human", "ai", "edited", "humanized"],
+  },
 ];
 
 /** Static sentences from the detector (exact-match catalog keys, no numbers). */
@@ -112,6 +137,10 @@ const STATIC_AI_TEXT = [
   tr("This detector was calibrated on English; results for other languages are less reliable, so a text is never labelled 'likely' AI-written on this evidence alone."),
   tr("This detector was calibrated on English; results for other languages are less reliable."),
   tr("Not enough running text to analyse (paragraphs under 40 words are skipped)."),
+  tr("Not enough evidence to judge: the detector was calibrated on English academic writing, and this text is not English or is too short, so no percentage is shown."),
+  tr("Method: Binoculars (two-model cross-perplexity). Its threshold has not yet been calibrated for this model pair, so treat the number as a hint."),
+  tr("Method: a fine-tuned AI-text classifier (DeBERTa-v3), trained on English only."),
+  tr("Method: VietBinoculars (PhoGPT-4B model pair). Well-known text the model has memorised, such as Wikipedia passages, famous literature or textbook definitions, can be wrongly flagged as AI."),
   tr("This is a statistical estimate, not proof. Edited AI text and very formulaic human writing can be misjudged, so use it as a prompt to review the flagged paragraphs, not as a verdict."),
 ] as const;
 

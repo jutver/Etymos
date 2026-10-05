@@ -42,6 +42,12 @@ export const AI_DETECTION_SOURCES: readonly AiDetectionSource[] = [
       "Liang, W., Yuksekgonul, M., Mao, Y., Wu, E., & Zou, J. (2023). GPT detectors are biased against non-native English writers. Patterns, 4(7).",
     url: "https://arxiv.org/abs/2304.02819",
   },
+  {
+    id: 5,
+    citation:
+      "Hans, A., Schwarzschild, A., Cherepanova, V., Kazemi, H., Saha, A., Goldblum, M., Geiping, J., & Goldstein, T. (2024). Spotting LLMs With Binoculars: Zero-Shot Detection of Machine-Generated Text. ICML 2024.",
+    url: "https://arxiv.org/abs/2401.12070",
+  },
 ];
 
 export interface AiExplanationPoint {
@@ -103,6 +109,29 @@ export function explainAiSegment(segment: AiDetectionSegment): AiExplanationPoin
   if (f.sentenceSpread !== undefined && f.sentenceSpread <= 0.6) {
     points.push({
       text: t("Its sentences keep the same even rhythm, while human writing usually mixes easy and surprising sentences."),
+      sources: [],
+    });
+  }
+  if (f.binoculars !== undefined) {
+    // Detector mode 2 (backend/ai_detector.py BINOCULARS_THRESHOLD, default 0.90).
+    points.push({
+      text:
+        f.binoculars < 0.9
+          ? t("Binoculars score {{score}}: relative to how surprising the topic is, the wording is as predictable as a language model's own output.", {
+              score: f.binoculars.toLocaleString(currentLocale(), { maximumFractionDigits: 2 }),
+            })
+          : t("Binoculars score {{score}}: about as surprising as typical human writing.", {
+              score: f.binoculars.toLocaleString(currentLocale(), { maximumFractionDigits: 2 }),
+            }),
+      sources: [5],
+    });
+  }
+  if (f.classifierAiScore !== undefined) {
+    // Detector mode 3: a trained classifier, not one of the published statistical methods above.
+    points.push({
+      text: t("A trained AI-text classifier rates this paragraph {{pct}}% likely to be AI-written or AI-edited.", {
+        pct: fmt(f.classifierAiScore * 100),
+      }),
       sources: [],
     });
   }

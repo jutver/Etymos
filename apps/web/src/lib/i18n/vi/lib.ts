@@ -94,6 +94,13 @@ export const lib: Record<string, string> = {
     "Các câu giữ một nhịp đều nhau, trong khi người viết thường xen kẽ câu dễ đoán và câu bất ngờ.",
   "No single measure stands out; the score comes from the three measures together.":
     "Không có thước đo nào nổi bật riêng; điểm số đến từ cả ba thước đo cộng lại.",
+  "Binoculars score {{score}}: relative to how surprising the topic is, the wording is as predictable as a language model's own output.":
+    "Điểm Binoculars {{score}}: so với độ lạ của chủ đề, câu chữ dễ đoán ngang với văn do chính mô hình ngôn ngữ viết ra.",
+  "Binoculars score {{score}}: about as surprising as typical human writing.":
+    "Điểm Binoculars {{score}}: độ khó đoán tương đương văn do người viết thông thường.",
+  "Not enough evidence to judge": "Chưa đủ cơ sở để kết luận",
+  "A trained AI-text classifier rates this paragraph {{pct}}% likely to be AI-written or AI-edited.":
+    "Bộ phân loại văn bản AI đã huấn luyện đánh giá đoạn này có {{pct}}% khả năng do AI viết hoặc AI chỉnh sửa.",
   // lib/matchExplanation.ts
   "This looks like a standard definition that many authors phrase similarly; it is usually acceptable if you cite where the definition comes from.":
     "Đây có vẻ là một định nghĩa quen thuộc mà nhiều tác giả diễn đạt tương tự; thường vẫn chấp nhận được nếu bạn ghi rõ nguồn của định nghĩa.",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaretRight, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
 import type { AiDetection, MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
@@ -7,6 +7,8 @@ import { Button } from "../../components/ui/Button";
 import { AiDetectionSection } from "./AiDetectionSection";
 import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
 import { t, tn } from "../../lib/i18n";
+
+export type SidebarTab = "sources" | "ai";
 
 export interface SourcesSidebarProps {
   matches: MatchedSource[];
@@ -26,6 +28,11 @@ export interface SourcesSidebarProps {
   /** Passed straight through to AiDetectionSection — see its own docs. */
   activeAiSegmentId?: string | null;
   onAiSegmentClick?: (segmentId: string) => void;
+  /** Controlled tab, so the Report page can show only the highlights that
+   * belong to it (sources tab -> matches, AI tab -> AI-flagged paragraphs).
+   * Omit both to keep the sidebar's own tab state. */
+  tab?: SidebarTab;
+  onTabChange?: (tab: SidebarTab) => void;
   onSelect: (matchId: string) => void;
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
@@ -46,6 +53,8 @@ export function SourcesSidebar({
   aiDetection,
   activeAiSegmentId,
   onAiSegmentClick,
+  tab: controlledTab,
+  onTabChange,
   onSelect,
   onViewComparison,
   onRewrite,
@@ -60,7 +69,15 @@ export function SourcesSidebar({
   // exists when a detection result is there to show (same rule as
   // AiDetectionSection, which renders nothing otherwise).
   const hasAiTab = aiDetection?.available === true;
-  const [tab, setTab] = useState<"sources" | "ai">("sources");
+  const [ownTab, setOwnTab] = useState<"sources" | "ai">("sources");
+  const tab = controlledTab ?? ownTab;
+  const setTab = useCallback(
+    (next: SidebarTab) => {
+      setOwnTab(next);
+      onTabChange?.(next);
+    },
+    [onTabChange],
+  );
   const activeTab = hasAiTab ? tab : "sources";
 
   // Haystacks are built once per match list; each keystroke is then just a
@@ -78,10 +95,10 @@ export function SourcesSidebar({
   // sources tab, an AI-flagged paragraph the AI tab.
   useEffect(() => {
     if (activeMatchId) setTab("sources");
-  }, [activeMatchId]);
+  }, [activeMatchId, setTab]);
   useEffect(() => {
     if (activeAiSegmentId) setTab("ai");
-  }, [activeAiSegmentId]);
+  }, [activeAiSegmentId, setTab]);
 
   useEffect(() => {
     if (!activeMatchId) return;

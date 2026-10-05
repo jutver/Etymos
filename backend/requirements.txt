@@ -23,6 +23,9 @@ pydantic>=2.11.7
 # --- Local Qwen metadata-extraction model (llm_metadata.py) ---
 accelerate==1.11.0
 
+# --- Vietnamese AI-content detection (ai_detector.py mode 3, PhoGPT remote code) ---
+einops>=0.7.0
+
 # --- Auth, rate limiting, Supabase integration ---
 PyJWT==2.12.0
 cryptography>=49.0.0

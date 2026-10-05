@@ -170,3 +170,198 @@ def test_each_segment_carries_its_three_features_for_the_ui_explanation():
     }
     result = summarize([seg], language="en", model_name="m")
     assert result["segments"][0]["features"] == {"mean_nll": 1.735, "top1_frac": 0.612, "sent_std": 0.412}
+
+
+# --- Mode 1: inconclusive ---------------------------------------------------
+
+VI_LONG = " ".join(["mình"] * 60)
+
+
+class TestModeOneInconclusive:
+    def _seg(self, prob, words=200):
+        f = {"mean_nll": 3.0, "top1_frac": 0.4, "sent_std": 0.8}
+        return {"start": 0, "end": words, "block_id": "b", "words": words, "features": f, "probability": prob}
+
+    def test_low_confidence_result_is_inconclusive_with_reason_first(self):
+        result = ai_detector.mark_inconclusive(summarize([self._seg(0.02)], language="vi", model_name="m"))
+        assert result["inconclusive"] is True
+        assert result["reasons"][0] == ai_detector.INCONCLUSIVE_REASON
+        assert result["overall_score"] == 2.0  # kept for debugging, hidden by the UI
+
+    def test_normal_confidence_and_unavailable_results_are_untouched(self):
+        normal = summarize([self._seg(0.9, 300)], language="en", model_name="m")
+        assert "inconclusive" not in ai_detector.mark_inconclusive(normal)
+        assert ai_detector.mark_inconclusive({"available": False}) == {"available": False}
+
+    def test_detect_ai_content_applies_mode_one(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 1)
+        document, text = _doc([("paragraph", VI_LONG)])
+        result = detect_ai_content(
+            document, text, extractor=lambda _t: {"mean_nll": 3.0, "top1_frac": 0.4, "sent_std": 0.8, "tokens": 80}
+        )
+        assert result["language"] == "vi" and result["inconclusive"] is True
+
+
+# --- Mode 2: Binoculars -----------------------------------------------------
+
+def _bino(score):
+    return lambda _t: {"binoculars": score, "log_ppl": 2.0, "x_ppl": 2.0 / score, "tokens": 80}
+
+
+class TestModeTwoBinoculars:
+    def test_probability_falls_as_the_score_rises(self):
+        low = ai_detector.binoculars_probability(0.75, threshold=0.9, scale=0.05)
+        mid = ai_detector.binoculars_probability(0.90, threshold=0.9, scale=0.05)
+        high = ai_detector.binoculars_probability(1.05, threshold=0.9, scale=0.05)
+        assert low > 0.9 and abs(mid - 0.5) < 1e-9 and high < 0.1
+
+    def test_machine_like_score_is_flagged(self):
+        document, text = _doc([("paragraph", LONG), ("paragraph", LONG)])
+        result = ai_detector.detect_ai_content_binoculars(document, text, extractor=_bino(0.7))
+        assert result["method"] == ai_detector.METHOD_BINOCULARS
+        assert result["level"] == "likely" and result["ai_share"] == 100.0
+        assert result["segments"][0]["features"]["binoculars"] == 0.7
+        assert any("below the" in r for r in result["reasons"])
+
+    def test_human_like_score_is_low(self):
+        document, text = _doc([("paragraph", LONG), ("paragraph", LONG)])
+        result = ai_detector.detect_ai_content_binoculars(document, text, extractor=_bino(1.1))
+        assert result["level"] == "low" and result["overall_score"] < 5
+        assert any("above the" in r for r in result["reasons"])
+
+    def test_unusable_models_report_unavailable(self):
+        document, text = _doc([("paragraph", LONG)])
+
+        def boom(_t):
+            raise DetectorUnavailable("no observer")
+
+        result = ai_detector.detect_ai_content_binoculars(document, text, extractor=boom)
+        assert result == {"available": False, "method": ai_detector.METHOD_BINOCULARS, "reason": "no observer"}
+
+    def test_mode_two_routes_the_default_extractor_to_binoculars(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 2)
+        calls = []
+        monkeypatch.setattr(
+            ai_detector, "detect_ai_content_binoculars", lambda d, t: calls.append(t) or {"available": True}
+        )
+        document, text = _doc([("paragraph", LONG)])
+        assert detect_ai_content(document, text) == {"available": True}
+        assert calls == [text]
+
+
+# --- Mode 3: fine-tuned English classifier ----------------------------------
+
+def _clf(p_human, p_ai=None, p_edited=0.0, p_humanized=0.0):
+    p_ai = (1.0 - p_human - p_edited - p_humanized) if p_ai is None else p_ai
+    return lambda _t: {
+        "p_human": p_human, "p_ai": p_ai, "p_ai_edited": p_edited, "p_humanized": p_humanized,
+        "ai_score": 1.0 - p_human,
+    }
+
+
+class TestModeThreeClassifier:
+    def test_card_threshold_maps_onto_the_flag_threshold(self):
+        t = ai_detector.CLASSIFIER_THRESHOLD
+        assert ai_detector.classifier_probability(0.0) == 0.0
+        assert abs(ai_detector.classifier_probability(t) - ai_detector.SEGMENT_FLAG_THRESHOLD) < 1e-9
+        assert abs(ai_detector.classifier_probability(1.0) - 1.0) < 1e-9
+        # A paragraph the card would NOT flag stays below our flag threshold.
+        assert ai_detector.classifier_probability(0.9) < ai_detector.SEGMENT_FLAG_THRESHOLD
+
+    def test_ai_text_is_flagged_with_class_breakdown(self):
+        document, text = _doc([("paragraph", LONG), ("paragraph", LONG)])
+        result = ai_detector.detect_ai_content_classifier(document, text, extractor=_clf(0.005, p_humanized=0.5))
+        assert result["method"] == ai_detector.METHOD_CLASSIFIER
+        assert result["ai_share"] == 100.0 and result["overall_score"] > 60
+        assert result["segments"][0]["features"]["p_humanized"] == 0.5
+        assert result["reasons"][0].startswith("Classifier estimate: 0% human")
+
+    def test_human_text_is_low(self):
+        document, text = _doc([("paragraph", LONG), ("paragraph", LONG)])
+        result = ai_detector.detect_ai_content_classifier(document, text, extractor=_clf(0.95))
+        assert result["level"] == "low" and result["ai_share"] == 0
+
+    def test_unusable_model_reports_unavailable(self):
+        document, text = _doc([("paragraph", LONG)])
+
+        def boom(_t):
+            raise DetectorUnavailable("no weights")
+
+        result = ai_detector.detect_ai_content_classifier(document, text, extractor=boom)
+        assert result == {"available": False, "method": ai_detector.METHOD_CLASSIFIER, "reason": "no weights"}
+
+    def test_english_goes_to_the_classifier(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 3)
+        monkeypatch.setattr(ai_detector, "detect_ai_content_classifier", lambda d, t: {"available": True, "via": "clf"})
+        document, text = _doc([("paragraph", "The quick brown fox jumps over the lazy dog. " * 10)])
+        assert detect_ai_content(document, text)["via"] == "clf"
+
+    def test_vietnamese_falls_back_to_mode_one(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 3)
+        # Without the PhoGPT pair (see TestModeThreeVietnamese for the pair itself).
+        monkeypatch.setattr(ai_detector, "detect_ai_content_viet", lambda d, t: {"available": False})
+        monkeypatch.setattr(
+            ai_detector, "segment_features",
+            lambda _t: {"mean_nll": 3.0, "top1_frac": 0.4, "sent_std": 0.8, "tokens": 80},
+        )
+        document, text = _doc([("paragraph", VI_LONG)])
+        result = detect_ai_content(document, text, extractor=ai_detector.segment_features)
+        assert result["method"] == ai_detector.METHOD and result["inconclusive"] is True
+
+
+# --- Mode 3, Vietnamese: VietBinoculars ---------------------------------------
+
+VI_TEXT = "Hôm nay mình đi học về muộn vì trời mưa rất to và đường thì kẹt xe. " * 8
+
+
+def _viet(score):
+    return lambda _t: {"binoculars": score, "log_ppl": 2.0, "x_ppl": 2.0 / score, "tokens": 120}
+
+
+class TestModeThreeVietnamese:
+    def test_ai_like_score_is_flagged_with_normal_confidence(self):
+        document, text = _doc([("paragraph", VI_TEXT), ("paragraph", VI_TEXT)])
+        result = ai_detector.detect_ai_content_viet(document, text, extractor=_viet(0.80))
+        assert result["method"] == ai_detector.METHOD_VIET_BINOCULARS
+        assert result["language"] == "vi" and result["confidence"] == "normal"
+        assert result["level"] == "likely" and result["ai_share"] == 100.0
+        assert result["binoculars_threshold"] == ai_detector.VIET_BINOCULARS_THRESHOLD
+        assert result["reasons"][-1] == ai_detector.VIET_METHOD_NOTE
+        assert not any("calibrated on English" in r for r in result["reasons"])
+
+    def test_human_like_score_is_low(self):
+        document, text = _doc([("paragraph", VI_TEXT), ("paragraph", VI_TEXT)])
+        result = ai_detector.detect_ai_content_viet(document, text, extractor=_viet(0.98))
+        assert result["level"] == "low" and result["overall_score"] < 10
+        assert any("above the 0.90 threshold" in r for r in result["reasons"])
+
+    def test_unusable_pair_reports_unavailable(self):
+        document, text = _doc([("paragraph", VI_TEXT)])
+
+        def boom(_t):
+            raise DetectorUnavailable("no GPU")
+
+        assert ai_detector.detect_ai_content_viet(document, text, extractor=boom)["available"] is False
+
+    def test_routing_picks_the_model_from_the_text_language(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 3)
+        monkeypatch.setattr(ai_detector, "detect_ai_content_classifier", lambda d, t: {"available": True, "via": "en"})
+        monkeypatch.setattr(
+            ai_detector, "detect_ai_content_viet",
+            lambda d, t: {"available": True, "via": "vi", "confidence": "normal"},
+        )
+        en_doc, en_text = _doc([("paragraph", "The quick brown fox jumps over the lazy dog. " * 10)])
+        vi_doc, vi_text = _doc([("paragraph", VI_TEXT)])
+        assert detect_ai_content(en_doc, en_text)["via"] == "en"
+        assert detect_ai_content(vi_doc, vi_text)["via"] == "vi"
+
+    def test_vietnamese_falls_back_to_mode_one_when_phogpt_cannot_run(self, monkeypatch):
+        monkeypatch.setattr(ai_detector, "AI_DETECTION_MODE", 3)
+        monkeypatch.setattr(ai_detector, "detect_ai_content_viet", lambda d, t: {"available": False, "reason": "no GPU"})
+        monkeypatch.setattr(
+            ai_detector, "segment_features",
+            lambda _t: {"mean_nll": 3.0, "top1_frac": 0.4, "sent_std": 0.8, "tokens": 80},
+        )
+        document, text = _doc([("paragraph", VI_TEXT)])
+        result = detect_ai_content(document, text, extractor=ai_detector.segment_features)
+        assert result["method"] == ai_detector.METHOD and result["inconclusive"] is True

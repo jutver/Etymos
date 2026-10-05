@@ -3,7 +3,7 @@ import { CaretDown, CaretUp, Robot } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import type { AiDetection } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
-import { aiLevelLabel, translateAiText } from "../../lib/aiDetection";
+import { aiDetectionLabel, aiLevelLabel, translateAiText } from "../../lib/aiDetection";
 import { trackEvent } from "../../lib/analytics";
 import { AI_DETECTION_SOURCES, explainAiSegment } from "../../lib/aiSegmentExplanation";
 import { t, currentLocale } from "../../lib/i18n";
@@ -62,10 +62,15 @@ export function AiDetectionSection({ detection, locked, onUpgrade, activeSegment
   }
 
   const score = Math.round(detection.overallScore);
-  const flagged = detection.segments
-    .filter((s) => s.score >= 60)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  // Detector mode 1: outside the calibration (not English / too short) —
+  // show "not enough evidence" instead of a reassuring low number.
+  const inconclusive = detection.inconclusive === true;
+  const flagged = inconclusive
+    ? []
+    : detection.segments
+        .filter((s) => s.score >= 60)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
 
   return (
     <div className="mt-3 shrink-0 rounded-[var(--radius-card)] border border-line bg-white p-3.5">
@@ -76,30 +81,35 @@ export function AiDetectionSection({ detection, locked, onUpgrade, activeSegment
           </span>
           <div className="min-w-0">
             <p className="text-xs font-bold text-navy-900">{t("AI-generated content")}</p>
-            <p className="truncate text-[11px] text-ink-500">{aiLevelLabel(detection.level)}</p>
+            <p className="truncate text-[11px] text-ink-500">{inconclusive ? aiDetectionLabel(detection) : aiLevelLabel(detection.level)}</p>
           </div>
         </div>
         <span
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums",
-            LEVEL_CHIP[detection.level],
+            inconclusive ? LEVEL_CHIP.low : LEVEL_CHIP[detection.level],
           )}
         >
-          {score}{t("% AI")}</span>
+          {inconclusive ? t("AI: inconclusive") : <>{score}{t("% AI")}</>}</span>
       </div>
 
-      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ai-flag-bg" role="presentation">
+      {inconclusive && (
+        <p className="mt-2.5 rounded-[var(--radius-input)] border border-line bg-surface-muted px-2.5 py-1.5 text-[11px] text-ink-600">
+          {t("We can't tell whether this text was AI-written: it is not English or is too short for the detector's calibration, so no percentage is shown.")}</p>
+      )}
+
+      {!inconclusive && <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ai-flag-bg" role="presentation">
         <div
           className="h-full rounded-full bg-ai-flag"
           style={{ width: `${Math.min(100, Math.max(2, score))}%` }}
         />
-      </div>
+      </div>}
       <p className="mt-1.5 text-[11px] text-ink-500">
         {detection.analyzedWords.toLocaleString(currentLocale())}{" "}{t("words analysed")}
         {detection.aiShare > 0 && <> · {Math.round(detection.aiShare)}{t("% in AI-looking paragraphs")}</>}
       </p>
 
-      {detection.confidence === "low" && (
+      {detection.confidence === "low" && !inconclusive && (
         <p className="mt-2 rounded-[var(--radius-input)] border border-line bg-surface-muted px-2.5 py-1.5 text-[11px] text-ink-600">
           {t("Lower confidence: this text is short or not in English, and the detector was tuned on English. Treat the number as a hint only.")}</p>
       )}

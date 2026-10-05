@@ -1,7 +1,7 @@
 // parseAiDetection maps the backend's snake_case `ai_detection` block to the
 // UI type, and must never throw on old/odd data.
 import { describe, expect, it } from "vitest";
-import { aiLevelLabel, parseAiDetection, translateAiText } from "./aiDetection";
+import { aiDetectionLabel, aiLevelLabel, parseAiDetection, translateAiText } from "./aiDetection";
 import { setLanguage } from "./i18n";
 
 const backendBlock = {
@@ -80,6 +80,46 @@ describe("translateAiText", () => {
     expect(translateAiText(reason)).toBe(reason);
     setLanguage("vi");
     expect(translateAiText("Some future reason the UI has never seen.")).toBe("Some future reason the UI has never seen.");
+    setLanguage("en");
+  });
+});
+
+describe("detector modes", () => {
+  it("mode 1: carries `inconclusive` only when the backend sets it", () => {
+    const inconclusive = parseAiDetection({ ...backendBlock, confidence: "low", inconclusive: true });
+    expect(inconclusive).toMatchObject({ available: true, inconclusive: true });
+    expect(parseAiDetection(backendBlock)).not.toHaveProperty("inconclusive");
+  });
+
+  it("mode 2: reads the Binoculars score of a segment", () => {
+    const parsed = parseAiDetection({
+      ...backendBlock,
+      method: "binoculars_v1",
+      segments: [{ start: 0, end: 10, words: 60, score: 80, features: { binoculars: 0.81, log_ppl: 2, x_ppl: 2.5 } }],
+    });
+    expect(parsed && parsed.available && parsed.segments[0]?.features).toEqual({ binoculars: 0.81 });
+  });
+
+  it("translates the new detector sentences", () => {
+    setLanguage("vi");
+    expect(translateAiText("Binoculars score ≈ 0.82, below the 0.90 threshold: relative to how surprising the topic is, the wording is as predictable as a language model's own output.")).toContain("0.82");
+    expect(translateAiText("Binoculars score ≈ 0.82, below the 0.90 threshold: relative to how surprising the topic is, the wording is as predictable as a language model's own output.")).toContain("Điểm Binoculars");
+    expect(aiDetectionLabel({ level: "low", inconclusive: true })).toBe("Chưa đủ cơ sở để kết luận");
+    setLanguage("en");
+  });
+});
+
+describe("detector mode 3 (classifier)", () => {
+  it("reads the classifier score and translates its reasons", () => {
+    const parsed = parseAiDetection({
+      ...backendBlock,
+      method: "ai_text_classifier_v1",
+      segments: [{ start: 0, end: 10, words: 60, score: 90, features: { ai_score: 0.99, p_human: 0.01 } }],
+    });
+    expect(parsed && parsed.available && parsed.segments[0]?.features).toEqual({ classifierAiScore: 0.99 });
+    setLanguage("vi");
+    expect(translateAiText("Classifier estimate: 2% human, 60% raw AI, 8% AI-edited, 30% humanized AI text.")).toContain("30%");
+    expect(translateAiText("Classifier estimate: 2% human, 60% raw AI, 8% AI-edited, 30% humanized AI text.")).toContain("Ước tính");
     setLanguage("en");
   });
 });

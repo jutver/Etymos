@@ -331,6 +331,19 @@ def check_text_plagiarism(
 
     verified_matches = verify_all_matches(matches)
 
+    # Sources the text already lists in its own References are cited, not
+    # plagiarized: drop their matches (no highlight, no score). Uncited
+    # sources keep the normal flow.
+    from cited_sources import filter_cited_matches
+
+    cited_filter = filter_cited_matches(
+        verified_matches,
+        document=document,
+        input_text=cleaned_text,
+        matches=matches,
+    )
+    verified_matches = cited_filter["kept"]
+
     _emit_progress(
         progress_callback,
         95,
@@ -344,6 +357,8 @@ def check_text_plagiarism(
         input_text=cleaned_text,
         document=document,
     )
+    final_report["cited_sources"] = cited_filter["cited_sources"]
+    final_report["reference_list_found"] = cited_filter["reference_found"]
 
     final_report["coverage"] = {
         "total_candidate_papers": len(cached_papers),

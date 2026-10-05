@@ -306,6 +306,24 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
 
     print_verified_matches(verified_matches, top_k=10)
 
+    # Sources the author already lists in their own References are cited,
+    # not plagiarized: drop their matches so they are neither highlighted
+    # nor scored. Uncited sources keep the normal flow.
+    from cited_sources import filter_cited_matches
+
+    cited_filter = filter_cited_matches(
+        verified_matches,
+        document=document,
+        input_text=input_text,
+        source_metadata=source_metadata_by_paper_id,
+        matches=matches,
+    )
+    verified_matches = cited_filter["kept"]
+
+    print("\n===== CITED SOURCES (excluded) =====")
+    for cited in cited_filter["cited_sources"]:
+        print("-", cited["source_paper_id"], "|", cited["source_title"])
+
     final_report = build_final_report(
         verified_matches=verified_matches,
         input_chunks=input_chunks,
@@ -313,6 +331,8 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
         document=document,
         source_metadata=source_metadata_by_paper_id,
     )
+    final_report["cited_sources"] = cited_filter["cited_sources"]
+    final_report["reference_list_found"] = cited_filter["reference_found"]
 
     # AI-content detection + plain-language explanations. Additive and
     # failure-proof (see report_enrichment.py): never changes the score.

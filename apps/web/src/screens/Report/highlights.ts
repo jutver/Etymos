@@ -466,6 +466,9 @@ export interface AiSegmentRange {
   id: string;
   start: number;
   end: number;
+  /** First words of the paragraph (backend `_excerpt`, may end in "…").
+   * Used when passages carry no offsets — see mapAiSegmentsToPassages. */
+  excerpt?: string;
 }
 
 /**
@@ -488,9 +491,34 @@ export function mapAiSegmentsToPassages(
         seg.start >= p.startOffset &&
         seg.end <= p.endOffset,
     );
-    if (hit) bySegment.set(seg.id, hit.id);
+    if (hit) {
+      bySegment.set(seg.id, hit.id);
+      continue;
+    }
+    // A report reopened from Supabase has no passage offsets
+    // (document_passages doesn't store them), so the offset test above
+    // never hits: find the paragraph by its opening words instead.
+    const byText = passageForExcerpt(passages, seg.excerpt);
+    if (byText) bySegment.set(seg.id, byText.id);
   }
   return bySegment;
+}
+
+// Same folding as the backend's ai_detector.normalize_text (which built
+// the excerpt): NFKC ligatures, "detec- tion" re-joined, whitespace squashed.
+function squashWhitespace(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/([\p{L}\p{N}_])-\s+(?=\p{Ll})/gu, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function passageForExcerpt(passages: DocPassage[], excerpt: string | undefined): DocPassage | undefined {
+  const needle = squashWhitespace((excerpt ?? "").replace(/…$/, ""));
+  // Too short to tell paragraphs apart reliably.
+  if (needle.length < 20) return undefined;
+  return passages.find((p) => p.blockType !== "heading" && squashWhitespace(p.text ?? "").includes(needle));
 }
 
 /** Passage ids that should get the "looks machine-written" paragraph-level
