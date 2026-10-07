@@ -74,6 +74,15 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return deepcopy(job) if job else None
 
 
+def make_queue_callback(job_id: str):
+    """For gpu_queue.gpu_slot: shows the job's place in line while it waits."""
+    def callback(ahead: int) -> None:
+        message = ("Waiting in queue: you're next" if ahead == 0
+                   else f"Waiting in queue: {ahead} ahead of you")
+        update_job(job_id, status="queued", current_step="queued", message=message)
+    return callback
+
+
 def make_progress_callback(job_id: str):
     def callback(progress: int, step: str, message: str) -> None:
         update_job(job_id, status="processing", progress=progress,

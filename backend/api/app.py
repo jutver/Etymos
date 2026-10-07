@@ -21,7 +21,8 @@ from slowapi.middleware import SlowAPIMiddleware
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
-from job_manager import create_job, get_job, make_progress_callback, update_job
+from job_manager import create_job, get_job, make_progress_callback, make_queue_callback, update_job
+from gpu_queue import gpu_slot
 from report_store import delete_report, get_report, list_reports, save_report
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
@@ -264,7 +265,9 @@ def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
     init_marker_preview(report_id)
     work_dir = MARKER_PREVIEW_DIR / report_id
     try:
-        result = marker_preview.build_marker_preview(pdf_path, work_dir)
+        # marker-pdf loads its own models onto the GPU, so it takes a slot like a check.
+        with gpu_slot():
+            result = marker_preview.build_marker_preview(pdf_path, work_dir)
         mark_marker_preview_ready(
             report_id, html=result["html"], docx_local_path=str(result["docx_path"])
         )
@@ -300,14 +303,15 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
     callback = make_progress_callback(job_id)
 
     try:
-        update_job(job_id, status="processing", progress=1,
-                   current_step="starting",
-                   message=f"Starting {'DOCX' if input_type == 'docx' else 'PDF'} analysis")
+        with gpu_slot(on_wait=make_queue_callback(job_id)):
+            update_job(job_id, status="processing", progress=1,
+                       current_step="starting",
+                       message=f"Starting {'DOCX' if input_type == 'docx' else 'PDF'} analysis")
 
-        if input_type == "docx":
-            report = check_docx_plagiarism(docx_path=pdf_path, progress_callback=callback)
-        else:
-            report = check_pdf_plagiarism(pdf_path=pdf_path, progress_callback=callback)
+            if input_type == "docx":
+                report = check_docx_plagiarism(docx_path=pdf_path, progress_callback=callback)
+            else:
+                report = check_pdf_plagiarism(pdf_path=pdf_path, progress_callback=callback)
 
         report_id = save_report(report, input_type=input_type, input_name=original_name, user_id=user_id)
 
@@ -351,9 +355,10 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
                   balance_source: BalanceSource) -> None:
     callback = make_progress_callback(job_id)
     try:
-        update_job(job_id, status="processing", progress=1,
-                   current_step="starting", message="Starting text analysis")
-        report = check_text_plagiarism(user_text=user_text, progress_callback=callback)
+        with gpu_slot(on_wait=make_queue_callback(job_id)):
+            update_job(job_id, status="processing", progress=1,
+                       current_step="starting", message="Starting text analysis")
+            report = check_text_plagiarism(user_text=user_text, progress_callback=callback)
         report_id = save_report(report, input_type="text", input_name="Pasted text", user_id=user_id)
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
