@@ -228,7 +228,7 @@ export function FormatToolbar({
         role="toolbar"
         aria-label={t("Document formatting")}
         aria-controls="report-document-editor"
-        className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-xl border border-line/80 bg-white/95 px-2 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-md"
+        className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-xl border border-line/80 bg-white px-2 py-1.5 shadow-[var(--shadow-card)]"
       >
         <div className="flex items-center rounded-full bg-surface-muted p-0.5">
           {(hasOriginal ? (["document", "original", "edit"] as const) : (["document", "edit"] as const)).map((v) => (

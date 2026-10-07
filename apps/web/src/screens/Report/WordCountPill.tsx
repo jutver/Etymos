@@ -23,7 +23,7 @@ export function WordCountPill({
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2.5 rounded-full border border-line/80 bg-white/90 px-3.5 py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-card)] backdrop-blur-md"
+      className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2.5 rounded-full border border-line/80 bg-white px-3.5 py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-card)]"
     >
       <span className="tabular-nums text-ink-900">
         <span className="font-semibold">{words.toLocaleString(currentLocale())}</span>{" "}{t("words")}</span>

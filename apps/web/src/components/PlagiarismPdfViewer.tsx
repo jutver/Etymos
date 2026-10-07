@@ -578,6 +578,19 @@ export function PlagiarismPdfViewer({
     return () => cancelAnimationFrame(raf);
   }, [numPages, updateCurrentPage]);
 
+  // Scroll events fire many times per frame; measure the pages at most once a frame.
+  const scrollRafRef = useRef<number | null>(null);
+  const onViewerScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      updateCurrentPage();
+    });
+  }, [updateCurrentPage]);
+  useEffect(() => () => {
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+  }, []);
+
   // Cuộn mượt viewer nội bộ tới 1 trang cụ thể - thay cho việc đổi pageNumber
   // để "nhảy trang" như trước, vì giờ mọi trang đều đã mount sẵn trong dải dài.
   const scrollToPage = useCallback((page: number) => {
@@ -722,7 +735,7 @@ export function PlagiarismPdfViewer({
           `relative flex-1 overflow-hidden`). */}
       <div
         ref={viewerRef}
-        onScroll={updateCurrentPage}
+        onScroll={onViewerScroll}
         className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-ink-100/40 p-4"
       >
         {!pdfUrl ? (

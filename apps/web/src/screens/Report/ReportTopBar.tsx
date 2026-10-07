@@ -194,7 +194,7 @@ export function ReportTopBar({
   scoreSlot,
 }: ReportTopBarProps) {
   return (
-    <header className="studio-report-bar z-20 shrink-0 border-b border-line/70 bg-white/85 backdrop-blur-md">
+    <header className="studio-report-bar z-20 shrink-0 border-b border-line/70 bg-white/95">
       <div className="flex min-h-16 flex-wrap items-center gap-1 px-3 py-2 sm:px-5">
         <HomeLogoButton onGoHome={onGoHome} />
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-line" />
