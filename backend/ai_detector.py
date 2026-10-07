@@ -45,6 +45,7 @@ import logging
 import math
 import os
 import re
+import threading
 import unicodedata
 
 logger = logging.getLogger(__name__)
@@ -997,6 +998,8 @@ VIET_METHOD_NOTE = (
 )
 
 _viet_models = None  # (tokenizer, observer, performer)
+# Concurrent first Vietnamese checks would otherwise each load the ~7.3 GB pair.
+_viet_models_lock = threading.Lock()
 
 
 def _viet_handles():
@@ -1004,30 +1007,34 @@ def _viet_handles():
     if _viet_models is not None:
         return _viet_models
 
-    try:
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    with _viet_models_lock:
+        if _viet_models is not None:
+            return _viet_models
 
-        if not torch.cuda.is_available():
-            raise DetectorUnavailable("VietBinoculars needs a CUDA GPU (~7.3 GB VRAM).")
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-        logger.info("Loading VietBinoculars pair %s + %s (int8)...", VIET_OBSERVER_MODEL, VIET_PERFORMER_MODEL)
-        kwargs = dict(
-            trust_remote_code=True,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
-            device_map={"": 0},
-            torch_dtype=torch.bfloat16,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(VIET_OBSERVER_MODEL, trust_remote_code=True)
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = tokenizer.eos_token
-        observer = AutoModelForCausalLM.from_pretrained(VIET_OBSERVER_MODEL, **kwargs).eval()
-        performer = AutoModelForCausalLM.from_pretrained(VIET_PERFORMER_MODEL, **kwargs).eval()
-        _viet_models = (tokenizer, observer, performer)
-    except DetectorUnavailable:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise DetectorUnavailable(f"VietBinoculars models failed to load: {exc}") from exc
+            if not torch.cuda.is_available():
+                raise DetectorUnavailable("VietBinoculars needs a CUDA GPU (~7.3 GB VRAM).")
+
+            logger.info("Loading VietBinoculars pair %s + %s (int8)...", VIET_OBSERVER_MODEL, VIET_PERFORMER_MODEL)
+            kwargs = dict(
+                trust_remote_code=True,
+                quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+                device_map={"": 0},
+                torch_dtype=torch.bfloat16,
+            )
+            tokenizer = AutoTokenizer.from_pretrained(VIET_OBSERVER_MODEL, trust_remote_code=True)
+            if not tokenizer.pad_token:
+                tokenizer.pad_token = tokenizer.eos_token
+            observer = AutoModelForCausalLM.from_pretrained(VIET_OBSERVER_MODEL, **kwargs).eval()
+            performer = AutoModelForCausalLM.from_pretrained(VIET_PERFORMER_MODEL, **kwargs).eval()
+            _viet_models = (tokenizer, observer, performer)
+        except DetectorUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise DetectorUnavailable(f"VietBinoculars models failed to load: {exc}") from exc
 
     return _viet_models
 
