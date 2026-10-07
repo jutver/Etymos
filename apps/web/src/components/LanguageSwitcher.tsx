@@ -15,8 +15,9 @@ export function LanguageSwitcher({ tone = "light", className }: { tone?: "light"
       role="group"
       aria-label={t("Language")}
       className={cn(
-        "inline-flex items-center rounded-full border p-0.5 text-[11px] font-bold",
-        dark ? "border-white/15 bg-white/5" : "border-line bg-white",
+        "inline-flex w-fit shrink-0 items-center rounded-full border font-bold",
+        // Dark (app nav) matches the height of the avatar button beside it.
+        dark ? "border-white/15 bg-white/5 p-1 text-xs" : "border-line bg-white p-0.5 text-[11px]",
         className,
       )}
     >
@@ -31,7 +32,8 @@ export function LanguageSwitcher({ tone = "light", className }: { tone?: "light"
             aria-pressed={active}
             onClick={() => setLanguage(code)}
             className={cn(
-              "rounded-full px-2.5 py-1 transition-colors",
+              "rounded-full transition-colors",
+              dark ? "px-3 py-1" : "px-2.5 py-1",
               active
                 ? dark
                   ? "bg-white text-navy-900"

@@ -397,7 +397,7 @@
 .upload-editorial > div:first-child > p:last-child, .library-shell > div:first-child > p:last-child, .history-shell > div:first-child > p:last-child, .trash-shell > div:first-child > p:last-child { max-width: 610px; line-height: 1.75; }
 .upload-editorial > div:nth-child(2) { margin-top: 32px; }
 .upload-editorial > div:nth-child(2) > .studio-card:first-child { position: relative; overflow: hidden; border-color: #d4e0f0; box-shadow: 0 18px 38px #142b4a0a; }
-.upload-editorial > div:nth-child(2) > .studio-card:first-child::before { content: '01'; position: absolute; top: 18px; right: 22px; color: #2563eb12; font-size: 84px; font-weight: 800; line-height: 1; pointer-events: none; }
+.upload-editorial > div:nth-child(2) > .studio-card:first-child::before { content: ''; position: absolute; top: 18px; right: 22px; width: 76px; height: 76px; background-color: #2563eb12; -webkit-mask: url('/assets/logo/etymos-mark-white.svg') center / contain no-repeat; mask: url('/assets/logo/etymos-mark-white.svg') center / contain no-repeat; pointer-events: none; }
 .upload-editorial [role="tablist"] { position: relative; z-index: 1; max-width: 320px; border: 1px solid #d9e4f2; background: #f4f8fd; }
 .upload-editorial .studio-dropzone { position: relative; overflow: hidden; border-radius: 22px 72px 22px 22px; background: linear-gradient(135deg, #eff6ff, #f9fbff); }
 .upload-editorial .studio-dropzone::before, .upload-editorial .studio-dropzone::after { content: ''; position: absolute; border: 1px solid #bcd1ed; border-radius: 50%; pointer-events: none; }
@@ -425,7 +425,7 @@
   .upload-editorial > div:first-child, .library-shell > div:first-child, .history-shell > div:first-child, .trash-shell > div:first-child { padding-bottom: 18px; }
   .upload-editorial > div:nth-child(2) { margin-top: 24px; }
   .upload-editorial .studio-dropzone { border-radius: 18px 46px 18px 18px; }
-  .upload-editorial > div:nth-child(2) > .studio-card:first-child::before { font-size: 56px; }
+  .upload-editorial > div:nth-child(2) > .studio-card:first-child::before { width: 52px; height: 52px; }
   .library-shell > div:nth-child(2)::before { display: none; }
   .history-shell > .studio-card > div:first-child::after { display: none; }
   .trash-shell > .studio-card { overflow-x: auto; }

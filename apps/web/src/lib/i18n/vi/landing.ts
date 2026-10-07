@@ -50,7 +50,6 @@ export const landing: Record<string, string> = {
   "This check keeps running if you leave — it stays in your documents as “Checking”.":
     "Lần kiểm tra này vẫn tiếp tục chạy nếu bạn rời đi — nó sẽ nằm trong tài liệu của bạn với trạng thái “Đang kiểm tra”.",
   "This exceeds the {{plan}} plan's {{limit}}-word limit.": "Vượt quá giới hạn {{limit}} từ của gói {{plan}}.",
-  "Top up credits": "Nạp thêm lượt",
   "Try again": "Thử lại",
   "Unable to start analysis.": "Không thể bắt đầu phân tích.",
   "Upload files": "Tải file lên",
@@ -65,7 +64,6 @@ export const landing: Record<string, string> = {
   "Which balance should we use?": "Nên dùng số dư nào?",
   "You have credits available in more than one place. Pick which one this check should spend.":
     "Bạn có lượt kiểm tra ở nhiều nơi. Hãy chọn nguồn để trừ cho lần kiểm tra này.",
-  "Your balance": "Số dư của bạn",
   "browse files": "chọn file",
   "on your computer": "trên máy tính của bạn",
   "{{count}} check remaining": "Còn {{count}} lượt kiểm tra",

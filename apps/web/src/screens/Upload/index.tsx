@@ -18,7 +18,6 @@ import {
 import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { Modal, ModalCloseButton } from "../../components/ui/Modal";
-import { UsageMeter } from "../../components/UsageMeter";
 import { StatusPill } from "../../components/Severity";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit, PROJECTS } from "../../lib/store";
@@ -58,7 +57,6 @@ export default function UploadPage() {
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const requestCheck = useAppStore((s) => s.requestCheck);
-  const remaining = useAppStore((s) => s.remaining());
   const selectedBalance = useAppStore((s) => s.selectedBalance);
   const setSelectedBalance = useAppStore((s) => s.setSelectedBalance);
   const balances = useAppStore((s) => s.balances());
@@ -604,18 +602,6 @@ export default function UploadPage() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-5 lg:h-full lg:overflow-hidden">
-          <div className="shrink-0 rounded-[var(--radius-card-lg)] border border-line bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Your balance")}</p>
-            <div className="mt-3">
-              <UsageMeter />
-            </div>
-            {remaining <= 1 && (
-              <Button as="link" to="/pricing" size="sm" fullWidth className="mt-4">
-                {planLabel(plan) === "Free" ? t("Upgrade or buy credits") : t("Top up credits")}
-              </Button>
-            )}
-          </div>
-
           <div className="studio-card flex flex-1 min-h-0 flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-5">
             <div className="flex shrink-0 items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500">

@@ -71,71 +71,79 @@ export function AppNav() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3 lg:mt-auto lg:flex-col lg:items-stretch">
-          <LanguageSwitcher tone="dark" />
-          <div className="hidden sm:block lg:mb-4 lg:rounded-xl lg:border lg:border-white/10 lg:p-3">
+        <div className="flex items-center gap-3 lg:mt-auto lg:flex-col lg:items-stretch lg:gap-4">
+          <div className="hidden sm:block lg:hidden">
             <UsageMeter compact interactive={false} />
           </div>
+          <div className="hidden lg:block">
+            <UsageMeter variant="sidebar" />
+          </div>
 
-          <button
-            onClick={() => setMobileNavOpen((v) => !v)}
-            aria-label={t("Toggle navigation")}
-            aria-expanded={mobileNavOpen} aria-controls="workspace-mobile-navigation" className="flex size-11 items-center justify-center rounded-[var(--radius-input)] text-white/80 hover:bg-white/10 lg:hidden"
-          >
-            {mobileNavOpen ? <X size={20} /> : <List size={20} />}
-          </button>
+          {/* Language and account share one row: language left of the avatar in
+              the top bar, avatar left / language right at the sidebar's foot. */}
+          <div className="flex items-center gap-3 lg:flex-row-reverse lg:justify-between">
+            <LanguageSwitcher tone="dark" />
 
-          <div className="relative" ref={menuRef}>
             <button
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Account menu"
-              aria-expanded={menuOpen}
-              className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-2.5 text-white transition-colors hover:bg-white/10"
+              onClick={() => setMobileNavOpen((v) => !v)}
+              aria-label={t("Toggle navigation")}
+              aria-expanded={mobileNavOpen} aria-controls="workspace-mobile-navigation" className="flex size-11 items-center justify-center rounded-[var(--radius-input)] text-white/80 hover:bg-white/10 lg:hidden"
             >
-              <span className="flex size-7 items-center justify-center rounded-full bg-brand-400 text-xs font-bold text-white">
-                {initialsFor(user) || <User size={14} weight="fill" />}
-              </span>
-              <CaretDown size={13} className={cn("transition-transform", menuOpen && "rotate-180")} />
+              {mobileNavOpen ? <X size={20} /> : <List size={20} />}
             </button>
 
-            {menuOpen && (
-              <div className="studio-card absolute right-0 top-[calc(100%+10px)] z-50 w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)] lg:bottom-[calc(100%+10px)] lg:left-0 lg:right-auto lg:top-auto lg:w-full">
-                <div className="px-3 py-2.5">
-                  <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
-                  <p className="truncate text-xs text-ink-500">{user?.email ?? t("{{plan}} plan", { plan: planLabel(plan) })}</p>
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="Account menu"
+                aria-expanded={menuOpen}
+                className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-2.5 text-white transition-colors hover:bg-white/10"
+              >
+                <span className="flex size-7 items-center justify-center rounded-full bg-brand-400 text-xs font-bold text-white">
+                  {initialsFor(user) || <User size={14} weight="fill" />}
+                </span>
+                <CaretDown size={13} className={cn("transition-transform", menuOpen && "rotate-180")} />
+              </button>
+
+              {menuOpen && (
+                <div className="studio-card absolute right-0 top-[calc(100%+10px)] z-50 w-60 rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)] lg:bottom-[calc(100%+10px)] lg:left-0 lg:right-auto lg:top-auto lg:w-50">
+                  <div className="px-3 py-2.5">
+                    <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
+                    <p className="truncate text-xs text-ink-500">{user?.email ?? t("{{plan}} plan", { plan: planLabel(plan) })}</p>
+                  </div>
+                  <div className="h-px bg-line" />
+                  <Link
+                    to="/account/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    {t("My Profile")}</Link>
+                  <Link
+                    to="/account/plan"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    {t("My Plan")}</Link>
+                  <Link
+                    to="/account/payments"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    {t("Payment history")}</Link>
+                  <div className="h-px bg-line" />
+                  <button
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      await supabase.auth.signOut();
+                      navigate("/");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    <SignOut size={16} />
+                    {t("Log out")}</button>
                 </div>
-                <div className="h-px bg-line" />
-                <Link
-                  to="/account/profile"
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
-                >
-                  {t("My Profile")}</Link>
-                <Link
-                  to="/account/plan"
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
-                >
-                  {t("My Plan")}</Link>
-                <Link
-                  to="/account/payments"
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
-                >
-                  {t("Payment history")}</Link>
-                <div className="h-px bg-line" />
-                <button
-                  onClick={async () => {
-                    setMenuOpen(false);
-                    await supabase.auth.signOut();
-                    navigate("/");
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
-                >
-                  <SignOut size={16} />
-                  {t("Log out")}</button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
