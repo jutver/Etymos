@@ -12,7 +12,7 @@ import { Button } from "../../components/ui/Button";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
-import { annualSavingsPercent, formatVND } from "@etymos/shared";
+import { formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import { subscriptionStatus } from "../../lib/payments";
@@ -55,11 +55,6 @@ export default function AccountPlanPage() {
       cancelled = true;
     };
   }, []);
-
-  const maxAnnualSavings = Math.max(
-    0,
-    ...plans.filter((p) => p.id !== "free").map((p) => annualSavingsPercent(p.priceMonthly, p.priceAnnual)),
-  );
 
   function renew() {
     if (plan === "free") return;
@@ -157,26 +152,21 @@ export default function AccountPlanPage() {
       <section className="mt-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-h3 font-bold tracking-tight text-navy-900">{t("Change plan")}</h2>
-          <div className="inline-flex items-center gap-1 self-start rounded-full bg-surface-muted p-1">
-            <button
-              onClick={() => setBillingCycle("monthly")}
-              className={cn(
-                "rounded-full px-5 py-2 text-sm font-semibold transition-colors",
-                billingCycle === "monthly" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
-              )}
-            >
-              {t("Monthly")}</button>
-            <button
-              onClick={() => setBillingCycle("annual")}
-              className={cn(
-                "flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors",
-                billingCycle === "annual" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
-              )}
-            >
-              {t("Annual")}<span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
-                {t("Save up to {{percent}}%", { percent: maxAnnualSavings })}
-              </span>
-            </button>
+          <div className="grid grid-cols-2 gap-1 self-start rounded-full bg-surface-muted p-1">
+            {(["monthly", "annual"] as const).map((cycle) => (
+              <button
+                key={cycle}
+                type="button"
+                aria-pressed={billingCycle === cycle}
+                onClick={() => setBillingCycle(cycle)}
+                className={cn(
+                  "rounded-full px-6 py-2 text-sm font-semibold transition-colors",
+                  billingCycle === cycle ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
+                )}
+              >
+                {cycle === "monthly" ? t("Monthly") : t("Annual")}
+              </button>
+            ))}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
