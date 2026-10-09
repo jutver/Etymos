@@ -493,3 +493,104 @@ export async function notifyPasswordChanged(): Promise<void> {
     console.warn("Password-change notice failed", err);
   }
 }
+
+// --- Support (backend/api/support.py) --------------------------------------
+
+export type SupportCategory = "billing" | "account" | "checks" | "bug" | "other";
+export type SupportStatus = "open" | "pending" | "resolved" | "closed";
+
+export interface SupportAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  /** Signed, expires after ~10 minutes. */
+  url: string | null;
+}
+
+export interface SupportTicketSummary {
+  number: number;
+  subject: string;
+  category: SupportCategory;
+  status: SupportStatus;
+  created_at: string;
+  updated_at: string;
+  last_agent_message_at: string | null;
+}
+
+export interface SupportMessage {
+  id: string;
+  from: "you" | "support";
+  body: string;
+  channel: "web" | "email" | "admin";
+  created_at: string;
+  attachments: SupportAttachment[];
+}
+
+export interface SupportConversation extends SupportTicketSummary {
+  messages: SupportMessage[];
+}
+
+/** Attachment limits, mirrored from support.py so the form can say no before uploading. */
+export const SUPPORT_MAX_FILES = 5;
+export const SUPPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
+export const SUPPORT_FILE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+
+async function optionalAuthHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function sendForm<T>(path: string, form: FormData, headers: Record<string, string>): Promise<T> {
+  const response = await fetch(buildUrl(path), { method: "POST", headers, body: form });
+  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
+  return response.json() as Promise<T>;
+}
+
+function supportForm(fields: Record<string, string | undefined>, files: File[]): FormData {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) if (value !== undefined) form.append(key, value);
+  for (const file of files) form.append("files", file);
+  return form;
+}
+
+/** Opens a ticket. Signed in, it is tied to the account (email/name are
+ * ignored); signed out, `email` is required. ApiError detail: invalid_email,
+ * invalid_subject, invalid_body, body_too_long, invalid_category,
+ * too_many_files, file_too_large, file_type, too_many_requests. */
+export async function openSupportTicket(input: {
+  category: SupportCategory;
+  subject: string;
+  body: string;
+  email?: string;
+  name?: string;
+  website?: string;
+  files: File[];
+}): Promise<{ number: number; signed_in: boolean }> {
+  const { files, ...fields } = input;
+  return sendForm("/api/support/tickets", supportForm(fields, files), await optionalAuthHeader());
+}
+
+export function listMySupportTickets(): Promise<{ items: SupportTicketSummary[] }> {
+  return requestJson("/api/support/tickets");
+}
+
+export function getMySupportTicket(number: number): Promise<SupportConversation> {
+  return requestJson(`/api/support/tickets/${number}`);
+}
+
+/** ApiError 409 "closed" when the ticket is closed. */
+export async function replyToMySupportTicket(number: number, body: string, files: File[]): Promise<SupportConversation> {
+  return sendForm(`/api/support/tickets/${number}/messages`, supportForm({ body }, files), await getAuthHeader());
+}
+
+export async function getGuestSupportTicket(token: string): Promise<SupportConversation> {
+  const response = await fetch(buildUrl(`/api/support/guest/${encodeURIComponent(token)}`));
+  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
+  return response.json() as Promise<SupportConversation>;
+}
+
+export function replyAsGuest(token: string, body: string, files: File[]): Promise<SupportConversation> {
+  return sendForm(`/api/support/guest/${encodeURIComponent(token)}/messages`, supportForm({ body }, files), {});
+}

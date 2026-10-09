@@ -108,7 +108,6 @@ export const components: Record<string, string> = {
   "Your account has been suspended": "Tài khoản của bạn đã bị đình chỉ",
   "Zoom in": "Phóng to",
   "Zoom out": "Thu nhỏ",
-  "hello@etymos.vn": "hello@etymos.vn",
   "instead of confirming.": "thay vì xác nhận.",
   "{{plan}} plan": "Gói {{plan}}",
   "© 2026 Etymos. Made for Vietnamese students and researchers.": "© 2026 Etymos. Dành cho sinh viên và nhà nghiên cứu Việt Nam.",

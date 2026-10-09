@@ -11,6 +11,8 @@ import UserDetailPage from "./screens/Users/UserDetail";
 import ModerationPage from "./screens/Moderation";
 import DocumentDetailPage from "./screens/Moderation/DocumentDetail";
 import VerificationPage from "./screens/Verification";
+import SupportInboxPage from "./screens/Support";
+import SupportTicketDetailPage from "./screens/Support/TicketDetail";
 import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import FeatureFlagsPage from "./screens/Config/FeatureFlags";
 import AnnouncementsPage from "./screens/Config/Announcements";
@@ -48,6 +50,8 @@ function App() {
           <Route path="/moderation" element={<ModerationPage />} />
           <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
           <Route path="/verification" element={<VerificationPage />} />
+          <Route path="/support" element={<SupportInboxPage />} />
+          <Route path="/support/:number" element={<SupportTicketDetailPage />} />
           <Route path="/waitlist" element={<WaitlistLayout />}>
             <Route index element={<Navigate to="/waitlist/access" replace />} />
             <Route path="access" element={<AccessPage />} />

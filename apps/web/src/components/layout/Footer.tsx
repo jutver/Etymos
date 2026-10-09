@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { EnvelopeSimple } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
+import { SUPPORT_EMAIL } from "../support/labels";
 
 export function Footer() {
   return (
@@ -12,12 +13,12 @@ export function Footer() {
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
             {t("Vietnamese-first plagiarism detection, built to be affordable for every student and researcher.")}</p>
           <a
-            href="mailto:hello@etymos.vn"
-            aria-label="Email Etymos support"
+            href={`mailto:${SUPPORT_EMAIL}`}
+            aria-label={t("Email Etymos support")}
             className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-white/70 hover:text-white"
           >
             <EnvelopeSimple size={16} />
-            {t("hello@etymos.vn")}</a>
+            {SUPPORT_EMAIL}</a>
         </div>
 
         <div>
@@ -48,6 +49,10 @@ export function Footer() {
             <li>
               <Link to="/history" className="hover:text-white">
                 {t("My history")}</Link>
+            </li>
+            <li>
+              <Link to="/contact" className="hover:text-white">
+                {t("Contact support")}</Link>
             </li>
           </ul>
         </div>

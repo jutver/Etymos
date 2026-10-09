@@ -41,7 +41,6 @@ def send_email(to: str, content: EmailContent) -> None:
     password = os.getenv("SMTP_PASSWORD")
     if not (host and user and password):
         raise MailerNotConfigured("SMTP_HOST / SMTP_USER / SMTP_PASSWORD are not set.")
-    port = int(os.getenv("SMTP_PORT", "465"))
     sender = os.getenv("SMTP_FROM") or f"Etymos <{user}>"
 
     msg = EmailMessage()
@@ -51,7 +50,18 @@ def send_email(to: str, content: EmailContent) -> None:
     msg["Message-ID"] = make_msgid(domain=user.split("@")[-1])
     msg.set_content(render_text(content))
     msg.add_alternative(render_email(content), subtype="html")
+    send_message(msg, user=user, password=password)
+    logger.info("Sent '%s' email", content.subject)
 
+
+def send_message(msg: EmailMessage, *, user: str, password: str) -> None:
+    """Hands a fully built message to the SMTP server, logged in as `user`.
+    Support email (support_mail.py) builds its own message, with threading
+    headers and attachments, and logs in as the support mailbox."""
+    host = os.getenv("SMTP_HOST")
+    if not host:
+        raise MailerNotConfigured("SMTP_HOST is not set.")
+    port = int(os.getenv("SMTP_PORT", "465"))
     context = ssl.create_default_context()
     if port == 465:
         with smtplib.SMTP_SSL(host, port, context=context, timeout=20) as smtp:
@@ -62,4 +72,3 @@ def send_email(to: str, content: EmailContent) -> None:
             smtp.starttls(context=context)
             smtp.login(user, password)
             smtp.send_message(msg)
-    logger.info("Sent '%s' email", content.subject)

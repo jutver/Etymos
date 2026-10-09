@@ -12,11 +12,22 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
   success: "bg-success-bg text-success",
 };
 
-export function StatusBadge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {
+/** `capitalize` (default) title-cases raw status values like "pending"; pass
+ * false for labels that are already written as sentences. */
+export function StatusBadge({
+  label,
+  tone = "neutral",
+  capitalize = true,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  capitalize?: boolean;
+}) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-caption font-medium capitalize",
+        "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption font-medium",
+        capitalize && "capitalize",
         TONE_CLASSES[tone],
       )}
     >

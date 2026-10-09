@@ -55,6 +55,15 @@ class EmailContent:
     notes: list[str] = field(default_factory=list)
     # Label/value rows (receipts, alerts), shown under the paragraphs.
     details: list[tuple[str, str]] = field(default_factory=list)
+    # A quoted message (support emails), shown in a tinted box after the
+    # paragraphs. HTML, like paragraphs.
+    quote: Optional[str] = None
+    quote_label: Optional[str] = None
+    # Plain-text line above the logo. Support emails put the reply marker
+    # here so the inbound poller can cut the quoted history.
+    top_line: Optional[str] = None
+    # Replaces the "automated email, please don't reply" footer (HTML).
+    footer: Optional[str] = None
 
 
 esc = html.escape
@@ -94,6 +103,23 @@ def _code(label: Optional[str], code: str) -> str:
 </table>"""
 
 
+def _quote(label: Optional[str], quote: str) -> str:
+    caption = (
+        f'<p style="margin:0 0 8px;font-family:{FONT};font-size:12px;font-weight:600;letter-spacing:0.4px;text-transform:uppercase;color:{MUTED}">{label}</p>'
+        if label
+        else ""
+    )
+    return f"""
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 6px">
+  <tr>
+    <td style="padding:16px 20px;background:{TINT};border-radius:10px;border-left:3px solid {BRAND}">
+      {caption}
+      <div style="font-family:{FONT};font-size:14px;line-height:1.6;color:{INK}">{quote}</div>
+    </td>
+  </tr>
+</table>"""
+
+
 def _details(rows: list[tuple[str, str]]) -> str:
     cells = "".join(
         f"""<tr>
@@ -115,6 +141,8 @@ def render_email(content: EmailContent) -> str:
     )
     if content.details:
         body += _details(content.details)
+    if content.quote:
+        body += _quote(content.quote_label, content.quote)
     if content.button_label and content.button_url:
         body += _button(content.button_label, content.button_url)
     if content.code:
@@ -122,6 +150,12 @@ def render_email(content: EmailContent) -> str:
     notes = "".join(
         f'<p style="margin:14px 0 0;font-family:{FONT};font-size:13px;line-height:1.6;color:{MUTED}">{n}</p>'
         for n in content.notes
+    )
+    top_line = ""
+    if content.top_line:
+        top_line = f'<p style="margin:0;padding:12px 16px 0;text-align:center;font-family:{FONT};font-size:12px;color:{MUTED}">{esc(content.top_line)}</p>'
+    footer = content.footer or (
+        f'{FOOTER} <a href="mailto:{SUPPORT_EMAIL}" style="color:{BRAND};text-decoration:none">{SUPPORT_EMAIL}</a>.'
     )
     fallback = ""
     if content.button_url:
@@ -143,7 +177,7 @@ def render_email(content: EmailContent) -> str:
 <title>{esc(content.subject)}</title>
 </head>
 <body style="margin:0;padding:0;background:{PAGE};-webkit-text-size-adjust:100%">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(content.preheader)}&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(content.preheader)}&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;&#8203;&#8204;</div>{top_line}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="{PAGE}" style="background:{PAGE}">
   <tr>
     <td align="center" style="padding:40px 16px">
@@ -172,7 +206,7 @@ def render_email(content: EmailContent) -> str:
               <tr><td style="padding:32px 40px 0"><div style="height:1px;background:{LINE};line-height:1px;font-size:0">&nbsp;</div></td></tr>
               <tr>
                 <td style="padding:18px 40px 32px">
-                  <p style="margin:0;font-family:{FONT};font-size:12px;line-height:1.6;color:{MUTED}">{FOOTER} <a href="mailto:{SUPPORT_EMAIL}" style="color:{BRAND};text-decoration:none">{SUPPORT_EMAIL}</a>.</p>
+                  <p style="margin:0;font-family:{FONT};font-size:12px;line-height:1.6;color:{MUTED}">{footer}</p>
                 </td>
               </tr>
             </table>
@@ -198,18 +232,24 @@ def render_text(content: EmailContent) -> str:
     import re
 
     def strip(s: str) -> str:
-        return html.unescape(re.sub(r"<[^>]+>", "", s))
+        return html.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", s)))
 
-    lines = [strip(content.heading), ""]
+    lines = [content.top_line, ""] if content.top_line else []
+    lines += [strip(content.heading), ""]
     lines += [strip(p) for p in content.paragraphs]
     if content.details:
         lines += [""] + [f"{strip(k)}: {strip(v)}" for k, v in content.details]
+    if content.quote:
+        quoted = strip(content.quote)
+        lines += [""] + ([strip(content.quote_label)] if content.quote_label else []) + quoted.splitlines()
     if content.button_url:
         lines += ["", f"{strip(content.button_label or '')}: {content.button_url}"]
     if content.code:
         lines += ["", f"{strip(content.code_label or '')} {content.code}".strip()]
     if content.notes:
         lines += [""] + [strip(n) for n in content.notes]
+    if content.footer:
+        lines += ["", strip(content.footer)]
     lines += ["", "—", f"Etymos · {APP_URL} · {SUPPORT_EMAIL}"]
     return "\n".join(lines)
 
@@ -429,4 +469,96 @@ def admin_transfer_alert_email(
         ],
         button_label="Open Revenue → Transactions" if admin_url else None,
         button_url=f"{admin_url.rstrip('/')}/revenue/transactions" if admin_url else None,
+    )
+
+
+# --- Support (backend/api/support.py) --------------------------------------
+
+# Above the logo of every email sent from support@. The inbound poller cuts a
+# reply at this line, so whatever the user typed above it is kept and the
+# quoted history below it is dropped.
+SUPPORT_REPLY_MARKER = "##- Please type your reply above this line / Vui lòng trả lời phía trên dòng này -##"
+
+SUPPORT_CATEGORIES = {
+    "billing": "Billing and payments",
+    "account": "Account and login",
+    "checks": "Checks and reports",
+    "bug": "Something isn't working",
+    "other": "Other",
+}
+
+
+def support_subject(number: int, subject: str) -> str:
+    return f"[#{number}] {subject}"
+
+
+def text_to_html(text: str) -> str:
+    """User or agent text for an email body: escaped, line breaks kept."""
+    return esc(text.strip()).replace("\r\n", "\n").replace("\n", "<br>")
+
+
+def _support_footer(view_url: Optional[str]) -> str:
+    view = (
+        f' or <a href="{esc(view_url)}" style="color:{BRAND};text-decoration:none">view the conversation</a>'
+        if view_url
+        else ""
+    )
+    return f"Reply to this email to add to your request{view}. Please keep the ticket number in the subject."
+
+
+def support_received_email(*, number: int, subject: str, body: str, view_url: Optional[str]) -> EmailContent:
+    return EmailContent(
+        subject=support_subject(number, subject),
+        preheader=f"We got your request #{number}. Our team will reply by email.",
+        top_line=SUPPORT_REPLY_MARKER,
+        heading="We got your request",
+        paragraphs=[
+            f"Thanks for contacting Etymos. Your request is <strong>#{number}</strong>, and our team will reply to this email address, usually within one business day.",
+            "If you have anything to add, such as screenshots or more detail, just reply to this email.",
+        ],
+        quote=text_to_html(body),
+        quote_label="Your message",
+        button_label="View your request" if view_url else None,
+        button_url=view_url,
+        footer=_support_footer(view_url),
+    )
+
+
+def support_agent_reply_email(
+    *, number: int, subject: str, body: str, view_url: Optional[str], status: str, attachment_count: int = 0
+) -> EmailContent:
+    notes = []
+    if attachment_count:
+        notes.append(f"{attachment_count} attachment{'s' if attachment_count != 1 else ''} included.")
+    if status == "resolved":
+        notes.append("We've marked this request as resolved. If you still need help, just reply and it will reopen.")
+    return EmailContent(
+        subject=support_subject(number, subject),
+        preheader=body.strip().splitlines()[0][:140] if body.strip() else f"New reply on request #{number}",
+        top_line=SUPPORT_REPLY_MARKER,
+        heading=f"Reply to your request #{number}",
+        paragraphs=[text_to_html(body)],
+        notes=notes,
+        button_label="View conversation" if view_url else None,
+        button_url=view_url,
+        footer=_support_footer(view_url),
+    )
+
+
+def support_agent_alert_email(
+    *, number: int, subject: str, body: str, requester: str, category: str, is_new: bool, admin_url: Optional[str]
+) -> EmailContent:
+    what = "New support request" if is_new else "New reply on a support request"
+    return EmailContent(
+        subject=f"[Etymos support] {what} #{number}: {subject}",
+        preheader=body.strip()[:140],
+        heading=f"{what} #{number}",
+        paragraphs=[f"<strong>{esc(subject)}</strong>"],
+        details=[
+            ("From", esc(requester)),
+            ("Category", esc(SUPPORT_CATEGORIES.get(category, category))),
+        ],
+        quote=text_to_html(body[:4000]),
+        button_label="Open in admin" if admin_url else None,
+        button_url=f"{admin_url.rstrip('/')}/support/{number}" if admin_url else None,
     )

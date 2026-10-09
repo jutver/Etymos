@@ -4,7 +4,7 @@
 // Visual style mirrors VerifyStudent's pending/rejected states for
 // consistency with the rest of the account-status UI.
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Prohibit, Warning } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { Button } from "../ui/Button";
@@ -12,7 +12,7 @@ import { useAppStore } from "../../lib/store";
 import { deleteOwnAccount } from "../../lib/api";
 import { t, tr, currentLocale } from "../../lib/i18n";
 
-const SUPPORT_EMAIL = "support@etymos.ai";
+import { SUPPORT_EMAIL } from "../support/labels";
 
 export function BannedScreen({ reason, bannedUntil }: { reason: string | null; bannedUntil: string | null }) {
   const navigate = useNavigate();
@@ -42,6 +42,10 @@ export function BannedScreen({ reason, bannedUntil }: { reason: string | null; b
 
           <p className="mt-4 text-xs text-ink-400">
             {t("If you believe this is a mistake, contact support.")}{" "}
+            <Link to="/contact" className="font-semibold text-brand-600 underline underline-offset-2">
+              {t("Contact support")}
+            </Link>{" "}
+            {t("or email")}{" "}
             <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-brand-600 underline underline-offset-2">
               {SUPPORT_EMAIL}
             </a>
@@ -105,8 +109,8 @@ export function DeletionConfirmScreen() {
 
           <p className="mt-3 text-center text-[0.6875rem] text-ink-400">
             {t("Think this is a mistake?")}{" "}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-brand-600 underline underline-offset-2">
-              {t("Contact support")}</a>{" "}
+            <Link to="/contact" className="font-semibold text-brand-600 underline underline-offset-2">
+              {t("Contact support")}</Link>{" "}
             {t("instead of confirming.")}</p>
         </div>
 

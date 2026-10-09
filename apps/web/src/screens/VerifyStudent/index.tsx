@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
   Clock,
@@ -124,7 +124,7 @@ export default function VerifyStudentPage() {
             </div>
           </div>
           <p className="mt-4 text-xs text-ink-400">
-            {t("Think this is a mistake?")}{" "}<a href="mailto:support@etymos.ai" className="font-semibold text-brand-600 underline underline-offset-2">{t("Contact support")}</a>.
+            {t("Think this is a mistake?")}{" "}<Link to="/contact" className="font-semibold text-brand-600 underline underline-offset-2">{t("Contact support")}</Link>.
           </p>
 
           <Button

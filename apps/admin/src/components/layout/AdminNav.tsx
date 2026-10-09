@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   ChartLineUp,
@@ -7,6 +7,7 @@ import {
   Users,
   ShieldWarning,
   SealCheck,
+  Lifebuoy,
   Hourglass,
   Tag,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ import { supabase } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
 import { LanguageSwitcher } from "../LanguageSwitcher";
+import { getSupportSummary } from "../../lib/supportApi";
 
 const NAV_ITEMS = [
   { to: "/", label: tr("Dashboard"), icon: ChartLineUp, end: true },
@@ -26,6 +28,7 @@ const NAV_ITEMS = [
   { to: "/users", label: tr("Users"), icon: Users },
   { to: "/moderation", label: tr("Moderation"), icon: ShieldWarning },
   { to: "/verification", label: tr("Verification"), icon: SealCheck },
+  { to: "/support", label: tr("Support"), icon: Lifebuoy },
   { to: "/waitlist", label: tr("Waitlist"), icon: Hourglass },
   { to: "/pricing", label: tr("Pricing"), icon: Tag },
   { to: "/config", label: tr("Config"), icon: SlidersHorizontal },
@@ -57,7 +60,27 @@ function Brand() {
   );
 }
 
+/** Open support requests, refreshed every minute, for the nav badge. */
+function useOpenSupportCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      getSupportSummary()
+        .then((s) => !cancelled && setCount(s.counts.open))
+        .catch(() => undefined);
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+  return count;
+}
+
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const openSupport = useOpenSupportCount();
   return (
     <div className="flex-1 space-y-1 px-3">
       {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
@@ -75,6 +98,11 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         >
           <Icon size={18} weight="bold" />
           {t(label)}
+          {to === "/support" && openSupport > 0 && (
+            <span className="ml-auto rounded-full bg-accent px-1.5 py-0.5 text-micro font-semibold tabular-nums text-white">
+              {openSupport}
+            </span>
+          )}
         </NavLink>
       ))}
     </div>

@@ -18,6 +18,8 @@ import { lazy } from "react";
 export const LandingPage = lazy(() => import("../../screens/Landing"));
 export const PricingPage = lazy(() => import("../../screens/Pricing"));
 export const WaitlistPage = lazy(() => import("../../screens/Waitlist"));
+export const ContactPage = lazy(() => import("../../screens/Contact"));
+export const GuestSupportTicketPage = lazy(() => import("../../screens/GuestSupportTicket"));
 
 // Auth
 export const LoginPage = lazy(() => import("../../screens/Login"));
@@ -43,6 +45,8 @@ export const AccountProfilePage = lazy(() => import("../../screens/AccountProfil
 export const AccountPlanPage = lazy(() => import("../../screens/AccountPlan"));
 export const PaymentHistoryPage = lazy(() => import("../../screens/PaymentHistory"));
 export const VerifyStudentPage = lazy(() => import("../../screens/VerifyStudent"));
+export const SupportRequestsPage = lazy(() => import("../../screens/SupportRequests"));
+export const SupportTicketPage = lazy(() => import("../../screens/SupportTicket"));
 
 /**
  * Warm the chunks a signed-in user is most likely to hit next, once the

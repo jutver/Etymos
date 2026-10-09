@@ -4,6 +4,7 @@ import {
   CaretDown,
   ClockCounterClockwise,
   FolderOpen,
+  Lifebuoy,
   List,
   SignOut,
   Trash,
@@ -25,6 +26,7 @@ const navLinks = [
   { label: tr("Documents"), href: "/documents", icon: FolderOpen },
   { label: tr("History"), href: "/history", icon: ClockCounterClockwise },
   { label: tr("My Trash"), href: "/trash", icon: Trash },
+  { label: tr("Support"), href: "/account/support", icon: Lifebuoy },
 ];
 
 export function AppNav() {
@@ -52,7 +54,7 @@ export function AppNav() {
           <Logo variant="light" to="/upload" />
           <nav aria-label="Workspace navigation" className="hidden items-center gap-1 lg:flex lg:w-full lg:flex-col lg:items-stretch">
             {navLinks.map((l) => {
-              const active = location.pathname === l.href;
+              const active = location.pathname === l.href || location.pathname.startsWith(`${l.href}/`);
               return (
                 <Link
                   key={l.href}
@@ -124,6 +126,12 @@ export function AppNav() {
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                   >
                     {t("My Plan")}</Link>
+                  <Link
+                    to="/account/support"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    {t("Help & support")}</Link>
                   <div className="h-px bg-line" />
                   <button
                     onClick={async () => {
@@ -149,7 +157,7 @@ export function AppNav() {
           </div>
           <nav aria-label="Workspace navigation" className="flex flex-col gap-1">
             {navLinks.map((l) => {
-              const active = location.pathname === l.href;
+              const active = location.pathname === l.href || location.pathname.startsWith(`${l.href}/`);
               return (
                 <Link
                   key={l.href}

@@ -33,6 +33,8 @@ from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from rate_limit import limiter
 from recovery_email import router as recovery_email_router
 from payments import router as payments_router
+from support import router as support_router
+import support_inbound
 import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
@@ -64,6 +66,8 @@ async def lifespan(_: FastAPI):
         logger.exception("AI detection/explanation flag registration failed; using code defaults.")
     # Expiry reminders, receipts the webhook missed, verification results...
     notifications.start_scheduler()
+    # Support inbox (email replies -> tickets) and auto-closing tickets.
+    support_inbound.start()
     yield
 
 
@@ -101,6 +105,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.include_router(recovery_email_router)
 app.include_router(payments_router)
+app.include_router(support_router)
 
 RATE_LIMIT_CHECK_PDF = os.getenv("RATE_LIMIT_CHECK_PDF", "10/hour")
 RATE_LIMIT_CHECK_TEXT = os.getenv("RATE_LIMIT_CHECK_TEXT", "20/hour")

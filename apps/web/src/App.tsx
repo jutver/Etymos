@@ -37,6 +37,10 @@ import {
   ResetPasswordPage,
   RecoverAccountPage,
   WaitlistPage,
+  ContactPage,
+  GuestSupportTicketPage,
+  SupportRequestsPage,
+  SupportTicketPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
 
@@ -139,6 +143,8 @@ function App() {
         <Route element={<PublicShellWithBanner />}>
           <Route path="/" element={<HomeRoute />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/support/t/:token" element={<GuestSupportTicketPage />} />
         </Route>
 
         <Route element={<AuthShell />}>
@@ -171,6 +177,8 @@ function App() {
             <Route path="/account/plan" element={<AccountPlanPage />} />
             <Route path="/account/payments" element={<PaymentHistoryPage />} />
             <Route path="/verify-student" element={<VerifyStudentPage />} />
+            <Route path="/account/support" element={<SupportRequestsPage />} />
+            <Route path="/account/support/:number" element={<SupportTicketPage />} />
           </Route>
         </Route>
 
