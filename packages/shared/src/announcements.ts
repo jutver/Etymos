@@ -1,6 +1,7 @@
 /**
  * Announcements, shared by the site (which shows them) and the admin app
- * (which writes them). Schema: supabase/migrations/20261017000000_announcements_overhaul.sql.
+ * (which writes them). Schema: supabase/migrations/20261017000000_announcements_overhaul.sql
+ * and 20261018000000_announcements_bilingual.sql.
  */
 import { supabase } from "./supabase";
 
@@ -30,8 +31,12 @@ export type AnnouncementIcon = (typeof ANNOUNCEMENT_ICONS)[number];
 export interface Announcement {
   id: string;
   kind: AnnouncementKind;
+  /** English. */
   title: string | null;
   message: string;
+  /** Vietnamese. */
+  title_vi: string | null;
+  message_vi: string;
   severity: AnnouncementSeverity;
   /** Banner only; null = no icon. */
   icon: AnnouncementIcon | null;
@@ -54,6 +59,21 @@ export const ANNOUNCEMENT_IMAGE_BUCKET = "announcement-images";
 export function announcementImageUrl(path: string | null): string | null {
   if (!path) return null;
   return supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+export type AnnouncementLanguage = "en" | "vi";
+
+/** Title and message in `lang`. A blank field falls back to the other
+ * language, so text written in one language still reaches everyone. */
+export function announcementText(
+  a: Pick<Announcement, "title" | "message" | "title_vi" | "message_vi">,
+  lang: AnnouncementLanguage,
+): { title: string; message: string } {
+  const pick = (en: string | null, vi: string | null) => {
+    const [first, second] = lang === "vi" ? [vi, en] : [en, vi];
+    return first?.trim() || second?.trim() || "";
+  };
+  return { title: pick(a.title, a.title_vi), message: pick(a.message, a.message_vi) };
 }
 
 export type AnnouncementState = "off" | "scheduled" | "live" | "ended";

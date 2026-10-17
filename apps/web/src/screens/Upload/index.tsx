@@ -17,6 +17,7 @@ import {
 } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
+import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { Modal, ModalCloseButton } from "../../components/ui/Modal";
 import { StatusPill } from "../../components/Severity";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
@@ -62,6 +63,7 @@ export default function UploadPage() {
   const balances = useAppStore((s) => s.balances());
 
   const [tab, setTab] = useState<"file" | "paste">("file");
+  const tabPill = usePill<HTMLDivElement>(tab);
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<{ name: string; size: number; file: File }[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -302,29 +304,32 @@ export default function UploadPage() {
       <div className="mt-6 grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Main upload card */}
         <div className="studio-card flex flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-7 lg:min-h-[640px]">
-          <div role="tablist" aria-label="Document input method" className="flex shrink-0 gap-1 rounded-full bg-surface-muted p-1">
+          <div ref={tabPill.ref} role="tablist" aria-label="Document input method" className="relative flex shrink-0 gap-1 rounded-full bg-surface-muted p-1">
+            <PillIndicator box={tabPill.box} className="bg-white shadow-sm" />
             <button
               onClick={() => setTab("file")}
               role="tab"
               aria-selected={tab === "file"}
+              data-pill-active={tab === "file"}
               aria-controls="upload-files-panel"
               className={cn(
-                "flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
-                tab === "file" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
+                "relative flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
+                tab === "file" ? "text-navy-900" : "text-ink-500 hover:text-ink-700",
               )}
             >
-              {t("Upload files")}</button>
+              <span className="relative">{t("Upload files")}</span></button>
             <button
               onClick={() => setTab("paste")}
               role="tab"
               aria-selected={tab === "paste"}
+              data-pill-active={tab === "paste"}
               aria-controls="paste-text-panel"
               className={cn(
-                "flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
-                tab === "paste" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
+                "relative flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
+                tab === "paste" ? "text-navy-900" : "text-ink-500 hover:text-ink-700",
               )}
             >
-              {t("Paste text")}</button>
+              <span className="relative">{t("Paste text")}</span></button>
           </div>
 
           {tab === "file" ? (

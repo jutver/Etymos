@@ -4,6 +4,7 @@ import { planLabel, useAppStore } from "../lib/store";
 import type { BalanceSource } from "../lib/store";
 import { cn } from "@etymos/shared";
 import { Link } from "react-router-dom";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { t } from "../lib/i18n";
 
 const SOURCE_ICON: Record<BalanceSource, typeof Coins> = {
@@ -100,6 +101,15 @@ function BalanceIcon({ source }: { source: BalanceSource }) {
   );
 }
 
+/** Collapse/expand swap for the sidebar box: height between the two views,
+ * the outgoing one fading fast, the incoming one fading in behind it. */
+const EASE = [0.32, 0.72, 0, 1] as const;
+const SWAP = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: "auto", opacity: 1, transition: { height: { duration: 0.32, ease: EASE }, opacity: { duration: 0.2, delay: 0.1 } } },
+  exit: { height: 0, opacity: 0, transition: { height: { duration: 0.32, ease: EASE }, opacity: { duration: 0.12 } } },
+};
+
 const SIDEBAR_COLLAPSED_KEY = "etymos.balanceCollapsed";
 
 function readCollapsed(): boolean {
@@ -134,88 +144,97 @@ function SidebarBalance() {
   const creditsEmpty = creditBalances.every((b) => b.remaining <= 0);
   const sectionLabel = "text-[0.6875rem] font-semibold uppercase tracking-wider text-white/50";
 
-  if (collapsed) {
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={false}
-        aria-label={t("Show balance details")}
-        className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 text-white transition-colors hover:bg-white/[0.08]"
-      >
-        {planBalance && (
-          <>
-            <BalanceChip source="plan" remaining={planBalance.remaining} label={t(planBalance.label)} />
-            <span aria-hidden className="h-4 w-px bg-white/15" />
-          </>
-        )}
-        {creditBalances.map((b) => (
-          <BalanceChip key={b.source} source={b.source} remaining={b.remaining} label={t(b.label)} />
-        ))}
-        <CaretDown size={13} className="ml-auto shrink-0 rotate-180 text-white/50" />
-      </button>
-    );
-  }
-
+  // One frame; inside it the collapsed row and the full list swap places.
+  // Both stay in the flow while they animate, so as one shrinks and the
+  // other grows the frame's height glides from one to the other.
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04]">
-      <div className="p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className={sectionLabel}>{t("Plan")}</span>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-expanded
-            aria-label={t("Hide balance details")}
-            title={t("Hide balance details")}
-            className="-m-1 flex size-6 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-          >
-            <CaretDown size={13} />
-          </button>
-        </div>
-        {planBalance && (
-          <div className={cn("flex items-center gap-2.5", planBalance.remaining <= 0 && "opacity-55")}>
-            <BalanceIcon source="plan" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-white">{t("{{plan}} plan", { plan: planLabel(plan) })}</p>
-              <p className="truncate text-[0.6875rem] text-white/55">{t("Checks left")}</p>
-            </div>
-            <span className="text-sm font-bold tabular-nums text-white">{planBalance.remaining}</span>
-          </div>
-        )}
-      </div>
+    <MotionConfig reducedMotion="user">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+        <AnimatePresence initial={false}>
+          {collapsed ? (
+            <motion.div key="collapsed" {...SWAP}>
+              <button
+                type="button"
+                onClick={toggle}
+                aria-expanded={false}
+                aria-label={t("Show balance details")}
+                className="flex w-full items-center gap-2 px-2.5 py-2 text-white transition-colors hover:bg-white/[0.04]"
+              >
+                {planBalance && (
+                  <>
+                    <BalanceChip source="plan" remaining={planBalance.remaining} label={t(planBalance.label)} />
+                    <span aria-hidden className="h-4 w-px bg-white/15" />
+                  </>
+                )}
+                {creditBalances.map((b) => (
+                  <BalanceChip key={b.source} source={b.source} remaining={b.remaining} label={t(b.label)} />
+                ))}
+                <CaretDown size={13} className="ml-auto shrink-0 rotate-180 text-white/50" />
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div key="expanded" {...SWAP}>
+              <div className="p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className={sectionLabel}>{t("Plan")}</span>
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    aria-expanded
+                    aria-label={t("Hide balance details")}
+                    title={t("Hide balance details")}
+                    className="-m-1 flex size-6 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <CaretDown size={13} />
+                  </button>
+                </div>
+                {planBalance && (
+                  <div className={cn("flex items-center gap-2.5", planBalance.remaining <= 0 && "opacity-55")}>
+                    <BalanceIcon source="plan" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-white">{t("{{plan}} plan", { plan: planLabel(plan) })}</p>
+                      <p className="truncate text-[0.6875rem] text-white/55">{t("Checks left")}</p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-white">{planBalance.remaining}</span>
+                  </div>
+                )}
+              </div>
 
-      <div className="border-t border-white/10 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className={sectionLabel}>{t("Credits")}</span>
-          <Link
-            to="/account/plan"
-            className={cn(
-              "inline-flex items-center gap-1 text-[0.6875rem] font-semibold transition-colors",
-              creditsEmpty ? "text-brand-300 hover:text-white" : "text-white/50 hover:text-white",
-            )}
-          >
-            {t("Get more")}
-            <ArrowRight size={11} weight="bold" />
-          </Link>
-        </div>
-        <ul className="flex flex-col gap-1">
-          {creditBalances.map((b) => (
-            <li
-              key={b.source}
-              title={t(b.label)}
-              className={cn("flex items-center gap-2.5 py-1", b.remaining <= 0 && "opacity-55")}
-            >
-              <BalanceIcon source={b.source} />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/75">
-                {t(b.source === "standard" ? "Standard" : "Premium")}
-              </span>
-              <span className="text-sm font-bold tabular-nums text-white">{b.remaining}</span>
-            </li>
-          ))}
-        </ul>
+              <div className="border-t border-white/10 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className={sectionLabel}>{t("Credits")}</span>
+                  <Link
+                    to="/account/plan"
+                    className={cn(
+                      "inline-flex items-center gap-1 text-[0.6875rem] font-semibold transition-colors",
+                      creditsEmpty ? "text-brand-300 hover:text-white" : "text-white/50 hover:text-white",
+                    )}
+                  >
+                    {t("Get more")}
+                    <ArrowRight size={11} weight="bold" />
+                  </Link>
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {creditBalances.map((b) => (
+                    <li
+                      key={b.source}
+                      title={t(b.label)}
+                      className={cn("flex items-center gap-2.5 py-1", b.remaining <= 0 && "opacity-55")}
+                    >
+                      <BalanceIcon source={b.source} />
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/75">
+                        {t(b.source === "standard" ? "Standard" : "Premium")}
+                      </span>
+                      <span className="text-sm font-bold tabular-nums text-white">{b.remaining}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </MotionConfig>
   );
 }
 

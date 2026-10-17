@@ -18,9 +18,7 @@ export const announcements: Record<string, string> = {
   "Schedule": "Lên lịch",
   "Edit announcement": "Sửa thông báo",
   "Title": "Tiêu đề",
-  "Leave blank for “{{default}}”.": "Để trống để dùng “{{default}}”.",
   "Message": "Nội dung",
-  "Leave blank for the standard “come back later” text.": "Để trống để dùng nội dung mặc định “quay lại sau”.",
   "Colour": "Màu",
   "Icon": "Biểu tượng",
   "No icon": "Không có biểu tượng",
@@ -46,7 +44,6 @@ export const announcements: Record<string, string> = {
   "Lock the site now": "Khóa trang web ngay",
   "Preview": "Xem trước",
   "Your message": "Nội dung của bạn",
-  "Got it": "Đã hiểu",
   "Starts {{time}}": "Bắt đầu {{time}}",
   "Starts when switched on": "Bắt đầu khi bật",
   "until ended by an admin": "đến khi quản trị viên kết thúc",
@@ -75,12 +72,19 @@ export const announcements: Record<string, string> = {
   "Scheduled": "Đã lên lịch",
   "Ended": "Đã kết thúc",
   "Off": "Tắt",
-  "We'll be back soon": "Chúng tôi sẽ sớm trở lại",
-  "Etymos is down for maintenance while we make some improvements. Please come back a little later.":
-    "Etymos đang tạm dừng để bảo trì và nâng cấp. Bạn vui lòng quay lại sau ít phút nhé.",
   "d": "ngày",
   "h": "giờ",
   "m": "phút",
   "s": "giây",
   "Feature flags and system health.": "Cờ tính năng và tình trạng hệ thống.",
+  "Some boxes have no Vietnamese: visitors using Vietnamese see the English there.":
+    "Một số ô chưa có tiếng Việt: người xem bằng tiếng Việt sẽ thấy tiếng Anh ở đó.",
+  "Some boxes have no English: visitors using English see the Vietnamese there.":
+    "Một số ô chưa có tiếng Anh: người xem bằng tiếng Anh sẽ thấy tiếng Việt ở đó.",
+  "Some boxes are filled in one language only: visitors see the other language there.":
+    "Một số ô chỉ có một ngôn ngữ: ở đó người xem sẽ thấy ngôn ngữ còn lại.",
+  "Visitors see the text in their language. Leave both blank for the standard “come back later” text.":
+    "Người xem thấy nội dung theo ngôn ngữ của họ. Để trống cả hai để dùng nội dung mặc định “quay lại sau”.",
+  "Visitors see the text in their language. A blank box falls back to the other language.":
+    "Người xem thấy nội dung theo ngôn ngữ của họ. Ô nào để trống sẽ dùng ngôn ngữ còn lại.",
 };

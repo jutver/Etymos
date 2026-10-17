@@ -1,19 +1,20 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Wrench } from "@phosphor-icons/react";
-import type { Announcement } from "@etymos/shared";
+import { announcementText, type Announcement } from "@etymos/shared";
 import { Logo } from "../layout/Logo";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { PageLoader } from "../ui/PageLoader";
 import { useAuth } from "../../lib/auth";
 import { useAnnouncements } from "../../lib/announcements";
 import { fetchMyProfile } from "../../lib/profileQueries";
-import { currentLocale, t } from "../../lib/i18n";
+import { currentLocale, t, useLanguage } from "../../lib/i18n";
 
 /** Still reachable during maintenance, so an admin can sign in. */
 const OPEN_PATHS = ["/login", "/auth/callback"];
 
 function MaintenanceScreen({ notice }: { notice: Announcement }) {
+  const { title, message } = announcementText(notice, useLanguage());
   return (
     <div className="flex min-h-dvh flex-col bg-surface-tint">
       <header className="flex items-center justify-between px-5 py-5 sm:px-8">
@@ -26,11 +27,11 @@ function MaintenanceScreen({ notice }: { notice: Announcement }) {
             <Wrench size={26} weight="fill" />
           </div>
           <h1 className="mt-5 text-h2 font-bold tracking-tight text-navy-900">
-            {notice.title?.trim() ? t(notice.title) : t("We'll be back soon")}
+            {title ? t(title) : t("We'll be back soon")}
           </h1>
           <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink-600">
-            {notice.message.trim()
-              ? t(notice.message)
+            {message
+              ? t(message)
               : t("Etymos is down for maintenance while we make some improvements. Please come back a little later.")}
           </p>
           {notice.starts_at && (

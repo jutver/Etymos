@@ -4,8 +4,10 @@ import {
   ANNOUNCEMENT_ICONS,
   announcementImageUrl,
   announcementState,
+  announcementText,
   cn,
   type Announcement,
+  type AnnouncementLanguage,
   type AnnouncementIcon,
   type AnnouncementKind,
   type AnnouncementSeverity,
@@ -21,10 +23,10 @@ import {
   type AnnouncementInput,
 } from "../../lib/configQueries";
 import { friendlyError } from "../../lib/errors";
-import { t, tr } from "../../lib/i18n";
+import { getLanguage, t, tr } from "../../lib/i18n";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
 import { AnnouncementPreview } from "./Preview";
-import { DEFAULT_MAINTENANCE_MESSAGE, DEFAULT_MAINTENANCE_TITLE, KIND_LABELS, SEVERITY_BAR, SEVERITY_LABELS, fromLocalInput, toLocalInput } from "./shared";
+import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, SEVERITY_BAR, SEVERITY_LABELS, fromLocalInput, toLocalInput } from "./shared";
 
 const KINDS: { kind: AnnouncementKind; icon: typeof Rows; hint: string }[] = [
   { kind: "banner", icon: Rows, hint: tr("A bar across the top of every page") },
@@ -33,6 +35,23 @@ const KINDS: { kind: AnnouncementKind; icon: typeof Rows; hint: string }[] = [
 ];
 
 const SEVERITIES = Object.keys(SEVERITY_LABELS) as AnnouncementSeverity[];
+
+/** One column of text boxes per site language. Labels are each language's own name. */
+const TEXT_LANGUAGES: {
+  lang: AnnouncementLanguage;
+  label: string;
+  short: string;
+  title: "title" | "titleVi";
+  message: "message" | "messageVi";
+}[] = [
+  { lang: "en", label: "English", short: "EN", title: "title", message: "message" },
+  { lang: "vi", label: "Tiếng Việt", short: "VI", title: "titleVi", message: "messageVi" },
+];
+
+const MESSAGE_PLACEHOLDER: Record<AnnouncementLanguage, string> = {
+  en: "Message shown to users…",
+  vi: "Tin nhắn hiển thị cho người dùng…",
+};
 
 const inputBase =
   "rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent";
@@ -75,6 +94,8 @@ interface Draft {
   kind: AnnouncementKind;
   title: string;
   message: string;
+  titleVi: string;
+  messageVi: string;
   severity: AnnouncementSeverity;
   icon: AnnouncementIcon | null;
   countdownOn: boolean;
@@ -91,6 +112,8 @@ function draftFrom(a: Announcement | null): Draft {
     kind: a?.kind ?? "banner",
     title: a?.title ?? "",
     message: a?.message ?? "",
+    titleVi: a?.title_vi ?? "",
+    messageVi: a?.message_vi ?? "",
     severity: a?.severity ?? "info",
     icon: a ? a.icon : "megaphone",
     countdownOn: Boolean(a?.countdown_to),
@@ -110,8 +133,10 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
   if (d.startMode === "at" && !starts) return tr("Pick a start time.");
   // A past start is fine when editing something already running.
   if (starts && !editing && Date.parse(starts) < now - 60_000) return tr("The start time is in the past.");
-  if (d.kind === "banner" && !d.message.trim()) return tr("Write the message for the top bar.");
-  if (d.kind === "popup" && !d.title.trim() && !d.message.trim() && !d.imagePath && !file) {
+  const hasMessage = Boolean(d.message.trim() || d.messageVi.trim());
+  const hasTitle = Boolean(d.title.trim() || d.titleVi.trim());
+  if (d.kind === "banner" && !hasMessage) return tr("Write the message for the top bar.");
+  if (d.kind === "popup" && !hasTitle && !hasMessage && !d.imagePath && !file) {
     return tr("Add a title, text or an image.");
   }
   if (d.kind === "banner" && d.countdownOn) {
@@ -127,6 +152,17 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
   return null;
 }
 
+/** Text written in one language but not the other: a nudge, not a blocker. */
+function missingLanguage(d: Draft): string | null {
+  const fields: [string, string][] = d.kind === "banner" ? [[d.message, d.messageVi]] : [[d.title, d.titleVi], [d.message, d.messageVi]];
+  const enOnly = fields.some(([en, vi]) => en.trim() && !vi.trim());
+  const viOnly = fields.some(([en, vi]) => vi.trim() && !en.trim());
+  if (enOnly && !viOnly) return tr("Some boxes have no Vietnamese: visitors using Vietnamese see the English there.");
+  if (viOnly && !enOnly) return tr("Some boxes have no English: visitors using English see the Vietnamese there.");
+  if (enOnly && viOnly) return tr("Some boxes are filled in one language only: visitors see the other language there.");
+  return null;
+}
+
 function toInput(d: Draft, imagePath: string | null, isActive: boolean): AnnouncementInput {
   const banner = d.kind === "banner";
   const popup = d.kind === "popup";
@@ -134,6 +170,8 @@ function toInput(d: Draft, imagePath: string | null, isActive: boolean): Announc
     kind: d.kind,
     title: banner ? null : d.title.trim() || null,
     message: d.message.trim(),
+    title_vi: banner ? null : d.titleVi.trim() || null,
+    message_vi: d.messageVi.trim(),
     severity: banner ? d.severity : "info",
     icon: banner ? d.icon : null,
     countdown_to: banner && d.countdownOn ? fromLocalInput(d.countdownTo) : null,
@@ -157,6 +195,7 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
   const [error, setError] = useState<string | null>(null);
   const [confirmLock, setConfirmLock] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [previewLang, setPreviewLang] = useState<AnnouncementLanguage>(getLanguage);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setD((prev) => ({ ...prev, [key]: value }));
@@ -168,6 +207,11 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
   const imageUrl = fileUrl ?? announcementImageUrl(d.imagePath);
 
   const issue = problem(d, file, editing !== null);
+  const languageGap = missingLanguage(d);
+  const previewText = announcementText(
+    { title: d.title, message: d.message, title_vi: d.titleVi, message_vi: d.messageVi },
+    previewLang,
+  );
   // Saving this locks the site right away (and it isn't locked already): confirm first.
   const locksNow =
     d.kind === "maintenance" &&
@@ -258,28 +302,44 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
         </div>
 
         <div className="mt-5 space-y-4">
-          {d.kind !== "banner" && (
-            <Field
-              label={t("Title")}
-              hint={d.kind === "maintenance" ? t("Leave blank for “{{default}}”.", { default: t(DEFAULT_MAINTENANCE_TITLE) }) : undefined}
-            >
-              <input value={d.title} maxLength={120} onChange={(e) => set("title", e.target.value)} className={inputClass} />
-            </Field>
-          )}
-
-          <Field
-            label={t("Message")}
-            hint={d.kind === "maintenance" ? t("Leave blank for the standard “come back later” text.") : undefined}
-          >
-            <textarea
-              value={d.message}
-              rows={d.kind === "banner" ? 2 : 4}
-              maxLength={d.kind === "banner" ? 240 : 2000}
-              onChange={(e) => set("message", e.target.value)}
-              placeholder={d.kind === "maintenance" ? t(DEFAULT_MAINTENANCE_MESSAGE) : t("Message shown to users…")}
-              className={inputClass}
-            />
-          </Field>
+          <div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {TEXT_LANGUAGES.map(({ lang, label, title, message }) => (
+                <fieldset key={lang} className="space-y-3 rounded-control border border-border p-3.5" onFocus={() => setPreviewLang(lang)}>
+                  <legend className="px-1 text-caption font-semibold text-fg">{label}</legend>
+                  {d.kind !== "banner" && (
+                    <Field label={t("Title")}>
+                      <input
+                        lang={lang}
+                        value={d[title]}
+                        maxLength={120}
+                        onChange={(e) => set(title, e.target.value)}
+                        placeholder={d.kind === "maintenance" ? DEFAULT_MAINTENANCE_TEXT[lang].title : undefined}
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
+                  <Field label={t("Message")}>
+                    <textarea
+                      lang={lang}
+                      value={d[message]}
+                      rows={d.kind === "banner" ? 2 : 4}
+                      maxLength={d.kind === "banner" ? 240 : 2000}
+                      onChange={(e) => set(message, e.target.value)}
+                      placeholder={d.kind === "maintenance" ? DEFAULT_MAINTENANCE_TEXT[lang].message : MESSAGE_PLACEHOLDER[lang]}
+                      className={inputClass}
+                    />
+                  </Field>
+                </fieldset>
+              ))}
+            </div>
+            <p className="mt-1.5 text-caption text-fg-subtle">
+              {d.kind === "maintenance"
+                ? t("Visitors see the text in their language. Leave both blank for the standard “come back later” text.")
+                : t("Visitors see the text in their language. A blank box falls back to the other language.")}
+            </p>
+            {languageGap && <p className="mt-1 text-caption text-warning">{t(languageGap)}</p>}
+          </div>
 
           {d.kind === "banner" && (
             <>
@@ -485,11 +545,19 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
       </div>
 
       <div className="xl:sticky xl:top-6 xl:self-start">
-        <p className="mb-2 text-micro font-semibold uppercase tracking-wider text-fg-subtle">{t("Preview")}</p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-micro font-semibold uppercase tracking-wider text-fg-subtle">{t("Preview")}</p>
+          <Choice
+            value={previewLang}
+            options={TEXT_LANGUAGES.map(({ lang, short }) => [lang, short])}
+            onChange={setPreviewLang}
+          />
+        </div>
         <AnnouncementPreview
           kind={d.kind}
-          title={d.title}
-          message={d.message}
+          lang={previewLang}
+          title={previewText.title}
+          message={previewText.message}
           severity={d.severity}
           icon={d.icon}
           countdownTo={d.kind === "banner" && d.countdownOn ? fromLocalInput(d.countdownTo) : null}

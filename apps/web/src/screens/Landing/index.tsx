@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import {
   ArrowRight,
   Lightbulb,
@@ -7,13 +7,11 @@ import {
   NotePencil,
   Translate,
 } from "@phosphor-icons/react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import Lenis from "lenis";
 import { Button } from "../../components/ui/Button";
 import { HeroPreview } from "./HeroPreview";
 import { COMPETITORS } from "../../lib/mockData";
 import { t, tr } from "../../lib/i18n";
+import { useSmoothPage } from "../../lib/useSmoothPage";
 
 const capabilities = [
   { icon: Lightbulb, title: tr("Understand every match."), body: tr("Plain-language explanations show why a passage is flagged, beyond a similarity percentage."), label: tr("Explainable AI") },
@@ -31,24 +29,7 @@ const steps = [
 export default function LandingPage() {
   const root = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
-    const media = gsap.matchMedia();
-    media.add("(prefers-reduced-motion: no-preference)", () => {
-      const lenis = new Lenis({ autoRaf: false, smoothWheel: true });
-      const tick = (time: number) => lenis.raf(time * 1000);
-      lenis.on("scroll", ScrollTrigger.update);
-      gsap.ticker.add(tick);
-      const context = gsap.context(() => {
-        gsap.from(".composition-intro > *", { y: 24, duration: 0.8, stagger: 0.1, ease: "power3.out", clearProps: "transform" });
-        gsap.utils.toArray<HTMLElement>(".editorial-reveal").forEach((section) => {
-          gsap.from(section, { y: 30, duration: 0.85, ease: "power3.out", clearProps: "transform", scrollTrigger: { trigger: section, start: "top 90%", once: true } });
-        });
-      }, root);
-      return () => { context.revert(); gsap.ticker.remove(tick); lenis.destroy(); };
-    });
-    return () => media.revert();
-  }, []);
+  useSmoothPage(root);
 
   return (
     <div ref={root} className="editorial-site composition-site">

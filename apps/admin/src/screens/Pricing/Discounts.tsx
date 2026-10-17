@@ -21,6 +21,7 @@ import type {
 } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { t as tl, currentLocale } from "../../lib/i18n";
+import { DiscountsSkeleton } from "./Skeletons";
 
 function localInputToIso(value: string): string | null {
   if (!value) return null;
@@ -466,7 +467,7 @@ export default function DiscountsPage() {
     }
   }
 
-  if (loading) return <p className="text-body text-fg-muted">{tl("Loading…")}</p>;
+  if (loading) return <DiscountsSkeleton />;
 
   return (
     <div className="space-y-8">

@@ -9,6 +9,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard } from "../../components/PlanCard";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
@@ -39,6 +40,7 @@ export default function AccountPlanPage() {
   const { daysLeft, resetDate } = planResetInfo();
   const status = subscriptionStatus(plan, planExpiresAt);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const cyclePill = usePill<HTMLDivElement>(billingCycle);
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
 
@@ -152,19 +154,21 @@ export default function AccountPlanPage() {
       <section className="mt-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-h3 font-bold tracking-tight text-navy-900">{t("Change plan")}</h2>
-          <div className="grid grid-cols-2 gap-1 self-start rounded-full bg-surface-muted p-1">
+          <div ref={cyclePill.ref} className="relative grid grid-cols-2 gap-1 self-start rounded-full bg-surface-muted p-1">
+            <PillIndicator box={cyclePill.box} className="bg-white shadow-sm" />
             {(["monthly", "annual"] as const).map((cycle) => (
               <button
                 key={cycle}
                 type="button"
                 aria-pressed={billingCycle === cycle}
+                data-pill-active={billingCycle === cycle}
                 onClick={() => setBillingCycle(cycle)}
                 className={cn(
-                  "rounded-full px-6 py-2 text-sm font-semibold transition-colors",
-                  billingCycle === cycle ? "bg-white text-navy-900 shadow-sm" : "text-ink-500 hover:text-ink-700",
+                  "relative rounded-full px-6 py-2 text-sm font-semibold transition-colors",
+                  billingCycle === cycle ? "text-navy-900" : "text-ink-500 hover:text-ink-700",
                 )}
               >
-                {cycle === "monthly" ? t("Monthly") : t("Annual")}
+                <span className="relative">{cycle === "monthly" ? t("Monthly") : t("Annual")}</span>
               </button>
             ))}
           </div>
