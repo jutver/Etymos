@@ -8,6 +8,7 @@ import {
 import type { AdminCreditPack, AdminPlanDefinition } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { t } from "../../lib/i18n";
+import { PlansAndPacksSkeleton } from "./Skeletons";
 
 function NumberField({
   label,
@@ -78,7 +79,7 @@ export default function PlansAndPacksPage() {
     }
   }
 
-  if (loading) return <p className="text-body text-fg-muted">{t("Loading…")}</p>;
+  if (loading) return <PlansAndPacksSkeleton />;
 
   return (
     <div className="space-y-6">

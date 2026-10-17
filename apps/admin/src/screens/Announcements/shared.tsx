@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cn, type AnnouncementKind, type AnnouncementSeverity, type AnnouncementState } from "@etymos/shared";
+import { cn, type AnnouncementKind, type AnnouncementLanguage, type AnnouncementSeverity, type AnnouncementState } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
 
 export const KIND_LABELS: Record<AnnouncementKind, string> = {
@@ -37,10 +37,19 @@ export const STATE_TONES = {
   off: "neutral",
 } as const;
 
-export const DEFAULT_MAINTENANCE_TITLE = tr("We'll be back soon");
-export const DEFAULT_MAINTENANCE_MESSAGE = tr(
-  "Etymos is down for maintenance while we make some improvements. Please come back a little later.",
-);
+/** What the site's maintenance page says when both text boxes are blank, in
+ * each site language (the preview shows the language picked there, not the
+ * admin's own). Keep in step with MaintenanceGate in apps/web. */
+export const DEFAULT_MAINTENANCE_TEXT: Record<AnnouncementLanguage, { title: string; message: string }> = {
+  en: {
+    title: "We'll be back soon",
+    message: "Etymos is down for maintenance while we make some improvements. Please come back a little later.",
+  },
+  vi: {
+    title: "Chúng tôi sẽ sớm trở lại",
+    message: "Etymos đang tạm dừng để bảo trì và nâng cấp. Bạn vui lòng quay lại sau ít phút nhé.",
+  },
+};
 
 /** ISO -> value for <input type="datetime-local"> in this browser's time zone. */
 export function toLocalInput(iso: string | null): string {

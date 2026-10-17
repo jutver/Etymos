@@ -26,6 +26,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
+import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 
 /**
  * Rich-text commands run through `document.execCommand`.
@@ -220,6 +221,7 @@ export function FormatToolbar({
   onInsertTable,
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
+  const viewPill = usePill<HTMLDivElement>(view);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -230,20 +232,24 @@ export function FormatToolbar({
         aria-controls="report-document-editor"
         className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin rounded-xl border border-line/80 bg-white px-2 py-1.5 shadow-[var(--shadow-card)]"
       >
-        <div className="flex items-center rounded-full bg-surface-muted p-0.5">
+        <div ref={viewPill.ref} className="relative flex items-center rounded-full bg-surface-muted p-0.5">
+          <PillIndicator box={viewPill.box} className="bg-white shadow-sm" />
           {(hasOriginal ? (["document", "original", "edit"] as const) : (["document", "edit"] as const)).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => onViewChange(v)}
               aria-pressed={view === v}
+              data-pill-active={view === v}
               className={cn(
-                "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                view === v ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-900",
+                "relative rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                view === v ? "text-ink-900" : "text-ink-500 hover:text-ink-900",
               )}
             >
-              {v === "edit" && <PencilSimple size={12} weight="bold" />}
-              {v === "document" ? t("Document") : v === "original" ? t("Original") : t("Edit")}
+              <span className="relative flex items-center gap-1">
+                {v === "edit" && <PencilSimple size={12} weight="bold" />}
+                {v === "document" ? t("Document") : v === "original" ? t("Original") : t("Edit")}
+              </span>
             </button>
           ))}
         </div>

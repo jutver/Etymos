@@ -8,6 +8,20 @@ Admin app → **Announcements**. There are three kinds:
 | **Pop-up** | A dialog, shown once to each visitor (per browser) | Title, text, image: any mix |
 | **Maintenance** | Replaces the whole site with a "We'll be back soon" page | Optional title and message (blank uses the standard text) |
 
+## Languages
+
+Each announcement has an **English** and a **Tiếng Việt** column for its title
+and message. Visitors see the one that matches the site language they picked.
+A blank box falls back to the other language, so an announcement written in one
+language still reaches everyone. The editor warns when a box is filled in only one
+language. The preview has an EN / VI switch, and clicking into a column switches
+the preview to that language.
+
+For maintenance, leaving both columns blank shows the standard "We'll be back
+soon" page, in the visitor's language.
+
+## Editing
+
 The form has a live preview. Each kind can start right away or at a set time.
 Top bars and pop-ups can also end at a set time. A switched-off announcement
 stays in the list, and you can switch it on again.
@@ -42,6 +56,9 @@ stays in the list, and you can switch it on again.
 
 ## Setup
 
-Apply `supabase/migrations/20261017000000_announcements_overhaul.sql`
-(`supabase db push`). It adds the new columns, turns existing announcements
-into top bars, and creates the image bucket, which only admins can write to.
+Apply `supabase/migrations/20261017000000_announcements_overhaul.sql` and
+`20261018000000_announcements_bilingual.sql` (`supabase db push`). The first adds
+the new columns, turns existing announcements into top bars, and creates the
+image bucket, which only admins can write to. The second adds `title_vi` and
+`message_vi`. Existing text is treated as English and shows to everyone until a
+Vietnamese version is added.

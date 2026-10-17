@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretDown, Check, Minus } from "@phosphor-icons/react";
 import { PlanCard } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
+import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { FEATURE_MATRIX } from "../../lib/mockData";
 import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
 import type { ActivePlanDiscount } from "../../lib/configQueries";
-import { annualSavingsPercent, formatVND } from "@etymos/shared";
+import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
+import { useSmoothPage, useStaggerIn } from "../../lib/useSmoothPage";
 
 function applyDiscount(price: number, discount: ActivePlanDiscount): number {
   return discount.discount_type === "percent"
@@ -51,6 +53,13 @@ export default function PricingPage() {
   const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
   const [discounts, setDiscounts] = useState<ActivePlanDiscount[]>([]);
 
+  // Same motion as the landing page. Plan cards come from the database, so
+  // they get their own entrance once they've rendered.
+  const root = useRef<HTMLDivElement>(null);
+  const cyclePill = usePill<HTMLDivElement>(billingCycle);
+  useSmoothPage(root, { intro: ".pricing-intro" });
+  useStaggerIn(root, ".pricing-plans > *", plans.length > 0);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchPlanDefinitions(), fetchCreditPacks(), fetchActivePlanDiscounts()])
@@ -66,50 +75,42 @@ export default function PricingPage() {
     };
   }, []);
 
-  const maxAnnualSavings = Math.max(
-    0,
-    ...plans.filter((p) => p.id !== "free").map((p) => annualSavingsPercent(p.priceMonthly, p.priceAnnual)),
-  );
-
   function buyPack(packId: CreditPack["id"]) {
     selectCheckoutItem({ kind: "pack", packId });
     navigate("/checkout");
   }
 
   return (
-    <div>
-      <section className="studio-page mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
+    <div ref={root}>
+      <section className="pricing-intro studio-page mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
         <p aria-hidden="true" className="editorial-kicker mb-3">{t("A PLAN FOR YOUR NEXT CHAPTER")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">
           {t("Simple, honest pricing")}</h1>
-        <p className="mx-auto mt-3 max-w-md text-body-lg text-ink-600">
+        <p className="mx-auto mt-3 max-w-lg text-balance text-body-lg text-ink-600">
           {t("Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.")}</p>
 
-        <div className="mx-auto mt-7 inline-flex items-center gap-1 rounded-full bg-surface-muted p-1">
-          <button
-            onClick={() => setBillingCycle("monthly")}
-            className={cn(
-              "rounded-full px-5 py-2 text-sm font-semibold transition-colors",
-              billingCycle === "monthly" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
-            )}
-          >
-            {t("Monthly")}</button>
-          <button
-            onClick={() => setBillingCycle("annual")}
-            className={cn(
-              "flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors",
-              billingCycle === "annual" ? "bg-white text-navy-900 shadow-sm" : "text-ink-500",
-            )}
-          >
-            {t("Annual")}<span className="rounded-full bg-success-bg px-2 py-0.5 text-[0.6875rem] font-bold text-success">
-              {t("Save up to {{percent}}%", { percent: maxAnnualSavings })}
-            </span>
-          </button>
+        <div ref={cyclePill.ref} className="relative mx-auto mt-7 inline-grid grid-cols-2 gap-1 rounded-full bg-surface-muted p-1">
+          <PillIndicator box={cyclePill.box} className="bg-white shadow-sm" />
+          {(["monthly", "annual"] as const).map((cycle) => (
+            <button
+              key={cycle}
+              type="button"
+              aria-pressed={billingCycle === cycle}
+              data-pill-active={billingCycle === cycle}
+              onClick={() => setBillingCycle(cycle)}
+              className={cn(
+                "relative rounded-full px-7 py-2 text-sm font-semibold transition-colors",
+                billingCycle === cycle ? "text-navy-900" : "text-ink-500 hover:text-ink-700",
+              )}
+            >
+              <span className="relative">{cycle === "monthly" ? t("Monthly") : t("Annual")}</span>
+            </button>
+          ))}
         </div>
       </section>
 
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
+        <div className="pricing-plans grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
           {plans.map((plan) => {
             const discount = discounts.find((d) => d.target_type === "plan" && d.target_id === plan.id);
             const basePrice = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
@@ -122,7 +123,7 @@ export default function PricingPage() {
       </section>
 
       {/* Credit packs */}
-      <section className="bg-surface-tint py-16">
+      <section className="editorial-reveal bg-surface-tint py-16">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <div className="text-center">
             <h2 className="text-h2 font-bold tracking-tight text-navy-900">
@@ -174,7 +175,7 @@ export default function PricingPage() {
       </section>
 
       {/* Feature comparison table */}
-      <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
+      <section className="editorial-reveal mx-auto max-w-6xl px-5 py-16 sm:px-8">
         <h2 className="text-center text-h2 font-bold tracking-tight text-navy-900">
           {t("Compare every feature")}</h2>
 
@@ -210,7 +211,7 @@ export default function PricingPage() {
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto max-w-2xl px-5 py-20 sm:px-8">
+      <section className="editorial-reveal mx-auto max-w-2xl px-5 py-20 sm:px-8">
         <h2 className="text-center text-h2 font-bold tracking-tight text-navy-900">
           {t("Frequently asked questions")}</h2>
         <div className="mt-8 flex flex-col gap-2">

@@ -43,7 +43,10 @@ export const account: Record<string, string> = {
   "Google": "Google",
   "Hide password": "Ẩn mật khẩu",
   "Hide passwords": "Ẩn mật khẩu",
-  "JPG, PNG, or PDF of a student ID or enrollment letter": "Ảnh JPG, PNG hoặc file PDF của thẻ sinh viên hoặc giấy xác nhận nhập học",
+  "A photo of your student ID or enrollment letter: JPG, PNG or WebP, up to 2 MB":
+    "Ảnh thẻ sinh viên hoặc giấy xác nhận nhập học: JPG, PNG hoặc WebP, tối đa 2 MB",
+  "Please upload a photo: JPG, PNG or WebP.": "Vui lòng tải lên ảnh định dạng JPG, PNG hoặc WebP.",
+  "That image is larger than 2 MB. Please upload a smaller one.": "Ảnh này lớn hơn 2 MB. Vui lòng tải lên ảnh nhỏ hơn.",
   "Linked": "Đã liên kết",
   "Log in to continue to your Etymos account.": "Đăng nhập để tiếp tục vào tài khoản Etymos của bạn.",
   "Manage": "Quản lý",
@@ -67,7 +70,6 @@ export const account: Record<string, string> = {
   "Rejected": "Bị từ chối",
   "Requested": "Đã yêu cầu",
   "Reviewed": "Đã xem xét",
-  "Save up to {{percent}}%": "Tiết kiệm đến {{percent}}%",
   "Show password": "Hiện mật khẩu",
   "Show passwords": "Hiện mật khẩu",
   "Sign-in methods linked to your account. To link or unlink Google, sign in with Google using this account's email.":

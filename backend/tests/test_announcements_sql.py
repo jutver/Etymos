@@ -1,5 +1,6 @@
 """
-Database tests for supabase/migrations/20261017000000_announcements_overhaul.sql:
+Database tests for supabase/migrations/20261017000000_announcements_overhaul.sql
+and 20261018000000_announcements_bilingual.sql:
 the per-kind content rules and who may write announcements and their images.
 Skipped without pgserver/psycopg, like test_payments_sql.py (whose throwaway
 database and helpers these reuse).
@@ -70,3 +71,10 @@ def test_updated_at_moves_on_update(db):
     db.execute("update public.announcements set is_active = true where id = %s", (row_id,))
     age = db.execute("select now() - updated_at < interval '1 minute' from public.announcements where id = %s", (row_id,))
     assert age.fetchone()[0]
+
+
+def test_vietnamese_alone_is_enough(db):
+    assert insert(db, kind="banner", message_vi="Xin chào") == ("banner", "")
+    assert insert(db, kind="popup", title_vi="Khuyến mãi")[0] == "popup"
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert(db, kind="banner", message=" ", message_vi=" ")

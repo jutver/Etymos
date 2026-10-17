@@ -1,11 +1,13 @@
 import { Wrench, X } from "@phosphor-icons/react";
-import { cn, type AnnouncementIcon, type AnnouncementKind, type AnnouncementSeverity } from "@etymos/shared";
+import { cn, type AnnouncementIcon, type AnnouncementKind, type AnnouncementLanguage, type AnnouncementSeverity } from "@etymos/shared";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
-import { Countdown, DEFAULT_MAINTENANCE_MESSAGE, DEFAULT_MAINTENANCE_TITLE, SEVERITY_BAR } from "./shared";
+import { Countdown, DEFAULT_MAINTENANCE_TEXT, SEVERITY_BAR } from "./shared";
 import { t } from "../../lib/i18n";
 
 export interface PreviewProps {
   kind: AnnouncementKind;
+  /** Which language's text this is; the site's own labels follow it. */
+  lang: AnnouncementLanguage;
   title: string;
   message: string;
   severity: AnnouncementSeverity;
@@ -50,7 +52,7 @@ function BannerPreview({ message, severity, icon, countdownTo }: PreviewProps) {
   );
 }
 
-function PopupPreview({ title, message, imageUrl }: PreviewProps) {
+function PopupPreview({ lang, title, message, imageUrl }: PreviewProps) {
   const hasText = Boolean(title.trim() || message.trim());
   return (
     <div className="relative">
@@ -69,7 +71,7 @@ function PopupPreview({ title, message, imageUrl }: PreviewProps) {
             {message.trim() && <p className="mt-1 line-clamp-4 whitespace-pre-line text-caption text-fg-muted">{message}</p>}
             {!hasText && !imageUrl && <p className="text-caption text-fg-subtle">{t("Add a title, text or an image.")}</p>}
             <div className={cn("rounded-control bg-accent py-1.5 text-center text-caption font-semibold text-white", hasText && "mt-3")}>
-              {t("Got it")}
+              {lang === "vi" ? "Đã hiểu" : "Got it"}
             </div>
           </div>
         </div>
@@ -78,16 +80,16 @@ function PopupPreview({ title, message, imageUrl }: PreviewProps) {
   );
 }
 
-function MaintenancePreview({ title, message }: PreviewProps) {
+function MaintenancePreview({ lang, title, message }: PreviewProps) {
   return (
     <div className="flex min-h-64 items-center justify-center bg-bg p-5">
       <div className="w-full max-w-[280px] rounded-card border border-border bg-surface p-5 text-center shadow-card">
         <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-warning-bg text-warning">
           <Wrench size={17} weight="fill" />
         </span>
-        <p className="mt-3 text-body font-bold text-fg">{title.trim() || t(DEFAULT_MAINTENANCE_TITLE)}</p>
+        <p className="mt-3 text-body font-bold text-fg">{title.trim() || DEFAULT_MAINTENANCE_TEXT[lang].title}</p>
         <p className="mt-1.5 line-clamp-5 whitespace-pre-line text-caption text-fg-muted">
-          {message.trim() || t(DEFAULT_MAINTENANCE_MESSAGE)}
+          {message.trim() || DEFAULT_MAINTENANCE_TEXT[lang].message}
         </p>
       </div>
     </div>

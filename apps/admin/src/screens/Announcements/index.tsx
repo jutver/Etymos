@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { Image as ImageIcon, PencilSimple, Timer, Trash, WarningOctagon, Wrench } from "@phosphor-icons/react";
-import { announcementState, cn, type Announcement, type AnnouncementKind } from "@etymos/shared";
+import { announcementState, announcementText, cn, type Announcement, type AnnouncementKind } from "@etymos/shared";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
 import { ListItemsSkeleton } from "../../components/Skeleton";
 import { deleteAnnouncement, listAnnouncements, setAnnouncementActive } from "../../lib/configQueries";
 import { friendlyError } from "../../lib/errors";
-import { currentLocale, t, tr } from "../../lib/i18n";
+import { currentLocale, getLanguage, t, tr } from "../../lib/i18n";
 import { AnnouncementEditor } from "./Editor";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
-import { DEFAULT_MAINTENANCE_TITLE, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
+import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
 
 type Filter = "all" | AnnouncementKind;
 
@@ -34,9 +34,12 @@ function schedule(a: Announcement): string {
   return bits.join(" · ");
 }
 
+/** Headline in the admin's language, falling back to the other one. */
 function summary(a: Announcement): string {
-  if (a.kind === "maintenance") return a.title?.trim() || a.message.trim() || t(DEFAULT_MAINTENANCE_TITLE);
-  return a.title?.trim() || a.message.trim() || t("Image only");
+  const lang = getLanguage();
+  const { title, message } = announcementText(a, lang);
+  if (a.kind === "maintenance") return title || message || DEFAULT_MAINTENANCE_TEXT[lang].title;
+  return title || message || t("Image only");
 }
 
 /** Live or scheduled maintenance, pinned above everything with a way out. */

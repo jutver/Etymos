@@ -1,6 +1,7 @@
 // Pricing, paywall, checkout, payment confirmation, History and Trash.
 export const billing: Record<string, string> = {
   "/mo": "/tháng",
+  "/yr": "/năm",
   "A subscription gives unlimited checks for a flat monthly fee, best for regular use. Credit packs are pay-per-use, best if you only need to check a document occasionally.":
     "Gói đăng ký cho phép kiểm tra không giới hạn với một mức phí cố định hằng tháng, phù hợp khi dùng thường xuyên. Gói lượt tính phí theo từng lần dùng, phù hợp nếu bạn chỉ thỉnh thoảng cần kiểm tra một tài liệu.",
   "Actions": "Thao tác",

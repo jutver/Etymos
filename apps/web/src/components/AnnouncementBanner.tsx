@@ -3,11 +3,11 @@
 // App.tsx; data comes from AnnouncementsProvider (lib/announcements.tsx).
 import { useState, type ReactNode } from "react";
 import { Wrench, X } from "@phosphor-icons/react";
-import { cn, type Announcement, type AnnouncementSeverity } from "@etymos/shared";
+import { announcementText, cn, type Announcement, type AnnouncementSeverity } from "@etymos/shared";
 import { Countdown } from "./announcements/Countdown";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./announcements/icons";
 import { dismissAnnouncement, dismissedAnnouncements, useAnnouncements } from "../lib/announcements";
-import { t } from "../lib/i18n";
+import { t, useLanguage } from "../lib/i18n";
 
 const severityStyles: Record<AnnouncementSeverity, string> = {
   info: "bg-brand-100 border-brand-300 text-brand-700",
@@ -43,13 +43,14 @@ function Bar({
 
 function BannerBar({ banner, onDismiss }: { banner: Announcement; onDismiss: () => void }) {
   const Icon = banner.icon ? ANNOUNCEMENT_ICON_COMPONENTS[banner.icon] : null;
+  const { message } = announcementText(banner, useLanguage());
   return (
     <Bar severity={banner.severity} onDismiss={onDismiss}>
       <p>
         {/* Inside the text so it wraps with the first word, not on a line of its own. */}
         {Icon && <Icon size={17} weight="fill" className="mr-2 inline-block align-[-0.2em]" />}
         {/* t(): seeded announcements may have catalog translations; admin text passes through. */}
-        {t(banner.message)}
+        {t(message)}
       </p>
       {banner.countdown_to && <Countdown to={banner.countdown_to} />}
     </Bar>

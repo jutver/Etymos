@@ -17,6 +17,12 @@ import { t, tr } from "../../lib/i18n";
 
 const EVIDENCE_BUCKET = "student-verification";
 
+// Photos only, up to 2 MB. The bucket enforces the same limits
+// (supabase/migrations/20261018010000_student_verification_limits.sql).
+const EVIDENCE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const EVIDENCE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
+const EVIDENCE_MAX_BYTES = 2 * 1024 * 1024;
+
 type ExistingStatus = "pending" | "approved" | "rejected" | null;
 
 export default function VerifyStudentPage() {
@@ -32,6 +38,7 @@ export default function VerifyStudentPage() {
   const [submitted, setSubmitted] = useState(false);
   const [existingStatus, setExistingStatus] = useState<ExistingStatus>(null);
   const [checkingExisting, setCheckingExisting] = useState(true);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -62,6 +69,17 @@ export default function VerifyStudentPage() {
   function pickFile(list: FileList | null) {
     const picked = list?.[0];
     if (!picked) return;
+    // Check the extension too: some browsers leave the type blank.
+    const ext = picked.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!(picked.type in EVIDENCE_TYPES) || !EVIDENCE_EXTENSIONS.includes(ext)) {
+      setFileError(t("Please upload a photo: JPG, PNG or WebP."));
+      return;
+    }
+    if (picked.size > EVIDENCE_MAX_BYTES) {
+      setFileError(t("That image is larger than 2 MB. Please upload a smaller one."));
+      return;
+    }
+    setFileError(null);
     setFile({ name: picked.name, previewUrl: URL.createObjectURL(picked), blob: picked });
   }
 
@@ -69,11 +87,20 @@ export default function VerifyStudentPage() {
     if (!file || !user) return;
     setSubmitting(true);
     try {
-      const storagePath = `${user.id}/${Date.now()}-${file.blob.name}`;
+      // Keep the name (admins see and search it), in characters storage accepts.
+      const base = file.blob.name
+        .replace(/\.[^.]*$/, "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .replace(/[^A-Za-z0-9_-]+/g, "-")
+        .slice(0, 60);
+      const storagePath = `${user.id}/${Date.now()}-${base || "student-id"}.${EVIDENCE_TYPES[file.blob.type]}`;
 
       const { error: uploadError } = await supabase.storage
         .from(EVIDENCE_BUCKET)
-        .upload(storagePath, file.blob, { upsert: true });
+        .upload(storagePath, file.blob, { upsert: true, contentType: file.blob.type });
       if (uploadError) throw uploadError;
 
       const { error: insertError } = await supabase.from("student_verification_requests").insert({
@@ -234,11 +261,11 @@ export default function VerifyStudentPage() {
                 {t("or")}{" "}<span className="font-semibold text-brand-600">{t("browse files")}</span>{" "}{t("on your computer")}</p>
             </div>
             <p className="flex items-center gap-1.5 text-[0.6875rem] text-ink-300">
-              <FileImage size={13} />{" "}{t("JPG, PNG, or PDF of a student ID or enrollment letter")}</p>
+              <FileImage size={13} />{" "}{t("A photo of your student ID or enrollment letter: JPG, PNG or WebP, up to 2 MB")}</p>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,.pdf"
+              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={(e) => {
                 pickFile(e.target.files);
@@ -246,6 +273,13 @@ export default function VerifyStudentPage() {
               }}
             />
           </div>
+        )}
+
+        {fileError && (
+          <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-severity-high">
+            <Warning size={16} weight="fill" className="shrink-0" />
+            {fileError}
+          </p>
         )}
 
         <Button

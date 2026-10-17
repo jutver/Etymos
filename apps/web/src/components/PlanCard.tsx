@@ -72,7 +72,7 @@ export function PlanCard({
         </span>
         {price > 0 && (
           <span className="text-sm font-medium text-ink-500">
-            /{billingCycle === "monthly" ? "mo" : "yr"}
+            {billingCycle === "monthly" ? t("/mo") : t("/yr")}
           </span>
         )}
       </div>

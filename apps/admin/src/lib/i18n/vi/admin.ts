@@ -114,7 +114,6 @@ export const admin: Record<string, string> = {
   "MRR": "MRR",
   "Max redemptions (blank = unlimited)": "Số lượt dùng tối đa (để trống = không giới hạn)",
   "Message shown to the user": "Tin nhắn hiển thị cho người dùng",
-  "Message shown to users…": "Tin nhắn hiển thị cho người dùng…",
   "Moderation": "Kiểm duyệt",
   "New announcement": "Thông báo mới",
   "New discount code": "Mã giảm giá mới",

@@ -55,6 +55,7 @@ describe("UI language", () => {
     setLanguage("vi");
     const html = render(LanguageSwitcher);
     expect(html).toContain('aria-label="Ngôn ngữ"');
-    expect(html).toMatch(/aria-pressed="true"[^>]*>VI</);
+    // The label sits in a span beside the sliding indicator; stay inside the active button.
+    expect(html).toMatch(/aria-pressed="true"[^>]*>(?:(?!<\/button>)[\s\S])*>VI</);
   });
 });

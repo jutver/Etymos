@@ -62,7 +62,7 @@ export async function listAnnouncements(): Promise<Announcement[]> {
 /** The fields the editor sets. */
 export type AnnouncementInput = Pick<
   Announcement,
-  "kind" | "title" | "message" | "severity" | "icon" | "countdown_to" | "image_path" | "starts_at" | "ends_at" | "is_active"
+  "kind" | "title" | "message" | "title_vi" | "message_vi" | "severity" | "icon" | "countdown_to" | "image_path" | "starts_at" | "ends_at" | "is_active"
 >;
 
 export async function createAnnouncement(input: AnnouncementInput, adminId: string): Promise<void> {
