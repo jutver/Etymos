@@ -23,10 +23,13 @@ const AdminAuthContext = createContext<AdminAuthContextValue>({
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const { session, user, loading } = useSupabaseSession();
   const [roleStatus, setRoleStatus] = useState<AdminRoleStatus>("loading");
+  const userId = user?.id ?? null;
 
+  // Keyed on the id, not the user object: coming back to the tab refreshes
+  // the session, and re-checking the role then would blank the whole app.
   useEffect(() => {
     if (loading) return;
-    if (!user) {
+    if (!userId) {
       setRoleStatus("not-admin");
       return;
     }
@@ -37,7 +40,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     supabase
       .from("profiles")
       .select("role")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single()
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -47,7 +50,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, loading]);
+  }, [userId, loading]);
 
   const value: AdminAuthContextValue = {
     session,

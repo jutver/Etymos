@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@etymos/shared";
+import { stableUser, supabase } from "@etymos/shared";
 import { t } from "./i18n";
 
 interface AuthContextValue {
@@ -35,18 +35,21 @@ export const initialAuthRedirect = (() => {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  // Same object while the user is unchanged (see stableUser), so screens
+  // that refetch on `user` don't reload every time the tab regains focus.
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    function apply(newSession: Session | null) {
       setSession(newSession);
+      setUser((prev) => stableUser(prev, newSession?.user ?? null));
       setLoading(false);
-    });
+    }
+
+    supabase.auth.getSession().then(({ data }) => apply(data.session));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => apply(newSession));
 
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -80,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id]);
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading }}>
+    <AuthContext.Provider value={{ session, user, loading }}>
       {children}
     </AuthContext.Provider>
   );
