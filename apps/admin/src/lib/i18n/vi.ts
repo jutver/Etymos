@@ -3,9 +3,11 @@
 import { common } from "./vi/common";
 import { admin } from "./vi/admin";
 import { support } from "./vi/support";
+import { announcements } from "./vi/announcements";
 
 export const vi: Record<string, string> = {
   ...common,
   ...admin,
   ...support,
+  ...announcements,
 };

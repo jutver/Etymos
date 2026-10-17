@@ -15,7 +15,7 @@ import SupportInboxPage from "./screens/Support";
 import SupportTicketDetailPage from "./screens/Support/TicketDetail";
 import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import FeatureFlagsPage from "./screens/Config/FeatureFlags";
-import AnnouncementsPage from "./screens/Config/Announcements";
+import AnnouncementsPage from "./screens/Announcements";
 import SystemHealthPage from "./screens/Config/SystemHealth";
 import { WaitlistLayout } from "./screens/Waitlist/WaitlistLayout";
 import AccessPage from "./screens/Waitlist/Access";
@@ -61,10 +61,11 @@ function App() {
             <Route path="plans" element={<PlansAndPacksPage />} />
             <Route path="discounts" element={<DiscountsPage />} />
           </Route>
+          <Route path="/announcements" element={<AnnouncementsPage />} />
           <Route path="/config" element={<ConfigLayout />}>
             <Route index element={<Navigate to="/config/feature-flags" replace />} />
             <Route path="feature-flags" element={<FeatureFlagsPage />} />
-            <Route path="announcements" element={<AnnouncementsPage />} />
+            <Route path="announcements" element={<Navigate to="/announcements" replace />} />
             <Route path="system-health" element={<SystemHealthPage />} />
           </Route>
         </Route>

@@ -134,15 +134,5 @@ export interface AdminDiscountCode {
   updated_at: string;
 }
 
-export type AnnouncementSeverity = "info" | "warning" | "success" | "error";
-
-export interface Announcement {
-  id: string;
-  message: string;
-  severity: AnnouncementSeverity;
-  is_active: boolean;
-  starts_at: string | null;
-  ends_at: string | null;
-  created_by: string | null;
-  created_at: string;
-}
+// Announcements are shared with the site: packages/shared/src/announcements.ts.
+export type { Announcement, AnnouncementKind, AnnouncementSeverity, AnnouncementIcon } from "@etymos/shared";

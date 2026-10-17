@@ -1,4 +1,4 @@
-import { supabase } from "@etymos/shared";
+import { ANNOUNCEMENT_IMAGE_BUCKET, supabase } from "@etymos/shared";
 import type {
   AdminCreditPack,
   AdminDiscountCode,
@@ -56,27 +56,53 @@ export async function listAnnouncements(): Promise<Announcement[]> {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as Announcement[];
 }
 
-export async function createAnnouncement(
-  input: Pick<Announcement, "message" | "severity">,
-  adminId: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from("announcements")
-    .insert({ ...input, is_active: true, created_by: adminId });
+/** The fields the editor sets. */
+export type AnnouncementInput = Pick<
+  Announcement,
+  "kind" | "title" | "message" | "severity" | "icon" | "countdown_to" | "image_path" | "starts_at" | "ends_at" | "is_active"
+>;
+
+export async function createAnnouncement(input: AnnouncementInput, adminId: string): Promise<void> {
+  const { error } = await supabase.from("announcements").insert({ ...input, created_by: adminId });
+  if (error) throw error;
+}
+
+export async function updateAnnouncement(id: string, patch: Partial<AnnouncementInput>): Promise<void> {
+  const { error } = await supabase.from("announcements").update(patch).eq("id", id);
   if (error) throw error;
 }
 
 export async function setAnnouncementActive(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase.from("announcements").update({ is_active: isActive }).eq("id", id);
-  if (error) throw error;
+  await updateAnnouncement(id, { is_active: isActive });
 }
 
-export async function deleteAnnouncement(id: string): Promise<void> {
-  const { error } = await supabase.from("announcements").delete().eq("id", id);
+export async function deleteAnnouncement(a: Pick<Announcement, "id" | "image_path">): Promise<void> {
+  const { error } = await supabase.from("announcements").delete().eq("id", a.id);
   if (error) throw error;
+  if (a.image_path) await removeAnnouncementImage(a.image_path);
+}
+
+const IMAGE_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
+export const ANNOUNCEMENT_IMAGE_TYPES = Object.keys(IMAGE_EXT);
+export const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Uploads a pop-up image to the public bucket and returns its path. */
+export async function uploadAnnouncementImage(file: File): Promise<string> {
+  const path = `${crypto.randomUUID()}.${IMAGE_EXT[file.type] ?? "img"}`;
+  const { error } = await supabase.storage
+    .from(ANNOUNCEMENT_IMAGE_BUCKET)
+    .upload(path, file, { contentType: file.type, cacheControl: "31536000" });
+  if (error) throw error;
+  return path;
+}
+
+/** Best effort: a leftover image costs a little storage, nothing more. */
+export async function removeAnnouncementImage(path: string): Promise<void> {
+  const { error } = await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([path]);
+  if (error) console.warn("Couldn't remove announcement image", path, error);
 }
 
 export async function listPlanDiscounts(): Promise<AdminPlanDiscount[]> {

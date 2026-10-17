@@ -1,40 +1,13 @@
-// Dismissible banner for admin-authored announcements. Fetches the most
-// recent active row from `announcements` (is_active = true, within the
-// starts_at/ends_at window) — RLS policy `announcements_select_all` makes
-// this readable signed out too, so it's mounted above both PublicShell and
-// AppShell in App.tsx.
-import { useEffect, useState } from "react";
-import { CheckCircle, Info, Warning, X, XCircle } from "@phosphor-icons/react";
-import { supabase, cn } from "@etymos/shared";
+// Top-of-page bars: the latest live banner announcement, and a notice when
+// maintenance is scheduled. Mounted above both PublicShell and AppShell in
+// App.tsx; data comes from AnnouncementsProvider (lib/announcements.tsx).
+import { useState, type ReactNode } from "react";
+import { Wrench, X } from "@phosphor-icons/react";
+import { cn, type Announcement, type AnnouncementSeverity } from "@etymos/shared";
+import { Countdown } from "./announcements/Countdown";
+import { ANNOUNCEMENT_ICON_COMPONENTS } from "./announcements/icons";
+import { dismissAnnouncement, dismissedAnnouncements, useAnnouncements } from "../lib/announcements";
 import { t } from "../lib/i18n";
-
-type AnnouncementSeverity = "info" | "warning" | "success" | "error";
-
-interface AnnouncementRow {
-  id: string;
-  message: string;
-  severity: AnnouncementSeverity;
-  created_at: string;
-}
-
-const DISMISSED_KEY = "etymos-dismissed-announcements";
-
-function getDismissedIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function persistDismissedId(id: string) {
-  if (typeof window === "undefined") return;
-  const ids = getDismissedIds();
-  ids.add(id);
-  window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
-}
 
 const severityStyles: Record<AnnouncementSeverity, string> = {
   info: "bg-brand-100 border-brand-300 text-brand-700",
@@ -43,70 +16,76 @@ const severityStyles: Record<AnnouncementSeverity, string> = {
   error: "bg-severity-high-bg border-severity-high-line text-severity-high",
 };
 
-const severityIcons: Record<AnnouncementSeverity, typeof Info> = {
-  info: Info,
-  success: CheckCircle,
-  warning: Warning,
-  error: XCircle,
-};
-
-export function AnnouncementBanner() {
-  const [announcement, setAnnouncement] = useState<AnnouncementRow | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const nowIso = new Date().toISOString();
-    supabase
-      .from("announcements")
-      .select("id, message, severity, created_at")
-      .eq("is_active", true)
-      .or(`starts_at.is.null,starts_at.lte.${nowIso}`)
-      .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error("Failed to load announcements", error);
-          return;
-        }
-        const row = (data ?? [])[0] as AnnouncementRow | undefined;
-        if (row && !getDismissedIds().has(row.id)) {
-          setAnnouncement(row);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!announcement) return null;
-
-  function dismiss() {
-    if (!announcement) return;
-    persistDismissedId(announcement.id);
-    setAnnouncement(null);
-  }
-
-  const Icon = severityIcons[announcement.severity];
-
+function Bar({
+  severity,
+  onDismiss,
+  children,
+}: {
+  severity: AnnouncementSeverity;
+  onDismiss: () => void;
+  children: ReactNode;
+}) {
   return (
-    <div
-      role="status"
-      className={cn(
-        "flex items-center gap-3 border-b px-5 py-2.5 text-sm font-medium sm:px-8",
-        severityStyles[announcement.severity],
-      )}
-    >
-      <Icon size={17} weight="fill" className="shrink-0" />
-      <p className="flex-1">{t(announcement.message)}</p>
+    <div role="status" className={cn("relative border-b px-12 py-2.5 text-sm font-medium", severityStyles[severity])}>
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
+        {children}
+      </div>
       <button
-        onClick={dismiss}
+        onClick={onDismiss}
         aria-label={t("Dismiss announcement")}
-        className="shrink-0 rounded-full p-1 transition-colors hover:bg-black/5"
+        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 transition-colors hover:bg-black/5 sm:right-5"
       >
         <X size={15} />
       </button>
     </div>
+  );
+}
+
+function BannerBar({ banner, onDismiss }: { banner: Announcement; onDismiss: () => void }) {
+  const Icon = banner.icon ? ANNOUNCEMENT_ICON_COMPONENTS[banner.icon] : null;
+  return (
+    <Bar severity={banner.severity} onDismiss={onDismiss}>
+      <p>
+        {/* Inside the text so it wraps with the first word, not on a line of its own. */}
+        {Icon && <Icon size={17} weight="fill" className="mr-2 inline-block align-[-0.2em]" />}
+        {/* t(): seeded announcements may have catalog translations; admin text passes through. */}
+        {t(banner.message)}
+      </p>
+      {banner.countdown_to && <Countdown to={banner.countdown_to} />}
+    </Bar>
+  );
+}
+
+export function AnnouncementBanner() {
+  const { banner, upcomingMaintenance } = useAnnouncements();
+  // Dismissals made this session; earlier ones are read from storage.
+  const [dismissed, setDismissed] = useState(dismissedAnnouncements);
+
+  function dismiss(id: string) {
+    dismissAnnouncement(id);
+    setDismissed((prev) => new Set(prev).add(id));
+  }
+
+  const showMaintenance = upcomingMaintenance && !dismissed.has(upcomingMaintenance.id);
+  const showBanner = banner && !dismissed.has(banner.id);
+  if (!showMaintenance && !showBanner) return null;
+
+  return (
+    <>
+      {showMaintenance && (
+        <Bar
+          severity="warning"
+         
+          onDismiss={() => dismiss(upcomingMaintenance.id)}
+        >
+          <p>
+            <Wrench size={17} weight="fill" className="mr-2 inline-block align-[-0.2em]" />
+            {t("Scheduled maintenance: Etymos will be unavailable for a while starting in")}
+          </p>
+          <Countdown to={upcomingMaintenance.starts_at!} />
+        </Bar>
+      )}
+      {showBanner && <BannerBar banner={banner} onDismiss={() => dismiss(banner.id)} />}
+    </>
   );
 }
