@@ -18,11 +18,17 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+# Must be set before torch starts CUDA. Lets the allocator grow segments in
+# place, so memory freed when gpu_models unloads a model can be reused by a
+# differently shaped one instead of sitting fragmented (matters on 12 GB).
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
 from job_manager import create_job, get_job, make_progress_callback, make_queue_callback, update_job
 from gpu_queue import gpu_slot
+import gpu_models
 from report_store import delete_report, get_report, list_reports, save_report
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
@@ -270,8 +276,13 @@ def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
     init_marker_preview(report_id)
     work_dir = MARKER_PREVIEW_DIR / report_id
     try:
-        # marker-pdf loads its own models onto the GPU, so it takes a slot like a check.
-        with gpu_slot():
+        if marker_preview.uses_gpu():
+            # marker-pdf loads its own models onto the GPU, so it takes a slot
+            # like a check, and idle check models make room for it.
+            with gpu_slot():
+                gpu_models.free_idle()
+                result = marker_preview.build_marker_preview(pdf_path, work_dir)
+        else:
             result = marker_preview.build_marker_preview(pdf_path, work_dir)
         mark_marker_preview_ready(
             report_id, html=result["html"], docx_local_path=str(result["docx_path"])

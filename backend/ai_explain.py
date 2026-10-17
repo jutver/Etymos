@@ -421,33 +421,34 @@ def explain_with_gemini(match: dict, facts: dict | None = None) -> str:
 
 
 def explain_with_local_model(match: dict, facts: dict | None = None) -> str:
-    import llm_metadata
-
-    llm_metadata._ensure_local_model_loaded()
-    tokenizer, model = llm_metadata._tokenizer, llm_metadata._model
-    if tokenizer is None or model is None:
-        raise ExplainUnavailable("Local model failed to load.")
-
     import torch
 
-    prompt = tokenizer.apply_chat_template(
-        [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": build_prompt(match, facts)}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=LOCAL_EXPLAIN_MAX_NEW_TOKENS,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
-            top_k=None,
-            pad_token_id=tokenizer.eos_token_id,
+    import gpu_models
+    import llm_metadata
+
+    with llm_metadata.local_model() as (tokenizer, model):
+        prompt = tokenizer.apply_chat_template(
+            [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": build_prompt(match, facts)}],
+            tokenize=False,
+            add_generation_prompt=True,
         )
-    generated = outputs[0][inputs["input_ids"].shape[-1]:]
-    return clean_explanation(tokenizer.decode(generated, skip_special_tokens=True))
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
+
+        def generate():
+            with torch.no_grad():
+                return model.generate(
+                    **inputs,
+                    max_new_tokens=LOCAL_EXPLAIN_MAX_NEW_TOKENS,
+                    do_sample=False,
+                    temperature=None,
+                    top_p=None,
+                    top_k=None,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+
+        outputs = gpu_models.retry_on_oom(generate)
+        generated = outputs[0][inputs["input_ids"].shape[-1]:]
+        return clean_explanation(tokenizer.decode(generated, skip_special_tokens=True))
 
 
 PROVIDERS: dict[str, Callable[..., str]] = {
