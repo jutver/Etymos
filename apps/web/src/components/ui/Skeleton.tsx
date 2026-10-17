@@ -61,7 +61,8 @@ export function SkeletonText({ lines = 3, className, lineClassName }: SkeletonTe
       {Array.from({ length: lines }, (_, i) => (
         <Skeleton
           key={i}
-          className={cn("h-3 w-full", i === lines - 1 && "w-2/3", lineClassName)}
+          // cn() doesn't merge Tailwind classes, so pick one width rather than override it.
+          className={cn("h-3", i === lines - 1 ? "w-2/3" : "w-full", lineClassName)}
         />
       ))}
     </div>

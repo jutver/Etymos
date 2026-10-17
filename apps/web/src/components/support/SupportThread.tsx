@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { EnvelopeSimple, FilePdf, Image as ImageIcon, WarningCircle } from "@phosphor-icons/react";
+import { EnvelopeSimple, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { Button } from "../ui/Button";
 import { LogoMark } from "../layout/Logo";
+import { Skeleton, SkeletonText } from "../ui/Skeleton";
 import { AttachmentPicker } from "./AttachmentPicker";
-import { CATEGORY_LABELS, STATUS_CLASSES, STATUS_LABELS, formatBytes, supportErrorText } from "./labels";
+import { Attachments } from "./Attachments";
+import { CATEGORY_LABELS, STATUS_CLASSES, STATUS_LABELS, supportErrorText } from "./labels";
 import type { SupportConversation, SupportMessage } from "../../lib/api";
 import { currentLocale, t } from "../../lib/i18n";
 
@@ -43,24 +45,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       >
         {message.body}
       </div>
-      {message.attachments.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
-          {message.attachments.map((a) => (
-            <li key={a.id}>
-              <a
-                href={a.url ?? undefined}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-700 hover:border-brand-300"
-              >
-                {a.content_type === "application/pdf" ? <FilePdf size={14} /> : <ImageIcon size={14} />}
-                <span className="max-w-[12rem] truncate">{a.filename}</span>
-                <span className="text-ink-400">{formatBytes(a.size_bytes)}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+      {message.attachments.length > 0 && <Attachments attachments={message.attachments} alignEnd={!fromSupport} />}
     </li>
   );
 }
@@ -154,6 +139,59 @@ export function SupportThread({
           <p className="mt-3 text-xs text-ink-400">{t("You can also reply to any of our emails about this request.")}</p>
         </form>
       )}
+    </div>
+  );
+}
+
+/** Skeleton bubbles: the request, a reply from support, a follow-up. */
+const SKELETON_BUBBLES: { fromSupport: boolean; lines: number; width: string }[] = [
+  { fromSupport: false, lines: 3, width: "w-[min(30rem,85%)]" },
+  { fromSupport: true, lines: 4, width: "w-[min(34rem,90%)]" },
+  { fromSupport: false, lines: 2, width: "w-[min(22rem,70%)]" },
+];
+
+/** Placeholder in the shape of SupportThread while the conversation loads,
+ * so the page doesn't sit empty and the layout doesn't jump when it lands. */
+export function SupportThreadSkeleton() {
+  return (
+    <div role="status" aria-busy="true">
+      <span className="sr-only">{t("Loading…")}</span>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="mt-2.5 h-7 w-[min(24rem,80%)]" rounded="md" />
+        </div>
+        <Skeleton className="h-6 w-20" rounded="full" />
+      </div>
+
+      <ol className="mt-8 flex flex-col gap-6" aria-hidden="true">
+        {SKELETON_BUBBLES.map((b, i) => (
+          <li key={i} className={cn("flex flex-col gap-1.5", b.fromSupport ? "items-start" : "items-end")}>
+            <div className="flex items-center gap-2">
+              {b.fromSupport && <Skeleton className="h-5 w-5" rounded="full" />}
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <div
+              className={cn(
+                "rounded-2xl px-4 py-3.5",
+                b.width,
+                b.fromSupport ? "rounded-tl-md border border-line bg-white" : "rounded-tr-md bg-brand-100/50",
+              )}
+            >
+              <SkeletonText lines={b.lines} />
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-4 sm:p-5" aria-hidden="true">
+        <Skeleton className="h-[6.5rem] w-full" variant="flat" rounded="md" />
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Skeleton className="h-8 w-32" rounded="full" />
+          <Skeleton className="h-8 w-24" rounded="md" />
+        </div>
+      </div>
     </div>
   );
 }
