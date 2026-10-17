@@ -44,7 +44,10 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
             console.error("Failed to load announcements", error);
             return;
           }
-          setRows((data ?? []) as Announcement[]);
+          // Keep the same array when nothing changed, so a routine refresh
+          // doesn't hand every consumer new objects.
+          const next = (data ?? []) as Announcement[];
+          setRows((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
           setNow(Date.now());
         });
     load();

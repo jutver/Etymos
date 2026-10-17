@@ -61,23 +61,25 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   const { maintenance } = useAnnouncements();
   const { user, loading } = useAuth();
   const { pathname } = useLocation();
-  const [admin, setAdmin] = useState<boolean | null>(null);
+  // Whether this user is an admin, checked once per user. Keyed on ids, not
+  // on the announcement object: the list is re-fetched every minute, and
+  // re-checking would swap the site for a loader and remount every page.
+  const [adminFor, setAdminFor] = useState<{ userId: string; admin: boolean } | null>(null);
+  const maintenanceId = maintenance?.id ?? null;
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    if (!maintenance) return;
-    if (!user) {
-      setAdmin(false);
-      return;
-    }
+    if (!maintenanceId || !userId || adminFor?.userId === userId) return;
     let cancelled = false;
-    setAdmin(null);
-    fetchMyProfile(user.id)
-      .then((p) => !cancelled && setAdmin(p.role === "admin"))
-      .catch(() => !cancelled && setAdmin(false));
+    fetchMyProfile(userId)
+      .then((p) => !cancelled && setAdminFor({ userId, admin: p.role === "admin" }))
+      .catch(() => !cancelled && setAdminFor({ userId, admin: false }));
     return () => {
       cancelled = true;
     };
-  }, [maintenance, user?.id]);
+  }, [maintenanceId, userId, adminFor?.userId]);
+
+  const admin = !userId ? false : adminFor?.userId === userId ? adminFor.admin : null;
 
   if (!maintenance || OPEN_PATHS.includes(pathname)) return <>{children}</>;
   if (loading || admin === null) return <PageLoader />;
