@@ -5,6 +5,9 @@ import { AppShell } from "./components/layout/AppShell";
 import { AuthShell } from "./components/layout/AuthShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
+import { AnnouncementPopup } from "./components/announcements/AnnouncementPopup";
+import { MaintenanceGate } from "./components/announcements/MaintenanceGate";
+import { AnnouncementsProvider } from "./lib/announcements";
 import { PageLoader } from "./components/ui/PageLoader";
 import { useAuth } from "./lib/auth";
 import { trackPageView } from "./lib/analytics";
@@ -137,56 +140,59 @@ function App() {
   // current language at call time, so every screen has to render again.
   useLanguage();
   return (
-    <>
+    <AnnouncementsProvider>
       <ScrollToTop />
       <PageViewTracker />
-      <Routes>
-        <Route element={<PublicShellWithBanner />}>
-          <Route path="/" element={<HomeRoute />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/support/t/:token" element={<GuestSupportTicketPage />} />
-        </Route>
-
-        <Route element={<AuthShell />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/email-verified" element={<EmailVerifiedPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/recover-account" element={<RecoverAccountPage />} />
-        </Route>
-
-        <Route element={<RequireAuth />}>
-          {/* Outside the AppShell gate on purpose — a waitlisted user must be
-              able to reach this without the authenticated app chrome. */}
-          <Route path="/waitlist" element={<WaitlistPage />} />
-
-          <Route element={<AppShellWithBanner />}>
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/analyzing" element={<AnalyzingPage />} />
-            <Route path="/report/:id" element={<ReportPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/trash" element={<TrashPage />} />
-            <Route path="/paywall" element={<PaywallPage />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/payment-success" element={<PaymentSuccessPage />} />
-            <Route path="/account/profile" element={<AccountProfilePage />} />
-            <Route path="/account/plan" element={<AccountPlanPage />} />
-            <Route path="/account/payments" element={<PaymentHistoryPage />} />
-            <Route path="/verify-student" element={<VerifyStudentPage />} />
-            <Route path="/account/support" element={<SupportRequestsPage />} />
-            <Route path="/account/support/new" element={<NewSupportRequestPage />} />
-            <Route path="/account/support/:number" element={<SupportTicketPage />} />
+      <MaintenanceGate>
+        <AnnouncementPopup />
+        <Routes>
+          <Route element={<PublicShellWithBanner />}>
+            <Route path="/" element={<HomeRoute />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/support/t/:token" element={<GuestSupportTicketPage />} />
           </Route>
-        </Route>
 
-        <Route path="*" element={<NotFoundRoute />} />
-      </Routes>
-    </>
+          <Route element={<AuthShell />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
+            <Route path="/email-verified" element={<EmailVerifiedPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/recover-account" element={<RecoverAccountPage />} />
+          </Route>
+
+          <Route element={<RequireAuth />}>
+            {/* Outside the AppShell gate on purpose — a waitlisted user must be
+                able to reach this without the authenticated app chrome. */}
+            <Route path="/waitlist" element={<WaitlistPage />} />
+
+            <Route element={<AppShellWithBanner />}>
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="/analyzing" element={<AnalyzingPage />} />
+              <Route path="/report/:id" element={<ReportPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/trash" element={<TrashPage />} />
+              <Route path="/paywall" element={<PaywallPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/payment-success" element={<PaymentSuccessPage />} />
+              <Route path="/account/profile" element={<AccountProfilePage />} />
+              <Route path="/account/plan" element={<AccountPlanPage />} />
+              <Route path="/account/payments" element={<PaymentHistoryPage />} />
+              <Route path="/verify-student" element={<VerifyStudentPage />} />
+              <Route path="/account/support" element={<SupportRequestsPage />} />
+              <Route path="/account/support/new" element={<NewSupportRequestPage />} />
+              <Route path="/account/support/:number" element={<SupportTicketPage />} />
+            </Route>
+          </Route>
+
+          <Route path="*" element={<NotFoundRoute />} />
+        </Routes>
+      </MaintenanceGate>
+    </AnnouncementsProvider>
   );
 }
 

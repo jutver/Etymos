@@ -1,0 +1,37 @@
+import {
+  CalendarBlank,
+  CheckCircle,
+  Clock,
+  Gift,
+  Heart,
+  Info,
+  Lightning,
+  Megaphone,
+  Percent,
+  Rocket,
+  Sparkle,
+  Tag,
+  Warning,
+  Wrench,
+  XCircle,
+  type Icon,
+} from "@phosphor-icons/react";
+import type { AnnouncementIcon } from "@etymos/shared";
+
+export const ANNOUNCEMENT_ICON_COMPONENTS: Record<AnnouncementIcon, Icon> = {
+  info: Info,
+  warning: Warning,
+  success: CheckCircle,
+  error: XCircle,
+  megaphone: Megaphone,
+  gift: Gift,
+  tag: Tag,
+  percent: Percent,
+  lightning: Lightning,
+  sparkle: Sparkle,
+  rocket: Rocket,
+  clock: Clock,
+  calendar: CalendarBlank,
+  wrench: Wrench,
+  heart: Heart,
+};

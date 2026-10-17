@@ -13,6 +13,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { LoadingRegion, Skeleton, SkeletonText } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
   getSupportTicket,
@@ -105,11 +106,7 @@ export default function SupportTicketDetailPage() {
       </button>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
-      {!ticket && !error && (
-        <div className="mt-16 flex justify-center text-fg-muted">
-          <CircleNotch size={22} className="animate-spin" />
-        </div>
-      )}
+      {!ticket && !error && <TicketDetailSkeleton />}
 
       {ticket && (
         <div className="mt-3 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -262,6 +259,65 @@ export default function SupportTicketDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Same layout as the loaded ticket: header, messages, composer, side panels. */
+function TicketDetailSkeleton() {
+  return (
+    <LoadingRegion className="mt-3 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-3 w-64 max-w-full" />
+            <Skeleton className="mt-2.5 h-7 w-[min(26rem,80%)]" rounded="control" />
+          </div>
+          <Skeleton className="h-6 w-16" rounded="full" />
+        </div>
+
+        <ol className="mt-6 flex flex-col gap-4" aria-hidden="true">
+          {[3, 2, 4].map((lines, i) => (
+            <li
+              key={i}
+              className={cn("rounded-card border p-4", i === 1 ? "border-accent/30 bg-accent-bg/40" : "border-border bg-surface")}
+            >
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+              <SkeletonText lines={lines} className="mt-3.5" />
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-6 rounded-card border border-border bg-surface p-4 shadow-card" aria-hidden="true">
+          <div className="mb-3 flex gap-1.5">
+            <Skeleton className="h-7 w-36" rounded="control" />
+            <Skeleton className="h-7 w-28" rounded="control" />
+          </div>
+          <div className="h-36 rounded-control border border-border bg-surface-muted/50" />
+          <div className="mt-3 flex justify-end">
+            <Skeleton className="h-8 w-28" rounded="control" />
+          </div>
+        </div>
+      </div>
+
+      <aside className="flex flex-col gap-4" aria-hidden="true">
+        {[4, 2, 4].map((rows, i) => (
+          <section key={i} className="rounded-card border border-border bg-surface p-4 shadow-card">
+            <Skeleton className="mb-4 h-2.5 w-20" />
+            <div className="flex flex-col gap-3.5">
+              {Array.from({ length: rows }, (_, r) => (
+                <div key={r} className="flex flex-col gap-1.5">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-7 w-full" rounded="control" />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </aside>
+    </LoadingRegion>
   );
 }
 

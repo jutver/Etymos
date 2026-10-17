@@ -113,4 +113,17 @@ export const components: Record<string, string> = {
   "© 2026 Etymos. Made for Vietnamese students and researchers.": "© 2026 Etymos. Dành cho sinh viên và nhà nghiên cứu Việt Nam.",
   "Source:":
     "Nguồn:",
+  // Announcements: countdown, scheduled maintenance bar, maintenance screen.
+  "Scheduled maintenance: Etymos will be unavailable for a while starting in": "Bảo trì theo lịch: Etymos sẽ tạm ngừng hoạt động sau",
+  "d": "ngày",
+  "h": "giờ",
+  "m": "phút",
+  "s": "giây",
+  "We'll be back soon": "Chúng tôi sẽ sớm trở lại",
+  "Etymos is down for maintenance while we make some improvements. Please come back a little later.":
+    "Etymos đang tạm dừng để bảo trì và nâng cấp. Bạn vui lòng quay lại sau ít phút nhé.",
+  "Since {{time}}": "Từ {{time}}",
+  "Admin sign in": "Đăng nhập quản trị",
+  "Maintenance mode is on. Only admins can use the site; everyone else sees the maintenance page.":
+    "Đang bật chế độ bảo trì. Chỉ quản trị viên dùng được trang web; mọi người khác sẽ thấy trang bảo trì.",
 };

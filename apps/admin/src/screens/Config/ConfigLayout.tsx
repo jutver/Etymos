@@ -4,7 +4,6 @@ import { t, tr } from "../../lib/i18n";
 
 const TABS = [
   { to: "/config/feature-flags", label: tr("Feature flags") },
-  { to: "/config/announcements", label: tr("Announcements") },
   { to: "/config/system-health", label: tr("System health") },
 ];
 
@@ -12,7 +11,7 @@ export function ConfigLayout() {
   return (
     <div>
       <h1 className="text-h1 font-semibold text-fg">{t("Config")}</h1>
-      <p className="mt-1 text-body text-fg-muted">{t("Feature flags, announcements, and system health.")}</p>
+      <p className="mt-1 text-body text-fg-muted">{t("Feature flags and system health.")}</p>
 
       <div className="mt-5 flex gap-1 border-b border-border">
         {TABS.map((tab) => (

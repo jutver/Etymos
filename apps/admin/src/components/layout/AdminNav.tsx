@@ -10,6 +10,7 @@ import {
   Lifebuoy,
   Hourglass,
   Tag,
+  Megaphone,
   SlidersHorizontal,
   SignOut,
   List,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: "/support", label: tr("Support"), icon: Lifebuoy },
   { to: "/waitlist", label: tr("Waitlist"), icon: Hourglass },
   { to: "/pricing", label: tr("Pricing"), icon: Tag },
+  { to: "/announcements", label: tr("Announcements"), icon: Megaphone },
   { to: "/config", label: tr("Config"), icon: SlidersHorizontal },
 ];
 

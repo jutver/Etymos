@@ -3,3 +3,4 @@ export * from "./cn";
 export * from "./format";
 export * from "./supabase";
 export * from "./session";
+export * from "./announcements";

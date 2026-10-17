@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { Skeleton } from "./Skeleton";
 import { t, tr } from "../lib/i18n";
+
+/** Placeholder rows while loading; widths vary so it reads as data, not a grid. */
+const SKELETON_ROWS = 6;
+const SKELETON_WIDTHS = ["w-3/4", "w-1/2", "w-2/3", "w-5/6", "w-2/5"];
 
 export interface Column<T> {
   key: string;
@@ -36,7 +41,8 @@ export function DataTable<T>({
   return (
     <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-body">
+        <table className="w-full border-collapse text-body" aria-busy={loading || undefined}>
+          {loading && <caption className="sr-only">{t("Loading…")}</caption>}
           <thead>
             <tr className="border-b border-border">
               {columns.map((col) => (
@@ -54,10 +60,15 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-fg-subtle">
-                  {t("Loading…")}</td>
-              </tr>
+              Array.from({ length: SKELETON_ROWS }, (_, i) => (
+                <tr key={i} aria-hidden="true" className="border-b border-border last:border-b-0">
+                  {columns.map((col, c) => (
+                    <td key={col.key} className={cn("px-4 py-3", col.className)}>
+                      <Skeleton className={cn("h-3.5", SKELETON_WIDTHS[(i + c) % SKELETON_WIDTHS.length])} />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-fg-subtle">

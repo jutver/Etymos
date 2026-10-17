@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Flag, Trash, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { DetailPageSkeleton } from "../../components/Skeleton";
 import { StatusBadge, moderationTone, docStatusTone } from "../../components/StatusBadge";
 import { getDocument, setModerationStatus } from "../../lib/moderationQueries";
 import { useAdminAuth } from "../../lib/auth";
@@ -53,7 +54,7 @@ export default function DocumentDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-body text-fg-muted">{t("Loading…")}</p>;
+    return <DetailPageSkeleton cards={[2]} />;
   }
 
   if (!doc) {
