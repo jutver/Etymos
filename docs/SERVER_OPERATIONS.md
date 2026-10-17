@@ -8,12 +8,13 @@ paths are from the older n1/n2 machines; the paths below are current).
 ## What runs where
 
 The machine is a container with no init system (PID 1 is a shell), so
-**supervisord** keeps two processes alive and restarts them if they crash:
+**supervisord** keeps three processes alive and restarts them if they crash:
 
 | Program | What it does | Logs |
 |---|---|---|
 | `etymos-api` | FastAPI backend (uvicorn) on port 8000, started by `scripts/run_api.sh`, which loads `.env` | `logs/api.err.log` (app output), `logs/api.out.log` |
 | `cloudflared` | Cloudflare Tunnel publishing `https://api.etymos.site` → `localhost:8000` | `logs/cloudflared.err.log` |
+| `etymos-deploy` | Deploys new backend commits on `main` automatically ([AUTO_DEPLOY.md](AUTO_DEPLOY.md)) | `logs/deploy.log` |
 
 | Path | Contents |
 |---|---|
@@ -54,7 +55,12 @@ The API takes ~20–40 s to load its models after a (re)start; `status` shows
 
 ## Deploying a backend change
 
-After pushing to `main`:
+Normally nothing to do: `etymos-deploy` pulls, restarts and checks
+`/api/health` by itself after the GitHub tests pass. See
+[AUTO_DEPLOY.md](AUTO_DEPLOY.md), and `tail -f backend/logs/deploy.log` to
+watch.
+
+To deploy by hand, run `$SV stop etymos-deploy` first, then:
 
 ```bash
 cd /workspace/Etymos
@@ -66,7 +72,8 @@ sleep 30; $SV status
 curl -s localhost:8000/api/health; echo
 ```
 
-Then confirm from anywhere: `curl https://api.etymos.site/api/health`.
+Then confirm from anywhere: `curl https://api.etymos.site/api/health`, and
+`$SV start etymos-deploy` again.
 
 The frontend (`apps/web`, `apps/admin`) deploys separately through Vercel on
 push — nothing to do on this machine. Database migrations go through
@@ -233,6 +240,18 @@ stdout_logfile=/workspace/Etymos/backend/logs/cloudflared.out.log
 stderr_logfile=/workspace/Etymos/backend/logs/cloudflared.err.log
 stdout_logfile_maxbytes=10MB
 stderr_logfile_maxbytes=10MB
+
+; Auto-deploy of new commits on main (docs/AUTO_DEPLOY.md)
+[program:etymos-deploy]
+command=/workspace/Etymos/backend/scripts/deploy_watch.sh
+directory=/workspace/Etymos
+autostart=true
+autorestart=true
+stopsignal=TERM
+stopasgroup=true
+stdout_logfile=/workspace/Etymos/backend/logs/deploy.log
+redirect_stderr=true
+stdout_logfile_maxbytes=10MB
 ```
 
 ### `backend/.env` keys

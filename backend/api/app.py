@@ -26,7 +26,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
-from job_manager import create_job, get_job, make_progress_callback, make_queue_callback, update_job
+from job_manager import active_count, create_job, get_job, make_progress_callback, make_queue_callback, update_job
 from gpu_queue import gpu_slot
 import gpu_models
 from report_store import delete_report, get_report, list_reports, save_report
@@ -260,7 +260,9 @@ class CiteRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "plagiarism-checker"}
+    # active_jobs: checks in progress, so scripts/deploy_watch.sh can wait for
+    # them to finish before restarting.
+    return {"status": "ok", "service": "plagiarism-checker", "active_jobs": active_count()}
 
 
 def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:

@@ -88,3 +88,9 @@ def make_progress_callback(job_id: str):
         update_job(job_id, status="processing", progress=progress,
                    current_step=step, message=message)
     return callback
+
+
+def active_count() -> int:
+    """Checks queued or running right now. The auto-deploy waits for 0 before restarting."""
+    with _LOCK:
+        return sum(1 for job in _JOBS.values() if job["status"] in ("queued", "processing"))
