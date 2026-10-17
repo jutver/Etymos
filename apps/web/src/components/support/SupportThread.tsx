@@ -70,9 +70,12 @@ function MessageBubble({ message }: { message: SupportMessage }) {
 export function SupportThread({
   conversation,
   onReply,
+  newRequestPath = "/contact",
 }: {
   conversation: SupportConversation;
   onReply: (body: string, files: File[]) => Promise<void>;
+  /** Where "Open a new request" goes once the request is closed. */
+  newRequestPath?: string;
 }) {
   const [body, setBody] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -117,7 +120,7 @@ export function SupportThread({
       {closed ? (
         <div className="mt-8 rounded-[var(--radius-card)] border border-line bg-surface-tint px-5 py-4 text-sm text-ink-600">
           {t("This request is closed.")}{" "}
-          <Link to="/contact" className="font-semibold text-brand-600 underline underline-offset-2">
+          <Link to={newRequestPath} className="font-semibold text-brand-600 underline underline-offset-2">
             {t("Open a new request")}
           </Link>{" "}
           {t("if you still need help.")}

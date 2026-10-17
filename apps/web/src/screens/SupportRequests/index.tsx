@@ -30,7 +30,7 @@ export default function SupportRequestsPage() {
           <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My requests")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">{t("Your conversations with Etymos Support.")}</p>
         </div>
-        <Button as="link" to="/contact" size="sm" iconLeft={<Plus size={15} weight="bold" />}>
+        <Button as="link" to="/account/support/new" size="sm" iconLeft={<Plus size={15} weight="bold" />}>
           {t("New request")}
         </Button>
       </div>

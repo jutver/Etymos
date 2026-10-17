@@ -1,7 +1,10 @@
 # Support: contact form, ticket inbox, email replies
 
 Built in, no third-party helpdesk. People contact support from `/contact`
-(signed in or not) or by emailing `support@etymos.site`. Agents answer from
+when signed out, from **My requests → New request** (`/account/support/new`)
+when signed in, or by emailing `support@etymos.site`. `/contact` sends
+signed-in users to `/account/support/new`, except those kept out of the app
+(waitlist, pending deletion), who use `/contact` as before. Agents answer from
 the admin app (**Support**). Requesters reply by email or on the site.
 
 ## How it fits together

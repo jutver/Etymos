@@ -41,6 +41,7 @@ export default function SupportTicketPage() {
           <SupportThread
             conversation={conversation}
             onReply={async (body, files) => setConversation(await replyToMySupportTicket(number, body, files))}
+            newRequestPath="/account/support/new"
           />
         )}
       </div>

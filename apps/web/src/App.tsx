@@ -40,6 +40,7 @@ import {
   ContactPage,
   GuestSupportTicketPage,
   SupportRequestsPage,
+  NewSupportRequestPage,
   SupportTicketPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
@@ -178,6 +179,7 @@ function App() {
             <Route path="/account/payments" element={<PaymentHistoryPage />} />
             <Route path="/verify-student" element={<VerifyStudentPage />} />
             <Route path="/account/support" element={<SupportRequestsPage />} />
+            <Route path="/account/support/new" element={<NewSupportRequestPage />} />
             <Route path="/account/support/:number" element={<SupportTicketPage />} />
           </Route>
         </Route>
