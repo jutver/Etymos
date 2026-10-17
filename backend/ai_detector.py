@@ -45,8 +45,9 @@ import logging
 import math
 import os
 import re
-import threading
 import unicodedata
+
+import gpu_models
 
 logger = logging.getLogger(__name__)
 
@@ -361,14 +362,11 @@ def summarize(segment_results: list[dict], *, language: str, model_name: str) ->
 # Model-backed part
 # ---------------------------------------------------------------------------
 
-def _lm_handles():
+def _lm():
+    """`with _lm() as (tokenizer, model):` — the local Qwen model llm_metadata loads."""
     import llm_metadata
 
-    llm_metadata._ensure_local_model_loaded()
-    tokenizer, model = llm_metadata._tokenizer, llm_metadata._model
-    if tokenizer is None or model is None:
-        raise DetectorUnavailable("Local language model failed to load.")
-    return tokenizer, model
+    return llm_metadata.local_model()
 
 
 def segment_features(text: str) -> dict | None:
@@ -379,30 +377,35 @@ def segment_features(text: str) -> dict | None:
     try:
         import torch
 
-        tokenizer, model = _lm_handles()
-        enc = tokenizer(
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=MAX_SEGMENT_TOKENS,
-            return_offsets_mapping=True,
-        )
-        offsets = enc.pop("offset_mapping")[0].tolist()
-        ids = enc["input_ids"][0]
-        if ids.shape[0] < 16:
-            return None
+        with _lm() as (tokenizer, model):
+            enc = tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=MAX_SEGMENT_TOKENS,
+                return_offsets_mapping=True,
+            )
+            offsets = enc.pop("offset_mapping")[0].tolist()
+            ids = enc["input_ids"][0]
+            if ids.shape[0] < 16:
+                return None
 
-        start_id = tokenizer.convert_tokens_to_ids("<|endoftext|>")
-        if start_id is None or start_id < 0:
-            start_id = tokenizer.eos_token_id
-        input_ids = torch.cat([torch.tensor([start_id]), ids]).unsqueeze(0).to(model.device)
+            start_id = tokenizer.convert_tokens_to_ids("<|endoftext|>")
+            if start_id is None or start_id < 0:
+                start_id = tokenizer.eos_token_id
+            input_ids = torch.cat([torch.tensor([start_id]), ids]).unsqueeze(0).to(model.device)
 
-        with torch.no_grad():
-            logits = model(input_ids=input_ids).logits[0, :-1].float()
-        target = ids.to(logits.device)
-        log_probs = torch.log_softmax(logits, dim=-1)
-        nll = (-log_probs[torch.arange(target.shape[0]), target]).cpu().tolist()
-        top1 = (logits.argmax(dim=-1) == target).float().cpu().tolist()
+            def score():
+                with torch.no_grad():
+                    logits = model(input_ids=input_ids).logits[0, :-1].float()
+                    target = ids.to(logits.device)
+                    # NLL as logsumexp - target logit: same as indexing
+                    # log_softmax, without a second vocab-sized copy.
+                    nll = torch.logsumexp(logits, dim=-1) - logits.gather(1, target.unsqueeze(1)).squeeze(1)
+                    top1 = (logits.argmax(dim=-1) == target).float()
+                    return nll.cpu().tolist(), top1.cpu().tolist()
+
+            nll, top1 = gpu_models.retry_on_oom(score)
     except DetectorUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 — any torch/CUDA/tokenizer failure => feature unavailable
@@ -553,7 +556,6 @@ BINOCULARS_METHOD_NOTE = (
     "calibrated for this model pair, so treat the number as a hint."
 )
 
-_observer_model = None
 
 
 def binoculars_probability(score: float, threshold: float | None = None, scale: float | None = None) -> float:
@@ -563,36 +565,31 @@ def binoculars_probability(score: float, threshold: float | None = None, scale: 
     return _sigmoid((threshold - score) / scale)
 
 
-def _observer_handles():
-    """Performer = the instruct model llm_metadata already loads; observer = its base model."""
-    global _observer_model
-    tokenizer, performer = _lm_handles()
+def _load_observer():
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-    if _observer_model is None:
-        try:
-            import torch
-            from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+        logger.info("Loading Binoculars observer model %s...", BINOCULARS_OBSERVER_MODEL)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            BINOCULARS_OBSERVER_MODEL,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,
+        )
+        return model.eval()
+    except Exception as exc:  # noqa: BLE001
+        raise DetectorUnavailable(f"Binoculars observer model failed to load: {exc}") from exc
 
-            logger.info("Loading Binoculars observer model %s...", BINOCULARS_OBSERVER_MODEL)
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-            )
-            model = AutoModelForCausalLM.from_pretrained(
-                BINOCULARS_OBSERVER_MODEL,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-            )
-            model.eval()
-            _observer_model = model
-        except Exception as exc:  # noqa: BLE001
-            raise DetectorUnavailable(f"Binoculars observer model failed to load: {exc}") from exc
 
-    return tokenizer, _observer_model, performer
+gpu_models.register("qwen_base", _load_observer, estimate_gb=1.3)
 
 
 def binoculars_features(text: str) -> dict | None:
@@ -603,31 +600,39 @@ def binoculars_features(text: str) -> dict | None:
     try:
         import torch
 
-        tokenizer, observer, performer = _observer_handles()
-        enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=MAX_SEGMENT_TOKENS)
-        ids = enc["input_ids"][0]
-        if ids.shape[0] < 16:
-            return None
+        import llm_metadata
 
-        start_id = tokenizer.convert_tokens_to_ids("<|endoftext|>")
-        if start_id is None or start_id < 0:
-            start_id = tokenizer.eos_token_id
-        input_ids = torch.cat([torch.tensor([start_id]), ids]).unsqueeze(0)
+        with gpu_models.use(llm_metadata.LOCAL_MODEL, "qwen_base") as ((tokenizer, performer), observer):
+            enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=MAX_SEGMENT_TOKENS)
+            ids = enc["input_ids"][0]
+            if ids.shape[0] < 16:
+                return None
 
-        with torch.no_grad():
-            observer_logits = observer(input_ids=input_ids.to(observer.device)).logits[0, :-1].float()
-            performer_logits = performer(input_ids=input_ids.to(performer.device)).logits[0, :-1].float()
+            start_id = tokenizer.convert_tokens_to_ids("<|endoftext|>")
+            if start_id is None or start_id < 0:
+                start_id = tokenizer.eos_token_id
+            input_ids = torch.cat([torch.tensor([start_id]), ids]).unsqueeze(0)
 
-        performer_logits = performer_logits.to(observer_logits.device)
-        vocab = min(observer_logits.shape[-1], performer_logits.shape[-1])
-        observer_logits = observer_logits[:, :vocab]
-        performer_logits = performer_logits[:, :vocab]
-        target = ids.to(observer_logits.device)
+            def score():
+                with torch.no_grad():
+                    observer_logits = observer(input_ids=input_ids.to(observer.device)).logits[0, :-1].float()
+                    performer_logits = performer(input_ids=input_ids.to(performer.device)).logits[0, :-1].float()
 
-        performer_log_probs = torch.log_softmax(performer_logits, dim=-1)
-        log_ppl = float((-performer_log_probs[torch.arange(target.shape[0]), target]).mean())
-        observer_probs = torch.softmax(observer_logits, dim=-1)
-        x_ppl = float((-(observer_probs * performer_log_probs).sum(dim=-1)).mean())
+                    performer_logits = performer_logits.to(observer_logits.device)
+                    vocab = min(observer_logits.shape[-1], performer_logits.shape[-1])
+                    observer_logits = observer_logits[:, :vocab]
+                    performer_logits = performer_logits[:, :vocab]
+                    target = ids.to(observer_logits.device)
+
+                    performer_log_probs = torch.log_softmax(performer_logits, dim=-1)
+                    del performer_logits
+                    log_ppl = float((-performer_log_probs[torch.arange(target.shape[0]), target]).mean())
+                    observer_probs = torch.softmax(observer_logits, dim=-1)
+                    del observer_logits
+                    x_ppl = float((-(observer_probs * performer_log_probs).sum(dim=-1)).mean())
+                    return log_ppl, x_ppl
+
+            log_ppl, x_ppl = gpu_models.retry_on_oom(score)
     except DetectorUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 — any torch/CUDA/tokenizer failure => feature unavailable
@@ -774,9 +779,6 @@ CLASSIFIER_METHOD_NOTE = (
     "Method: a fine-tuned AI-text classifier (DeBERTa-v3), trained on English only."
 )
 
-_classifier = None  # (tokenizer, model)
-
-
 def classifier_probability(ai_score: float, threshold: float | None = None) -> float:
     """
     Map the model's ai_score onto this module's probability scale so its
@@ -792,11 +794,7 @@ def classifier_probability(ai_score: float, threshold: float | None = None) -> f
     return SEGMENT_FLAG_THRESHOLD + (1 - SEGMENT_FLAG_THRESHOLD) * (ai_score - threshold) / (1 - threshold)
 
 
-def _classifier_handles():
-    global _classifier
-    if _classifier is not None:
-        return _classifier
-
+def _load_classifier():
     try:
         import torch
         import torch.nn as nn
@@ -829,11 +827,12 @@ def _classifier_handles():
         model = AIDetectionModel.from_pretrained(AI_TEXT_DETECTOR_MODEL).eval()
         if torch.cuda.is_available():
             model = model.to("cuda")
-        _classifier = (tokenizer, model)
+        return tokenizer, model
     except Exception as exc:  # noqa: BLE001
         raise DetectorUnavailable(f"AI-text classifier failed to load: {exc}") from exc
 
-    return _classifier
+
+gpu_models.register("ai_classifier", _load_classifier, estimate_gb=0.7)
 
 
 def classifier_features(text: str) -> dict | None:
@@ -841,14 +840,18 @@ def classifier_features(text: str) -> dict | None:
     try:
         import torch
 
-        tokenizer, model = _classifier_handles()
-        enc = tokenizer(text, truncation=True, max_length=CLASSIFIER_MAX_TOKENS, return_tensors="pt")
-        if enc["input_ids"].shape[1] < 16:
-            return None
-        device = next(model.parameters()).device
-        enc = {k: v.to(device) for k, v in enc.items()}
-        with torch.inference_mode():
-            probs = torch.softmax(model(**enc).float(), dim=-1)[0].cpu().tolist()
+        with gpu_models.use("ai_classifier") as (tokenizer, model):
+            enc = tokenizer(text, truncation=True, max_length=CLASSIFIER_MAX_TOKENS, return_tensors="pt")
+            if enc["input_ids"].shape[1] < 16:
+                return None
+            device = next(model.parameters()).device
+            enc = {k: v.to(device) for k, v in enc.items()}
+
+            def score():
+                with torch.inference_mode():
+                    return torch.softmax(model(**enc).float(), dim=-1)[0].cpu().tolist()
+
+            probs = gpu_models.retry_on_oom(score)
     except DetectorUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -997,46 +1000,36 @@ VIET_METHOD_NOTE = (
     "such as Wikipedia passages, famous literature or textbook definitions, can be wrongly flagged as AI."
 )
 
-_viet_models = None  # (tokenizer, observer, performer)
-# Concurrent first Vietnamese checks would otherwise each load the ~7.3 GB pair.
-_viet_models_lock = threading.Lock()
+def _load_viet_pair():
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+        if not torch.cuda.is_available():
+            raise DetectorUnavailable("VietBinoculars needs a CUDA GPU (~7.3 GB VRAM).")
+
+        logger.info("Loading VietBinoculars pair %s + %s (int8)...", VIET_OBSERVER_MODEL, VIET_PERFORMER_MODEL)
+        kwargs = dict(
+            trust_remote_code=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map={"": 0},
+            torch_dtype=torch.bfloat16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(VIET_OBSERVER_MODEL, trust_remote_code=True)
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = tokenizer.eos_token
+        observer = AutoModelForCausalLM.from_pretrained(VIET_OBSERVER_MODEL, **kwargs).eval()
+        performer = AutoModelForCausalLM.from_pretrained(VIET_PERFORMER_MODEL, **kwargs).eval()
+        return tokenizer, observer, performer
+    except DetectorUnavailable:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise DetectorUnavailable(f"VietBinoculars models failed to load: {exc}") from exc
 
 
-def _viet_handles():
-    global _viet_models
-    if _viet_models is not None:
-        return _viet_models
-
-    with _viet_models_lock:
-        if _viet_models is not None:
-            return _viet_models
-
-        try:
-            import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-            if not torch.cuda.is_available():
-                raise DetectorUnavailable("VietBinoculars needs a CUDA GPU (~7.3 GB VRAM).")
-
-            logger.info("Loading VietBinoculars pair %s + %s (int8)...", VIET_OBSERVER_MODEL, VIET_PERFORMER_MODEL)
-            kwargs = dict(
-                trust_remote_code=True,
-                quantization_config=BitsAndBytesConfig(load_in_8bit=True),
-                device_map={"": 0},
-                torch_dtype=torch.bfloat16,
-            )
-            tokenizer = AutoTokenizer.from_pretrained(VIET_OBSERVER_MODEL, trust_remote_code=True)
-            if not tokenizer.pad_token:
-                tokenizer.pad_token = tokenizer.eos_token
-            observer = AutoModelForCausalLM.from_pretrained(VIET_OBSERVER_MODEL, **kwargs).eval()
-            performer = AutoModelForCausalLM.from_pretrained(VIET_PERFORMER_MODEL, **kwargs).eval()
-            _viet_models = (tokenizer, observer, performer)
-        except DetectorUnavailable:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            raise DetectorUnavailable(f"VietBinoculars models failed to load: {exc}") from exc
-
-    return _viet_models
+# The biggest model here: on a 12 GB card it takes turns with the English
+# classifier rather than both staying loaded (gpu_models).
+gpu_models.register("viet_pair", _load_viet_pair, estimate_gb=7.1)
 
 
 def viet_binoculars_features(text: str) -> dict | None:
@@ -1044,21 +1037,26 @@ def viet_binoculars_features(text: str) -> dict | None:
     try:
         import torch
 
-        tokenizer, observer, performer = _viet_handles()
-        enc = tokenizer(
-            text, return_tensors="pt", truncation=True, max_length=VIET_MAX_TOKENS, return_token_type_ids=False
-        ).to(0)
-        if enc.input_ids.shape[1] < 16:
-            return None
-        with torch.inference_mode():
-            obs = observer(**enc).logits.float()
-            perf = performer(**enc).logits.float()
-        labels = enc.input_ids[:, 1:]
-        log_ppl = torch.nn.functional.cross_entropy(
-            perf[:, :-1].transpose(1, 2), labels, reduction="none"
-        ).mean().item()
-        x_ppl = (-(torch.softmax(obs, dim=-1) * torch.log_softmax(perf, dim=-1)).sum(-1)).mean().item()
-        tokens = int(enc.input_ids.shape[1])
+        with gpu_models.use("viet_pair") as (tokenizer, observer, performer):
+            enc = tokenizer(
+                text, return_tensors="pt", truncation=True, max_length=VIET_MAX_TOKENS, return_token_type_ids=False
+            ).to(0)
+            if enc.input_ids.shape[1] < 16:
+                return None
+
+            def score():
+                with torch.inference_mode():
+                    obs = observer(**enc).logits.float()
+                    perf = performer(**enc).logits.float()
+                    labels = enc.input_ids[:, 1:]
+                    log_ppl = torch.nn.functional.cross_entropy(
+                        perf[:, :-1].transpose(1, 2), labels, reduction="none"
+                    ).mean().item()
+                    x_ppl = (-(torch.softmax(obs, dim=-1) * torch.log_softmax(perf, dim=-1)).sum(-1)).mean().item()
+                    return log_ppl, x_ppl
+
+            log_ppl, x_ppl = gpu_models.retry_on_oom(score)
+            tokens = int(enc.input_ids.shape[1])
     except DetectorUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001

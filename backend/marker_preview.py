@@ -49,10 +49,40 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).parent
 MARKER_ENV_DIR = BACKEND_DIR / "marker_env"
 
-# Conversion mode: "balanced" (VLM layout + OCR, needs Docker+GPU, best
-# accuracy — see docs/SETUP_MARKER.md) or "fast" (CPU-only heuristics, no extra
-# infra, weaker on math). Overridable via env var without a code change.
-MARKER_MODE = os.getenv("MARKER_MODE", "balanced")
+# On a card smaller than this, the preview stays off the GPU by default: the
+# balanced mode's vLLM container keeps several GB reserved, which a 12 GB
+# card needs for the checks' own models (gpu_models.py).
+MARKER_GPU_MIN_VRAM_GB = float(os.getenv("MARKER_GPU_MIN_VRAM_GB", "20"))
+
+
+def _small_gpu() -> bool:
+    import gpu_models
+
+    total = gpu_models.total_vram_gb()
+    return total is not None and total < MARKER_GPU_MIN_VRAM_GB
+
+
+def marker_mode() -> str:
+    """
+    MARKER_MODE: "balanced" (VLM layout + OCR, needs Docker+GPU, best
+    accuracy — see docs/SETUP_MARKER.md) or "fast" (lighter models, no extra
+    infra, weaker on math). Default: balanced, or fast on a small GPU.
+    """
+    return os.getenv("MARKER_MODE") or ("fast" if _small_gpu() else "balanced")
+
+
+def marker_device() -> str | None:
+    """
+    MARKER_DEVICE, passed to marker as TORCH_DEVICE ("cpu", "cuda"). Default:
+    marker's own choice (the GPU when there is one), or cpu on a small GPU.
+    """
+    return os.getenv("MARKER_DEVICE") or ("cpu" if _small_gpu() else None)
+
+
+def uses_gpu() -> bool:
+    """Whether a conversion needs a GPU job slot."""
+    return marker_mode() == "balanced" or marker_device() != "cpu"
+
 
 # How long a single conversion may run before being treated as failed.
 # marker's own first-run model download can take a while; subsequent runs
@@ -102,7 +132,7 @@ def convert_pdf_to_markdown(pdf_path: Path, work_dir: Path, *, mode: str | None 
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     marker_single = _marker_single_script()
-    effective_mode = mode or MARKER_MODE
+    effective_mode = mode or marker_mode()
 
     cmd = [
         str(marker_single),
@@ -112,7 +142,12 @@ def convert_pdf_to_markdown(pdf_path: Path, work_dir: Path, *, mode: str | None 
         "--mode", effective_mode,
     ]
 
-    env = {**os.environ, "SURYA_INFERENCE_KEEP_ALIVE": "true"} if MARKER_KEEP_ALIVE else None
+    env = dict(os.environ)
+    if MARKER_KEEP_ALIVE:
+        env["SURYA_INFERENCE_KEEP_ALIVE"] = "true"
+    device = marker_device()
+    if device:
+        env["TORCH_DEVICE"] = device
 
     try:
         result = subprocess.run(

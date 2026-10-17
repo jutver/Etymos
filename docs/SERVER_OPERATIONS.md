@@ -133,6 +133,7 @@ first — see "Setting up a new machine" step 2.
 | `ERROR (spawn error)` on start | The command can't be launched | Run the `command=` line from `supervisord.conf` by hand to see the real error |
 | A program stuck in FATAL after you fixed the cause | Supervisord stopped retrying | `$SV start <name>`; if it still refuses, `$SV shutdown`, wait 3 s, start supervisord again |
 | API log: `ModuleNotFoundError` after a pull | New Python dependency | `backend/.venv/bin/pip install -r backend/requirements.txt`, restart |
+| API log: `CUDA out of memory`, or checks slow because models keep reloading | GPU too small for the current settings | See `GPU_MEMORY.md`; on 12 GB try `GPU_JOB_SLOTS=1` |
 
 Cloudflared's `failed to sufficiently increase receive buffer size` line is
 a harmless performance warning.
@@ -244,4 +245,5 @@ stderr_logfile_maxbytes=10MB
 `SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME` — see `SETUP_PAYMENTS.md`. Optional notification settings (`ADMIN_ALERT_EMAILS`,
 `ADMIN_APP_URL`, ...) — see `SETUP_EMAIL.md`. Support (`SUPPORT_SMTP_USER`,
 `SUPPORT_SMTP_PASSWORD`, `SUPPORT_LINK_SECRET`, `SUPPORT_ALERT_EMAILS`, ...) —
-see `SETUP_SUPPORT.md`.
+see `SETUP_SUPPORT.md`. GPU memory (`GPU_JOB_SLOTS`, `GPU_MODEL_BUDGET_GB`, ...) —
+see `GPU_MEMORY.md`.

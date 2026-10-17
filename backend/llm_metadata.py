@@ -6,6 +6,7 @@ import threading
 
 import google.generativeai as genai
 
+import gpu_models
 from config import LLM_MODEL_NAME
 from feature_flags import is_flag_enabled
 
@@ -13,64 +14,53 @@ logger = logging.getLogger(__name__)
 
 
 # =========================
-# Lazy local (Qwen) LLM load
+# Local (Qwen) LLM, loaded on first use
 # =========================
 #
-# NOTE: torch/transformers and the multi-GB Qwen weights are only loaded on
-# the first call into a *local*-path function (extract_metadata_with_llm /
-# extract_section_metadata_with_llm / extract_all_section_metadata /
-# extract_all_section_metadata_one_call). Simply `import llm_metadata` no
-# longer forces this load — important when the `gemini_metadata_extraction`
-# feature flag is active and the local model is never used at all.
+# torch/transformers and the Qwen weights are only loaded the first time a
+# *local*-path function runs (gpu_models), never at import — important when
+# the `gemini_metadata_extraction` flag is on and the local model is never
+# used. The same weights serve rewrite, explain and the AI detector.
 
-_local_model_lock = threading.Lock()
-_tokenizer = None
-_model = None
+def _load_local_model():
+    import torch
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        LLM_MODEL_NAME,
+        trust_remote_code=True
+    )
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        LLM_MODEL_NAME,
+        quantization_config=bnb_config,
+        device_map="auto",
+        trust_remote_code=True,
+        low_cpu_mem_usage=True
+    )
+
+    model.eval()
+    return tokenizer, model
 
 
-def _ensure_local_model_loaded():
-    global _tokenizer, _model
+LOCAL_MODEL = "qwen_instruct"
+gpu_models.register(LOCAL_MODEL, _load_local_model, estimate_gb=1.3)
 
-    if _model is not None:
-        return
 
-    with _local_model_lock:
-        if _model is not None:
-            return
-
-        import torch
-        from transformers import (
-            AutoModelForCausalLM,
-            AutoTokenizer,
-            BitsAndBytesConfig,
-        )
-
-        logger.info("Loading local LLM %s (lazy, first local-path use)...", LLM_MODEL_NAME)
-
-        tokenizer = AutoTokenizer.from_pretrained(
-            LLM_MODEL_NAME,
-            trust_remote_code=True
-        )
-
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True
-        )
-
-        model = AutoModelForCausalLM.from_pretrained(
-            LLM_MODEL_NAME,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-            low_cpu_mem_usage=True
-        )
-
-        model.eval()
-
-        _tokenizer = tokenizer
-        _model = model
+def local_model():
+    """`with local_model() as (tokenizer, model):` — holds the model loaded meanwhile."""
+    return gpu_models.use(LOCAL_MODEL)
 
 
 # =========================
@@ -174,8 +164,6 @@ def normalize_metadata(metadata):
 # =========================
 
 def generate_json_from_prompt(prompt, max_new_tokens=256, max_length=4096):
-    _ensure_local_model_loaded()
-
     messages = [
         {
             "role": "system",
@@ -187,35 +175,39 @@ def generate_json_from_prompt(prompt, max_new_tokens=256, max_length=4096):
         }
     ]
 
-    input_text = _tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = _tokenizer(
-        input_text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length
-    ).to(_model.device)
-
     import torch
 
-    with torch.no_grad():
-        outputs = _model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=_tokenizer.eos_token_id
+    with local_model() as (tokenizer, model):
+        input_text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
         )
 
-    generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
+        inputs = tokenizer(
+            input_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length
+        ).to(model.device)
 
-    decoded = _tokenizer.decode(
-        generated_tokens,
-        skip_special_tokens=True
-    ).strip()
+        def generate():
+            with torch.no_grad():
+                return model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=tokenizer.eos_token_id
+                )
+
+        outputs = gpu_models.retry_on_oom(generate)
+
+        generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
+
+        decoded = tokenizer.decode(
+            generated_tokens,
+            skip_special_tokens=True
+        ).strip()
 
     return decoded
 

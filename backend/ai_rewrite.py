@@ -180,19 +180,14 @@ def rewrite_with_gemini(input_sentence: str, source_sentence: str, *, strict: bo
 def rewrite_with_local_model(input_sentence: str, source_sentence: str, *, strict: bool = False) -> str:
     """Run the rewrite on the local Qwen2.5 model.
 
-    Reuses llm_metadata's lazily-loaded singleton weights (the same model
-    the metadata extractor uses) via its tokenizer/model handles, with a
-    rewrite-appropriate system prompt instead of the JSON-only one.
+    Shares llm_metadata's weights (the same model the metadata extractor
+    uses), with a rewrite-appropriate system prompt instead of the JSON-only
+    one.
     """
+    import torch
+
+    import gpu_models
     import llm_metadata
-
-    llm_metadata._ensure_local_model_loaded()
-
-    tokenizer = llm_metadata._tokenizer
-    model = llm_metadata._model
-
-    if tokenizer is None or model is None:
-        raise RewriteUnavailable("Local model failed to load.")
 
     messages = [
         {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
@@ -202,34 +197,34 @@ def rewrite_with_local_model(input_sentence: str, source_sentence: str, *, stric
         },
     ]
 
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=4096,
-    ).to(model.device)
-
-    import torch
-
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=LOCAL_REWRITE_MAX_NEW_TOKENS,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            pad_token_id=tokenizer.eos_token_id,
+    with llm_metadata.local_model() as (tokenizer, model):
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
-    generated = outputs[0][inputs["input_ids"].shape[-1]:]
+        inputs = tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=4096,
+        ).to(model.device)
 
-    return _clean_output(tokenizer.decode(generated, skip_special_tokens=True))
+        def generate():
+            with torch.no_grad():
+                return model.generate(
+                    **inputs,
+                    max_new_tokens=LOCAL_REWRITE_MAX_NEW_TOKENS,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+
+        outputs = gpu_models.retry_on_oom(generate)
+        generated = outputs[0][inputs["input_ids"].shape[-1]:]
+        return _clean_output(tokenizer.decode(generated, skip_special_tokens=True))
 
 
 def rewrite_sentence(input_sentence: str, source_sentence: str) -> dict:
