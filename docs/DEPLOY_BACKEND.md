@@ -275,7 +275,9 @@ chmod +x /usr/local/bin/cloudflared
 ```
 
 There are two paths from here depending on whether you own a domain you can
-add to Cloudflare as a DNS zone. **Pick one.**
+add to Cloudflare as a DNS zone. **Pick one.** Moving to a new machine when
+the named tunnel already exists (the old machine was destroyed)? Use **4c**
+instead.
 
 ### 4a. No domain — Quick Tunnel
 
@@ -372,6 +374,143 @@ supervisord takes ownership from here. Then update supervisord's
 ```
 command=/usr/local/bin/cloudflared tunnel --config /path/to/etymos/cloudflared/config.yml run etymos-api
 ```
+
+### 4c. The tunnel already exists, but the machine running it is gone
+
+Use this section when you move to a new instance and `api.etymos.site` used to
+point at an old instance that has since been destroyed. Don't run 4b again.
+
+**What survived and what didn't.** The `etymos-api` tunnel and the
+`api.etymos.site` DNS record are stored in your Cloudflare account, so they
+survive the old machine. Your Cloudflare account remembers the old machine
+only as a dropped connection. The files that lived on the old machine are
+gone:
+- the tunnel's credentials file (`<TUNNEL_ID>.json`)
+- `cert.pem`
+- `config.yml`
+
+The new machine only needs those files recreated for the **same** tunnel.
+
+That's why `route dns` prints this:
+
+```
+INF api.etymos.site is already configured to route to your tunnel tunnelID=...
+```
+
+This is the expected answer, not an error: DNS is already right and needs
+no change. Two commands from 4b would go wrong here:
+- `cloudflared tunnel create etymos-api` fails because the name is taken.
+- `cloudflared tunnel route dns --overwrite-dns ...` with a *new* tunnel
+  breaks the record that already works.
+
+Paths below are the current server layout (`/workspace`, which survives
+restarts — see `SERVER_OPERATIONS.md`).
+
+**1. Install cloudflared** (as at the top of step 4):
+
+```bash
+curl -L -o /usr/local/bin/cloudflared \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x /usr/local/bin/cloudflared
+```
+
+**2. Log in to Cloudflare from this machine.** This prints a URL. Open it in
+your own browser and pick the `etymos.site` zone. It writes
+`~/.cloudflared/cert.pem`, which lets this machine manage your tunnels. Skip
+this step if `route dns` above already worked, because then `cert.pem` is
+already there.
+
+```bash
+cloudflared tunnel login
+mkdir -p /workspace/.cloudflared && chmod 700 /workspace/.cloudflared
+cp ~/.cloudflared/cert.pem /workspace/.cloudflared/
+```
+
+**3. Find the existing tunnel's ID:**
+
+```bash
+cloudflared tunnel list
+# ID                                    NAME        CREATED   CONNECTIONS
+# 5a60d1b1-8ef0-47eb-ba47-24fce8221ebc  etymos-api  ...       (empty: nothing connected)
+TID=5a60d1b1-8ef0-47eb-ba47-24fce8221ebc   # the ID from your output
+```
+
+It should be the same ID the `route dns` message printed. If
+`CONNECTIONS` still lists something, step 5 handles it.
+
+**4. Recreate the credentials file** for that tunnel. This downloads the
+tunnel's secret again; it doesn't create a new tunnel:
+
+```bash
+cloudflared tunnel token --cred-file /workspace/.cloudflared/$TID.json etymos-api >/dev/null
+chmod 600 /workspace/.cloudflared/*
+```
+
+Then write the config:
+
+```bash
+cat > /workspace/.cloudflared/config.yml <<EOF
+tunnel: $TID
+credentials-file: /workspace/.cloudflared/$TID.json
+ingress:
+  - hostname: api.etymos.site
+    service: http://localhost:8000
+  - service: http_status:404
+EOF
+cloudflared tunnel --config /workspace/.cloudflared/config.yml ingress validate   # → OK
+```
+
+**5. Clear the old machine's connection** (only if `tunnel list` still showed
+one). Cloudflare drops it on its own once the old machine has been gone a
+while. To remove it now:
+
+```bash
+cloudflared tunnel cleanup etymos-api
+```
+
+`cleanup` removes *every* connection the tunnel has, so run it before
+starting the new one, not after.
+
+Make sure the old instance really is destroyed and not just stopped. If it
+comes back with cloudflared running, both machines serve `api.etymos.site`
+and requests alternate between them.
+
+**6. Test in the foreground.** Start the API first (step 3's
+`[program:etymos-api]`, or `scripts/run_api.sh` by hand). Then:
+
+```bash
+cloudflared --no-autoupdate tunnel --config /workspace/.cloudflared/config.yml run etymos-api
+# from your own machine:
+curl -f https://api.etymos.site/api/health
+```
+
+Look for `Registered tunnel connection` lines. Cloudflare error 1033
+means no connector is up. Error 502 means the tunnel is fine but nothing
+answers on port 8000 yet: the API is still loading or not running. Press
+Ctrl-C once `/api/health` answers.
+
+**7. Hand it to supervisord.** `[program:cloudflared]` should have:
+
+```
+command=/usr/local/bin/cloudflared --no-autoupdate tunnel --config /workspace/.cloudflared/config.yml run etymos-api
+```
+
+Then continue with "Either way" below. Afterwards, `cloudflared tunnel info
+etymos-api` should list exactly one connector, from the new machine's IP.
+
+**If step 4 fails.** It fails, for example, when the tunnel was deleted, or
+was created in the Cloudflare dashboard and doesn't appear in `tunnel list`.
+In that case, start over with a fresh tunnel and point the existing
+hostname at it:
+
+```bash
+cloudflared tunnel delete -f etymos-api            # only if it still exists
+cloudflared tunnel create etymos-api               # writes ~/.cloudflared/<NEW_ID>.json
+cloudflared tunnel route dns --overwrite-dns etymos-api api.etymos.site
+cp ~/.cloudflared/<NEW_ID>.json /workspace/.cloudflared/
+```
+
+Then do steps 4 (the `config.yml` part, with the new ID) to 7.
 
 ### Either way, once `command=` is set correctly
 
