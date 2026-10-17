@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { DetailPageSkeleton, ListItemsSkeleton } from "../../components/Skeleton";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
 import {
@@ -394,7 +395,8 @@ export default function UserDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-body text-fg-muted">{t("Loading…")}</p>;
+    // Plan & credits, then the ban and delete cards.
+    return <DetailPageSkeleton cards={[6, 2, 2]} />;
   }
 
   if (!profile) {
@@ -617,7 +619,7 @@ export default function UserDetailPage() {
         </div>
 
         {auditLoading ? (
-          <p className="text-body text-fg-muted">{t("Loading…")}</p>
+          <ListItemsSkeleton />
         ) : auditLog.length === 0 ? (
           <p className="text-body text-fg-muted">{t("No audit events recorded for this user yet.")}</p>
         ) : (
@@ -669,7 +671,7 @@ export default function UserDetailPage() {
           {t("The user's own activity — document checks and purchases — as opposed to admin-caused changes above.")}</p>
 
         {usageLoading ? (
-          <p className="text-body text-fg-muted">{t("Loading…")}</p>
+          <ListItemsSkeleton />
         ) : usageError ? (
           <p className="text-caption text-destructive">{t(usageError)}</p>
         ) : usageLog.length === 0 ? (

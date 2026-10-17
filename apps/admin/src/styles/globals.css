@@ -66,6 +66,24 @@
   --shadow-card: 0 1px 2px rgba(15, 27, 61, 0.04), 0 8px 24px -12px rgba(15, 27, 61, 0.12);
   --shadow-card-hover: 0 2px 4px rgba(15, 27, 61, 0.06), 0 16px 32px -12px rgba(15, 27, 61, 0.18);
   --shadow-pop: 0 12px 40px -8px rgba(15, 27, 61, 0.28);
+
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Loading placeholders (components/Skeleton.tsx): a highlight sweeping across
+   a border-coloured bar. */
+@utility shimmer-bg {
+  background-image: linear-gradient(90deg, var(--color-border) 25%, var(--color-surface-muted) 50%, var(--color-border) 75%);
+  background-size: 200% 100%;
 }
 
 @layer base {
