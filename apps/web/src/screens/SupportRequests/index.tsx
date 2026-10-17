@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChatCircleText, Plus, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusChip } from "../../components/support/SupportThread";
 import { CATEGORY_LABELS, supportErrorText } from "../../components/support/labels";
 import { listMySupportTickets, type SupportTicketSummary } from "../../lib/api";
@@ -30,7 +31,7 @@ export default function SupportRequestsPage() {
           <h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My requests")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">{t("Your conversations with Etymos Support.")}</p>
         </div>
-        <Button as="link" to="/contact" size="sm" iconLeft={<Plus size={15} weight="bold" />}>
+        <Button as="link" to="/account/support/new" size="sm" iconLeft={<Plus size={15} weight="bold" />}>
           {t("New request")}
         </Button>
       </div>
@@ -42,7 +43,22 @@ export default function SupportRequestsPage() {
         </div>
       )}
 
-      {!items && !error && <p className="mt-10 text-center text-sm text-ink-500">{t("Loading…")}</p>}
+      {!items && !error && (
+        <div role="status" aria-busy="true">
+          <span className="sr-only">{t("Loading…")}</span>
+          <ul aria-hidden="true" className="studio-card mt-7 divide-y divide-line overflow-hidden rounded-[var(--radius-card-lg)] border border-line bg-white">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="flex items-center gap-4 px-5 py-4">
+                <div className="min-w-0 flex-1">
+                  <Skeleton className={i === 1 ? "h-4 w-1/3" : "h-4 w-1/2"} />
+                  <Skeleton className="mt-2 h-3 w-2/3" />
+                </div>
+                <Skeleton className="h-6 w-20" rounded="full" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {items && items.length === 0 && (
         <div className="mt-7 flex flex-col items-center rounded-[var(--radius-card-lg)] border border-dashed border-line bg-surface-tint px-6 py-12 text-center">

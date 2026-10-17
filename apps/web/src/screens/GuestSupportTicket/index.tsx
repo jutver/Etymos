@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { WarningCircle } from "@phosphor-icons/react";
-import { SupportThread } from "../../components/support/SupportThread";
+import { SupportThread, SupportThreadSkeleton } from "../../components/support/SupportThread";
 import { supportErrorText } from "../../components/support/labels";
 import { getGuestSupportTicket, replyAsGuest, type SupportConversation } from "../../lib/api";
 import { t } from "../../lib/i18n";
@@ -39,7 +39,7 @@ export default function GuestSupportTicketPage() {
           </p>
         </div>
       )}
-      {!conversation && !error && <p className="mt-10 text-center text-sm text-ink-500">{t("Loading…")}</p>}
+      {!conversation && !error && <SupportThreadSkeleton />}
       {conversation && (
         <SupportThread
           conversation={conversation}
