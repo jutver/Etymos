@@ -167,7 +167,8 @@ def _status_from_score(score: float) -> str:
 
 def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                           user_id: Optional[str], input_type: str,
-                          input_name: Optional[str]) -> None:
+                          input_name: Optional[str],
+                          unlocked_tier: Optional[str] = None) -> None:
     """
     Upsert the completed report into Supabase (`documents` +
     `document_matches`) so it survives a process restart / redeploy, not
@@ -197,6 +198,14 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
     except Exception:
         logger.exception("Failed to upsert documents row for report_id=%s", report_id)
         return  # No point trying to insert matches for a document row that didn't land.
+
+    if unlocked_tier:
+        # Separate write so a database without the unlocked_tier column yet
+        # (migration not applied) only loses the tier, not the whole report.
+        try:
+            client.table("documents").update({"unlocked_tier": unlocked_tier}).eq("id", report_id).execute()
+        except Exception:
+            logger.exception("Failed to set unlocked_tier=%s for report_id=%s", unlocked_tier, report_id)
 
     # AI-content detection result (report_enrichment.py). Written as its own
     # UPDATE, apart from the upsert above, on purpose: if the
@@ -415,6 +424,7 @@ def _fetch_from_supabase(report_id: str) -> Optional[dict[str, Any]]:
             "overall_score": doc.get("similarity_score"),
             "document_status": doc.get("status"),
             "ai_detection": doc.get("ai_detection"),
+            "unlocked_tier": doc.get("unlocked_tier"),
             "matches": matches,
         }
     except Exception:
@@ -448,7 +458,11 @@ def _list_from_supabase(user_id: Optional[str], is_admin: bool) -> Optional[list
 
 def save_report(report: dict[str, Any], *, input_type: str,
                  input_name: str | None = None,
-                 user_id: str | None = None) -> str:
+                 user_id: str | None = None,
+                 unlocked_tier: str | None = None) -> str:
+    """`unlocked_tier` ('student' | 'professional') marks a check paid for with
+    a credit: the report gets that tier's features whatever the user's plan
+    (documents.unlocked_tier, 20261018080000_document_unlocked_tier.sql)."""
     init_report_store()
     report_id = str(uuid.uuid4())
 
@@ -467,6 +481,7 @@ def save_report(report: dict[str, Any], *, input_type: str,
         "input": {"type": input_type, "name": input_name},
         "user_id": user_id,
         "created_at": _now_iso(),
+        "unlocked_tier": unlocked_tier,
         **report,
     }
     path = REPORT_DIR / f"{report_id}.json"
@@ -476,9 +491,19 @@ def save_report(report: dict[str, Any], *, input_type: str,
         _REPORTS[report_id] = wrapped
 
     _persist_to_supabase(report_id, report, user_id=user_id,
-                         input_type=input_type, input_name=input_name)
+                         input_type=input_type, input_name=input_name,
+                         unlocked_tier=unlocked_tier)
 
     return report_id
+
+
+def set_cached_unlocked_tier(report_id: str, tier: str | None) -> None:
+    """Keeps the in-memory copy in step after a credit unlocks a report, so
+    get_report() doesn't keep serving the tier it was saved with."""
+    with _LOCK:
+        cached = _REPORTS.get(report_id)
+        if cached is not None:
+            cached["unlocked_tier"] = tier
 
 
 def get_report(report_id: str) -> dict[str, Any] | None:

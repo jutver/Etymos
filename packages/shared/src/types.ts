@@ -287,6 +287,10 @@ export interface CheckedDocument {
   pdfUrl?: string;
   /** AI-generated-content detection; absent for reports checked before it shipped. */
   aiDetection?: AiDetection;
+  /** Tier this document's features are unlocked to regardless of the user's
+   * plan: set when the check was paid with a credit, or a credit was spent on
+   * it later (documents.unlocked_tier). */
+  unlockedTier?: Exclude<PlanTier, "free">;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

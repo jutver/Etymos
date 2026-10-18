@@ -37,6 +37,8 @@ interface DocumentRow {
   // Added by supabase/migrations/20260727000100_documents_ai_detection.sql.
   // Optional in the type so rows read before that migration is applied still parse.
   ai_detection?: unknown;
+  // Added by supabase/migrations/20261018080000_document_unlocked_tier.sql.
+  unlocked_tier?: "student" | "professional" | null;
 }
 
 /** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
@@ -206,6 +208,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     passages,
     matches,
     aiDetection: parseAiDetection(docRow.ai_detection),
+    unlockedTier: docRow.unlocked_tier ?? undefined,
   };
 }
 

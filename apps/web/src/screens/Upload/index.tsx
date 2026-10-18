@@ -31,6 +31,7 @@ import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/cn";
 import type { Language, MatchedSource } from "../../lib/types";
 import { t, tr, tn, currentLocale } from "../../lib/i18n";
+import { paywallPath } from "../../lib/paywall";
 
 const languages: { id: Language; label: string }[] = [
   { id: "vi", label: "Tiếng Việt" },
@@ -178,7 +179,7 @@ export default function UploadPage() {
     const summaryLabel = docLabels.length > 1 ? t("{{count}} documents", { count: docLabels.length }) : docLabels[0];
     const allowed = requestCheck(source, summaryLabel || t("Untitled document"), docLabels.length);
     if (!allowed) {
-      navigate("/paywall");
+      navigate(paywallPath(source === "plan" ? "checks" : source === "standard" ? "standard-credits" : "premium-credits"));
       return;
     }
 

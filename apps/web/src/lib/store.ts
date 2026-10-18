@@ -161,6 +161,12 @@ interface AppState {
    * and after a full page reload. */
   reconcileCheckingDocuments: () => Promise<void>;
   recordCheckedDocument: (doc: CheckedDocument) => void;
+  /** After a credit unlocked a document: new tier on the cached copy (if any)
+   * and the balances the server returned. */
+  applyDocumentUnlock: (
+    id: string,
+    result: { unlockedTier: "student" | "professional"; standardCredits: number; premiumCredits: number },
+  ) => void;
   markFirstCheckComplete: () => void;
   moveToTrash: (id: string) => Promise<void>;
   restoreFromTrash: (id: string) => Promise<void>;
@@ -484,6 +490,15 @@ export const useAppStore = create<AppState>()(
 
       recordCheckedDocument: (doc) =>
         set((s) => ({ checkedDocuments: { ...s.checkedDocuments, [doc.id]: doc } })),
+
+      applyDocumentUnlock: (id, { unlockedTier, standardCredits, premiumCredits }) =>
+        set((s) => ({
+          standardCredits,
+          premiumCredits,
+          checkedDocuments: s.checkedDocuments[id]
+            ? { ...s.checkedDocuments, [id]: { ...s.checkedDocuments[id], unlockedTier } }
+            : s.checkedDocuments,
+        })),
 
       markFirstCheckComplete: () => set({ hasCompletedFirstCheck: true }),
 

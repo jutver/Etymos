@@ -9,6 +9,7 @@ import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 import sys
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,7 @@ sys.path.append(str(Path(__file__).parent))
 from job_manager import active_count, create_job, get_job, make_progress_callback, make_queue_callback, update_job
 from gpu_queue import gpu_slot
 import gpu_models
-from report_store import delete_report, get_report, list_reports, save_report
+from report_store import delete_report, get_report, list_reports, save_report, set_cached_unlocked_tier
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
 from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
@@ -44,7 +45,7 @@ import support_inbound
 import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
-from usage import ensure_quota_available, record_check_used
+from usage import credit_tier, ensure_quota_available, record_check_used, unlock_document_with_credit
 import marker_preview
 from marker_preview_store import (
     get_marker_preview,
@@ -232,6 +233,10 @@ class TextCheckRequest(BaseModel):
     text: str = Field(min_length=30, max_length=100_000)
     balance_source: BalanceSource
 
+class UnlockDocumentRequest(BaseModel):
+    tier: Literal["student", "professional"]
+
+
 class RewriteRequest(BaseModel):
     input_sentence: str
     source_sentence: str
@@ -331,7 +336,8 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
             else:
                 report = check_pdf_plagiarism(pdf_path=pdf_path, progress_callback=callback)
 
-        report_id = save_report(report, input_type=input_type, input_name=original_name, user_id=user_id)
+        report_id = save_report(report, input_type=input_type, input_name=original_name, user_id=user_id,
+                                unlocked_tier=credit_tier(balance_source))
 
         if user_id is not None and input_type == "pdf":
             _upload_pdf(user_id, report_id, Path(pdf_path))
@@ -377,7 +383,8 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
             update_job(job_id, status="processing", progress=1,
                        current_step="starting", message="Starting text analysis")
             report = check_text_plagiarism(user_text=user_text, progress_callback=callback)
-        report_id = save_report(report, input_type="text", input_name="Pasted text", user_id=user_id)
+        report_id = save_report(report, input_type="text", input_name="Pasted text", user_id=user_id,
+                                unlocked_tier=credit_tier(balance_source))
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
@@ -466,6 +473,17 @@ def read_job(job_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
         raise HTTPException(status_code=404, detail="Job not found.")
     require_owner_or_admin(job.get("user_id"), user)
     return job
+
+
+@app.post("/api/documents/{document_id}/unlock")
+def unlock_document(document_id: UUID, body: UnlockDocumentRequest,
+                    user: AuthedUser = Depends(verify_supabase_jwt)):
+    """Spend one credit to give this document a higher tier's features (the
+    paywall's "use a credit on this document"). Ownership is checked inside
+    the SQL function, which only matches the caller's own documents."""
+    result = unlock_document_with_credit(user.user_id, str(document_id), body.tier)
+    set_cached_unlocked_tier(str(document_id), result.get("unlocked_tier"))
+    return result
 
 
 @app.get("/api/reports/{report_id}")

@@ -37,7 +37,8 @@ export interface SourcesSidebarProps {
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
   onCite: (match: MatchedSource) => void;
-  onUpgrade: () => void;
+  /** Which locked section the user clicked, so the paywall can say what it unlocks. */
+  onUpgrade: (reason: "semantic" | "ai-detection") => void;
   open: boolean;
   onToggle: () => void;
 }
@@ -280,7 +281,7 @@ export function SourcesSidebar({
               {lockedCount}{" "}{t("more found by Semantic Detection")}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-500">
               {t("Upgrade to catch paraphrased and reworded copying too.")}</p>
-            <Button size="sm" className="mt-3 h-8 px-3 text-xs" onClick={onUpgrade}>
+            <Button size="sm" className="mt-3 h-8 px-3 text-xs" onClick={() => onUpgrade("semantic")}>
               {t("Unlock")}</Button>
           </div>
         )}
@@ -290,7 +291,7 @@ export function SourcesSidebar({
         <AiDetectionSection
           detection={aiDetection}
           locked={explanationLocked}
-          onUpgrade={onUpgrade}
+          onUpgrade={() => onUpgrade("ai-detection")}
           activeSegmentId={activeAiSegmentId}
           onSegmentClick={onAiSegmentClick}
           defaultExpanded
