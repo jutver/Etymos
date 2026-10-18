@@ -34,7 +34,7 @@ export interface ProfileFilters {
 /** PostgREST `or()` filters are comma/paren-delimited, so a stray `,` or `(`
  * in the search box would break the query — strip them (and the `%`/`*`
  * wildcards) before interpolating. */
-function sanitizeSearch(search: string): string {
+export function sanitizeSearch(search: string): string {
   return search.trim().replace(/[,()%*\\]/g, " ").trim();
 }
 
