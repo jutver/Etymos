@@ -48,15 +48,20 @@ export default function VerifyStudentPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await supabase
-          .from("student_verification_requests")
-          .select("status")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const [{ data }, { data: profile }] = await Promise.all([
+          supabase
+            .from("student_verification_requests")
+            .select("status")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          // An admin may delete the approved request; the verification
+          // itself stays on the profile.
+          supabase.from("profiles").select("student_verified").eq("id", user.id).maybeSingle(),
+        ]);
         if (cancelled) return;
-        setExistingStatus((data?.status as ExistingStatus) ?? null);
+        setExistingStatus(profile?.student_verified ? "approved" : ((data?.status as ExistingStatus) ?? null));
       } finally {
         if (!cancelled) setCheckingExisting(false);
       }

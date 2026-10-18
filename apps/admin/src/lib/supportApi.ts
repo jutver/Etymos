@@ -1,14 +1,13 @@
-// Support inbox. The ticket list, the status counts and the ticket fields
-// (status, assignee, topic, priority) go straight to Supabase: admins may
-// read the support tables under RLS and edit those fields through
-// admin_update_support_ticket(), and none of it sends email. Opening a ticket
-// and replying go through the backend (backend/api/support.py, /api/admin/support/*): replies
-// must be emailed from the support mailbox, statuses kept consistent with
-// them, and attachment links signed.
+// Support inbox. Everything except replying goes straight to Supabase:
+// admins may read the support tables and the support-attachments bucket, and
+// edit a ticket's fields through admin_update_support_ticket(). Replies and
+// notes go through the backend (backend/api/support.py, /api/admin/support/*)
+// because replies are emailed from the support mailbox.
 import { supabase } from "@etymos/shared";
 import { ApiError } from "./api";
 import { t } from "./i18n";
 import { sanitizeSearch } from "./supabaseQueries";
+import { deleteRecordsWithFiles, type DeleteResult, type DeleteScope } from "./storageFiles";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -48,7 +47,8 @@ export interface SupportAttachment {
   filename: string;
   content_type: string;
   size_bytes: number;
-  url: string | null;
+  /** In the support-attachments bucket; see openSupportFile(). */
+  path: string;
 }
 
 export interface SupportAdminMessage {
@@ -61,7 +61,7 @@ export interface SupportAdminMessage {
   sender_email: string | null;
   sender_auth: "pass" | "fail" | "none" | null;
   sender_mismatch: boolean;
-  raw_email_url: string | null;
+  raw_email_path: string | null;
   created_at: string;
   attachments: SupportAttachment[];
 }
@@ -135,8 +135,18 @@ export async function getSupportSummary(): Promise<SupportSummary> {
   return { counts };
 }
 
-export function listSupportAgents(): Promise<{ items: SupportPerson[] }> {
-  return request("/api/admin/support/agents");
+type ProfileRef = { id: string; email: string | null; display_name: string | null };
+
+function toPerson(p: ProfileRef): SupportPerson {
+  return { id: p.id, email: p.email, name: p.display_name };
+}
+
+export async function listSupportAgents(): Promise<{ items: SupportPerson[] }> {
+  const { data, error } = await supabase.from("profiles").select("id, email, display_name").eq("role", "admin");
+  if (error) throw error;
+  const items = (data ?? []).map(toPerson);
+  items.sort((a, b) => (a.name || a.email || "").toLowerCase().localeCompare((b.name || b.email || "").toLowerCase()));
+  return { items };
 }
 
 // Same columns as admin_ticket_row() in backend/api/support.py, with the
@@ -146,9 +156,7 @@ const TICKET_ROW_COLUMNS =
   "identity_verified, previous_ticket_id, created_at, updated_at, last_user_message_at, last_agent_message_at, " +
   "resolved_at, closed_at, assignee:profiles!support_tickets_assigned_to_fkey(id, email, display_name)";
 
-type TicketRowRecord = Omit<SupportTicketRow, "assignee"> & {
-  assignee: { id: string; email: string | null; display_name: string | null } | null;
-};
+type TicketRowRecord = Omit<SupportTicketRow, "assignee"> & { assignee: ProfileRef | null };
 
 export interface SupportTicketQuery {
   status?: SupportStatus;
@@ -192,26 +200,87 @@ export async function listSupportTickets(params: SupportTicketQuery): Promise<{ 
   const { data, count, error } = await query.range(from, from + params.pageSize - 1);
   if (error) throw error;
   const rows = (data ?? []) as unknown as TicketRowRecord[];
+  return { items: rows.map(toTicketRow), total: count ?? rows.length };
+}
+
+function toTicketRow({ assignee, ...row }: TicketRowRecord): SupportTicketRow {
+  return { ...row, assignee: assignee ? toPerson(assignee) : null };
+}
+
+const ACCOUNT_COLUMNS =
+  "id, email, display_name, role, plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, " +
+  "student_verified, created_at, banned_permanent, banned_until, deletion_requested_at";
+
+const MESSAGE_COLUMNS =
+  "id, author_type, body, internal, channel, sender_email, sender_auth, sender_mismatch, raw_email_path, created_at, " +
+  "author:profiles(id, email, display_name), attachments:support_attachments(id, filename, content_type, size_bytes, path)";
+
+type MessageRecord = Omit<SupportAdminMessage, "author"> & { author: ProfileRef | null };
+
+/** The ticket with its conversation and the requester's account: the same
+ * shape the backend's admin_conversation() built. */
+export async function getSupportTicket(number: number): Promise<SupportTicketDetail> {
+  const { data: ticket, error } = await supabase
+    .from("support_tickets")
+    .select(`${TICKET_ROW_COLUMNS}, previous:previous_ticket_id(number)`)
+    .eq("number", number)
+    .maybeSingle();
+  if (error) throw error;
+  if (!ticket) throw new ApiError(t("This support request doesn't exist."), 404);
+  const row = ticket as unknown as TicketRowRecord & { previous: { number: number } | null };
+
+  // A guest or email ticket shows the account using the same address, which
+  // isn't proof it's the same person (the page says so).
+  const account = row.user_id
+    ? supabase.from("profiles").select(ACCOUNT_COLUMNS).eq("id", row.user_id).maybeSingle()
+    : supabase.from("profiles").select(ACCOUNT_COLUMNS).eq("email", row.requester_email).limit(1).maybeSingle();
+  const [messages, accountResult] = await Promise.all([
+    supabase.from("support_messages").select(MESSAGE_COLUMNS).eq("ticket_id", row.id).order("created_at"),
+    account,
+  ]);
+  if (messages.error) throw messages.error;
+  if (accountResult.error) throw accountResult.error;
+
+  const { previous, ...rest } = row;
   return {
-    items: rows.map(({ assignee, ...row }) => ({
-      ...row,
-      assignee: assignee ? { id: assignee.id, email: assignee.email, name: assignee.display_name } : null,
+    ...toTicketRow(rest),
+    previous_ticket_number: previous?.number ?? null,
+    account: (accountResult.data as SupportAccount | null) ?? null,
+    messages: ((messages.data ?? []) as unknown as MessageRecord[]).map(({ author, ...m }) => ({
+      ...m,
+      author: author ? toPerson(author) : null,
     })),
-    total: count ?? rows.length,
   };
 }
 
-export function getSupportTicket(number: number): Promise<SupportTicketDetail> {
-  return request(`/api/admin/support/tickets/${number}`);
+/** Deletes tickets with their messages, attachments and original emails. */
+export function deleteSupportTickets(scope: DeleteScope): Promise<DeleteResult> {
+  return deleteRecordsWithFiles("admin_delete_support_tickets", "support-attachments", scope);
+}
+
+/** Opens an attachment or original email in a new tab. The link is signed
+ * on click, so it never goes stale however long the ticket stays open. The
+ * tab opens first, before the await, so the browser doesn't treat it as a
+ * popup. */
+export async function openSupportFile(path: string): Promise<void> {
+  const tab = window.open("about:blank", "_blank");
+  if (tab) tab.opener = null;
+  const { data, error } = await supabase.storage.from("support-attachments").createSignedUrl(path, 60);
+  if (error || !data) {
+    tab?.close();
+    throw error ?? new Error(t("Couldn't open the file."));
+  }
+  if (tab) tab.location.href = data.signedUrl;
+  else window.open(data.signedUrl, "_blank", "noopener");
 }
 
 /** A public reply is emailed to the requester (ApiError 502 "send_failed"
  * if the mail server refuses it — nothing is saved then). An internal note
- * is only visible here. */
+ * is only visible here. Reload the ticket with getSupportTicket() after. */
 export function postSupportMessage(
   number: number,
   input: { body: string; internal: boolean; setStatus?: SupportStatus; files: File[] },
-): Promise<SupportTicketDetail> {
+): Promise<{ id: string }> {
   const form = new FormData();
   form.append("body", input.body);
   form.append("internal", String(input.internal));

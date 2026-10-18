@@ -98,3 +98,17 @@ def test_status_change_is_logged_with_the_admin_as_actor(db):
     update(db, admin, number, status="resolved")
     entry = [e for e in log(db, user) if e["action"] == "support.ticket_status_changed"][-1]
     assert entry["actor_kind"] == "admin" and entry["metadata"]["number"] == number
+
+
+# --- support-attachments bucket (20261018050000_admin_support_attachments_read.sql)
+
+
+def test_only_admins_can_read_support_files(db):
+    admin, user = make_user(db, admin=True), make_user(db)
+    name = f"{user}/file.pdf"
+    # Real Supabase grants this; the stub leaves it to each test.
+    db.execute("grant select on storage.objects to authenticated")
+    db.execute("insert into storage.objects (bucket_id, name) values ('support-attachments', %s)", (name,))
+    query = "select name from storage.objects where bucket_id = 'support-attachments' and name = %s"
+    assert as_user(db, admin, query, (name,)) == [(name,)]
+    assert as_user(db, user, query, (name,)) == []

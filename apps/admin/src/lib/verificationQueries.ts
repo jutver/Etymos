@@ -3,6 +3,7 @@ import type { Profile } from "./types";
 import type { PagedResult } from "./supabaseQueries";
 import { PAGE_SIZE } from "./supabaseQueries";
 import { tr } from "./i18n";
+import { deleteRecordsWithFiles, type DeleteResult, type DeleteScope } from "./storageFiles";
 
 export type VerificationStatus = "pending" | "approved" | "rejected";
 
@@ -90,4 +91,10 @@ export async function getEvidenceSignedUrl(storagePath: string): Promise<string>
   if (error) throw error;
   if (!data?.signedUrl) throw new Error(tr("Could not generate a preview link for this file."));
   return data.signedUrl;
+}
+
+/** Deletes requests and their evidence files. The student keeps their
+ * verified status: it lives on the profile, not on the request. */
+export function deleteVerificationRequests(scope: DeleteScope): Promise<DeleteResult> {
+  return deleteRecordsWithFiles("admin_delete_verification_requests", EVIDENCE_BUCKET, scope);
 }

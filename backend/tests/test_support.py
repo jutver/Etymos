@@ -418,6 +418,7 @@ def test_admin_reply_is_emailed_threaded_and_sets_pending(env):
         files=[("files", ("receipt.pdf", PDF, "application/pdf"))],
     )
     assert r.status_code == 200, r.text
+    assert r.json()["id"] == messages(env)[-1]["id"]
     reply = env.support_sent[-1]
     assert reply["auto_reply"] is False and reply["references"][-1] == ack_id
     assert reply["attachments"][0].filename == "receipt.pdf"
