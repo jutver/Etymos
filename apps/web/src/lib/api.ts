@@ -21,6 +21,8 @@ export interface BackendReport {
    * block — parse it with `parseAiDetection` (lib/aiDetection.ts). Absent on
    * reports produced before the detector existed. */
   ai_detection?: unknown;
+  /** Set when the check was paid with a credit (see CheckedDocument.unlockedTier). */
+  unlocked_tier?: "student" | "professional" | null;
   matched_papers: Array<{
     source_paper_id: string;
     source_title: string;
@@ -220,6 +222,22 @@ export async function submitPdfCheck(file: File, balanceSource: BalanceSource): 
   }
 
   return response.json() as Promise<BackendJob>;
+}
+
+export interface UnlockDocumentResponse {
+  status: "ok" | "already_unlocked";
+  unlocked_tier: "student" | "professional";
+  standard_credits: number;
+  premium_credits: number;
+}
+
+/** Spends one Standard (tier "student") or Premium (tier "professional")
+ * credit to unlock that tier's features on one document. */
+export function unlockDocument(documentId: string, tier: "student" | "professional"): Promise<UnlockDocumentResponse> {
+  return requestJson<UnlockDocumentResponse>(`/api/documents/${encodeURIComponent(documentId)}/unlock`, {
+    method: "POST",
+    body: JSON.stringify({ tier }),
+  });
 }
 
 export async function getJob(jobId: string): Promise<BackendJob> {

@@ -315,7 +315,7 @@ export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasPro
 
   return (
     <div className="relative flex-1 overflow-y-auto scrollbar-thin bg-white px-4 pb-32">
-      <div className="mx-auto w-full max-w-[52rem] pt-24">
+      <div className="mx-auto w-full max-w-[52rem] pt-10">
         <DocumentEditor
           key={resetKey}
           ref={innerRef}

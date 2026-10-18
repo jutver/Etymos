@@ -404,6 +404,7 @@ export default function AnalyzingPage() {
             matches,
             pdfUrl: state.pdfDataUrl ?? undefined, // ← thêm dòng này
             aiDetection: parseAiDetection(report.ai_detection),
+            unlockedTier: report.unlocked_tier ?? undefined,
           };
 
           recordCheckedDocument(doc);

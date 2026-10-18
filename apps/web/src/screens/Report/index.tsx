@@ -32,6 +32,7 @@ import { computeWordLimitOffset } from "./wordLimit";
 import { applySavedVersion } from "./applySavedVersion";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
+import { effectiveTier, paywallPath } from "../../lib/paywall";
 
 // Private Storage bucket the backend uploads original PDFs into (see
 // backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
@@ -75,7 +76,6 @@ export default function ReportPage() {
   const plan = useAppStore((s) => s.plan);
   const pushToast = useAppStore((s) => s.pushToast);
   const renameDocumentInHistory = useAppStore((s) => s.renameDocumentInHistory);
-  const isFree = plan === "free";
 
   const checkedDocuments = useAppStore((s) => s.checkedDocuments);
   const history = useAppStore((s) => s.history);
@@ -120,6 +120,10 @@ export default function ReportPage() {
   }, [id, cachedDoc, refetchNonce]);
 
   const doc = (refetchNonce > 0 ? remoteDoc : cachedDoc ?? remoteDoc) ?? null;
+  // Features follow the better of the user's plan and this document's own
+  // tier (a check paid with a credit, or a credit spent on it from the paywall).
+  const tier = effectiveTier(plan, doc?.unlockedTier);
+  const isFree = tier === "free";
   const historyMeta = id ? history.find((h) => h.id === id) : undefined;
 
   // Analytics: one `report_viewed` per report actually rendered (not per
@@ -378,7 +382,7 @@ export default function ReportPage() {
     [doc],
   );
 
-  const wordLimit = planWordLimit(plan);
+  const wordLimit = planWordLimit(tier);
   // Where (character offset into the document) the word limit is first
   // crossed — feeds the per-view word-limit treatments so they can cut off
   // at the right spot instead of just gating the whole view.
@@ -581,7 +585,7 @@ export default function ReportPage() {
 
   function handleExport() {
     if (isFree) {
-      navigate("/paywall");
+      navigate(paywallPath("export", id));
       return;
     }
     trackEvent("report_exported");
@@ -656,13 +660,10 @@ export default function ReportPage() {
         scoreSlot={
           <>
             <ScoreChip score={displayScore} />
-            <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate("/paywall")} />
+            <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate(paywallPath("ai-detection", id))} />
           </>
         }
-      />
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        toolbarSlot={
           <FormatToolbar
             locked={locked}
             onRequestUnlock={() => setView("edit")}
@@ -680,9 +681,13 @@ export default function ReportPage() {
             onClearFocus={clearSelection}
             onInsertTable={() => canvasRef.current?.insertTable()}
           />
+        }
+      />
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {view === "original" ? (
-            <div className="relative flex-1 overflow-hidden pt-16">
+            <div className="relative flex-1 overflow-hidden">
               <PlagiarismPdfViewer
                 pdfUrl={effectivePdfUrl ?? ""}
                 unavailableMessage={tl(pdfFetchError) ?? undefined}
@@ -774,7 +779,7 @@ export default function ReportPage() {
           locatedIds={showsText ? locatedIds : undefined}
           resolvedIds={resolvedIds}
           explanationLocked={isFree}
-          rewriteLocked={plan !== "professional"}
+          rewriteLocked={tier !== "professional"}
           aiDetection={doc.aiDetection}
           activeAiSegmentId={activeAiSegmentId}
           onAiSegmentClick={handleSelectAiSegment}
@@ -786,12 +791,8 @@ export default function ReportPage() {
             setComparisonMatch(match);
           }}
           onRewrite={(match) => {
-            if (isFree) {
-              navigate("/paywall");
-              return;
-            }
-            if (plan !== "professional") {
-              navigate("/pricing");
+            if (tier !== "professional") {
+              navigate(paywallPath("rewrite", id));
               return;
             }
             // Don't spend an AI call on a rewrite that can't be applied.
@@ -803,7 +804,7 @@ export default function ReportPage() {
             setRewriteMatch(match);
           }}
           onCite={handleCite}
-          onUpgrade={() => navigate("/paywall")}
+          onUpgrade={(reason) => navigate(paywallPath(reason, id))}
           open={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => !v)}
         />

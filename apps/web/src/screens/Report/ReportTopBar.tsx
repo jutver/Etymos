@@ -150,7 +150,7 @@ function FileNameField({
       disabled={disabled}
       onClick={() => setEditing(true)}
       title={t("Rename document")}
-      className="min-w-0 truncate rounded-[var(--radius-input)] px-2 py-1 text-sm font-semibold text-ink-900 transition-colors hover:bg-surface-muted disabled:pointer-events-none"
+      className="min-w-0 truncate rounded-[var(--radius-input)] px-2 py-1 text-sm font-semibold lg:max-w-[16rem] text-ink-900 transition-colors hover:bg-surface-muted disabled:pointer-events-none"
     >
       {value}
       <span className="sr-only">{" "}{t("— click to rename")}</span>
@@ -175,6 +175,9 @@ export interface ReportTopBarProps {
   exportLocked: boolean;
   /** Rendered at the far left of the right-hand cluster (similarity chip). */
   scoreSlot?: React.ReactNode;
+  /** View switcher / formatting tools, centred between the title and the
+   * actions on wide screens and wrapped onto its own row below `lg`. */
+  toolbarSlot?: React.ReactNode;
 }
 
 export function ReportTopBar({
@@ -192,6 +195,7 @@ export function ReportTopBar({
   onExport,
   exportLocked,
   scoreSlot,
+  toolbarSlot,
 }: ReportTopBarProps) {
   return (
     <header className="studio-report-bar z-20 shrink-0 border-b border-line/70 bg-white/95">
@@ -200,7 +204,13 @@ export function ReportTopBar({
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-line" />
         <FileNameField value={fileName} onCommit={onRename} />
 
-        <div className="report-actions ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+        {toolbarSlot && (
+          <div className="order-last flex min-w-0 basis-full justify-center lg:order-none lg:basis-0 lg:flex-1 lg:px-2">
+            {toolbarSlot}
+          </div>
+        )}
+
+        <div className="report-actions ml-auto flex shrink-0 min-w-0 flex-wrap items-center justify-end gap-1">
           {scoreSlot}
 
           <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-line sm:block" />

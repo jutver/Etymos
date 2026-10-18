@@ -231,3 +231,53 @@ def record_check_used(user_id: str, balance_source: str) -> None:
             ).eq("id", user_id).execute()
     except Exception:
         logger.exception("Failed to record check usage for user_id=%s", user_id)
+
+
+# A check paid with a credit gets that credit's tier of features, and so does
+# an existing report a credit is spent on (documents.unlocked_tier,
+# supabase/migrations/20261018080000_document_unlocked_tier.sql).
+CREDIT_TIERS = {"standard": "student", "premium": "professional"}
+
+
+def credit_tier(balance_source: str) -> Optional[str]:
+    """The document tier a check paid from `balance_source` unlocks, if any."""
+    return CREDIT_TIERS.get(balance_source)
+
+
+def unlock_document_with_credit(user_id: str, document_id: str, tier: str) -> dict:
+    """
+    Spends one Standard credit (tier 'student') or Premium credit (tier
+    'professional') to raise one of the user's documents to that tier. The
+    check, deduction and tier change happen in a single SQL function, so a
+    double click can't spend twice and a failure never charges. Unlike
+    ensure_quota_available() this fails closed: it moves money-like balances.
+
+    Returns {status, unlocked_tier, standard_credits, premium_credits} with
+    status 'ok' or 'already_unlocked' (nothing spent).
+    """
+    client = get_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Unlocking documents isn't available right now.")
+    try:
+        resp = client.rpc(
+            "unlock_document_with_credit",
+            {"p_user_id": user_id, "p_document_id": document_id, "p_tier": tier},
+        ).execute()
+    except Exception:
+        logger.exception("Failed to unlock document_id=%s for user_id=%s", document_id, user_id)
+        raise HTTPException(status_code=500, detail="Couldn't unlock this document. You haven't been charged.")
+
+    result = (resp.data if resp else None) or {}
+    status = result.get("status")
+    if status == "not_found":
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if status == "no_credits":
+        kind = "standard" if tier == "student" else "premium"
+        raise HTTPException(
+            status_code=402,
+            detail=f"You have no {kind} credits left. Buy more credits to continue.",
+        )
+    if status not in ("ok", "already_unlocked"):
+        logger.error("Unexpected unlock result for document_id=%s: %r", document_id, result)
+        raise HTTPException(status_code=500, detail="Couldn't unlock this document. You haven't been charged.")
+    return result
