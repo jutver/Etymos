@@ -76,7 +76,7 @@ export function AppNav() {
   }, [menuOpen]);
 
   return (
-    <header className="studio-nav workspace-navigation sticky top-0 z-40 h-[68px] border-b border-navy-700/60 bg-navy-900 lg:fixed lg:inset-y-0 lg:left-0 lg:h-dvh lg:w-60">
+    <header className="studio-nav workspace-navigation sticky top-[var(--banner-h,0px)] z-40 h-[68px] border-b border-navy-700/60 bg-navy-900 lg:fixed lg:bottom-0 lg:left-0 lg:h-auto lg:w-60">
       <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-6 px-5 sm:px-8 lg:flex-col lg:items-stretch lg:justify-start lg:px-5 lg:py-8">
         <div className="flex items-center gap-8 lg:flex-col lg:items-start lg:gap-12">
           <Logo variant="light" to="/upload" />
@@ -194,7 +194,7 @@ export function AppNav() {
       </div>
 
       {mobileNavOpen && (
-        <div id="workspace-mobile-navigation" className="max-h-[calc(100dvh-68px)] overflow-y-auto border-t border-navy-700/60 bg-navy-900 px-5 py-4 lg:hidden">
+        <div id="workspace-mobile-navigation" className="max-h-[calc(100dvh-68px-var(--banner-h,0px))] overflow-y-auto border-t border-navy-700/60 bg-navy-900 px-5 py-4 lg:hidden">
           <div className="mb-3 sm:hidden">
             <UsageMeter interactive={false} />
           </div>

@@ -17,7 +17,7 @@ export function PublicNav() {
   const location = useLocation();
 
   return (
-    <header className="public-nav sticky top-0 z-40 border-b border-line/70 bg-white/95">
+    <header className="public-nav sticky top-[var(--banner-h,0px)] z-40 border-b border-line/70 bg-white/95">
       <div className="mx-auto flex h-[80px] max-w-[1480px] items-center justify-between px-5 sm:px-8">
         <Logo />
 
@@ -54,7 +54,7 @@ export function PublicNav() {
       </div>
 
       {open && (
-        <div id="public-mobile-navigation" className="max-h-[calc(100dvh-80px)] overflow-y-auto border-t border-line bg-white px-5 py-4 lg:hidden">
+        <div id="public-mobile-navigation" className="max-h-[calc(100dvh-80px-var(--banner-h,0px))] overflow-y-auto border-t border-line bg-white px-5 py-4 lg:hidden">
           <nav aria-label="Primary navigation" className="flex flex-col gap-1">
             {links.map((l) => (
               <Link

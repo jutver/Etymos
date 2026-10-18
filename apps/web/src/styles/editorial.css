@@ -1,6 +1,6 @@
 /* Etymos / editorial redesign. Decorative layers never intercept controls. */
 .editorial-site { background: #f8fafc; color: #142b4a; }
-.editorial-site section[id] { scroll-margin-top: 90px; }
+.editorial-site section[id] { scroll-margin-top: calc(90px + var(--banner-h, 0px)); }
 .editorial-kicker { font-size: 10px; font-weight: 600; letter-spacing: .18em; line-height: 1.6; text-transform: uppercase; }
 .editorial-hero { max-width: 1480px; margin: auto; padding: 60px 48px 72px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
 .editorial-intro h1 { font-size: clamp(52px, 5.6vw, 88px); font-weight: 500; line-height: 1.03; letter-spacing: -.065em; margin: 32px 0 28px; }
