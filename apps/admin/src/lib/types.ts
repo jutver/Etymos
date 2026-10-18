@@ -107,10 +107,24 @@ export interface AdminCreditPack {
 
 export type DiscountType = "percent" | "fixed";
 
-export interface AdminPlanDiscount {
+/** Who may get a discount. Every limit that's set must hold; none set means
+ * everyone. */
+export interface DiscountAudience {
+  /** Lower-case emails; null = any email. */
+  allowed_emails: string[] | null;
+  /** Account creation window (profiles.created_at). */
+  signup_from: string | null;
+  signup_to: string | null;
+  /** Only users without a paid order yet. */
+  new_customers_only: boolean;
+}
+
+export interface AdminPlanDiscount extends DiscountAudience {
   id: string;
   target_type: "plan" | "pack";
   target_id: string;
+  /** Plans only; null = monthly and annual. */
+  billing_cycle: BillingCycle | null;
   discount_type: DiscountType;
   amount: number;
   starts_at: string | null;
@@ -120,9 +134,13 @@ export interface AdminPlanDiscount {
   updated_at: string;
 }
 
-export interface AdminDiscountCode {
+export interface AdminDiscountCode extends DiscountAudience {
   id: string;
   code: string;
+  /** "plan:<id>" / "pack:<id>"; null = any plan or pack. */
+  targets: string[] | null;
+  /** Limits plans only; null = monthly and annual. */
+  billing_cycle: BillingCycle | null;
   discount_type: DiscountType;
   amount: number;
   starts_at: string | null;

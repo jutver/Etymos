@@ -81,23 +81,21 @@ export async function fetchCreditPacks(): Promise<CreditPack[]> {
 export interface ActivePlanDiscount {
   target_type: "plan" | "pack";
   target_id: string;
+  /** Plans only: the discount covers just this billing cycle. */
+  billing_cycle: "monthly" | "annual" | null;
   discount_type: "percent" | "fixed";
   amount: number;
 }
 
 /**
- * Fetches currently-active direct discounts on plans/credit packs
- * (plan_discounts table), scoped to rows whose optional schedule window
- * covers "now". Public-readable, same pattern as plan_definitions/credit_packs.
+ * The automatic discounts on plans/credit packs the viewer would get right
+ * now: active, in their schedule window, and aimed at this account (or at
+ * everyone when signed out). The plan_discounts table itself is admin-only,
+ * since a discount can name the emails it's for. Checkout prices come from
+ * the backend, which applies the same rules.
  */
 export async function fetchActivePlanDiscounts(): Promise<ActivePlanDiscount[]> {
-  const nowIso = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("plan_discounts")
-    .select("target_type, target_id, discount_type, amount")
-    .eq("active", true)
-    .or(`starts_at.is.null,starts_at.lte.${nowIso}`)
-    .or(`ends_at.is.null,ends_at.gte.${nowIso}`);
+  const { data, error } = await supabase.rpc("my_plan_discounts");
   if (error) throw error;
-  return (data ?? []) as ActivePlanDiscount[];
+  return ((data ?? []) as ActivePlanDiscount[]).map((d) => ({ ...d, amount: Number(d.amount) }));
 }

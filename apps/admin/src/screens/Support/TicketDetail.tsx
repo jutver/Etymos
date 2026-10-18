@@ -34,6 +34,8 @@ import {
 import { ApiError } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, t, tr } from "../../lib/i18n";
+import { toastDeleteResult } from "../../lib/storageFiles";
+import { pushToast } from "../../lib/toast";
 import { CATEGORY_LABELS, STATUS_LABELS, statusTone } from "./labels";
 
 const FILE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
@@ -120,6 +122,7 @@ export default function SupportTicketDetailPage() {
         },
       );
     } catch (err) {
+      pushToast({ kind: "error", title: t("Couldn't save the change"), description: friendlyError(err) });
       setTicket((cur) =>
         cur && {
           ...cur,
@@ -129,7 +132,6 @@ export default function SupportTicketDetailPage() {
           ...(assignee !== undefined && { assignee: before.assignee }),
         },
       );
-      setError(friendlyError(err));
     }
   }
 
@@ -138,7 +140,7 @@ export default function SupportTicketDetailPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await deleteSupportTickets({ kind: "ids", ids: [ticket.id] });
+      toastDeleteResult(await deleteSupportTickets({ kind: "ids", ids: [ticket.id] }));
       navigate("/support");
     } catch (err) {
       setDeleteError(friendlyError(err));
@@ -546,6 +548,11 @@ function Composer({ ticket, onPosted }: { ticket: SupportTicketDetail; onPosted:
       });
       setBody("");
       setFiles([]);
+      pushToast({
+        kind: "success",
+        title: internal ? t("Note added") : t("Reply sent"),
+        description: internal ? undefined : t("Emailed to {{email}}.", { email: ticket.requester_email }),
+      });
       await onPosted();
     } catch (err) {
       setError(replyError(err));

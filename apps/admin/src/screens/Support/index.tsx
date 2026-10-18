@@ -17,7 +17,7 @@ import {
   type SupportTicketRow,
 } from "../../lib/supportApi";
 import { friendlyError } from "../../lib/errors";
-import { deleteResultMessage, type DeleteScope } from "../../lib/storageFiles";
+import { toastDeleteResult, type DeleteScope } from "../../lib/storageFiles";
 import { t, tr } from "../../lib/i18n";
 import { CATEGORY_LABELS, STATUS_LABELS, ago, statusTone } from "./labels";
 
@@ -60,7 +60,6 @@ export default function SupportInboxPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   // Bumped after a delete so the list and counts load again.
   const [version, setVersion] = useState(0);
 
@@ -121,7 +120,7 @@ export default function SupportInboxPage() {
       pageCache.clear();
       setDeleteOpen(false);
       setSelected(new Set());
-      setNotice(deleteResultMessage(result));
+      toastDeleteResult(result);
       setVersion((v) => v + 1);
     } catch (err) {
       setDeleteError(friendlyError(err));
@@ -220,7 +219,6 @@ export default function SupportInboxPage() {
             type="button"
             onClick={() => {
               setDeleteError(null);
-              setNotice(null);
               setDeleteOpen(true);
             }}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3 py-2 text-caption font-medium text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
@@ -275,7 +273,6 @@ export default function SupportInboxPage() {
       </div>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
-      {notice && <p className="mt-4 text-caption text-fg-muted">{notice}</p>}
 
       <div className="mt-4">
         <DataTable

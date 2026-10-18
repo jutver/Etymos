@@ -39,6 +39,10 @@ export function paymentErrorMessage(err: unknown): string {
         return t("This discount code has reached its usage limit.");
       case "discount_already_used":
         return t("You have already used this discount code.");
+      case "discount_not_eligible":
+        return t("This discount code isn't available for your account.");
+      case "discount_not_applicable":
+        return t("This discount code doesn't apply to this purchase.");
       case "verification_required":
         return t("Verify your student status before buying this plan.");
       case "payments_not_configured":

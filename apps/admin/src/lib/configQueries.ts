@@ -1,4 +1,5 @@
 import { ANNOUNCEMENT_IMAGE_BUCKET, supabase } from "@etymos/shared";
+import { sanitizeSearch } from "./supabaseQueries";
 import type {
   AdminCreditPack,
   AdminDiscountCode,
@@ -114,25 +115,15 @@ export async function listPlanDiscounts(): Promise<AdminPlanDiscount[]> {
   return data ?? [];
 }
 
-export async function createPlanDiscount(
-  input: Pick<
-    AdminPlanDiscount,
-    "target_type" | "target_id" | "discount_type" | "amount" | "starts_at" | "ends_at" | "active"
-  >,
-): Promise<void> {
+/** The fields an admin sets on an automatic discount. */
+export type PlanDiscountInput = Omit<AdminPlanDiscount, "id" | "created_at" | "updated_at">;
+
+export async function createPlanDiscount(input: PlanDiscountInput): Promise<void> {
   const { error } = await supabase.from("plan_discounts").insert(input);
   if (error) throw error;
 }
 
-export async function updatePlanDiscount(
-  id: string,
-  patch: Partial<
-    Pick<
-      AdminPlanDiscount,
-      "target_type" | "target_id" | "discount_type" | "amount" | "starts_at" | "ends_at" | "active"
-    >
-  >,
-): Promise<void> {
+export async function updatePlanDiscount(id: string, patch: Partial<PlanDiscountInput>): Promise<void> {
   const { error } = await supabase.from("plan_discounts").update(patch).eq("id", id);
   if (error) throw error;
 }
@@ -151,25 +142,15 @@ export async function listDiscountCodes(): Promise<AdminDiscountCode[]> {
   return data ?? [];
 }
 
-export async function createDiscountCode(
-  input: Pick<
-    AdminDiscountCode,
-    "code" | "discount_type" | "amount" | "starts_at" | "ends_at" | "max_redemptions" | "active"
-  >,
-): Promise<void> {
+/** The fields an admin sets on a discount code. */
+export type DiscountCodeInput = Omit<AdminDiscountCode, "id" | "redemption_count" | "created_at" | "updated_at">;
+
+export async function createDiscountCode(input: DiscountCodeInput): Promise<void> {
   const { error } = await supabase.from("discount_codes").insert(input);
   if (error) throw error;
 }
 
-export async function updateDiscountCode(
-  id: string,
-  patch: Partial<
-    Pick<
-      AdminDiscountCode,
-      "code" | "discount_type" | "amount" | "starts_at" | "ends_at" | "max_redemptions" | "active"
-    >
-  >,
-): Promise<void> {
+export async function updateDiscountCode(id: string, patch: Partial<DiscountCodeInput>): Promise<void> {
   const { error } = await supabase.from("discount_codes").update(patch).eq("id", id);
   if (error) throw error;
 }
@@ -177,4 +158,19 @@ export async function updateDiscountCode(
 export async function deleteDiscountCode(id: string): Promise<void> {
   const { error } = await supabase.from("discount_codes").delete().eq("id", id);
   if (error) throw error;
+}
+
+/** Accounts whose email or name matches, for adding emails to a discount. */
+export async function searchProfileEmails(search: string): Promise<{ email: string; display_name: string | null }[]> {
+  const term = sanitizeSearch(search);
+  if (!term) return [];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("email, display_name")
+    .or(`email.ilike.%${term}%,display_name.ilike.%${term}%`)
+    .not("email", "is", null)
+    .order("email")
+    .limit(8);
+  if (error) throw error;
+  return (data ?? []) as { email: string; display_name: string | null }[];
 }
