@@ -9,14 +9,14 @@ import {
   SignOut,
   Trash,
   UploadSimple,
-  User,
   X,
 } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { UsageMeter } from "../UsageMeter";
 import { cn } from "@etymos/shared";
 import { planLabel, useAppStore } from "../../lib/store";
-import { useAuth, displayNameFor, initialsFor } from "../../lib/auth";
+import { useAuth, displayNameFor } from "../../lib/auth";
+import { UserAvatar } from "../ui/UserAvatar";
 import { supabase } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
 import { LanguageSwitcher } from "../LanguageSwitcher";
@@ -132,9 +132,7 @@ export function AppNav() {
                 aria-expanded={menuOpen}
                 className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-2.5 text-white transition-colors hover:bg-white/10"
               >
-                <span className="flex size-7 items-center justify-center rounded-full bg-brand-400 text-xs font-bold text-white">
-                  {initialsFor(user) || <User size={14} weight="fill" />}
-                </span>
+                <UserAvatar user={user} className="size-7 text-xs" />
                 <CaretDown size={13} className={cn("transition-transform", menuOpen && "rotate-180")} />
               </button>
 

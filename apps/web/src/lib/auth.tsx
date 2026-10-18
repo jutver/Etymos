@@ -93,9 +93,26 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+/** First non-blank string among the given user_metadata keys. */
+function metadataString(user: User, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = user.user_metadata?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** A name the user saved wins; otherwise the Google account's name
+ * (`full_name` / `name`, set by Supabase's Google provider). */
 export function displayNameFor(user: User | null): string {
   if (!user) return "";
-  return (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || t("Etymos user");
+  return metadataString(user, ["display_name", "full_name", "name"]) || user.email?.split("@")[0] || t("Etymos user");
+}
+
+/** The Google account's profile photo, if the user signed in with Google. */
+export function avatarUrlFor(user: User | null): string | null {
+  if (!user) return null;
+  return metadataString(user, ["avatar_url", "picture"]);
 }
 
 export function initialsFor(user: User | null): string {
