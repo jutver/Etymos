@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { CaretLeft, CaretRight, MagnifyingGlassMinus, MagnifyingGlassPlus } from "@phosphor-icons/react";
+import {
+  ArrowsOutLineHorizontal,
+  CaretLeft,
+  CaretRight,
+  FrameCorners,
+  MagnifyingGlassMinus,
+  MagnifyingGlassPlus,
+} from "@phosphor-icons/react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import type { MatchedSource, Severity } from "../lib/types";
@@ -39,7 +46,28 @@ type PlagiarismPdfViewerProps = {
   aiSegments?: { id: string; excerpt: string; score: number }[];
   activeAiSegmentId?: string | null;
   onAiSegmentClick?: (segmentId: string) => void;
+  /** How the page is sized to start with: the full width of the viewer
+   * (reading, the default) or the whole page in view (a quick preview). */
+  defaultFit?: FitMode;
 };
+
+type FitMode = "width" | "page";
+
+// Stable defaults: a fresh `[]` on every render would retrigger the text-scan
+// effect below, which sets state, which renders again — an endless loop.
+const NO_AI_SEGMENTS: NonNullable<PlagiarismPdfViewerProps["aiSegments"]> = [];
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.15;
+// A fit never blows the page up past this, so a very wide window doesn't draw
+// a huge canvas (zooming in by hand still goes further).
+const MAX_FIT_SCALE = 1.75;
+// A 2× canvas is already sharp on retina; 3× screens would otherwise draw
+// 2.25× the pixels for no visible gain.
+const PIXEL_RATIO = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
+// Padding of the viewer box (p-4) on each side, left out of the fit maths.
+const VIEWER_PADDING = 16;
 
 // Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
 // từ text layer thật của trình duyệt bằng Range API) - không cần nhân thêm
@@ -133,17 +161,25 @@ export function PlagiarismPdfViewer({
   unavailableMessage,
   onPageChange,
   overLimitOffset = Infinity,
-  aiSegments = [],
+  aiSegments = NO_AI_SEGMENTS,
   activeAiSegmentId = null,
   onAiSegmentClick,
+  defaultFit = "width",
 }: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
-  // "Trang hiện tại" giờ không còn điều khiển việc render nữa (mọi trang đều
-  // được mount cùng lúc trong dải cuộn dài) - nó chỉ là trang đang hiển thị
-  // nhiều nhất trong khung nhìn, dùng cho chỉ báo "Trang X / Y" + để biết mũi
-  // tên trước/sau nên cuộn tới đâu. Được cập nhật bởi scroll listener bên dưới.
+  // Only this page is mounted: one canvas and one text layer at a time, however
+  // long the document is.
   const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(1.1);
+  // Zoom is relative to the fit: 1 means "exactly fits", whatever the viewer size.
+  const [fit, setFit] = useState<FitMode>(defaultFit);
+  const [zoom, setZoom] = useState(1);
+  // Unscaled size of the current page (PDF points), read when it loads.
+  const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
+  // Inner size of the viewer box, kept current by a ResizeObserver.
+  const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
+  // Size of the last page drawn, held while the next one renders so the box
+  // doesn't collapse and jump between pages.
+  const [renderedBox, setRenderedBox] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
@@ -168,10 +204,10 @@ export function PlagiarismPdfViewer({
   const aiLocationsCache = useRef<Record<number, AiSegmentLocation[]>>({});
 
   const matchLocationsCache = useRef<Record<number, MatchLocation[]>>({});
-  // Container DOM của từng trang (để đo Range/getClientRects và để scrollIntoView).
+  // Container DOM của trang đang hiển thị (để đo Range/getClientRects).
   const pageContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  // Vùng cuộn thực sự của viewer (KHÔNG phải toàn bộ trang Report) - đây là
-  // "zone" nội bộ mà bước 1 yêu cầu, để trang Report bên ngoài không bị cuộn theo.
+  // Vùng cuộn riêng của viewer (KHÔNG phải toàn bộ trang Report), để trang
+  // bên ngoài không bị cuộn theo khi trang PDF cao hơn khung nhìn.
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
   const matchById = useMemo(() => {
@@ -216,7 +252,34 @@ export function PlagiarismPdfViewer({
     setPageRects({});
     setAiPageRects({});
     setCurrentPage(1);
+    setPageSize(null);
+    setRenderedBox(null);
   }, [fileSource]);
+
+  // Track the viewer's inner size so "fit" follows window and panel resizes.
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.floor(entry.contentRect.width);
+      const height = Math.floor(entry.contentRect.height);
+      setViewport((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const scale = useMemo(() => {
+    if (!pageSize || !viewport) return 1;
+    const byWidth = viewport.width / pageSize.width;
+    const fitScale = Math.min(
+      MAX_FIT_SCALE,
+      fit === "width" ? byWidth : Math.min(byWidth, viewport.height / pageSize.height),
+    );
+    // Rounded (down, so a fitted page never overflows by a pixel) so sub-pixel
+    // resize noise doesn't re-render the page.
+    return Math.max(0.1, Math.floor(fitScale * zoom * 100) / 100);
+  }, [fit, zoom, pageSize, viewport]);
 
   // --- 2. Đo toạ độ pixel THẬT của match trên MỘT trang cụ thể, bằng Range
   //         API trên text layer thật của trình duyệt. Đây là lý do hết lem
@@ -400,24 +463,31 @@ export function PlagiarismPdfViewer({
           const page = await pdfDoc.getPage(pageIdx);
           const textContent = await page.getTextContent();
 
+          // Indexes here are SPAN indexes in the rendered text layer, not
+          // textContent item indexes: pdf.js draws no span for an empty item
+          // (often just a line break), so counting items would shift every
+          // highlight after the first empty one onto the wrong words.
           let pageText = "";
           const charToItem: number[] = [];
           const charOffsetInItem: number[] = [];
-          textContent.items.forEach((item: any, itemIdx: number) => {
+          let spanIdx = -1;
+          let spanLen = 0;
+          textContent.items.forEach((item: any) => {
             const str = item.str ?? "";
+            if (str.length > 0) {
+              spanIdx++;
+              spanLen = str.length;
+            }
             for (let c = 0; c < str.length; c++) {
-              charToItem.push(itemIdx);
+              charToItem.push(spanIdx);
               charOffsetInItem.push(c);
             }
             pageText += str;
-            if (item.hasEOL) {
+            // The separator belongs to the last drawn span, just past its end.
+            if (item.hasEOL || !str.endsWith(" ")) {
               pageText += " ";
-              charToItem.push(itemIdx);
-              charOffsetInItem.push(str.length);
-            } else if (!str.endsWith(" ")) {
-              pageText += " ";
-              charToItem.push(itemIdx);
-              charOffsetInItem.push(str.length);
+              charToItem.push(Math.max(0, spanIdx));
+              charOffsetInItem.push(spanLen);
             }
           });
 
@@ -512,10 +582,10 @@ export function PlagiarismPdfViewer({
           setMatchesByPage(byPage);
           aiLocationsCache.current = aiLocCache;
           setAiSegmentsByPage(aiByPage);
-          // Các trang trong dải cuộn dài có thể đã render text layer XONG
-          // TRƯỚC KHI bước quét này hoàn tất (chạy song song), nên chủ động đo
-          // lại toàn bộ trang đã mount ngay khi có kết quả quét mới, thay vì
-          // chờ một sự kiện render khác không chắc sẽ xảy ra.
+          // Trang đang hiển thị có thể đã render text layer XONG TRƯỚC KHI
+          // bước quét này hoàn tất (chạy song song), nên chủ động đo lại ngay
+          // khi có kết quả quét mới, thay vì chờ một sự kiện render khác
+          // không chắc sẽ xảy ra.
           requestAnimationFrame(() => {
             if (cancelled) return;
             pageContainerRefs.current.forEach((_, p) => {
@@ -554,64 +624,62 @@ export function PlagiarismPdfViewer({
     if (numPages) onPageChange?.(currentPage, numPages);
   }, [currentPage, numPages, onPageChange]);
 
-  // --- 4. Xác định trang nào đang "hiện diện" nhiều nhất trong khung nhìn của
-  //         chính viewer (không phải window/Report page), dùng cùng kỹ thuật
-  //         với DocumentCanvas.measurePages(): so sánh mép trên của từng trang
-  //         với một "đường tham chiếu" nằm gần đỉnh khung nhìn. ---
-  const updateCurrentPage = useCallback(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !numPages) return;
-    const viewerRect = viewer.getBoundingClientRect();
-    const viewportLine = viewerRect.top + viewerRect.height * 0.35;
-    let current = 1;
-    for (let p = 1; p <= numPages; p++) {
-      const el = pageContainerRefs.current.get(p);
-      if (!el) continue;
-      if (el.getBoundingClientRect().top <= viewportLine) current = p;
-    }
-    setCurrentPage((prev) => (prev === current ? prev : current));
-  }, [numPages]);
+  // --- 4. Lật trang: chỉ đổi trang đang mount, rồi đưa khung nhìn về đầu trang. ---
+  const goToPage = useCallback(
+    (page: number) => {
+      if (!numPages) return;
+      const next = Math.min(Math.max(1, page), numPages);
+      setCurrentPage(next);
+      viewerRef.current?.scrollTo({ top: 0 });
+    },
+    [numPages],
+  );
 
-  useEffect(() => {
-    if (!numPages) return;
-    const raf = requestAnimationFrame(updateCurrentPage);
-    return () => cancelAnimationFrame(raf);
-  }, [numPages, updateCurrentPage]);
-
-  // Scroll events fire many times per frame; measure the pages at most once a frame.
-  const scrollRafRef = useRef<number | null>(null);
-  const onViewerScroll = useCallback(() => {
-    if (scrollRafRef.current !== null) return;
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = null;
-      updateCurrentPage();
-    });
-  }, [updateCurrentPage]);
-  useEffect(() => () => {
-    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
-  }, []);
-
-  // Cuộn mượt viewer nội bộ tới 1 trang cụ thể - thay cho việc đổi pageNumber
-  // để "nhảy trang" như trước, vì giờ mọi trang đều đã mount sẵn trong dải dài.
-  const scrollToPage = useCallback((page: number) => {
-    const el = pageContainerRefs.current.get(page);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
-  // --- 5. Cuộn tới trang chứa match khi activeMatchId đổi ---
+  // --- 5. Mở trang chứa match khi activeMatchId đổi ---
   useEffect(() => {
     if (!activeMatchId) return;
     const targetPage = Object.entries(matchesByPage).find(([, ids]) => ids.includes(activeMatchId))?.[0];
-    if (targetPage) scrollToPage(Number(targetPage));
-  }, [activeMatchId, matchesByPage, scrollToPage]);
+    if (targetPage) goToPage(Number(targetPage));
+  }, [activeMatchId, matchesByPage, goToPage]);
 
   // Cùng cơ chế ở trên, cho việc bấm 1 đoạn "nghi AI viết" từ card sidebar.
   useEffect(() => {
     if (!activeAiSegmentId) return;
     const targetPage = Object.entries(aiSegmentsByPage).find(([, ids]) => ids.includes(activeAiSegmentId))?.[0];
-    if (targetPage) scrollToPage(Number(targetPage));
-  }, [activeAiSegmentId, aiSegmentsByPage, scrollToPage]);
+    if (targetPage) goToPage(Number(targetPage));
+  }, [activeAiSegmentId, aiSegmentsByPage, goToPage]);
+
+  // Once the active highlight's page is drawn, bring the highlight into view
+  // when the page is taller than the viewer.
+  useEffect(() => {
+    const id = activeMatchId ?? activeAiSegmentId;
+    const viewer = viewerRef.current;
+    if (!id || !viewer) return;
+    const rect =
+      pageRects[currentPage]?.find((r) => r.matchId === id) ??
+      aiPageRects[currentPage]?.find((r) => r.segmentId === id);
+    const container = pageContainerRefs.current.get(currentPage);
+    if (!rect || !container) return;
+    const top = container.offsetTop + rect.y - viewer.clientHeight / 3;
+    viewer.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }, [activeMatchId, activeAiSegmentId, currentPage, pageRects, aiPageRects]);
+
+  function onViewerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.target instanceof HTMLInputElement) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown") {
+      e.preventDefault();
+      goToPage(currentPage + 1);
+    } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+      e.preventDefault();
+      goToPage(currentPage - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      goToPage(1);
+    } else if (e.key === "End" && numPages) {
+      e.preventDefault();
+      goToPage(numPages);
+    }
+  }
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -619,27 +687,67 @@ export function PlagiarismPdfViewer({
     setLoadError(null);
   }
 
+  // Natural size of each page as it loads: pages in one PDF can differ in
+  // size or orientation, so the fit is recomputed per page.
+  const onPageLoadSuccess = useCallback((page: { originalWidth: number; originalHeight: number }) => {
+    setPageSize((prev) =>
+      prev && prev.width === page.originalWidth && prev.height === page.originalHeight
+        ? prev
+        : { width: page.originalWidth, height: page.originalHeight },
+    );
+  }, []);
+
+  // Stable per page: react-pdf redraws the canvas / text layer when these
+  // callbacks change identity, and each redraw re-measures and sets state —
+  // inline functions here would loop.
+  const onPageRenderSuccess = useCallback(() => {
+    const el = pageContainerRefs.current.get(currentPage)?.querySelector("canvas");
+    if (!el) return;
+    const width = el.clientWidth;
+    const height = el.clientHeight;
+    setRenderedBox((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
+  }, [currentPage]);
+
+  const onTextLayerRendered = useCallback(() => {
+    measurePage(currentPage);
+    measureAiPage(currentPage);
+  }, [currentPage, measurePage, measureAiPage]);
+
+  const setPageContainer = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (el) pageContainerRefs.current.set(currentPage, el);
+      else pageContainerRefs.current.delete(currentPage);
+    },
+    [currentPage],
+  );
+
   function onDocumentLoadError(err: Error) {
     console.error("PDF load error:", err);
     setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
   }
 
   const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
+  // Counted from where matches were located in the text (every page), not
+  // from the boxes drawn on the one page currently on screen.
   const severityCounts = useMemo(() => {
     const counts: Record<Severity, number> = { high: 0, moderate: 0, low: 0 };
-    Object.values(pageRects).forEach((rects) => {
-      rects.forEach((r) => {
-        counts[r.severity] = (counts[r.severity] ?? 0) + 1;
-      });
-    });
+    const seen = new Set<string>();
+    Object.values(matchesByPage).forEach((ids) =>
+      ids.forEach((id) => {
+        const m = matchById.get(id);
+        if (!m || seen.has(id)) return;
+        if (m.startOffset != null && m.startOffset >= overLimitOffset) return;
+        seen.add(id);
+        counts[m.severity] = (counts[m.severity] ?? 0) + 1;
+      }),
+    );
     return counts;
-  }, [pageRects]);
+  }, [matchesByPage, matchById, overLimitOffset]);
   const hasHighlights = severityCounts.high + severityCounts.moderate + severityCounts.low > 0;
-  const aiSegmentCount = useMemo(() => {
-    const ids = new Set<string>();
-    Object.values(aiPageRects).forEach((rects) => rects.forEach((r) => ids.add(r.segmentId)));
-    return ids.size;
-  }, [aiPageRects]);
+  const aiSegmentCount = useMemo(
+    () => new Set(Object.values(aiSegmentsByPage).flat()).size,
+    [aiSegmentsByPage],
+  );
   const hoveredMatch = hoveredMatchId ? matchById.get(hoveredMatchId) : null;
   const hoveredLocation = useMemo(() => {
     if (!hoveredMatchId) return null;
@@ -650,55 +758,88 @@ export function PlagiarismPdfViewer({
     return null;
   }, [hoveredMatchId, pageRects]);
 
-  const pageNumbers = useMemo(
-    () => (numPages ? Array.from({ length: numPages }, (_, i) => i + 1) : []),
-    [numPages],
-  );
+  const [pageInput, setPageInput] = useState("1");
+  useEffect(() => setPageInput(String(currentPage)), [currentPage]);
+  function commitPageInput() {
+    const n = Number.parseInt(pageInput, 10);
+    if (Number.isFinite(n)) goToPage(n);
+    else setPageInput(String(currentPage));
+  }
+
+  const rects = pageRects[currentPage] ?? [];
+  const aiRects = aiPageRects[currentPage] ?? [];
+  const toolbarButton =
+    "flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-40";
 
   return (
-    <div className="flex h-full flex-col rounded-[var(--radius-card)] border border-line bg-surface-tint p-4">
+    <div className="flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border border-line bg-surface-tint p-3 sm:p-4">
       {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
+            onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage <= 1}
-            className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
+            className={toolbarButton}
             aria-label={t("Previous page")}
           >
             <CaretLeft size={16} />
           </button>
-          <span className="text-sm font-medium text-ink-700">
-            {t("Page")}{" "}{currentPage} / {numPages ?? "..."}
-            {analyzing && <span className="ml-2 text-xs text-ink-400">{t("(scanning for overlaps...)")}</span>}
-          </span>
+          <label className="flex items-center gap-1.5 text-sm font-medium text-ink-700">
+            <span className="sr-only">{t("Go to page")}</span>
+            <input
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
+              onBlur={commitPageInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitPageInput();
+              }}
+              disabled={!numPages}
+              inputMode="numeric"
+              className="h-8 w-11 rounded-lg border border-line bg-white text-center tabular-nums outline-none focus:border-brand-400"
+            />
+            <span className="tabular-nums text-ink-500">/ {numPages ?? "…"}</span>
+          </label>
           <button
-            onClick={() => scrollToPage(Math.min(numPages ?? currentPage, currentPage + 1))}
+            onClick={() => goToPage(currentPage + 1)}
             disabled={!numPages || currentPage >= numPages}
-            className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 disabled:opacity-40"
+            className={toolbarButton}
             aria-label={t("Next page")}
           >
             <CaretRight size={16} />
           </button>
+          {analyzing && <span className="ml-1 text-xs text-ink-400">{t("(scanning for overlaps...)")}</span>}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => setScale((s) => Math.max(0.6, s - 0.1))}
-            className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600"
+            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
+            disabled={zoom <= ZOOM_MIN}
+            className={toolbarButton}
             aria-label={t("Zoom out")}
           >
             <MagnifyingGlassMinus size={16} />
           </button>
-          <span className="w-12 text-center text-xs font-medium text-ink-500">
+          <span className="w-11 text-center text-xs font-medium tabular-nums text-ink-500">
             {Math.round(scale * 100)}%
           </span>
           <button
-            onClick={() => setScale((s) => Math.min(2, s + 0.1))}
-            className="flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600"
+            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
+            disabled={zoom >= ZOOM_MAX}
+            className={toolbarButton}
             aria-label={t("Zoom in")}
           >
             <MagnifyingGlassPlus size={16} />
+          </button>
+          <button
+            onClick={() => {
+              setFit((f) => (f === "width" ? "page" : "width"));
+              setZoom(1);
+            }}
+            className={toolbarButton}
+            aria-label={fit === "width" ? t("Fit page") : t("Fit width")}
+            title={fit === "width" ? t("Fit page") : t("Fit width")}
+          >
+            {fit === "width" ? <FrameCorners size={16} /> : <ArrowsOutLineHorizontal size={16} />}
           </button>
         </div>
       </div>
@@ -729,14 +870,15 @@ export function PlagiarismPdfViewer({
         </div>
       )}
 
-      {/* Viewer - đây là "vùng riêng" của component này: overflow-y-auto tự
-          quản lý cuộn dải dài nhiều trang, KHÔNG đụng tới scroll của trang
-          Report bên ngoài (Report/index.tsx đã bọc component này trong 1 div
-          `relative flex-1 overflow-hidden`). */}
+      {/* Viewer - vùng cuộn riêng của component: chỉ 1 trang được mount, và
+          trang chỉ cuộn bên trong khung này khi cao/rộng hơn khung nhìn. */}
       <div
         ref={viewerRef}
-        onScroll={onViewerScroll}
-        className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-ink-100/40 p-4"
+        tabIndex={0}
+        onKeyDown={onViewerKeyDown}
+        aria-label={t("Document preview")}
+        className="min-h-0 flex-1 overflow-auto rounded-lg bg-ink-100/40 outline-none [scrollbar-gutter:stable] focus-visible:ring-2 focus-visible:ring-brand-300"
+        style={{ padding: VIEWER_PADDING }}
       >
         {!pdfUrl ? (
           <p
@@ -756,107 +898,99 @@ export function PlagiarismPdfViewer({
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             loading={<p className="py-12 text-center text-sm text-ink-400">{t("Loading PDF...")}</p>}
+            className="flex min-h-full w-max min-w-full items-start justify-center"
           >
-            {/* Dải trang dài cuộn liên tục - mọi trang được mount cùng lúc,
-                xếp dọc, thay cho việc chỉ mount 1 <Page> theo pageNumber. */}
-            <div className="flex flex-col items-center gap-6">
-              {pageNumbers.map((p) => {
-                const rects = pageRects[p] ?? [];
-                const aiRects = aiPageRects[p] ?? [];
-                return (
-                  <div
-                    key={p}
-                    ref={(el) => {
-                      if (el) pageContainerRefs.current.set(p, el);
-                      else pageContainerRefs.current.delete(p);
-                    }}
-                    data-page-number={p}
-                    className="relative inline-block shadow-[var(--shadow-card)]"
-                  >
-                    <Page
-                      pageNumber={p}
-                      scale={scale}
-                      renderAnnotationLayer={false}
-                      renderTextLayer
-                      onRenderTextLayerSuccess={() => {
-                        measurePage(p);
-                        measureAiPage(p);
-                        updateCurrentPage();
-                      }}
-                    />
+            {numPages && (
+              <div
+                ref={setPageContainer}
+                data-page-number={currentPage}
+                className="relative bg-white shadow-[var(--shadow-card)]"
+                // Hold the previous page's footprint until this one has drawn.
+                style={renderedBox ? { minWidth: renderedBox.width, minHeight: renderedBox.height } : undefined}
+              >
+                <Page
+                  key={currentPage}
+                  pageNumber={currentPage}
+                  scale={scale}
+                  devicePixelRatio={PIXEL_RATIO}
+                  renderAnnotationLayer={false}
+                  renderTextLayer
+                  loading={null}
+                  onLoadSuccess={onPageLoadSuccess}
+                  onRenderSuccess={onPageRenderSuccess}
+                  onRenderTextLayerSuccess={onTextLayerRendered}
+                />
 
-                    {/* Overlay đoạn nghi AI viết - vẽ TRƯỚC overlay match nên
-                        nằm DƯỚI nó trong thứ tự DOM/stacking: match (câu, hẹp
-                        hơn) luôn nhận click trước khi trùng vùng với AI wash
-                        (đoạn, rộng hơn) - đúng "Functional Wall Rule", 2 tín
-                        hiệu vẫn tách biệt về màu/click nhưng không giành nhau. */}
-                    <div className="pointer-events-none absolute inset-0">
-                      {aiRects.map((r, i) => {
-                        const isActive = activeAiSegmentId === r.segmentId;
-                        return (
-                          <div
-                            key={`ai-${r.segmentId}-${i}`}
-                            onClick={() => onAiSegmentClick?.(r.segmentId)}
-                            className="pointer-events-auto absolute cursor-pointer rounded-[2px] transition-colors"
-                            style={{
-                              left: r.x,
-                              top: r.y,
-                              width: r.width,
-                              height: r.height,
-                              backgroundColor: isActive ? AI_FLAG_COLOR.fillActive : AI_FLAG_COLOR.fill,
-                              boxShadow: isActive ? `inset 0 0 0 1px ${AI_FLAG_COLOR.border}` : undefined,
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
-                    <div className="pointer-events-none absolute inset-0">
-                      {rects.map((r, i) => {
-                        const isActive = activeMatchId === r.matchId;
-                        const isHovered = hoveredMatchId === r.matchId;
-                        const color = SEVERITY_COLOR[r.severity] ?? SEVERITY_COLOR.moderate;
-                        return (
-                          <div
-                            key={`${r.matchId}-${i}`}
-                            onClick={() => onMatchClick?.(r.matchId)}
-                            onMouseEnter={() => setHoveredMatchId(r.matchId)}
-                            onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
-                            className="pointer-events-auto absolute cursor-pointer rounded-[3px] transition-colors"
-                            style={{
-                              left: r.x,
-                              top: r.y,
-                              width: r.width,
-                              height: r.height,
-                              backgroundColor: isActive || isHovered ? color.fillActive : color.fill,
-                              boxShadow: `inset 0 0 0 1px ${color.border}`,
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    {/* Tooltip khi hover - chỉ render trên đúng trang chứa match đang hover */}
-                    {hoveredMatch && hoveredLocation && hoveredLocation.page === p && (
+                {/* Overlay đoạn nghi AI viết - vẽ TRƯỚC overlay match nên
+                    nằm DƯỚI nó trong thứ tự DOM/stacking: match (câu, hẹp
+                    hơn) luôn nhận click trước khi trùng vùng với AI wash
+                    (đoạn, rộng hơn) - đúng "Functional Wall Rule", 2 tín
+                    hiệu vẫn tách biệt về màu/click nhưng không giành nhau. */}
+                <div className="pointer-events-none absolute inset-0">
+                  {aiRects.map((r, i) => {
+                    const isActive = activeAiSegmentId === r.segmentId;
+                    return (
                       <div
-                        className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
+                        key={`ai-${r.segmentId}-${i}`}
+                        onClick={() => onAiSegmentClick?.(r.segmentId)}
+                        className="pointer-events-auto absolute cursor-pointer rounded-[2px] transition-colors"
                         style={{
-                          left: hoveredLocation.rect.x,
-                          top: Math.max(0, hoveredLocation.rect.y - 8),
-                          transform: "translateY(-100%)",
+                          left: r.x,
+                          top: r.y,
+                          width: r.width,
+                          height: r.height,
+                          backgroundColor: isActive ? AI_FLAG_COLOR.fillActive : AI_FLAG_COLOR.fill,
+                          boxShadow: isActive ? `inset 0 0 0 1px ${AI_FLAG_COLOR.border}` : undefined,
                         }}
-                      >
-                        <p className="font-semibold text-white">
-                          {t(SEVERITY_LABEL[hoveredMatch.severity])} · {hoveredMatch.matchPercent}%
-                        </p>
-                        <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
-                      </div>
-                    )}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
+                <div className="pointer-events-none absolute inset-0">
+                  {rects.map((r, i) => {
+                    const isActive = activeMatchId === r.matchId;
+                    const isHovered = hoveredMatchId === r.matchId;
+                    const color = SEVERITY_COLOR[r.severity] ?? SEVERITY_COLOR.moderate;
+                    return (
+                      <div
+                        key={`${r.matchId}-${i}`}
+                        onClick={() => onMatchClick?.(r.matchId)}
+                        onMouseEnter={() => setHoveredMatchId(r.matchId)}
+                        onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
+                        className="pointer-events-auto absolute cursor-pointer rounded-[3px] transition-colors"
+                        style={{
+                          left: r.x,
+                          top: r.y,
+                          width: r.width,
+                          height: r.height,
+                          backgroundColor: isActive || isHovered ? color.fillActive : color.fill,
+                          boxShadow: `inset 0 0 0 1px ${color.border}`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Tooltip khi hover */}
+                {hoveredMatch && hoveredLocation && hoveredLocation.page === currentPage && (
+                  <div
+                    className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
+                    style={{
+                      left: hoveredLocation.rect.x,
+                      top: Math.max(0, hoveredLocation.rect.y - 8),
+                      transform: "translateY(-100%)",
+                    }}
+                  >
+                    <p className="font-semibold text-white">
+                      {t(SEVERITY_LABEL[hoveredMatch.severity])} · {hoveredMatch.matchPercent}%
+                    </p>
+                    <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
                   </div>
-                );
-              })}
-            </div>
+                )}
+              </div>
+            )}
           </Document>
         ) : null}
       </div>
@@ -870,7 +1004,7 @@ export function PlagiarismPdfViewer({
             .map((p) => (
               <button
                 key={p}
-                onClick={() => scrollToPage(p)}
+                onClick={() => goToPage(p)}
                 className={`rounded-md border px-2 py-1 text-xs font-medium ${
                   p === currentPage
                     ? "border-brand-400 bg-brand-100 text-brand-700"

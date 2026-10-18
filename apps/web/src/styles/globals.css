@@ -121,7 +121,7 @@
 
   html {
     color-scheme: light;
-    scroll-padding-top: 5rem;
+    scroll-padding-top: calc(5rem + var(--banner-h, 0px));
   }
 
   body {
