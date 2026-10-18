@@ -621,7 +621,7 @@ export default function ReportPage() {
 
   if ((loading && !doc) || !doc) {
     return (
-      <div className="studio-report fixed inset-0 z-40 flex flex-col bg-surface-muted">
+      <div className="studio-report fixed inset-x-0 bottom-0 top-[var(--banner-h,0px)] z-40 flex flex-col bg-surface-muted">
         <div className="h-14 shrink-0 border-b border-line bg-white/85" />
         <div className="flex flex-1 overflow-hidden">
           <div className="flex-1 px-4 pt-24">
@@ -639,7 +639,7 @@ export default function ReportPage() {
   const hasOriginal = Boolean(effectivePdfUrl) || Boolean(pdfFetchError);
 
   return (
-    <div className="studio-report fixed inset-0 z-40 flex flex-col bg-surface-muted">
+    <div className="studio-report fixed inset-x-0 bottom-0 top-[var(--banner-h,0px)] z-40 flex flex-col bg-surface-muted">
       <ReportTopBar
         fileName={fileName}
         onRename={handleRename}
