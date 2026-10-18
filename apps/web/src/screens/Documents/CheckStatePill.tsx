@@ -1,8 +1,9 @@
 // Status indicator for a document whose check hasn't produced a similarity
 // score yet. Lives here (rather than in components/Severity.tsx alongside
 // StatusPill) because it describes the *job* lifecycle, not the similarity
-// severity, and because Documents, History and their sub-views are the only
-// screens that list unsettled checks. History imports it from here.
+// severity, and because Documents, History (and their sub-views) and Upload's
+// Recent checks are the only places that list unsettled checks. History and
+// Upload import it from here.
 import { CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import type { CheckState } from "../../lib/documentsQueries";

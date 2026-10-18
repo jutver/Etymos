@@ -272,12 +272,6 @@ export function analyzingStateFor(entry: HistoryEntryWithCheck) {
   };
 }
 
-async function documentExists(id: string): Promise<boolean> {
-  const { data, error } = await supabase.from("documents").select("id").eq("id", id).maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
-}
-
 export interface CheckResults {
   status: DocStatus;
   similarityScore: number;
@@ -307,56 +301,33 @@ export interface FinalizeCheckParams {
  *     language) onto it and drop the placeholder; the backend row is canonical.
  *   - backend row absent (API running without Supabase configured) -> complete
  *     the placeholder in place so the check isn't lost.
+ *
+ * Done by the `settle_checking_document` RPC in one transaction, which also
+ * writes the single "check completed" entry in the user's activity log
+ * (rather than the rename + deletion the row shuffle would otherwise log).
  */
 export async function finalizeCheckingDocument(params: FinalizeCheckParams): Promise<string> {
-  const { placeholderId, reportId } = params;
+  const { placeholderId, reportId, results } = params;
 
-  const results = {
-    check_state: "completed" as const,
-    check_error: null,
-    ...(params.results
+  const { data, error } = await supabase.rpc("settle_checking_document", {
+    p_placeholder_id: placeholderId,
+    p_report_id: reportId,
+    p_results: results
       ? {
-          status: params.results.status,
-          similarity_score: params.results.similarityScore,
-          similarity_score_free: params.results.similarityScore,
-          word_count: params.results.wordCount,
-          web_sources_scanned: params.results.webSourcesScanned,
-          academic_sources_scanned: params.results.academicSourcesScanned,
+          status: results.status,
+          similarity_score: results.similarityScore,
+          word_count: results.wordCount,
+          web_sources_scanned: results.webSourcesScanned,
+          academic_sources_scanned: results.academicSourcesScanned,
         }
-      : {}),
-  };
-
-  if (reportId && reportId !== placeholderId && (await documentExists(reportId))) {
-    const { data: placeholder, error: readError } = await supabase
-      .from("documents")
-      .select("*")
-      .eq("id", placeholderId)
-      .maybeSingle();
-    if (readError) throw readError;
-
-    if (placeholder) {
-      const row = placeholder as DocumentRow;
-      const { error: mergeError } = await supabase
-        .from("documents")
-        .update({
-          ...results,
-          title: row.title,
-          file_name: row.file_name,
-          language: row.language,
-          project: row.project,
-        })
-        .eq("id", reportId);
-      if (mergeError) throw mergeError;
-
-      const { error: deleteError } = await supabase.from("documents").delete().eq("id", placeholderId);
-      if (deleteError) throw deleteError;
-    }
-    return reportId;
+      : {},
+  });
+  if (error) {
+    // Neither row exists any more (e.g. deleted meanwhile): nothing to settle.
+    if (error.code === "P0002") return placeholderId;
+    throw error;
   }
-
-  const { error } = await supabase.from("documents").update(results).eq("id", placeholderId);
-  if (error) throw error;
-  return placeholderId;
+  return String(data);
 }
 
 export async function moveDocumentToTrash(id: string): Promise<void> {

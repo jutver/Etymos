@@ -20,10 +20,11 @@ import { Toggle } from "../../components/ui/Toggle";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { Modal, ModalCloseButton } from "../../components/ui/Modal";
 import { StatusPill } from "../../components/Severity";
+import { CheckStatePill } from "../Documents/CheckStatePill";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { useAppStore, planLabel, planWordLimit, PROJECTS } from "../../lib/store";
 import type { BalanceSource } from "../../lib/store";
-import { attachCheckJobId, createCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
+import { analyzingStateFor, attachCheckJobId, createCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import { useAuth } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { trackEvent } from "../../lib/analytics";
@@ -624,14 +625,25 @@ export default function UploadPage() {
                 {history.slice(0, 8).map((h) => (
                   <button
                     key={h.id}
-                    onClick={() => navigate(`/report/${h.id}`)}
+                    // An unfinished check has no report yet — reopen its progress view.
+                    onClick={() =>
+                      h.checkState === "checking"
+                        ? navigate("/analyzing", { state: analyzingStateFor(h) })
+                        : navigate(`/report/${h.id}`)
+                    }
                     className="flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-surface-tint"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink-900">{h.title}</p>
                       <p className="text-xs text-ink-400">{formatDate(h.date)}</p>
                     </div>
-                    <StatusPill status={h.status} className="shrink-0" />
+                    {/* `status` is only real once the check completes (it defaults
+                        to "clean" before that), so show the job state until then. */}
+                    {h.checkState === "completed" ? (
+                      <StatusPill status={h.status} className="shrink-0" />
+                    ) : (
+                      <CheckStatePill state={h.checkState} className="shrink-0" />
+                    )}
                   </button>
                 ))}
               </div>

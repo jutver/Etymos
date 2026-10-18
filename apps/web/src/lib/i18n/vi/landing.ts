@@ -34,7 +34,6 @@ export const landing: Record<string, string> = {
   "Please add content before checking.": "Vui lòng thêm nội dung trước khi kiểm tra.",
   "Please choose a PDF file to upload.": "Vui lòng chọn một file PDF để tải lên.",
   "Preview isn't available for this file type — it'll still be checked.": "Không có bản xem trước cho loại file này — file vẫn sẽ được kiểm tra.",
-  "Progress: {{percent}}%": "Tiến độ: {{percent}}%",
   "Recent checks": "Các lần kiểm tra gần đây",
   "Remove file": "Xóa file",
   "Report ready": "Báo cáo đã sẵn sàng",

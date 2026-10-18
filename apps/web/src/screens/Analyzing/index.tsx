@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, CircleNotch, ClockCounterClockwise, FileMagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
+import { motion } from "motion/react";
+import { CheckCircle, ClockCounterClockwise, FileMagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
 import { useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
@@ -504,7 +504,21 @@ export default function AnalyzingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex, steps.length, stepDuration]);
 
-  const progress = Math.min(100, Math.round((stepIndex / steps.length) * 100));
+  // A real check reports its own progress; the simulated one advances by step.
+  const progress =
+    state.reportMode === "backend"
+      ? jobStatus === "completed"
+        ? 100
+        : Math.min(100, Math.max(0, Math.round(jobProgress ?? 0)))
+      : Math.min(100, Math.round((stepIndex / steps.length) * 100));
+  // The one line saying what's happening now: the backend's message, or the
+  // simulated step.
+  const stageLabel =
+    state.reportMode === "backend"
+      ? jobStatus === "completed"
+        ? tl("Finishing up")
+        : tl(jobMessage) ?? tl("Waiting for backend")
+      : tl(steps[Math.min(stepIndex, steps.length - 1)].label);
   const docLabel = docLabels.length > 1 ? tl("{{count}} documents", { count: docLabels.length }) : docLabels[0];
   const failed = jobStatus === "failed";
 
@@ -544,11 +558,9 @@ export default function AnalyzingPage() {
           {jobMessage && <p className="mt-1 text-xs text-severity-high/80">{tl(jobMessage)}</p>}
         </div>
       ) : (
-        state.reportMode === "backend" &&
         !resultIds && (
-          <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm text-ink-600">
-            <p className="font-semibold text-ink-900">{jobStatus === "completed" ? tl("Finishing up") : tl(jobMessage) ?? tl("Waiting for backend")}</p>
-            {jobProgress !== null && <p className="mt-1 text-xs text-ink-500">{tl("Progress: {{percent}}%", { percent: jobProgress })}</p>}
+          <div className="mt-4 w-full max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-left text-sm">
+            <p className="font-semibold text-ink-900">{stageLabel}</p>
           </div>
         )
       )}
@@ -577,39 +589,6 @@ export default function AnalyzingPage() {
             onClick={() => navigate("/documents")}
           >
             {tl("Continue in background")}</Button>
-        </div>
-      )}
-
-      {!failed && (
-        <div className="mt-10 flex w-full max-w-sm flex-col gap-3 text-left">
-          <AnimatePresence initial={false}>
-            {steps.map((step, i) => {
-              const done = i < stepIndex || resultIds;
-              const active = i === stepIndex && !resultIds;
-              if (i > stepIndex && !resultIds) return null;
-              return (
-                <motion.div
-                  key={step.id}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className={cn(
-                    "flex items-center gap-3 rounded-[var(--radius-control)] border px-4 py-3",
-                    active ? "border-brand-300 bg-brand-100/40" : "border-line bg-white",
-                  )}
-                >
-                  {done ? (
-                    <CheckCircle size={20} weight="fill" className="text-success shrink-0" />
-                  ) : (
-                    <CircleNotch size={20} className="shrink-0 animate-spin motion-reduce:animate-none text-brand-500" />
-                  )}
-                  <span className={cn("text-sm font-medium", done ? "text-ink-500" : "text-ink-900")}>
-                    {tl(step.label)}
-                  </span>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
         </div>
       )}
 

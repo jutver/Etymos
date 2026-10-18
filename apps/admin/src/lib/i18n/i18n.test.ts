@@ -61,7 +61,7 @@ describe("admin i18n", () => {
     expect(en.tn(1, "{{count}} thing", "{{count}} things")).toBe("1 thing");
     expect(en.tn(3, "{{count}} thing", "{{count}} things")).toBe("3 things");
     en.setLanguage("vi");
-    expect(en.tn(3, "{{count}} words", "{{count}} words")).toBe("3 từ");
+    expect(en.tn(3, "{{count}} user", "{{count}} users")).toBe("3 người dùng");
   });
 
   it("persists the choice separately from the web app, updates <html lang>, and restores it", async () => {
