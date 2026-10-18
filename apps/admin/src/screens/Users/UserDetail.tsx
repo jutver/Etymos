@@ -408,7 +408,7 @@ export default function UserDetailPage() {
   const deletionRequested = !!profile.deletion_requested_at;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-[1400px]">
       <button
         type="button"
         onClick={() => navigate("/users")}
@@ -433,264 +433,276 @@ export default function UserDetailPage() {
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
-      <div className="mt-6 space-y-5 rounded-card border border-border bg-surface p-6 shadow-card">
-        <h2 className="text-h2 font-semibold text-fg">{t("Plan & credits")}</h2>
+      {/* Two columns on wide screens: what the admin edits on the left, the
+          user's history (which grows long) on the right. One column below xl,
+          where the side-by-side plan fields would get cramped. */}
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-2">
+        <div className="space-y-6">
+          <div className="space-y-5 rounded-card border border-border bg-surface p-6 shadow-card">
+            <h2 className="text-h2 font-semibold text-fg">{t("Plan & credits")}</h2>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan tier")}</label>
-            <select
-              value={planTier}
-              onChange={(e) => setPlanTier(e.target.value as PlanTier)}
-              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan tier")}</label>
+                <select
+                  value={planTier}
+                  onChange={(e) => setPlanTier(e.target.value as PlanTier)}
+                  className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+                >
+                  {PLAN_OPTIONS.map((p) => (
+                    <option key={p} value={p} className="capitalize">
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Billing cycle")}</label>
+                <select
+                  value={billingCycle}
+                  onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
+                  className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+                >
+                  {BILLING_OPTIONS.map((b) => (
+                    <option key={b} value={b} className="capitalize">
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan ends")}</label>
+                <input
+                  type="date"
+                  value={planTier === "free" ? "" : planEnds}
+                  disabled={planTier === "free"}
+                  onChange={(e) => setPlanEnds(e.target.value)}
+                  className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent disabled:opacity-50"
+                />
+                <p className="mt-1 text-caption text-fg-subtle">
+                  {planTier === "free" ? t("Free has no end date.") : t("End of that day, Vietnam time. Leave blank for no end date.")}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Standard credits")}</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={standardCredits}
+                  onChange={(e) => setStandardCredits(Number(e.target.value))}
+                  className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Premium credits")}</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={premiumCredits}
+                  onChange={(e) => setPremiumCredits(Number(e.target.value))}
+                  className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
+                />
+              </div>
+
+              <div className="flex items-end">
+                {/* Same height as the inputs beside it (border + py-2), so the switch
+                    lines up with the Premium credits field. A <label> forwards clicks
+                    on the text to the switch button. */}
+                <label className="flex cursor-pointer items-center gap-2.5 border border-transparent py-2 text-body text-fg">
+                  <Switch checked={studentVerified} onChange={setStudentVerified} />
+                  {t("Student verified")}
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {PLAN_OPTIONS.map((p) => (
-                <option key={p} value={p} className="capitalize">
-                  {p}
-                </option>
-              ))}
-            </select>
+              {saving ? t("Saving…") : t("Save changes")}
+            </button>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Billing cycle")}</label>
-            <select
-              value={billingCycle}
-              onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
-              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
-            >
-              {BILLING_OPTIONS.map((b) => (
-                <option key={b} value={b} className="capitalize">
-                  {b}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <ShieldWarning size={18} weight="bold" className="text-fg-muted" />
+              <h2 className="text-h2 font-semibold text-fg">{t("Ban")}</h2>
+            </div>
+
+            {banned ? (
+              <div className="rounded-control border border-destructive/40 bg-destructive-bg p-3.5">
+                <p className="text-body font-medium text-destructive">
+                  {profile.banned_permanent ? t("Banned permanently") : t("Banned until {{n}}", { n: new Date(profile.banned_until!).toLocaleString(currentLocale()) })}
+                </p>
+                {profile.ban_reason && <p className="mt-1 text-caption text-destructive/90">"{profile.ban_reason}"</p>}
+                <button
+                  type="button"
+                  onClick={handleUnban}
+                  disabled={unbanSubmitting}
+                  className="mt-3 cursor-pointer rounded-control border border-destructive/40 bg-surface px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:bg-destructive-bg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {unbanSubmitting ? t("Unbanning…") : t("Unban user")}
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-body text-fg-muted">
+                  {t("Banning signs this user out immediately and blocks sign-in until unbanned. They'll see your message.")}</p>
+                <button
+                  type="button"
+                  onClick={openBanModal}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
+                >
+                  <Prohibit size={14} weight="bold" />
+                  {t("Ban user")}</button>
+              </>
+            )}
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Plan ends")}</label>
-            <input
-              type="date"
-              value={planTier === "free" ? "" : planEnds}
-              disabled={planTier === "free"}
-              onChange={(e) => setPlanEnds(e.target.value)}
-              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent disabled:opacity-50"
-            />
-            <p className="mt-1 text-caption text-fg-subtle">
-              {planTier === "free" ? t("Free has no end date.") : t("End of that day, Vietnam time. Leave blank for no end date.")}
-            </p>
-          </div>
+          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <TrashSimple size={18} weight="bold" className="text-fg-muted" />
+              <h2 className="text-h2 font-semibold text-fg">{t("Delete account")}</h2>
+            </div>
 
-          <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Standard credits")}</label>
-            <input
-              type="number"
-              min={0}
-              value={standardCredits}
-              onChange={(e) => setStandardCredits(Number(e.target.value))}
-              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
-            />
-          </div>
+            {deletionRequested ? (
+              <div className="rounded-control border border-warning/40 bg-warning-bg p-3.5">
+                <p className="text-body font-medium text-warning">
+                  {t("Deletion requested")}{" "}{new Date(profile.deletion_requested_at!).toLocaleString(currentLocale())}
+                </p>
+                <p className="mt-1 text-caption text-warning/90">
+                  {t("Waiting for the user to confirm from their account — nothing is deleted until they click confirm.")}</p>
+                <button
+                  type="button"
+                  onClick={handleCancelDeletionRequest}
+                  disabled={cancellingDeletion}
+                  className="mt-3 cursor-pointer rounded-control border border-border bg-surface px-3.5 py-1.5 text-caption font-semibold text-fg transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {cancellingDeletion ? t("Cancelling…") : t("Cancel deletion request")}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-body text-fg-muted">
+                  {t("Requesting deletion prompts the user to confirm in their own account before anything is removed.")}</p>
+                <button
+                  type="button"
+                  onClick={handleRequestDeletion}
+                  disabled={requestingDeletion}
+                  className="mt-3 cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-semibold text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {requestingDeletion ? t("Requesting…") : t("Request deletion")}
+                </button>
+              </div>
+            )}
 
-          <div>
-            <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Premium credits")}</label>
-            <input
-              type="number"
-              min={0}
-              value={premiumCredits}
-              onChange={(e) => setPremiumCredits(Number(e.target.value))}
-              className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <div className="flex items-center gap-2.5">
-              <Switch checked={studentVerified} onChange={setStudentVerified} />
-              <span className="text-body text-fg">{t("Student verified")}</span>
+            <div className="border-t border-border pt-4">
+              <p className="text-body text-fg-muted">
+                {t("Force delete removes the account and all its data immediately —")}{" "}
+                <span className="font-semibold text-fg">{t("no confirmation from the user, cannot be undone.")}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setForceDeleteConfirmText("");
+                  setForceDeleteModalOpen(true);
+                }}
+                className="mt-3 flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
+              >
+                <TrashSimple size={14} weight="bold" />
+                {t("Force delete account")}</button>
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="cursor-pointer rounded-control bg-accent px-4 py-2 text-body font-semibold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {saving ? t("Saving…") : t("Save changes")}
-        </button>
-      </div>
+        <div className="space-y-6">
+          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <ClockCounterClockwise size={18} weight="bold" className="text-fg-muted" />
+              <h2 className="text-h2 font-semibold text-fg">{t("Audit trail")}</h2>
+            </div>
 
-      <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex items-center gap-2">
-          <ShieldWarning size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">{t("Ban")}</h2>
-        </div>
+            {auditLoading ? (
+              <ListItemsSkeleton />
+            ) : auditLog.length === 0 ? (
+              <p className="text-body text-fg-muted">{t("No audit events recorded for this user yet.")}</p>
+            ) : (
+              <ul className="space-y-3">
+                {auditLog.map((entry) => {
+                  const metadata = entry.metadata ?? {};
+                  const before = (metadata.before ?? {}) as Record<string, unknown>;
+                  const after = (metadata.after ?? {}) as Record<string, unknown>;
+                  const changedFields = Object.keys(after);
 
-        {banned ? (
-          <div className="rounded-control border border-destructive/40 bg-destructive-bg p-3.5">
-            <p className="text-body font-medium text-destructive">
-              {profile.banned_permanent ? t("Banned permanently") : t("Banned until {{n}}", { n: new Date(profile.banned_until!).toLocaleString(currentLocale()) })}
-            </p>
-            {profile.ban_reason && <p className="mt-1 text-caption text-destructive/90">"{profile.ban_reason}"</p>}
-            <button
-              type="button"
-              onClick={handleUnban}
-              disabled={unbanSubmitting}
-              className="mt-3 cursor-pointer rounded-control border border-destructive/40 bg-surface px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:bg-destructive-bg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {unbanSubmitting ? t("Unbanning…") : t("Unban user")}
-            </button>
+                  return (
+                    <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-body font-medium text-fg">
+                          {t(ACTION_LABELS[entry.action] ?? entry.action)}
+                        </span>
+                        <span className="text-caption text-fg-muted">
+                          {new Date(entry.created_at).toLocaleString(currentLocale())}
+                        </span>
+                      </div>
+                      {entry.actor_id && (
+                        <p className="mt-0.5 text-caption text-fg-muted">
+                          {t("By")}{" "}{entry.actor_id === adminUser?.id ? "you" : entry.actor_id}
+                        </p>
+                      )}
+                      {changedFields.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {changedFields.map((field) => (
+                            <li key={field} className="text-caption text-fg-muted">
+                              <span className="font-medium text-fg">{t(FIELD_LABELS[field] ?? field)}</span>:{" "}
+                              {formatAuditValue(before[field])} → {formatAuditValue(after[field])}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-        ) : (
-          <>
-            <p className="text-body text-fg-muted">
-              {t("Banning signs this user out immediately and blocks sign-in until unbanned. They'll see your message.")}</p>
-            <button
-              type="button"
-              onClick={openBanModal}
-              className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
-            >
-              <Prohibit size={14} weight="bold" />
-              {t("Ban user")}</button>
-          </>
-        )}
-      </div>
 
-      <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex items-center gap-2">
-          <TrashSimple size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">{t("Delete account")}</h2>
-        </div>
+          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <ListBullets size={18} weight="bold" className="text-fg-muted" />
+              <h2 className="text-h2 font-semibold text-fg">{t("Usage log")}</h2>
+            </div>
+            <p className="text-caption text-fg-muted">
+              {t("The user's own activity — document checks and purchases — as opposed to admin-caused changes above.")}</p>
 
-        {deletionRequested ? (
-          <div className="rounded-control border border-warning/40 bg-warning-bg p-3.5">
-            <p className="text-body font-medium text-warning">
-              {t("Deletion requested")}{" "}{new Date(profile.deletion_requested_at!).toLocaleString(currentLocale())}
-            </p>
-            <p className="mt-1 text-caption text-warning/90">
-              {t("Waiting for the user to confirm from their account — nothing is deleted until they click confirm.")}</p>
-            <button
-              type="button"
-              onClick={handleCancelDeletionRequest}
-              disabled={cancellingDeletion}
-              className="mt-3 cursor-pointer rounded-control border border-border bg-surface px-3.5 py-1.5 text-caption font-semibold text-fg transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {cancellingDeletion ? t("Cancelling…") : t("Cancel deletion request")}
-            </button>
+            {usageLoading ? (
+              <ListItemsSkeleton />
+            ) : usageError ? (
+              <p className="text-caption text-destructive">{t(usageError)}</p>
+            ) : usageLog.length === 0 ? (
+              <p className="text-body text-fg-muted">{t("No activity recorded for this user yet.")}</p>
+            ) : (
+              <ul className="space-y-3">
+                {usageLog.map((entry) => (
+                  <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-body font-medium text-fg">{entry.title}</span>
+                      <span className="shrink-0 text-caption text-fg-muted">
+                        {new Date(entry.created_at).toLocaleString(currentLocale())}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-caption text-fg-muted">{t(entry.detail)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        ) : (
-          <div>
-            <p className="text-body text-fg-muted">
-              {t("Requesting deletion prompts the user to confirm in their own account before anything is removed.")}</p>
-            <button
-              type="button"
-              onClick={handleRequestDeletion}
-              disabled={requestingDeletion}
-              className="mt-3 cursor-pointer rounded-control border border-border px-3.5 py-1.5 text-caption font-semibold text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {requestingDeletion ? t("Requesting…") : t("Request deletion")}
-            </button>
-          </div>
-        )}
-
-        <div className="border-t border-border pt-4">
-          <p className="text-body text-fg-muted">
-            {t("Force delete removes the account and all its data immediately —")}{" "}
-            <span className="font-semibold text-fg">{t("no confirmation from the user, cannot be undone.")}</span>
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setForceDeleteConfirmText("");
-              setForceDeleteModalOpen(true);
-            }}
-            className="mt-3 flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
-          >
-            <TrashSimple size={14} weight="bold" />
-            {t("Force delete account")}</button>
         </div>
-      </div>
-
-      <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex items-center gap-2">
-          <ClockCounterClockwise size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">{t("Audit trail")}</h2>
-        </div>
-
-        {auditLoading ? (
-          <ListItemsSkeleton />
-        ) : auditLog.length === 0 ? (
-          <p className="text-body text-fg-muted">{t("No audit events recorded for this user yet.")}</p>
-        ) : (
-          <ul className="space-y-3">
-            {auditLog.map((entry) => {
-              const metadata = entry.metadata ?? {};
-              const before = (metadata.before ?? {}) as Record<string, unknown>;
-              const after = (metadata.after ?? {}) as Record<string, unknown>;
-              const changedFields = Object.keys(after);
-
-              return (
-                <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-body font-medium text-fg">
-                      {t(ACTION_LABELS[entry.action] ?? entry.action)}
-                    </span>
-                    <span className="text-caption text-fg-muted">
-                      {new Date(entry.created_at).toLocaleString(currentLocale())}
-                    </span>
-                  </div>
-                  {entry.actor_id && (
-                    <p className="mt-0.5 text-caption text-fg-muted">
-                      {t("By")}{" "}{entry.actor_id === adminUser?.id ? "you" : entry.actor_id}
-                    </p>
-                  )}
-                  {changedFields.length > 0 && (
-                    <ul className="mt-2 space-y-1">
-                      {changedFields.map((field) => (
-                        <li key={field} className="text-caption text-fg-muted">
-                          <span className="font-medium text-fg">{t(FIELD_LABELS[field] ?? field)}</span>:{" "}
-                          {formatAuditValue(before[field])} → {formatAuditValue(after[field])}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      <div className="mt-6 space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex items-center gap-2">
-          <ListBullets size={18} weight="bold" className="text-fg-muted" />
-          <h2 className="text-h2 font-semibold text-fg">{t("Usage log")}</h2>
-        </div>
-        <p className="text-caption text-fg-muted">
-          {t("The user's own activity — document checks and purchases — as opposed to admin-caused changes above.")}</p>
-
-        {usageLoading ? (
-          <ListItemsSkeleton />
-        ) : usageError ? (
-          <p className="text-caption text-destructive">{t(usageError)}</p>
-        ) : usageLog.length === 0 ? (
-          <p className="text-body text-fg-muted">{t("No activity recorded for this user yet.")}</p>
-        ) : (
-          <ul className="space-y-3">
-            {usageLog.map((entry) => (
-              <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="truncate text-body font-medium text-fg">{entry.title}</span>
-                  <span className="shrink-0 text-caption text-fg-muted">
-                    {new Date(entry.created_at).toLocaleString(currentLocale())}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-caption text-fg-muted">{t(entry.detail)}</p>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       {banModalOpen && (
