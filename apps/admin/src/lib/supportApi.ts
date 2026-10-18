@@ -1,7 +1,8 @@
-// Support inbox. The ticket list and the status counts are plain reads, so
-// they query Supabase directly (admins may read the support tables under
-// RLS) and keep working when the backend is down. Everything else goes
-// through the backend (backend/api/support.py, /api/admin/support/*): replies
+// Support inbox. The ticket list, the status counts and the ticket fields
+// (status, assignee, topic, priority) go straight to Supabase: admins may
+// read the support tables under RLS and edit those fields through
+// admin_update_support_ticket(), and none of it sends email. Opening a ticket
+// and replying go through the backend (backend/api/support.py, /api/admin/support/*): replies
 // must be emailed from the support mailbox, statuses kept consistent with
 // them, and attachment links signed.
 import { supabase } from "@etymos/shared";
@@ -219,13 +220,33 @@ export function postSupportMessage(
   return request(`/api/admin/support/tickets/${number}/messages`, { method: "POST", body: form });
 }
 
-export function updateSupportTicket(
-  number: number,
-  patch: Partial<{ status: SupportStatus; priority: "normal" | "high"; category: SupportCategory; assigned_to: string }>,
-): Promise<SupportTicketDetail> {
-  return request(`/api/admin/support/tickets/${number}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
+export type SupportTicketPatch = Partial<{
+  status: SupportStatus;
+  priority: "normal" | "high";
+  category: SupportCategory;
+  /** An admin's id, or "" to unassign. */
+  assigned_to: string;
+}>;
+
+/** The ticket fields as saved, from admin_update_support_ticket(). */
+export type SupportTicketFields = Pick<
+  SupportTicketRow,
+  "status" | "priority" | "category" | "resolved_at" | "closed_at" | "updated_at"
+> & { assigned_to: string | null };
+
+/** Ticket fields send no email, so they're saved straight to the database
+ * (supabase/migrations/20261018040000_admin_update_support_ticket.sql)
+ * rather than through the backend. */
+export async function updateSupportTicket(number: number, patch: SupportTicketPatch): Promise<SupportTicketFields> {
+  const { data, error } = await supabase
+    .rpc("admin_update_support_ticket", {
+      p_number: number,
+      p_status: patch.status ?? null,
+      p_priority: patch.priority ?? null,
+      p_category: patch.category ?? null,
+      p_assigned_to: patch.assigned_to ?? null,
+    })
+    .single();
+  if (error) throw error;
+  return data as SupportTicketFields;
 }

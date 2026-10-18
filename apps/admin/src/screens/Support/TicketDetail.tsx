@@ -21,6 +21,7 @@ import {
   postSupportMessage,
   updateSupportTicket,
   type SupportAdminMessage,
+  type SupportTicketPatch,
   type SupportCategory,
   type SupportPerson,
   type SupportStatus,
@@ -65,7 +66,6 @@ export default function SupportTicketDetailPage() {
   const [ticket, setTicket] = useState<SupportTicketDetail | null>(null);
   const [agents, setAgents] = useState<SupportPerson[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,15 +82,47 @@ export default function SupportTicketDetailPage() {
     };
   }, [number]);
 
-  async function update(patch: Parameters<typeof updateSupportTicket>[1]) {
-    setUpdating(true);
+  // Applied on screen straight away; the saved values replace it when the
+  // database answers, and a failed save puts back what was there.
+  async function update(patch: SupportTicketPatch) {
+    if (!ticket) return;
+    const before = ticket;
+    const assignee =
+      patch.assigned_to === undefined
+        ? undefined
+        : (agents.find((a) => a.id === patch.assigned_to) ?? null);
     setError(null);
+    setTicket((cur) =>
+      cur && {
+        ...cur,
+        ...(patch.status && { status: patch.status }),
+        ...(patch.priority && { priority: patch.priority }),
+        ...(patch.category && { category: patch.category }),
+        ...(assignee !== undefined && { assignee }),
+      },
+    );
     try {
-      setTicket(await updateSupportTicket(number, patch));
+      const saved = await updateSupportTicket(number, patch);
+      setTicket((cur) =>
+        cur && {
+          ...cur,
+          ...(patch.status && { status: saved.status, resolved_at: saved.resolved_at, closed_at: saved.closed_at }),
+          ...(patch.priority && { priority: saved.priority }),
+          ...(patch.category && { category: saved.category }),
+          updated_at: saved.updated_at,
+        },
+      );
     } catch (err) {
+      setTicket((cur) =>
+        cur && {
+          ...cur,
+          ...(patch.status && { status: before.status, resolved_at: before.resolved_at, closed_at: before.closed_at }),
+          ...(patch.priority && { priority: before.priority }),
+          ...(patch.category && { category: before.category }),
+          ...(assignee !== undefined && { assignee: before.assignee }),
+        },
+      );
       setError(friendlyError(err));
-    } finally {
-      setUpdating(false);
     }
   }
 
@@ -146,7 +178,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Status")}>
                 <select
                   value={ticket.status}
-                  disabled={updating}
                   onChange={(e) => update({ status: e.target.value as SupportStatus })}
                   className={selectClass}
                 >
@@ -160,7 +191,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Assignee")}>
                 <select
                   value={ticket.assignee?.id ?? ""}
-                  disabled={updating}
                   onChange={(e) => update({ assigned_to: e.target.value })}
                   className={selectClass}
                 >
@@ -175,7 +205,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Topic")}>
                 <select
                   value={ticket.category}
-                  disabled={updating}
                   onChange={(e) => update({ category: e.target.value as SupportCategory })}
                   className={selectClass}
                 >
@@ -189,7 +218,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Priority")}>
                 <select
                   value={ticket.priority}
-                  disabled={updating}
                   onChange={(e) => update({ priority: e.target.value as "normal" | "high" })}
                   className={selectClass}
                 >
