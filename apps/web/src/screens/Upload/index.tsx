@@ -28,7 +28,7 @@ import { useAuth } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/cn";
-import type { Language } from "../../lib/types";
+import type { Language, MatchedSource } from "../../lib/types";
 import { t, tr, tn, currentLocale } from "../../lib/i18n";
 
 const languages: { id: Language; label: string }[] = [
@@ -41,6 +41,10 @@ const BALANCE_ICON: Record<BalanceSource, typeof GraduationCap> = {
   standard: Coins,
   premium: Sparkle,
 };
+
+// The file preview has no matches to highlight; a stable empty list keeps the
+// viewer from re-scanning the PDF on every render of this screen.
+const NO_MATCHES: MatchedSource[] = [];
 
 function isPdfFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -430,11 +434,11 @@ export default function UploadPage() {
                   <p className="shrink-0 text-xs font-medium text-ink-400">
                     {tn(files.length, "{{count}} file ready to check", "{{count}} files ready to check")}</p>
 
-                  <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-line bg-surface-tint">
+                  {/* A fixed-height frame: the viewer pages inside it instead of
+                      growing the whole card to the length of the document. */}
+                  <div className="h-[min(72vh,760px)] min-h-[26rem] shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface-tint">
                     {previewFile && isPdfFile(previewFile.file) ? (
-                      <div className="p-1">
-                        <PlagiarismPdfViewer pdfUrl={previewFile.file} matches={[]} />
-                      </div>
+                      <PlagiarismPdfViewer pdfUrl={previewFile.file} matches={NO_MATCHES} defaultFit="page" />
                     ) : (
                       <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-2 p-8 text-center">
                         <div className="flex size-12 items-center justify-center rounded-full bg-white text-ink-400 shadow-sm">
