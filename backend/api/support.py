@@ -994,7 +994,7 @@ async def admin_reply(
         if not internal and not support_mail.is_configured():
             raise HTTPException(status_code=503, detail="Email sending is not configured on this server.")
         ticket = _admin_ticket(client, number)
-        ticket, _ = add_agent_message(
+        _, message = add_agent_message(
             client,
             ticket,
             agent_id=admin.user_id,
@@ -1003,7 +1003,8 @@ async def admin_reply(
             files=incoming,
             set_status=set_status,
         )
-        return admin_conversation(client, ticket)
+        # The admin app reloads the ticket from the database itself.
+        return {"id": message["id"]}
 
     return await run_in_threadpool(work)
 

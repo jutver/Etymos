@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { EnvelopeSimple, MagnifyingGlass, ShieldWarning } from "@phosphor-icons/react";
+import { EnvelopeSimple, MagnifyingGlass, ShieldWarning, Trash } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { DataTable, type Column } from "../../components/DataTable";
+import { DeleteRecordsDialog } from "../../components/DeleteRecordsDialog";
+import { selectionColumn } from "../../components/selectionColumn";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
+  deleteSupportTickets,
   getSupportSummary,
   listSupportTickets,
   type SupportCategory,
@@ -14,6 +17,7 @@ import {
   type SupportTicketRow,
 } from "../../lib/supportApi";
 import { friendlyError } from "../../lib/errors";
+import { deleteResultMessage, type DeleteScope } from "../../lib/storageFiles";
 import { t, tr } from "../../lib/i18n";
 import { CATEGORY_LABELS, STATUS_LABELS, ago, statusTone } from "./labels";
 
@@ -26,6 +30,8 @@ const STATUS_TABS: { key: SupportStatus | "all"; label: string }[] = [
   { key: "closed", label: tr("Closed") },
   { key: "all", label: tr("All") },
 ];
+
+const DELETE_STATUSES = STATUS_TABS.filter((tab) => tab.key !== "all");
 
 // Last result per filter combination, kept for the session. Switching back to
 // a tab shows it straight away while a fresh copy loads in the background, so
@@ -50,6 +56,13 @@ export default function SupportInboxPage() {
   const [summary, setSummary] = useState<SupportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Bumped after a delete so the list and counts load again.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +97,10 @@ export default function SupportInboxPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [status, assigned, category, search, page]);
+  }, [status, assigned, category, search, page, version]);
+
+  // A selection only makes sense for the list it was made in.
+  useEffect(() => setSelected(new Set()), [status, assigned, category, search]);
 
   // Tab counts don't depend on the filters, so they load once per visit.
   useEffect(() => {
@@ -95,9 +111,27 @@ export default function SupportInboxPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
+
+  async function handleDelete(scope: DeleteScope) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteSupportTickets(scope);
+      pageCache.clear();
+      setDeleteOpen(false);
+      setSelected(new Set());
+      setNotice(deleteResultMessage(result));
+      setVersion((v) => v + 1);
+    } catch (err) {
+      setDeleteError(friendlyError(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const columns: Column<SupportTicketRow>[] = [
+    selectionColumn(rows, (r) => r.id, selected, setSelected),
     {
       key: "number",
       label: tr("#"),
@@ -182,6 +216,18 @@ export default function SupportInboxPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setNotice(null);
+              setDeleteOpen(true);
+            }}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3 py-2 text-caption font-medium text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
+          >
+            <Trash size={14} weight="bold" />
+            {selected.size > 0 ? t("Delete ({{count}})", { count: selected.size }) : t("Delete…")}
+          </button>
           <select
             value={assigned}
             onChange={(e) => {
@@ -229,6 +275,7 @@ export default function SupportInboxPage() {
       </div>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
+      {notice && <p className="mt-4 text-caption text-fg-muted">{notice}</p>}
 
       <div className="mt-4">
         <DataTable
@@ -243,6 +290,19 @@ export default function SupportInboxPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {deleteOpen && (
+        <DeleteRecordsDialog
+          title={tr("Delete support requests")}
+          selectedIds={[...selected]}
+          statuses={DELETE_STATUSES}
+          defaultStatus={status === "all" ? "closed" : status}
+          pending={deleting}
+          error={deleteError}
+          onCancel={() => setDeleteOpen(false)}
+          onConfirm={handleDelete}
+        />
+      )}
     </div>
   );
 }

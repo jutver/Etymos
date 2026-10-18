@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
-import { MagnifyingGlass, Eye, Check, X, CircleNotch } from "@phosphor-icons/react";
+import { MagnifyingGlass, Eye, Check, X, CircleNotch, Trash } from "@phosphor-icons/react";
 import { DataTable, type Column } from "../../components/DataTable";
+import { DeleteRecordsDialog } from "../../components/DeleteRecordsDialog";
+import { selectionColumn } from "../../components/selectionColumn";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
   listVerificationRequests,
   approveVerificationRequest,
   rejectVerificationRequest,
   getEvidenceSignedUrl,
+  deleteVerificationRequests,
   type VerificationRequest,
   type VerificationStatus,
 } from "../../lib/verificationQueries";
 import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
+import { deleteResultMessage, type DeleteScope } from "../../lib/storageFiles";
 import { cn } from "@etymos/shared";
 import { t, tr, currentLocale } from "../../lib/i18n";
 
@@ -31,6 +35,8 @@ const STATUS_TABS: { key: VerificationStatus | "all"; label: string }[] = [
   { key: "all", label: tr("All") },
 ];
 
+const DELETE_STATUSES = STATUS_TABS.filter((tab) => tab.key !== "all");
+
 export default function VerificationPage() {
   const { user } = useAdminAuth();
   const [statusFilter, setStatusFilter] = useState<VerificationStatus | "all">("pending");
@@ -43,6 +49,13 @@ export default function VerificationPage() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; storagePath: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The ids the dialog offers as "selected": the ticked rows, or one row's
+  // own delete button.
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function reload() {
     let cancelled = false;
@@ -64,6 +77,30 @@ export default function VerificationPage() {
   }
 
   useEffect(reload, [page, search, statusFilter]);
+  // A selection only makes sense for the list it was made in.
+  useEffect(() => setSelected(new Set()), [search, statusFilter]);
+
+  function openDelete(ids: string[]) {
+    setDeleteError(null);
+    setNotice(null);
+    setDeleteIds(ids);
+  }
+
+  async function handleDelete(scope: DeleteScope) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteVerificationRequests(scope);
+      setDeleteIds(null);
+      setSelected(new Set());
+      setNotice(deleteResultMessage(result));
+      reload();
+    } catch (err) {
+      setDeleteError(friendlyError(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handlePreview(row: VerificationRequest) {
     setError(null);
@@ -107,6 +144,7 @@ export default function VerificationPage() {
   }
 
   const columns: Column<VerificationRequest>[] = [
+    selectionColumn(rows, (r) => r.id, selected, setSelected),
     {
       key: "requester",
       label: tr("Requester"),
@@ -170,6 +208,14 @@ export default function VerificationPage() {
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => openDelete([r.id])}
+            title={t("Delete")}
+            className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
+          >
+            <Trash size={14} weight="bold" />
+          </button>
         </div>
       ),
     },
@@ -203,24 +249,35 @@ export default function VerificationPage() {
           ))}
         </div>
 
-        <div className="relative max-w-sm flex-1 sm:min-w-[240px]">
-          <MagnifyingGlass
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
-          />
-          <input
-            value={search}
-            onChange={(e) => {
-              setPage(0);
-              setSearch(e.target.value);
-            }}
-            placeholder={t("Search by file name…")}
-            className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
-          />
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => openDelete([...selected])}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3 py-2 text-caption font-medium text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
+          >
+            <Trash size={14} weight="bold" />
+            {selected.size > 0 ? t("Delete ({{count}})", { count: selected.size }) : t("Delete…")}
+          </button>
+          <div className="relative max-w-sm flex-1 sm:min-w-[240px]">
+            <MagnifyingGlass
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+            />
+            <input
+              value={search}
+              onChange={(e) => {
+                setPage(0);
+                setSearch(e.target.value);
+              }}
+              placeholder={t("Search by file name…")}
+              className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
+            />
+          </div>
         </div>
       </div>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
+      {notice && <p className="mt-4 text-caption text-fg-muted">{notice}</p>}
 
       <div className="mt-4">
         <DataTable
@@ -234,6 +291,19 @@ export default function VerificationPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {deleteIds && (
+        <DeleteRecordsDialog
+          title={tr("Delete verification requests")}
+          selectedIds={deleteIds}
+          statuses={DELETE_STATUSES}
+          defaultStatus={statusFilter === "all" ? "rejected" : statusFilter}
+          pending={deleting}
+          error={deleteError}
+          onCancel={() => setDeleteIds(null)}
+          onConfirm={handleDelete}
+        />
+      )}
 
       {preview && (
         <div

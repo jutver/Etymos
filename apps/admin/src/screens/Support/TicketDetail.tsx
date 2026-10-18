@@ -9,18 +9,23 @@ import {
   Paperclip,
   ShieldCheck,
   ShieldWarning,
+  Trash,
   Warning,
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { DeleteRecordsDialog } from "../../components/DeleteRecordsDialog";
 import { LoadingRegion, Skeleton, SkeletonText } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
+  deleteSupportTickets,
   getSupportTicket,
   listSupportAgents,
+  openSupportFile,
   postSupportMessage,
   updateSupportTicket,
   type SupportAdminMessage,
+  type SupportTicketPatch,
   type SupportCategory,
   type SupportPerson,
   type SupportStatus,
@@ -65,7 +70,9 @@ export default function SupportTicketDetailPage() {
   const [ticket, setTicket] = useState<SupportTicketDetail | null>(null);
   const [agents, setAgents] = useState<SupportPerson[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,15 +89,60 @@ export default function SupportTicketDetailPage() {
     };
   }, [number]);
 
-  async function update(patch: Parameters<typeof updateSupportTicket>[1]) {
-    setUpdating(true);
+  // Applied on screen straight away; the saved values replace it when the
+  // database answers, and a failed save puts back what was there.
+  async function update(patch: SupportTicketPatch) {
+    if (!ticket) return;
+    const before = ticket;
+    const assignee =
+      patch.assigned_to === undefined
+        ? undefined
+        : (agents.find((a) => a.id === patch.assigned_to) ?? null);
     setError(null);
+    setTicket((cur) =>
+      cur && {
+        ...cur,
+        ...(patch.status && { status: patch.status }),
+        ...(patch.priority && { priority: patch.priority }),
+        ...(patch.category && { category: patch.category }),
+        ...(assignee !== undefined && { assignee }),
+      },
+    );
     try {
-      setTicket(await updateSupportTicket(number, patch));
+      const saved = await updateSupportTicket(number, patch);
+      setTicket((cur) =>
+        cur && {
+          ...cur,
+          ...(patch.status && { status: saved.status, resolved_at: saved.resolved_at, closed_at: saved.closed_at }),
+          ...(patch.priority && { priority: saved.priority }),
+          ...(patch.category && { category: saved.category }),
+          updated_at: saved.updated_at,
+        },
+      );
     } catch (err) {
+      setTicket((cur) =>
+        cur && {
+          ...cur,
+          ...(patch.status && { status: before.status, resolved_at: before.resolved_at, closed_at: before.closed_at }),
+          ...(patch.priority && { priority: before.priority }),
+          ...(patch.category && { category: before.category }),
+          ...(assignee !== undefined && { assignee: before.assignee }),
+        },
+      );
       setError(friendlyError(err));
-    } finally {
-      setUpdating(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!ticket) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteSupportTickets({ kind: "ids", ids: [ticket.id] });
+      navigate("/support");
+    } catch (err) {
+      setDeleteError(friendlyError(err));
+      setDeleting(false);
     }
   }
 
@@ -138,7 +190,7 @@ export default function SupportTicketDetailPage() {
               ))}
             </ol>
 
-            <Composer ticket={ticket} onPosted={setTicket} />
+            <Composer ticket={ticket} onPosted={() => getSupportTicket(number).then(setTicket)} />
           </div>
 
           <aside className="flex flex-col gap-4">
@@ -146,7 +198,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Status")}>
                 <select
                   value={ticket.status}
-                  disabled={updating}
                   onChange={(e) => update({ status: e.target.value as SupportStatus })}
                   className={selectClass}
                 >
@@ -160,7 +211,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Assignee")}>
                 <select
                   value={ticket.assignee?.id ?? ""}
-                  disabled={updating}
                   onChange={(e) => update({ assigned_to: e.target.value })}
                   className={selectClass}
                 >
@@ -175,7 +225,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Topic")}>
                 <select
                   value={ticket.category}
-                  disabled={updating}
                   onChange={(e) => update({ category: e.target.value as SupportCategory })}
                   className={selectClass}
                 >
@@ -189,7 +238,6 @@ export default function SupportTicketDetailPage() {
               <Field label={t("Priority")}>
                 <select
                   value={ticket.priority}
-                  disabled={updating}
                   onChange={(e) => update({ priority: e.target.value as "normal" | "high" })}
                   className={selectClass}
                 >
@@ -205,6 +253,17 @@ export default function SupportTicketDetailPage() {
                   </Link>
                 </p>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteOpen(true);
+                }}
+                className="inline-flex cursor-pointer items-center gap-1.5 self-start text-caption font-medium text-fg-muted transition hover:text-destructive"
+              >
+                <Trash size={14} weight="bold" />
+                {t("Delete request")}
+              </button>
             </Panel>
 
             <Panel title={t("Requester")}>
@@ -257,6 +316,18 @@ export default function SupportTicketDetailPage() {
             </Panel>
           </aside>
         </div>
+      )}
+
+      {ticket && deleteOpen && (
+        <DeleteRecordsDialog
+          title={tr("Delete support request")}
+          selectedIds={[ticket.id]}
+          description={t("Delete #{{number}} with all its messages, attachments and original emails?", { number: ticket.number })}
+          pending={deleting}
+          error={deleteError}
+          onCancel={() => setDeleteOpen(false)}
+          onConfirm={handleDelete}
+        />
       )}
     </div>
   );
@@ -382,10 +453,10 @@ function MessageItem({ message: m, requester }: { message: SupportAdminMessage; 
           </span>
         )}
         <span className="text-fg-subtle">{when(m.created_at)}</span>
-        {m.raw_email_url && (
-          <a href={m.raw_email_url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+        {m.raw_email_path && (
+          <FileButton path={m.raw_email_path} className="text-accent hover:underline">
             {t("Original email")}
-          </a>
+          </FileButton>
         )}
       </div>
       {(m.sender_mismatch || m.sender_auth === "fail") && (
@@ -401,16 +472,14 @@ function MessageItem({ message: m, requester }: { message: SupportAdminMessage; 
         <ul className="mt-3 flex flex-wrap gap-2">
           {m.attachments.map((a) => (
             <li key={a.id}>
-              <a
-                href={a.url ?? undefined}
-                target="_blank"
-                rel="noreferrer"
+              <FileButton
+                path={a.path}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-caption text-fg-muted hover:text-fg"
               >
                 {a.content_type === "application/pdf" ? <FilePdf size={13} /> : <ImageIcon size={13} />}
                 <span className="max-w-[14rem] truncate">{a.filename}</span>
                 <span className="text-fg-subtle">{size(a.size_bytes)}</span>
-              </a>
+              </FileButton>
             </li>
           ))}
         </ul>
@@ -419,7 +488,25 @@ function MessageItem({ message: m, requester }: { message: SupportAdminMessage; 
   );
 }
 
-function Composer({ ticket, onPosted }: { ticket: SupportTicketDetail; onPosted: (detail: SupportTicketDetail) => void }) {
+/** Opens a support file in a new tab; see openSupportFile(). */
+function FileButton({ path, className, children }: { path: string; className: string; children: ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setFailed(false);
+        openSupportFile(path).catch(() => setFailed(true));
+      }}
+      title={failed ? t("Couldn't open the file.") : undefined}
+      className={cn("cursor-pointer", className, failed && "text-destructive")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Composer({ ticket, onPosted }: { ticket: SupportTicketDetail; onPosted: () => Promise<void> }) {
   const [mode, setMode] = useState<"reply" | "note">("reply");
   const [body, setBody] = useState("");
   const [after, setAfter] = useState<SupportStatus>("pending");
@@ -451,16 +538,15 @@ function Composer({ ticket, onPosted }: { ticket: SupportTicketDetail; onPosted:
     setSending(true);
     setError(null);
     try {
-      onPosted(
-        await postSupportMessage(ticket.number, {
-          body: body.trim(),
-          internal,
-          setStatus: internal ? undefined : after,
-          files,
-        }),
-      );
+      await postSupportMessage(ticket.number, {
+        body: body.trim(),
+        internal,
+        setStatus: internal ? undefined : after,
+        files,
+      });
       setBody("");
       setFiles([]);
+      await onPosted();
     } catch (err) {
       setError(replyError(err));
     } finally {

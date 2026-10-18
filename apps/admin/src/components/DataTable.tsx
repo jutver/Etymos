@@ -11,6 +11,8 @@ const SKELETON_WIDTHS = ["w-3/4", "w-1/2", "w-2/3", "w-5/6", "w-2/5"];
 export interface Column<T> {
   key: string;
   label: string;
+  /** Replaces the translated label in the header cell (e.g. a select-all box). */
+  header?: ReactNode;
   render: (row: T) => ReactNode;
   className?: string;
 }
@@ -53,7 +55,7 @@ export function DataTable<T>({
                     col.className,
                   )}
                 >
-                  {t(col.label)}
+                  {col.header ?? t(col.label)}
                 </th>
               ))}
             </tr>
