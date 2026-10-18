@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ClockCounterClockwise,
-  ListBullets,
   Prohibit,
   ShieldWarning,
   TrashSimple,
@@ -20,8 +19,8 @@ import {
   updateProfile,
   type AuditLogEntry,
 } from "../../lib/supabaseQueries";
-import { listUserUsageLog, type UsageLogEntry } from "../../lib/usageQueries";
 import { forceDeleteUser } from "../../lib/api";
+import { UserActivityLog } from "./UserActivityLog";
 import { isProfileBanned, isProfileOnline, type BillingCycle, type PlanTier, type Profile } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { useAdminAuth } from "../../lib/auth";
@@ -110,10 +109,8 @@ export default function UserDetailPage() {
 
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
+  const [activityVersion, setActivityVersion] = useState(0);
 
-  const [usageLog, setUsageLog] = useState<UsageLogEntry[]>([]);
-  const [usageLoading, setUsageLoading] = useState(true);
-  const [usageError, setUsageError] = useState<string | null>(null);
 
   // Ban modal
   const [banModalOpen, setBanModalOpen] = useState(false);
@@ -153,6 +150,8 @@ export default function UserDetailPage() {
   }, [id]);
 
   function refreshAuditLog(userId: string) {
+    // An admin action also adds entries to the activities log; reload it too.
+    setActivityVersion((v) => v + 1);
     setAuditLoading(true);
     return listAuditLogForUser(userId)
       .then((rows) => setAuditLog(rows))
@@ -163,20 +162,6 @@ export default function UserDetailPage() {
   useEffect(() => {
     if (!id) return;
     refreshAuditLog(id);
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    setUsageLoading(true);
-    setUsageError(null);
-    listUserUsageLog(id)
-      .then((rows) => !cancelled && setUsageLog(rows))
-      .catch((err: unknown) => !cancelled && setUsageError(friendlyError(err)))
-      .finally(() => !cancelled && setUsageLoading(false));
-    return () => {
-      cancelled = true;
-    };
   }, [id]);
 
   async function handleSave() {
@@ -408,7 +393,7 @@ export default function UserDetailPage() {
   const deletionRequested = !!profile.deletion_requested_at;
 
   return (
-    <div className="max-w-[1400px]">
+    <div className="max-w-[1800px]">
       <button
         type="button"
         onClick={() => navigate("/users")}
@@ -433,10 +418,11 @@ export default function UserDetailPage() {
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
-      {/* Two columns on wide screens: what the admin edits on the left, the
-          user's history (which grows long) on the right. One column below xl,
-          where the side-by-side plan fields would get cramped. */}
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-2">
+      {/* Three columns on very wide screens: what the admin edits, the admin
+          audit trail, and the user's activities log. Two below 2xl (the log
+          drops underneath, full width) and one below xl, where the side-by-side
+          plan fields would get cramped. */}
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-2 2xl:grid-cols-3">
         <div className="space-y-6">
           <div className="space-y-5 rounded-card border border-border bg-surface p-6 shadow-card">
             <h2 className="text-h2 font-semibold text-fg">{t("Plan & credits")}</h2>
@@ -671,37 +657,10 @@ export default function UserDetailPage() {
               </ul>
             )}
           </div>
+        </div>
 
-          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
-            <div className="flex items-center gap-2">
-              <ListBullets size={18} weight="bold" className="text-fg-muted" />
-              <h2 className="text-h2 font-semibold text-fg">{t("Usage log")}</h2>
-            </div>
-            <p className="text-caption text-fg-muted">
-              {t("The user's own activity — document checks and purchases — as opposed to admin-caused changes above.")}</p>
-
-            {usageLoading ? (
-              <ListItemsSkeleton />
-            ) : usageError ? (
-              <p className="text-caption text-destructive">{t(usageError)}</p>
-            ) : usageLog.length === 0 ? (
-              <p className="text-body text-fg-muted">{t("No activity recorded for this user yet.")}</p>
-            ) : (
-              <ul className="space-y-3">
-                {usageLog.map((entry) => (
-                  <li key={entry.id} className="rounded-control border border-border bg-surface-muted p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-body font-medium text-fg">{entry.title}</span>
-                      <span className="shrink-0 text-caption text-fg-muted">
-                        {new Date(entry.created_at).toLocaleString(currentLocale())}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-caption text-fg-muted">{t(entry.detail)}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+        <div className="xl:col-span-2 2xl:col-span-1">
+          <UserActivityLog userId={profile.id} adminId={adminUser?.id} refreshKey={activityVersion} />
         </div>
       </div>
 
