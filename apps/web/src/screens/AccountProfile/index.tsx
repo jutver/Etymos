@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeSlash, LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { UserAvatar } from "../../components/ui/UserAvatar";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
@@ -227,7 +228,8 @@ export default function AccountProfilePage() {
           <User size={18} weight="bold" />
           <h2 className="text-sm font-bold uppercase tracking-wide">{t("Display name")}</h2>
         </div>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <UserAvatar user={user} className="size-11 text-sm" />
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}

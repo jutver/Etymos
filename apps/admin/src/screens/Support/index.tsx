@@ -10,6 +10,7 @@ import {
   type SupportCategory,
   type SupportStatus,
   type SupportSummary,
+  type SupportTicketQuery,
   type SupportTicketRow,
 } from "../../lib/supportApi";
 import { friendlyError } from "../../lib/errors";
@@ -25,6 +26,11 @@ const STATUS_TABS: { key: SupportStatus | "all"; label: string }[] = [
   { key: "closed", label: tr("Closed") },
   { key: "all", label: tr("All") },
 ];
+
+// Last result per filter combination, kept for the session. Switching back to
+// a tab shows it straight away while a fresh copy loads in the background, so
+// the inbox never shows rows staler than the last visit.
+const pageCache = new Map<string, { items: SupportTicketRow[]; total: number }>();
 
 const ASSIGNEE_FILTERS: { key: string; label: string }[] = [
   { key: "", label: tr("Everyone") },
@@ -47,33 +53,49 @@ export default function SupportInboxPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const params: SupportTicketQuery = {
+      status: status === "all" ? undefined : status,
+      assigned: assigned || undefined,
+      category: category || undefined,
+      q: search,
+      page: page + 1,
+      pageSize: PAGE_SIZE,
+    };
+    const key = JSON.stringify(params);
+    const cached = pageCache.get(key);
+    if (cached) {
+      setRows(cached.items);
+      setTotal(cached.total);
+    }
+    setLoading(!cached);
     setError(null);
     const timer = window.setTimeout(() => {
-      listSupportTickets({
-        status: status === "all" ? undefined : status,
-        assigned: assigned || undefined,
-        category: category || undefined,
-        q: search,
-        page: page + 1,
-        pageSize: PAGE_SIZE,
-      })
+      listSupportTickets(params)
         .then((r) => {
+          pageCache.set(key, r);
           if (cancelled) return;
           setRows(r.items);
           setTotal(r.total);
         })
         .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
         .finally(() => !cancelled && setLoading(false));
-      getSupportSummary()
-        .then((s) => !cancelled && setSummary(s))
-        .catch(() => undefined);
     }, search ? 250 : 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
   }, [status, assigned, category, search, page]);
+
+  // Tab counts don't depend on the filters, so they load once per visit.
+  useEffect(() => {
+    let cancelled = false;
+    getSupportSummary()
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const columns: Column<SupportTicketRow>[] = [
     {
