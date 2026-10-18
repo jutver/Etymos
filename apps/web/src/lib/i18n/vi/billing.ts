@@ -90,6 +90,8 @@ export const billing: Record<string, string> = {
   "This discount code has expired.": "Mã giảm giá này đã hết hạn.",
   "This discount code has reached its usage limit.": "Mã giảm giá này đã hết lượt sử dụng.",
   "You have already used this discount code.": "Bạn đã dùng mã giảm giá này rồi.",
+  "This discount code isn't available for your account.": "Mã giảm giá này không áp dụng cho tài khoản của bạn.",
+  "This discount code doesn't apply to this purchase.": "Mã giảm giá này không áp dụng cho đơn hàng này.",
   "Verify your student status before buying this plan.": "Hãy xác minh tư cách sinh viên trước khi mua gói này.",
   "Payments aren't available right now. Please try again later.": "Hiện chưa thể thanh toán. Vui lòng thử lại sau.",
   "Checkout": "Thanh toán",

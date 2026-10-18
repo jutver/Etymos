@@ -189,10 +189,58 @@ def _in_window(row: dict, now: datetime) -> bool:
     return (starts is None or starts <= now) and (ends is None or ends >= now)
 
 
-def _code_row(client, user_id: str, raw_code: str) -> dict:
-    """The discount_codes row for a code the user typed, if they may use it.
-    Same rules as the redeem_discount_code RPC, without using it up: a code
-    is only spent when its order is paid."""
+class _Buyer:
+    """What a discount's audience rules ask about the person buying. Same
+    rules as discount_audience_ok() in
+    supabase/migrations/20261018070000_discount_audience.sql."""
+
+    def __init__(self, client, user_id: str, profile: Optional[dict]):
+        self.client, self.user_id = client, user_id
+        self.email = str((profile or {}).get("email") or "").lower()
+        self.signed_up = _parse_ts((profile or {}).get("created_at"))
+        self._has_paid: Optional[bool] = None
+
+    def has_paid(self) -> bool:
+        if self._has_paid is None:
+            paid = (
+                self.client.table(ORDERS)
+                .select("id")
+                .eq("user_id", self.user_id)
+                .eq("status", "success")
+                .limit(1)
+                .execute()
+            )
+            self._has_paid = bool(paid.data)
+        return self._has_paid
+
+    def in_audience(self, row: dict) -> bool:
+        emails = row.get("allowed_emails")
+        if emails is not None and self.email not in {str(e).lower() for e in emails}:
+            return False
+        start, end = _parse_ts(row.get("signup_from")), _parse_ts(row.get("signup_to"))
+        if (start or end) and self.signed_up is None:
+            return False
+        if start is not None and self.signed_up < start:
+            return False
+        if end is not None and self.signed_up > end:
+            return False
+        return not (row.get("new_customers_only") and self.has_paid())
+
+
+def _covers(row: dict, target_type: str, target_id: str, billing_cycle: Optional[str]) -> bool:
+    """Whether a discount covers the item: its plan/pack list (codes) and
+    its billing cycle, which only limits plans."""
+    targets = row.get("targets")
+    if targets is not None and f"{target_type}:{target_id}" not in targets:
+        return False
+    cycle = row.get("billing_cycle")
+    return not (cycle and target_type == "plan" and cycle != billing_cycle)
+
+
+def _code_row(client, buyer: _Buyer, raw_code: str, target: tuple[str, str, Optional[str]]) -> dict:
+    """The discount_codes row for a code the user typed, if they may use it
+    on this item. Same rules as the redeem_discount_code RPC, without using
+    it up: a code is only spent when its order is paid."""
     escaped = re.sub(r"([%_\\])", r"\\\1", raw_code)
     row = _first(client.table("discount_codes").select("*").ilike("code", escaped).limit(1).execute())
     if row is None:
@@ -208,11 +256,15 @@ def _code_row(client, user_id: str, raw_code: str) -> dict:
     cap = row.get("max_redemptions")
     if cap is not None and int(row.get("redemption_count") or 0) >= int(cap):
         raise HTTPException(status_code=400, detail="discount_limit_reached")
+    if not buyer.in_audience(row):
+        raise HTTPException(status_code=400, detail="discount_not_eligible")
+    if not _covers(row, *target):
+        raise HTTPException(status_code=400, detail="discount_not_applicable")
     used = (
         client.table("discount_code_redemptions")
         .select("id")
         .eq("code_id", row["id"])
-        .eq("user_id", user_id)
+        .eq("user_id", buyer.user_id)
         .limit(1)
         .execute()
     )
@@ -222,14 +274,15 @@ def _code_row(client, user_id: str, raw_code: str) -> dict:
 
 
 def quote_item(client, user_id: str, item: ItemIn) -> Quote:
+    profile = _first(
+        client.table("profiles").select("student_verified, email, created_at").eq("id", user_id).limit(1).execute()
+    )
+    buyer = _Buyer(client, user_id, profile)
     if item.kind == "plan":
         plan = _first(client.table("plan_definitions").select("*").eq("id", item.plan_tier).limit(1).execute())
         if plan is None:
             raise HTTPException(status_code=400, detail="unknown_item")
         if plan.get("requires_verification"):
-            profile = _first(
-                client.table("profiles").select("student_verified").eq("id", user_id).limit(1).execute()
-            )
             if not (profile and profile.get("student_verified")):
                 raise HTTPException(status_code=403, detail="verification_required")
         unit = plan["price_annual"] if item.billing_cycle == "annual" else plan["price_monthly"]
@@ -247,7 +300,7 @@ def quote_item(client, user_id: str, item: ItemIn) -> Quote:
 
     # A typed code replaces any automatic discount rather than stacking.
     if item.discount_code:
-        code = _code_row(client, user_id, item.discount_code)
+        code = _code_row(client, buyer, item.discount_code, (target_type, target_id, item.billing_cycle))
         return Quote(
             list_amount=list_amount,
             amount=_apply(list_amount, code["discount_type"], code["amount"]),
@@ -266,7 +319,13 @@ def quote_item(client, user_id: str, item: ItemIn) -> Quote:
     ).data or []
     best: Optional[dict] = None
     for row in rows:
-        if _in_window(row, now) and (
+        if not (
+            _in_window(row, now)
+            and _covers(row, target_type, target_id, item.billing_cycle)
+            and buyer.in_audience(row)
+        ):
+            continue
+        if (
             best is None
             or _apply(list_amount, row["discount_type"], row["amount"])
             < _apply(list_amount, best["discount_type"], best["amount"])

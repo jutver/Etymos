@@ -1,5 +1,6 @@
 import { supabase } from "@etymos/shared";
 import { t } from "./i18n";
+import { pushToast } from "./toast";
 
 /** What an admin chose to delete: picked rows, every row with one status, or all. */
 export type DeleteScope = { kind: "ids"; ids: string[] } | { kind: "status"; status: string } | { kind: "all" };
@@ -40,9 +41,16 @@ export async function deleteRecordsWithFiles(
   return { deleted, filesLeft };
 }
 
-/** "Deleted 3." — plus how many files are left behind, if any. */
-export function deleteResultMessage({ deleted, filesLeft }: DeleteResult): string {
-  return filesLeft > 0
-    ? t("Deleted {{count}}. {{files}} file(s) couldn't be removed from storage.", { count: deleted, files: filesLeft })
-    : t("Deleted {{count}}.", { count: deleted });
+/** Reports a delete in the corner: how many records went, and a warning if
+ * any of their files were left in storage. */
+export function toastDeleteResult({ deleted, filesLeft }: DeleteResult): void {
+  if (filesLeft > 0) {
+    pushToast({
+      kind: "warning",
+      title: t("Deleted {{count}}.", { count: deleted }),
+      description: t("{{files}} file(s) couldn't be removed from storage.", { files: filesLeft }),
+    });
+  } else {
+    pushToast({ kind: "success", title: t("Deleted {{count}}.", { count: deleted }) });
+  }
 }

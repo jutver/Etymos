@@ -452,7 +452,8 @@ export interface PaymentOrder {
 
 /** Server-side price for an item. ApiError detail on a bad discount code:
  * discount_invalid, discount_inactive, discount_not_started,
- * discount_expired, discount_limit_reached, discount_already_used. */
+ * discount_expired, discount_limit_reached, discount_already_used,
+ * discount_not_eligible, discount_not_applicable. */
 export function quotePayment(item: PaymentItem, discountCode?: string): Promise<PaymentQuote> {
   return requestJson<PaymentQuote>("/api/payments/quote", {
     method: "POST",

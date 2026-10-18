@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { AdminNav } from "./AdminNav";
+import { ToastViewport } from "../ToastViewport";
 
 export function AdminShell() {
   return (
@@ -8,6 +9,7 @@ export function AdminShell() {
       <main className="min-w-0 flex-1 overflow-x-auto px-4 py-5 sm:px-6 md:px-8 md:py-6">
         <Outlet />
       </main>
+      <ToastViewport />
     </div>
   );
 }

@@ -69,6 +69,8 @@ describe("paymentErrorMessage", () => {
   it("explains discount code problems", () => {
     expect(paymentErrorMessage(new ApiError("discount_expired", 400))).toBe("This discount code has expired.");
     expect(paymentErrorMessage(new ApiError("discount_already_used", 400))).toBe("You have already used this discount code.");
+    expect(paymentErrorMessage(new ApiError("discount_not_eligible", 400))).toMatch(/isn't available for your account/);
+    expect(paymentErrorMessage(new ApiError("discount_not_applicable", 400))).toMatch(/doesn't apply to this purchase/);
     expect(isDiscountError(new ApiError("discount_invalid", 400))).toBe(true);
     expect(isDiscountError(new ApiError("verification_required", 403))).toBe(false);
   });

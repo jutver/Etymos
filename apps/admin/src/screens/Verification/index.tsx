@@ -16,7 +16,8 @@ import {
 import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
 import { friendlyError } from "../../lib/errors";
-import { deleteResultMessage, type DeleteScope } from "../../lib/storageFiles";
+import { toastDeleteResult, type DeleteScope } from "../../lib/storageFiles";
+import { pushToast } from "../../lib/toast";
 import { cn } from "@etymos/shared";
 import { t, tr, currentLocale } from "../../lib/i18n";
 
@@ -55,7 +56,6 @@ export default function VerificationPage() {
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   function reload() {
     let cancelled = false;
@@ -82,7 +82,6 @@ export default function VerificationPage() {
 
   function openDelete(ids: string[]) {
     setDeleteError(null);
-    setNotice(null);
     setDeleteIds(ids);
   }
 
@@ -93,7 +92,7 @@ export default function VerificationPage() {
       const result = await deleteVerificationRequests(scope);
       setDeleteIds(null);
       setSelected(new Set());
-      setNotice(deleteResultMessage(result));
+      toastDeleteResult(result);
       reload();
     } catch (err) {
       setDeleteError(friendlyError(err));
@@ -121,9 +120,10 @@ export default function VerificationPage() {
     setError(null);
     try {
       await approveVerificationRequest(row.id, row.user_id, user.id);
+      pushToast({ kind: "success", title: t("Verification approved") });
       reload();
     } catch (err) {
-      setError(friendlyError(err));
+      pushToast({ kind: "error", title: t("Couldn't approve the request"), description: friendlyError(err) });
     } finally {
       setActingId(null);
     }
@@ -135,9 +135,10 @@ export default function VerificationPage() {
     setError(null);
     try {
       await rejectVerificationRequest(row.id, user.id);
+      pushToast({ kind: "success", title: t("Verification rejected") });
       reload();
     } catch (err) {
-      setError(friendlyError(err));
+      pushToast({ kind: "error", title: t("Couldn't reject the request"), description: friendlyError(err) });
     } finally {
       setActingId(null);
     }
@@ -277,7 +278,6 @@ export default function VerificationPage() {
       </div>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
-      {notice && <p className="mt-4 text-caption text-fg-muted">{notice}</p>}
 
       <div className="mt-4">
         <DataTable

@@ -20,6 +20,24 @@ function applyDiscount(price: number, discount: ActivePlanDiscount): number {
     : Math.max(0, price - discount.amount);
 }
 
+/** The lowest price the viewer's discounts give an item, as checkout picks it. */
+function discountedPriceFor(
+  discounts: ActivePlanDiscount[],
+  target: Pick<ActivePlanDiscount, "target_type" | "target_id">,
+  price: number,
+  billingCycle?: BillingCycle,
+): number | undefined {
+  const prices = discounts
+    .filter(
+      (d) =>
+        d.target_type === target.target_type &&
+        d.target_id === target.target_id &&
+        (!d.billing_cycle || d.billing_cycle === billingCycle),
+    )
+    .map((d) => applyDiscount(price, d));
+  return prices.length ? Math.min(...prices) : undefined;
+}
+
 const faqs = [
   {
     q: tr("Can I cancel my subscription anytime?"),
@@ -112,9 +130,13 @@ export default function PricingPage() {
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="pricing-plans grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
           {plans.map((plan) => {
-            const discount = discounts.find((d) => d.target_type === "plan" && d.target_id === plan.id);
             const basePrice = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
-            const discountedPrice = discount ? applyDiscount(basePrice, discount) : undefined;
+            const discountedPrice = discountedPriceFor(
+              discounts,
+              { target_type: "plan", target_id: plan.id },
+              basePrice,
+              billingCycle,
+            );
             return (
               <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle} discountedPrice={discountedPrice} />
             );
@@ -134,8 +156,7 @@ export default function PricingPage() {
 
           <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
             {creditPacks.map((pack) => {
-              const discount = discounts.find((d) => d.target_type === "pack" && d.target_id === pack.id);
-              const discountedPrice = discount ? applyDiscount(pack.price, discount) : undefined;
+              const discountedPrice = discountedPriceFor(discounts, { target_type: "pack", target_id: pack.id }, pack.price);
               const hasDiscount = discountedPrice !== undefined && discountedPrice < pack.price;
               return (
                 <div

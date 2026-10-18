@@ -114,7 +114,8 @@ class FakeDB:
                 {"id": "pack-premium", "price": 29000, "checks": 1},
             ],
             "profiles": [
-                {"id": "user-1", "student_verified": False},
+                {"id": "user-1", "student_verified": False, "email": "owner@example.com",
+                 "created_at": "2026-09-01T00:00:00+00:00"},
                 {"id": "user-2", "student_verified": True},
             ],
             "plan_discounts": [],
@@ -305,6 +306,73 @@ def test_discount_code_wildcards_are_literal(env):
     )
     r = env.client.post("/api/payments/quote", json={**PACK, "discount_code": "SPR%"})
     assert r.json()["detail"] == "discount_invalid"
+
+
+def _auto(**rule):
+    return {"target_type": "pack", "target_id": "pack-standard", "discount_type": "percent", "amount": 50,
+            "active": True, **rule}
+
+
+@pytest.mark.parametrize(
+    "rule,applies",
+    [
+        ({"allowed_emails": ["Owner@Example.com", "x@example.com"]}, True),
+        ({"allowed_emails": ["someone@example.com"]}, False),
+        ({"signup_from": "2026-08-01T00:00:00+00:00", "signup_to": "2026-09-30T00:00:00+00:00"}, True),
+        ({"signup_from": "2026-09-02T00:00:00+00:00"}, False),
+        ({"signup_to": "2026-08-31T00:00:00+00:00"}, False),
+        ({"new_customers_only": True}, True),
+    ],
+)
+def test_automatic_discount_audience(env, rule, applies):
+    env.db.tables["plan_discounts"].append(_auto(**rule))
+    r = env.client.post("/api/payments/quote", json=PACK).json()
+    assert (r["discount"] is not None) is applies
+
+
+def test_new_customers_only_skips_anyone_who_has_paid(env):
+    env.db.tables["plan_discounts"].append(_auto(new_customers_only=True))
+    env.db.tables["checkout_events"] += [
+        {"id": "o1", "user_id": "user-1", "status": "cancelled"},
+        {"id": "o2", "user_id": "user-1", "status": "success"},
+    ]
+    assert env.client.post("/api/payments/quote", json=PACK).json()["discount"] is None
+
+
+def test_automatic_plan_discount_billing_cycle(env):
+    env.db.tables["plan_discounts"].append(
+        {"target_type": "plan", "target_id": "professional", "discount_type": "percent", "amount": 10,
+         "active": True, "billing_cycle": "annual"}
+    )
+    annual = env.client.post("/api/payments/quote", json=PRO_ANNUAL).json()
+    monthly = env.client.post("/api/payments/quote", json={**PRO_ANNUAL, "billing_cycle": "monthly"}).json()
+    assert annual["amount"] == 2691000 and monthly["discount"] is None
+
+
+@pytest.mark.parametrize(
+    "rule,item,detail",
+    [
+        ({"allowed_emails": ["someone@example.com"]}, PACK, "discount_not_eligible"),
+        ({"signup_from": "2026-10-01T00:00:00+00:00"}, PACK, "discount_not_eligible"),
+        ({"targets": ["pack:pack-premium", "plan:professional"]}, PACK, "discount_not_applicable"),
+        ({"billing_cycle": "monthly"}, PRO_ANNUAL, "discount_not_applicable"),
+    ],
+)
+def test_discount_code_audience_and_targets(env, rule, item, detail):
+    env.db.tables["discount_codes"].append(
+        {"id": "dc-1", "code": "SPRING", "discount_type": "percent", "amount": 10, "active": True, **rule}
+    )
+    r = env.client.post("/api/payments/quote", json={**item, "discount_code": "SPRING"})
+    assert r.status_code == 400 and r.json()["detail"] == detail
+
+
+def test_discount_code_for_listed_items_and_emails(env):
+    env.db.tables["discount_codes"].append(
+        {"id": "dc-1", "code": "SPRING", "discount_type": "percent", "amount": 10, "active": True,
+         "targets": ["plan:professional"], "billing_cycle": "annual", "allowed_emails": ["owner@example.com"]}
+    )
+    r = env.client.post("/api/payments/quote", json={**PRO_ANNUAL, "discount_code": "SPRING"})
+    assert r.status_code == 200 and r.json()["amount"] == 2691000
 
 
 def test_fixed_discount_never_goes_below_zero():
