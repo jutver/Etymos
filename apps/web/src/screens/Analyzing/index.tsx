@@ -3,10 +3,18 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { CheckCircle, ClockCounterClockwise, FileMagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
-import { useAppStore } from "../../lib/store";
+import { CHECK_STALE_MS, INTERRUPTED_MESSAGE, useAppStore } from "../../lib/store";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
-import { pollJob, getReport, type BackendDocumentBlock } from "../../lib/api";
+import {
+  JOB_POLL_MS,
+  JobDeadlineError,
+  getReport,
+  isJobMissingError,
+  isTransientApiError,
+  pollJob,
+  type BackendDocumentBlock,
+} from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import { trackEvent } from "../../lib/analytics";
 import { parseExplanationFacts } from "../../lib/matchExplanation";
@@ -211,7 +219,7 @@ export default function AnalyzingPage() {
     if (state.reportMode === "backend" && state.documentId && !state.jobId) {
       if (completedRef.current) return;
       completedRef.current = true;
-      const message = tr("This check was interrupted and never finished. Please run it again.");
+      const message = INTERRUPTED_MESSAGE;
       setJobStatus("failed");
       setJobMessage(message);
       void markCheckFailed(state.documentId, message).catch(() => undefined);
@@ -221,15 +229,48 @@ export default function AnalyzingPage() {
 
     if (state.reportMode === "backend" && state.jobId) {
       let cancelled = false;
+      const abort = new AbortController();
+      // Same age-out as the Documents/History reconciler: measured from when
+      // the check was requested, if the row is known.
+      const startedAt = Date.parse(
+        useAppStore.getState().history.find((h) => h.id === state.documentId)?.startedAt ?? "",
+      );
+      const deadline = (Number.isFinite(startedAt) ? startedAt : Date.now()) + CHECK_STALE_MS;
+      const showUnreachable = () => !cancelled && setJobMessage(tr("Can't reach the server right now. Still trying…"));
+      // Set once the backend says the check completed: from then on nothing
+      // that goes wrong here means the check failed.
+      let jobDone = false;
+
+      /** getReport(), retried through brief connection drops like pollJob(). */
+      async function fetchReport(reportId: string) {
+        for (;;) {
+          try {
+            return await getReport(reportId);
+          } catch (error) {
+            if (!isTransientApiError(error) || Date.now() > deadline) throw error;
+            showUnreachable();
+            await new Promise((resolve) => window.setTimeout(resolve, JOB_POLL_MS));
+            abort.signal.throwIfAborted();
+          }
+        }
+      }
 
       async function runBackendAnalysis() {
         try {
-          const job = await pollJob(state.jobId!, (next) => {
-            if (cancelled) return;
-            setJobStatus(next.status);
-            setJobMessage(next.message ?? next.current_step ?? null);
-            setJobProgress(next.progress ?? null);
-          });
+          const job = await pollJob(
+            state.jobId!,
+            (next) => {
+              if (cancelled) return;
+              setJobStatus(next.status);
+              setJobMessage(next.message ?? next.current_step ?? null);
+              setJobProgress(next.progress ?? null);
+            },
+            {
+              deadline,
+              signal: abort.signal,
+              onUnreachable: showUnreachable,
+            },
+          );
 
           if (cancelled) return;
 
@@ -246,7 +287,8 @@ export default function AnalyzingPage() {
             return;
           }
 
-          const report = await getReport(job.report_id!);
+          jobDone = true;
+          const report = await fetchReport(job.report_id!);
           const today = new Date().toISOString().slice(0, 10);
           const entries: HistoryEntry[] = [];
           const ids: string[] = [];
@@ -441,7 +483,21 @@ export default function AnalyzingPage() {
           trackEvent("check_completed", { documents: ids.length });
           setResultIds(ids);
         } catch (error) {
-          const message = error instanceof Error ? error.message : tr("Analysis failed.");
+          if (cancelled) return;
+          // The check finished but its report couldn't be loaded: it didn't
+          // fail, so leave the row "Checking" for the Documents/History
+          // reconciler to settle once the backend answers.
+          if (jobDone) {
+            setJobStatus("failed");
+            setJobMessage(tr("Your check finished, but we couldn't load the result. It will appear in Documents shortly."));
+            return;
+          }
+          const interrupted = error instanceof JobDeadlineError || isJobMissingError(error);
+          const message = interrupted
+            ? INTERRUPTED_MESSAGE
+            : error instanceof Error
+              ? error.message
+              : tr("Analysis failed.");
           setJobStatus("failed");
           setJobMessage(message);
           if (state.documentId) {
@@ -452,7 +508,10 @@ export default function AnalyzingPage() {
       }
 
       runBackendAnalysis();
-      return;
+      return () => {
+        cancelled = true;
+        abort.abort();
+      };
     }
 
     if (stepIndex >= steps.length) {

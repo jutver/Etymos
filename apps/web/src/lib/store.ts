@@ -85,7 +85,7 @@ export const PROJECTS: string[] = ["Default"];
  * whole feature exists to prevent. */
 export const CHECK_STALE_MS = 30 * 60 * 1000;
 
-const INTERRUPTED_MESSAGE =
+export const INTERRUPTED_MESSAGE =
   tr("This check was interrupted and never finished. Please run it again.");
 
 interface AppState {

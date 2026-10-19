@@ -297,7 +297,7 @@ export async function getMarkerPreview(reportId: string): Promise<MarkerPreview>
   return requestJson<MarkerPreview>(`/api/reports/${reportId}/marker-preview`);
 }
 
-/** Polls like pollJob() until the marker-pdf conversion settles one way or
+/** Polls until the marker-pdf conversion settles one way or
  * another. Stops on "ready", "failed", AND "unavailable" — none of those
  * three will ever change on their own without a fresh check. */
 export async function pollMarkerPreview(
@@ -342,17 +342,57 @@ export async function downloadMarkerPreviewDocx(reportId: string, fileName: stri
   }
 }
 
-export async function pollJob(jobId: string, onProgress?: (job: BackendJob) => void): Promise<BackendJob> {
-  let job = await getJob(jobId);
-  onProgress?.(job);
+/** How often pollJob() asks about a running check. */
+export const JOB_POLL_MS = 5000;
 
-  while (job.status !== "completed" && job.status !== "failed") {
-    await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    job = await getJob(jobId);
-    onProgress?.(job);
+/** True when a request failed without telling us anything about the job: no
+ * answer at all (offline, backend down: fetch throws a TypeError), a server
+ * error, or a timeout/rate limit. Worth asking again. */
+export function isTransientApiError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  return error instanceof ApiError && (error.status >= 500 || error.status === 408 || error.status === 429);
+}
+
+/** pollJob() passed its deadline without the job finishing. */
+export class JobDeadlineError extends Error {
+  constructor() {
+    super("Job deadline passed");
+    this.name = "JobDeadlineError";
   }
+}
 
-  return job;
+export interface PollJobOptions {
+  /** Epoch ms. Past it, an unfinished or unreachable job throws JobDeadlineError. */
+  deadline?: number;
+  /** Called on each request that failed transiently; polling carries on. */
+  onUnreachable?: (error: unknown) => void;
+  /** Stops polling (throws an AbortError) when aborted. */
+  signal?: AbortSignal;
+}
+
+/** Polls a check job every JOB_POLL_MS until it completes or fails. A request
+ * that fails transiently (see isTransientApiError) is retried rather than
+ * thrown, so a brief connection drop can't end a check that's still running
+ * on the backend. Throws on a definite answer (404: the job is gone) or once
+ * `deadline` passes. */
+export async function pollJob(
+  jobId: string,
+  onProgress?: (job: BackendJob) => void,
+  { deadline = Infinity, onUnreachable, signal }: PollJobOptions = {},
+): Promise<BackendJob> {
+  for (let first = true; ; first = false) {
+    if (!first) await new Promise((resolve) => window.setTimeout(resolve, JOB_POLL_MS));
+    signal?.throwIfAborted();
+    try {
+      const job = await getJob(jobId);
+      onProgress?.(job);
+      if (job.status === "completed" || job.status === "failed") return job;
+    } catch (error) {
+      if (!isTransientApiError(error)) throw error;
+      onUnreachable?.(error);
+    }
+    if (Date.now() > deadline) throw new JobDeadlineError();
+  }
 }
 
 // --- Recovery email (backend/api/recovery_email.py) ------------------------
