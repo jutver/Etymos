@@ -20,6 +20,26 @@ the preview to that language.
 For maintenance, leaving both columns blank shows the standard "We'll be back
 soon" page, in the visitor's language.
 
+## Who sees it
+
+Top bars and pop-ups have a **Who sees it** setting:
+
+| Option | Shown to |
+|---|---|
+| **Everyone** (default) | Every visitor, signed in or not |
+| **Signed-in users** | Anyone signed in |
+| **Plans** | Signed-in people on the plans you tick (Free, Standard, Premium). A paid plan past its end date counts as Free |
+| **Chosen people** | Signed-in people with one of the listed emails. An email without an account yet works once that account is made |
+
+People outside the audience can't read the announcement at all: the
+`announcements` table isn't public, and the site loads its announcements
+through `my_announcements()`, which returns only the ones meant for the
+viewer. The site reloads them when someone signs in or out. A change to a
+user's plan reaches their open page on the next minute's refresh.
+
+Maintenance has no audience setting: it locks the site for everyone except
+admins and the people you let through.
+
 ## Editing
 
 The form has a live preview. Each kind can start right away or at a set time.
@@ -54,7 +74,7 @@ stays in the list, and you can switch it on again.
   others through too. Add them by email (type, paste a list, or search
   accounts by email or name). They sign in as usual and use the site normally.
   An email without an account yet works once that account is made. The list
-  is private: it's kept in the admin-only `maintenance_bypass` table, and the
+  is private: it's kept in the admin-only `announcement_emails` table, and the
   site only asks `my_maintenance_bypass()` whether the signed-in person is on
   it. Changing the list while maintenance is on reaches open pages within a
   minute.
@@ -67,7 +87,8 @@ stays in the list, and you can switch it on again.
 
 Apply `supabase/migrations/20261017000000_announcements_overhaul.sql` and
 `20261018000000_announcements_bilingual.sql`, then
-`20261019000000_maintenance_bypass.sql` for the bypass list (`supabase db push`). The first adds
+`20261019000000_maintenance_bypass.sql` and `20261020000000_announcement_audience.sql`
+for the bypass list and audiences (`supabase db push`). The first adds
 the new columns, turns existing announcements into top bars, and creates the
 image bucket, which only admins can write to. The second adds `title_vi` and
 `message_vi`. Existing text is treated as English and shows to everyone until a

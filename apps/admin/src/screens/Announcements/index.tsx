@@ -4,9 +4,10 @@ import { announcementState, announcementText, cn, type Announcement, type Announ
 import { StatusBadge } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
 import { ListItemsSkeleton } from "../../components/Skeleton";
-import { deleteAnnouncement, listAnnouncements, listMaintenanceBypass, setAnnouncementActive } from "../../lib/configQueries";
+import { deleteAnnouncement, listAnnouncements, listAnnouncementEmails, setAnnouncementActive } from "../../lib/configQueries";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, getLanguage, t, tr } from "../../lib/i18n";
+import { planLabel } from "../../lib/plans";
 import { AnnouncementEditor } from "./Editor";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
 import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
@@ -24,12 +25,16 @@ function when(iso: string) {
   return new Date(iso).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** One line on timing (start, end, countdown) and who gets through maintenance. */
-function schedule(a: Announcement, bypassCount: number): string {
+/** One line on timing (start, end, countdown) and who it's for: who sees a top
+ * bar or pop-up, or who else gets through maintenance. */
+function schedule(a: Announcement, emailCount: number): string {
   const bits: string[] = [];
   bits.push(a.starts_at ? t("Starts {{time}}", { time: when(a.starts_at) }) : t("Starts when switched on"));
   if (a.kind === "maintenance") bits.push(t("until ended by an admin"));
-  if (a.kind === "maintenance" && bypassCount > 0) bits.push(t("{{count}} other(s) let through", { count: bypassCount }));
+  if (a.kind === "maintenance" && emailCount > 0) bits.push(t("{{count}} other(s) let through", { count: emailCount }));
+  if (a.audience === "signed_in") bits.push(t("signed-in users only"));
+  if (a.audience === "plans") bits.push(t("only {{plans}}", { plans: (a.audience_plans ?? []).map(planLabel).join(", ") }));
+  if (a.audience === "emails") bits.push(t("only {{count}} chosen person(s)", { count: emailCount }));
   else if (a.ends_at) bits.push(t("ends {{time}}", { time: when(a.ends_at) }));
   if (a.kind === "banner" && a.countdown_to) bits.push(t("countdown to {{time}}", { time: when(a.countdown_to) }));
   return bits.join(" · ");
@@ -94,7 +99,7 @@ function MaintenanceStatus({
 
 export default function AnnouncementsPage() {
   const [items, setItems] = useState<Announcement[] | null>(null);
-  const [bypass, setBypass] = useState<Map<string, string[]>>(new Map());
+  const [emails, setEmails] = useState<Map<string, string[]>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [editing, setEditing] = useState<Announcement | null>(null);
@@ -104,10 +109,10 @@ export default function AnnouncementsPage() {
   const now = useNow(30_000);
 
   function refresh() {
-    return Promise.all([listAnnouncements(), listMaintenanceBypass()])
+    return Promise.all([listAnnouncements(), listAnnouncementEmails()])
       .then(([list, byId]) => {
         setItems(list);
-        setBypass(byId);
+        setEmails(byId);
       })
       .catch((err: unknown) => setError(friendlyError(err)));
   }
@@ -171,7 +176,7 @@ export default function AnnouncementsPage() {
       {maintenance && (
         <MaintenanceStatus
           item={maintenance}
-          bypassCount={bypass.get(maintenance.id)?.length ?? 0}
+          bypassCount={emails.get(maintenance.id)?.length ?? 0}
           ending={busyId === maintenance.id} onEnd={() => toggle(maintenance, false)} />
       )}
 
@@ -179,7 +184,7 @@ export default function AnnouncementsPage() {
         <AnnouncementEditor
           key={editing?.id ?? `new-${editorKey}`}
           editing={editing}
-          editingBypass={editing ? bypass.get(editing.id) ?? [] : []}
+          editingEmails={editing ? emails.get(editing.id) ?? [] : []}
           onDone={saved}
         />
       </div>
@@ -233,7 +238,7 @@ export default function AnnouncementsPage() {
                       {Icon && <Icon size={15} weight="fill" className="shrink-0 text-fg-muted" />}
                       <span className="truncate">{summary(a)}</span>
                     </p>
-                    <p className="mt-0.5 text-caption text-fg-subtle">{schedule(a, bypass.get(a.id)?.length ?? 0)}</p>
+                    <p className="mt-0.5 text-caption text-fg-subtle">{schedule(a, emails.get(a.id)?.length ?? 0)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Switch checked={a.is_active} disabled={busyId === a.id} onChange={(v) => toggle(a, v)} />

@@ -1,8 +1,9 @@
 """
 Database tests for supabase/migrations/20261017000000_announcements_overhaul.sql
-20261018000000_announcements_bilingual.sql and 20261019000000_maintenance_bypass.sql:
-the per-kind content rules, who may write announcements and their images, and
-who gets through maintenance.
+20261018000000_announcements_bilingual.sql, 20261019000000_maintenance_bypass.sql
+and 20261020000000_announcement_audience.sql: the per-kind content rules, who
+may write announcements and their images, who gets through maintenance, and
+who sees which announcement.
 Skipped without pgserver/psycopg, like test_payments_sql.py (whose throwaway
 database and helpers these reuse).
 """
@@ -88,7 +89,7 @@ def email_of(db, uid):
 def test_maintenance_lets_through_admins_and_listed_emails_only(db):
     admin, listed, other = make_user(db, admin=True), make_user(db), make_user(db)
     row_id = insert_id(db, kind="maintenance")
-    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, [f"  {email_of(db, listed).upper()} "]))
+    as_user(db, admin, "select public.set_announcement_emails(%s, %s)", (row_id, [f"  {email_of(db, listed).upper()} "]))
 
     check = "select public.my_maintenance_bypass(%s)"
     assert as_user(db, admin, check, (row_id,)) == [(True,)]
@@ -101,14 +102,14 @@ def test_maintenance_lets_through_admins_and_listed_emails_only(db):
 def test_bypass_list_is_admin_only(db):
     admin, user = make_user(db, admin=True), make_user(db)
     row_id = insert_id(db, kind="maintenance")
-    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, [email_of(db, user)]))
+    as_user(db, admin, "select public.set_announcement_emails(%s, %s)", (row_id, [email_of(db, user)]))
 
-    assert as_user(db, user, "select email from public.maintenance_bypass") == []
-    assert as_user(db, admin, "select email from public.maintenance_bypass where announcement_id = %s", (row_id,)) == [
+    assert as_user(db, user, "select email from public.announcement_emails") == []
+    assert as_user(db, admin, "select email from public.announcement_emails where announcement_id = %s", (row_id,)) == [
         (email_of(db, user),)
     ]
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
-        as_user(db, user, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["me@example.com"]))
+        as_user(db, user, "select public.set_announcement_emails(%s, %s)", (row_id, ["me@example.com"]))
 
 
 def test_setting_the_list_replaces_it_and_bumps_the_announcement(db):
@@ -116,19 +117,74 @@ def test_setting_the_list_replaces_it_and_bumps_the_announcement(db):
     row_id = db.execute(
         "insert into public.announcements (kind, updated_at) values ('maintenance', now() - interval '1 day') returning id"
     ).fetchone()[0]
-    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["a@example.com", "A@example.com"]))
-    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["b@example.com"]))
+    as_user(db, admin, "select public.set_announcement_emails(%s, %s)", (row_id, ["a@example.com", "A@example.com"]))
+    as_user(db, admin, "select public.set_announcement_emails(%s, %s)", (row_id, ["b@example.com"]))
 
-    emails = db.execute("select email from public.maintenance_bypass where announcement_id = %s", (row_id,)).fetchall()
+    emails = db.execute("select email from public.announcement_emails where announcement_id = %s", (row_id,)).fetchall()
     assert emails == [("b@example.com",)]
     fresh = db.execute("select now() - updated_at < interval '1 minute' from public.announcements where id = %s", (row_id,))
     assert fresh.fetchone()[0]
 
     db.execute("delete from public.announcements where id = %s", (row_id,))
-    assert db.execute("select count(*) from public.maintenance_bypass where announcement_id = %s", (row_id,)).fetchone()[0] == 0
+    assert db.execute("select count(*) from public.announcement_emails where announcement_id = %s", (row_id,)).fetchone()[0] == 0
 
 
 def insert_id(db, **cols):
     names = ", ".join(cols)
     marks = ", ".join(["%s"] * len(cols))
     return db.execute(f"insert into public.announcements ({names}) values ({marks}) returning id", tuple(cols.values())).fetchone()[0]
+
+
+def visible(db, user, ids):
+    """Which of `ids` my_announcements() returns to `user` (None = signed out)."""
+    sql = "select id from public.my_announcements()"
+    if user is None:
+        with db.transaction():
+            db.execute("set local role anon")
+            rows = db.execute(sql).fetchall()
+    else:
+        rows = as_user(db, user, sql)
+    return {r[0] for r in rows} & set(ids)
+
+
+def test_audience_decides_who_sees_an_announcement(db):
+    admin, free, standard, lapsed, listed = (make_user(db, admin=True), *(make_user(db) for _ in range(4)))
+    db.execute("update public.profiles set plan_tier = 'student' where id = %s", (standard,))
+    db.execute(
+        "update public.profiles set plan_tier = 'student', plan_expires_at = now() - interval '1 day' where id = %s", (lapsed,)
+    )
+
+    def make(**cols):
+        return insert_id(db, kind="banner", message="hi", is_active=True, **cols)
+
+    everyone = make()
+    signed_in = make(audience="signed_in")
+    paid = make(audience="plans", audience_plans=["student", "professional"])
+    on_free = make(audience="plans", audience_plans=["free"])
+    chosen = make(audience="emails")
+    as_user(db, admin, "select public.set_announcement_emails(%s, %s)", (chosen, [email_of(db, listed)]))
+    off = insert_id(db, kind="banner", message="hi", is_active=False)
+    ids = [everyone, signed_in, paid, on_free, chosen, off]
+
+    assert visible(db, None, ids) == {everyone}
+    assert visible(db, free, ids) == {everyone, signed_in, on_free}
+    assert visible(db, standard, ids) == {everyone, signed_in, paid}
+    assert visible(db, lapsed, ids) == {everyone, signed_in, on_free}
+    assert visible(db, listed, ids) == {everyone, signed_in, on_free, chosen}
+
+
+def test_announcements_table_is_no_longer_public(db):
+    user = make_user(db)
+    insert_id(db, kind="banner", message="secret", is_active=True, audience="emails")
+    assert as_user(db, user, "select id from public.announcements where message = 'secret'") == []
+
+
+def test_audience_rules(db):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="banner", message="x", audience="plans")
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="banner", message="x", audience="plans", audience_plans=["gold"])
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="banner", message="x", audience="everyone", audience_plans=["free"])
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="maintenance", audience="signed_in")

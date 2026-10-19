@@ -63,7 +63,20 @@ export async function listAnnouncements(): Promise<Announcement[]> {
 /** The fields the editor sets. */
 export type AnnouncementInput = Pick<
   Announcement,
-  "kind" | "title" | "message" | "title_vi" | "message_vi" | "severity" | "icon" | "countdown_to" | "image_path" | "starts_at" | "ends_at" | "is_active"
+  | "kind"
+  | "title"
+  | "message"
+  | "title_vi"
+  | "message_vi"
+  | "severity"
+  | "icon"
+  | "countdown_to"
+  | "image_path"
+  | "starts_at"
+  | "ends_at"
+  | "is_active"
+  | "audience"
+  | "audience_plans"
 >;
 
 /** Returns the new announcement's id. */
@@ -92,9 +105,10 @@ export async function deleteAnnouncement(a: Pick<Announcement, "id" | "image_pat
   if (a.image_path) await removeAnnouncementImage(a.image_path);
 }
 
-/** Emails let through a maintenance announcement, keyed by announcement id. */
-export async function listMaintenanceBypass(): Promise<Map<string, string[]>> {
-  const { data, error } = await supabase.from("maintenance_bypass").select("announcement_id, email").order("email");
+/** Each announcement's email list, keyed by announcement id: who sees a top
+ * bar or pop-up aimed at chosen people, or who gets through maintenance. */
+export async function listAnnouncementEmails(): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase.from("announcement_emails").select("announcement_id, email").order("email");
   if (error) throw error;
   const byId = new Map<string, string[]>();
   for (const row of (data ?? []) as { announcement_id: string; email: string }[]) {
@@ -103,9 +117,9 @@ export async function listMaintenanceBypass(): Promise<Map<string, string[]>> {
   return byId;
 }
 
-/** Replaces who gets through a maintenance announcement. */
-export async function setMaintenanceBypass(announcementId: string, emails: string[]): Promise<void> {
-  const { error } = await supabase.rpc("set_maintenance_bypass", { p_announcement: announcementId, p_emails: emails });
+/** Replaces an announcement's email list. */
+export async function setAnnouncementEmails(announcementId: string, emails: string[]): Promise<void> {
+  const { error } = await supabase.rpc("set_announcement_emails", { p_announcement: announcementId, p_emails: emails });
   if (error) throw error;
 }
 

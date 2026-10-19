@@ -1,12 +1,14 @@
 /**
  * Announcements, shared by the site (which shows them) and the admin app
  * (which writes them). Schema: supabase/migrations/20261017000000_announcements_overhaul.sql
- * and 20261018000000_announcements_bilingual.sql.
+ * 20261018000000_announcements_bilingual.sql and 20261020000000_announcement_audience.sql.
  */
 import { supabase } from "./supabase";
 
 export type AnnouncementKind = "banner" | "popup" | "maintenance";
 export type AnnouncementSeverity = "info" | "warning" | "success" | "error";
+/** Who sees a top bar or pop-up. Maintenance is always "everyone". */
+export type AnnouncementAudience = "everyone" | "signed_in" | "plans" | "emails";
 
 /** Icons a banner can show. Each app maps these to its icon components. */
 export const ANNOUNCEMENT_ICONS = [
@@ -45,6 +47,9 @@ export interface Announcement {
   /** Popup only: object path in the public `announcement-images` bucket. */
   image_path: string | null;
   is_active: boolean;
+  audience: AnnouncementAudience;
+  /** Plan ids ("free", "student", "professional") when audience is "plans", else null. */
+  audience_plans: string[] | null;
   /** Null = from the moment it's switched on. */
   starts_at: string | null;
   /** Ignored for maintenance, which lasts until switched off. */
