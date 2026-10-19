@@ -66,9 +66,15 @@ export type AnnouncementInput = Pick<
   "kind" | "title" | "message" | "title_vi" | "message_vi" | "severity" | "icon" | "countdown_to" | "image_path" | "starts_at" | "ends_at" | "is_active"
 >;
 
-export async function createAnnouncement(input: AnnouncementInput, adminId: string): Promise<void> {
-  const { error } = await supabase.from("announcements").insert({ ...input, created_by: adminId });
+/** Returns the new announcement's id. */
+export async function createAnnouncement(input: AnnouncementInput, adminId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("announcements")
+    .insert({ ...input, created_by: adminId })
+    .select("id")
+    .single();
   if (error) throw error;
+  return (data as { id: string }).id;
 }
 
 export async function updateAnnouncement(id: string, patch: Partial<AnnouncementInput>): Promise<void> {
@@ -84,6 +90,23 @@ export async function deleteAnnouncement(a: Pick<Announcement, "id" | "image_pat
   const { error } = await supabase.from("announcements").delete().eq("id", a.id);
   if (error) throw error;
   if (a.image_path) await removeAnnouncementImage(a.image_path);
+}
+
+/** Emails let through a maintenance announcement, keyed by announcement id. */
+export async function listMaintenanceBypass(): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase.from("maintenance_bypass").select("announcement_id, email").order("email");
+  if (error) throw error;
+  const byId = new Map<string, string[]>();
+  for (const row of (data ?? []) as { announcement_id: string; email: string }[]) {
+    byId.set(row.announcement_id, [...(byId.get(row.announcement_id) ?? []), row.email]);
+  }
+  return byId;
+}
+
+/** Replaces who gets through a maintenance announcement. */
+export async function setMaintenanceBypass(announcementId: string, emails: string[]): Promise<void> {
+  const { error } = await supabase.rpc("set_maintenance_bypass", { p_announcement: announcementId, p_emails: emails });
+  if (error) throw error;
 }
 
 const IMAGE_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };

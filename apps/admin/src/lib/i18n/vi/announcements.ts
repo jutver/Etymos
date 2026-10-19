@@ -38,6 +38,19 @@ export const announcements: Record<string, string> = {
   "Ends": "Kết thúc",
   "When you end it. Visitors see the maintenance page until then; admins can still use the site.":
     "Khi bạn kết thúc. Đến lúc đó khách sẽ thấy trang bảo trì; quản trị viên vẫn dùng được trang web.",
+  "When you end it. Visitors see the maintenance page until then; admins and the people below can still use the site.":
+    "Khi bạn kết thúc. Đến lúc đó khách sẽ thấy trang bảo trì; quản trị viên và những người bên dưới vẫn dùng được trang web.",
+  "Who can still use the site": "Ai vẫn dùng được trang web",
+  "Admins only": "Chỉ quản trị viên",
+  "Admins and chosen people": "Quản trị viên và người được chọn",
+  "They sign in as usual and use the site normally. Emails without an account yet work once that account is made.":
+    "Họ đăng nhập như thường và dùng trang web bình thường. Email chưa có tài khoản sẽ có hiệu lực khi tài khoản được tạo.",
+  "Add at least one email, or let only admins through.": "Thêm ít nhất một email, hoặc chỉ cho quản trị viên vào.",
+  "This locks the site for everyone except admins and the people you chose as soon as you confirm. Visitors in the middle of something lose their place.":
+    "Trang web sẽ bị khóa với mọi người trừ quản trị viên và những người bạn đã chọn ngay khi bạn xác nhận. Khách đang thao tác dở sẽ bị gián đoạn.",
+  "{{count}} other(s) let through": "cho thêm {{count}} người vào",
+  "Visitors see the maintenance page. Admins and {{count}} other(s) you let through can still use the site.":
+    "Khách thấy trang bảo trì. Quản trị viên và {{count}} người bạn cho vào vẫn dùng được trang web.",
   "When switched off": "Khi tắt",
   "This locks the site for everyone except admins as soon as you confirm. Visitors in the middle of something lose their place.":
     "Trang web sẽ bị khóa với mọi người trừ quản trị viên ngay khi bạn xác nhận. Khách đang thao tác dở sẽ bị gián đoạn.",

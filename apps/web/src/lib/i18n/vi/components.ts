@@ -126,7 +126,7 @@ export const components: Record<string, string> = {
   "Etymos is down for maintenance while we make some improvements. Please come back a little later.":
     "Etymos đang tạm dừng để bảo trì và nâng cấp. Bạn vui lòng quay lại sau ít phút nhé.",
   "Since {{time}}": "Từ {{time}}",
-  "Admin sign in": "Đăng nhập quản trị",
-  "Maintenance mode is on. Only admins can use the site; everyone else sees the maintenance page.":
-    "Đang bật chế độ bảo trì. Chỉ quản trị viên dùng được trang web; mọi người khác sẽ thấy trang bảo trì.",
+  "Sign in": "Đăng nhập",
+  "Maintenance mode is on. You can still use the site; other visitors see the maintenance page.":
+    "Đang bật chế độ bảo trì. Bạn vẫn dùng được trang web; những người khác sẽ thấy trang bảo trì.",
 };

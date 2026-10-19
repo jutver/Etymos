@@ -49,7 +49,16 @@ stays in the list, and you can switch it on again.
   red box at the top of the Announcements page, or switch it off in the list.
   Visitors' pages pick up the change within a minute.
 - Admins signed in on the site still get through, with a reminder at the
-  bottom of the screen. The maintenance page has an "Admin sign in" link, and
+  bottom of the screen.
+- **Who can still use the site**: pick **Admins and chosen people** to let
+  others through too. Add them by email (type, paste a list, or search
+  accounts by email or name). They sign in as usual and use the site normally.
+  An email without an account yet works once that account is made. The list
+  is private: it's kept in the admin-only `maintenance_bypass` table, and the
+  site only asks `my_maintenance_bypass()` whether the signed-in person is on
+  it. Changing the list while maintenance is on reaches open pages within a
+  minute.
+- The maintenance page has a "Sign in" link, and
   `/login` stays reachable.
 - It's a lock on the website only. The backend API keeps running, so
   checks already in progress still finish, and the payment webhook keeps working.
@@ -57,7 +66,8 @@ stays in the list, and you can switch it on again.
 ## Setup
 
 Apply `supabase/migrations/20261017000000_announcements_overhaul.sql` and
-`20261018000000_announcements_bilingual.sql` (`supabase db push`). The first adds
+`20261018000000_announcements_bilingual.sql`, then
+`20261019000000_maintenance_bypass.sql` for the bypass list (`supabase db push`). The first adds
 the new columns, turns existing announcements into top bars, and creates the
 image bucket, which only admins can write to. The second adds `title_vi` and
 `message_vi`. Existing text is treated as English and shows to everyone until a

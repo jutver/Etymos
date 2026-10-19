@@ -1,7 +1,8 @@
 """
 Database tests for supabase/migrations/20261017000000_announcements_overhaul.sql
-and 20261018000000_announcements_bilingual.sql:
-the per-kind content rules and who may write announcements and their images.
+20261018000000_announcements_bilingual.sql and 20261019000000_maintenance_bypass.sql:
+the per-kind content rules, who may write announcements and their images, and
+who gets through maintenance.
 Skipped without pgserver/psycopg, like test_payments_sql.py (whose throwaway
 database and helpers these reuse).
 """
@@ -78,3 +79,56 @@ def test_vietnamese_alone_is_enough(db):
     assert insert(db, kind="popup", title_vi="Khuyến mãi")[0] == "popup"
     with pytest.raises(psycopg.errors.CheckViolation):
         insert(db, kind="banner", message=" ", message_vi=" ")
+
+
+def email_of(db, uid):
+    return db.execute("select email from public.profiles where id = %s", (uid,)).fetchone()[0]
+
+
+def test_maintenance_lets_through_admins_and_listed_emails_only(db):
+    admin, listed, other = make_user(db, admin=True), make_user(db), make_user(db)
+    row_id = insert_id(db, kind="maintenance")
+    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, [f"  {email_of(db, listed).upper()} "]))
+
+    check = "select public.my_maintenance_bypass(%s)"
+    assert as_user(db, admin, check, (row_id,)) == [(True,)]
+    assert as_user(db, listed, check, (row_id,)) == [(True,)]
+    assert as_user(db, other, check, (row_id,)) == [(False,)]
+    # The list belongs to that announcement only.
+    assert as_user(db, listed, check, (insert_id(db, kind="maintenance"),)) == [(False,)]
+
+
+def test_bypass_list_is_admin_only(db):
+    admin, user = make_user(db, admin=True), make_user(db)
+    row_id = insert_id(db, kind="maintenance")
+    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, [email_of(db, user)]))
+
+    assert as_user(db, user, "select email from public.maintenance_bypass") == []
+    assert as_user(db, admin, "select email from public.maintenance_bypass where announcement_id = %s", (row_id,)) == [
+        (email_of(db, user),)
+    ]
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_user(db, user, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["me@example.com"]))
+
+
+def test_setting_the_list_replaces_it_and_bumps_the_announcement(db):
+    admin = make_user(db, admin=True)
+    row_id = db.execute(
+        "insert into public.announcements (kind, updated_at) values ('maintenance', now() - interval '1 day') returning id"
+    ).fetchone()[0]
+    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["a@example.com", "A@example.com"]))
+    as_user(db, admin, "select public.set_maintenance_bypass(%s, %s)", (row_id, ["b@example.com"]))
+
+    emails = db.execute("select email from public.maintenance_bypass where announcement_id = %s", (row_id,)).fetchall()
+    assert emails == [("b@example.com",)]
+    fresh = db.execute("select now() - updated_at < interval '1 minute' from public.announcements where id = %s", (row_id,))
+    assert fresh.fetchone()[0]
+
+    db.execute("delete from public.announcements where id = %s", (row_id,))
+    assert db.execute("select count(*) from public.maintenance_bypass where announcement_id = %s", (row_id,)).fetchone()[0] == 0
+
+
+def insert_id(db, **cols):
+    names = ", ".join(cols)
+    marks = ", ".join(["%s"] * len(cols))
+    return db.execute(f"insert into public.announcements ({names}) values ({marks}) returning id", tuple(cols.values())).fetchone()[0]
