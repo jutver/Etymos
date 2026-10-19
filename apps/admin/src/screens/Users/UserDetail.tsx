@@ -25,6 +25,7 @@ import { isProfileBanned, isProfileOnline, type BillingCycle, type PlanTier, typ
 import { friendlyError } from "../../lib/errors";
 import { useAdminAuth } from "../../lib/auth";
 import { t, tr, currentLocale } from "../../lib/i18n";
+import { billingCycleLabel, planLabel } from "../../lib/plans";
 
 const PLAN_OPTIONS: PlanTier[] = ["free", "student", "professional"];
 const BILLING_OPTIONS: BillingCycle[] = ["monthly", "annual"];
@@ -436,8 +437,8 @@ export default function UserDetailPage() {
                   className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 >
                   {PLAN_OPTIONS.map((p) => (
-                    <option key={p} value={p} className="capitalize">
-                      {p}
+                    <option key={p} value={p}>
+                      {planLabel(p)}
                     </option>
                   ))}
                 </select>
@@ -451,8 +452,8 @@ export default function UserDetailPage() {
                   className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 >
                   {BILLING_OPTIONS.map((b) => (
-                    <option key={b} value={b} className="capitalize">
-                      {b}
+                    <option key={b} value={b}>
+                      {billingCycleLabel(b)}
                     </option>
                   ))}
                 </select>

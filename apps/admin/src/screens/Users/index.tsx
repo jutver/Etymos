@@ -15,6 +15,7 @@ import {
 import { isProfileOnline, type AccessStatus, type AdminRole, type PlanTier, type Profile } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { t, tn, tr, currentLocale } from "../../lib/i18n";
+import { planLabel } from "../../lib/plans";
 
 /** Local YYYY-MM-DD for a Date, used both to render the date input's value
  * and to build the day's [from, to) range below — kept in the viewer's local
@@ -47,8 +48,8 @@ const ROLE_OPTIONS: Option<AdminRole | "">[] = [
 const PLAN_OPTIONS: Option<PlanTier | "">[] = [
   { value: "", label: tr("All plans") },
   { value: "free", label: tr("Free") },
-  { value: "student", label: tr("Student") },
-  { value: "professional", label: tr("Professional") },
+  { value: "student", label: tr("Standard") },
+  { value: "professional", label: tr("Premium") },
 ];
 
 const ACCESS_OPTIONS: Option<AccessStatus | "">[] = [
@@ -234,7 +235,7 @@ export default function UsersPage() {
   const columns: Column<Profile>[] = [
     { key: "email", label: tr("Email"), render: (r) => r.email ?? r.display_name ?? r.id },
     { key: "role", label: tr("Role"), render: (r) => <StatusBadge label={t(r.role)} tone={roleTone(r.role)} /> },
-    { key: "plan", label: tr("Plan"), render: (r) => <span className="capitalize">{r.plan_tier}</span> },
+    { key: "plan", label: tr("Plan"), render: (r) => planLabel(r.plan_tier) },
     { key: "standard_credits", label: tr("Standard"), render: (r) => r.standard_credits },
     { key: "premium_credits", label: tr("Premium"), render: (r) => r.premium_credits },
     {

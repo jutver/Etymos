@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { CircleNotch } from "@phosphor-icons/react";
 import { supabase } from "@etymos/shared";
 import { useAuth } from "../../lib/auth";
 import { useAppStore } from "../../lib/store";
 import { fetchMyProfile } from "../../lib/profileQueries";
 import { BannedScreen, DeletionConfirmScreen } from "./AccountStatusScreens";
-import { t } from "../../lib/i18n";
+import { useSplashHold } from "../BootSplash";
 
 /** Closed-beta gate state. `unknown` means the profile fetch is still in
  * flight — we must render a loading state rather than guessing, or we'd
@@ -28,13 +27,10 @@ type Gate =
   | { kind: "banned"; reason: string | null; bannedUntil: string | null }
   | { kind: "deletion-requested" };
 
+/** Sits under the boot splash (held below) while auth or the profile check
+ * is pending, so the screen behind it matches the splash's surface. */
 function FullPageLoader() {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-surface-tint">
-      <CircleNotch size={28} weight="bold" className="animate-spin motion-reduce:animate-none text-brand-600" />
-      <span className="sr-only">{t("Loading…")}</span>
-    </div>
-  );
+  return <div className="min-h-dvh bg-surface-tint" />;
 }
 
 export function RequireAuth() {
@@ -81,6 +77,10 @@ export function RequireAuth() {
       cancelled = true;
     };
   }, [user?.id, syncFromProfile]);
+
+  // Also covers the profile check right after signing in, so a fresh login
+  // gets the same splash as a fresh visit.
+  useSplashHold(gate.kind === "none" && (loading || (!!user && access === "unknown")));
 
   if (gate.kind === "banned") {
     return <BannedScreen reason={gate.reason} bannedUntil={gate.bannedUntil} />;

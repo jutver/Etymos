@@ -1,12 +1,27 @@
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { Logo } from "./Logo";
 import { ToastViewport } from "../ui/ToastViewport";
 import { PageLoader } from "../ui/PageLoader";
 import { LanguageSwitcher } from "../LanguageSwitcher";
+import { useSplashHold, useSplashOnMount } from "../BootSplash";
 import { t } from "../../lib/i18n";
 
+/** Screens that open with the splash when reached from outside this shell —
+ * the landing page's Get Started, the nav's Log in. Moving between them
+ * inside the shell keeps it mounted, so that doesn't re-trigger it. */
+const SPLASH_PATHS = ["/login", "/signup"];
+
+function AuthScreenFallback() {
+  // Keeps the splash up until the form's chunk has loaded; never brings it back.
+  useSplashHold(true, { reshow: false });
+  return <PageLoader fill="inline" />;
+}
+
 export function AuthShell() {
+  const { pathname } = useLocation();
+  useSplashOnMount(SPLASH_PATHS.includes(pathname));
+
   return (
     <div className="studio-auth auth-editorial flex min-h-dvh flex-col bg-surface-tint">
       <header className="flex items-center justify-between px-5 py-6 sm:px-8">
@@ -23,7 +38,7 @@ export function AuthShell() {
         <div className="studio-auth-card w-full max-w-lg">
           {/* Narrow column, so the loader fills the card slot rather than the
               viewport — the logo header stays visible above it. */}
-          <Suspense fallback={<PageLoader fill="inline" />}>
+          <Suspense fallback={<AuthScreenFallback />}>
             <Outlet />
           </Suspense>
         </div>

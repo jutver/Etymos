@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@etymos/shared";
 import { Spinner } from "./Spinner";
+import { useSplashHold } from "../BootSplash";
 import { t as tl, tr } from "../../lib/i18n";
 
 interface PageLoaderProps {
@@ -35,6 +36,9 @@ export function PageLoader({
   className,
 }: PageLoaderProps) {
   const [visible, setVisible] = useState(delayMs === 0);
+  // On the first load, keep the boot splash up instead (e.g. while the first
+  // route chunk downloads); later route changes show this loader as before.
+  useSplashHold(fill === "page", { reshow: false });
 
   useEffect(() => {
     if (delayMs === 0) return;
