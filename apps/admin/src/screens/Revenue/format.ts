@@ -16,8 +16,8 @@ export function formatCompactVND(amount: number): string {
 }
 
 const TIER_LABELS: Record<string, string> = {
-  student: tr("Student"),
-  professional: tr("Professional"),
+  student: tr("Standard"),
+  professional: tr("Premium"),
 };
 
 const PACK_LABELS: Record<string, string> = {
@@ -30,7 +30,7 @@ const CYCLE_LABELS: Record<string, string> = {
   annual: tr("annual"),
 };
 
-/** "Professional plan · annual", "Standard pack ×3". */
+/** "Premium plan · annual", "Standard pack ×3". */
 export function describeItem(
   order: Pick<RevenueOrder, "kind" | "plan_tier" | "billing_cycle" | "pack_id" | "quantity">,
 ): string {

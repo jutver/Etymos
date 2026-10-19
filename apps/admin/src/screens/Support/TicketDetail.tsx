@@ -34,6 +34,7 @@ import {
 import { ApiError } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, t, tr } from "../../lib/i18n";
+import { billingCycleLabel, planLabel } from "../../lib/plans";
 import { toastDeleteResult } from "../../lib/storageFiles";
 import { pushToast } from "../../lib/toast";
 import { CATEGORY_LABELS, STATUS_LABELS, statusTone } from "./labels";
@@ -289,8 +290,8 @@ export default function SupportTicketDetailPage() {
                     {ticket.account.display_name || ticket.account.email}
                   </Link>
                   <Row label={t("Plan")}>
-                    <span className="capitalize">{ticket.account.plan_tier}</span>
-                    {ticket.account.billing_cycle && ticket.account.plan_tier !== "free" && ` · ${ticket.account.billing_cycle}`}
+                    <span>{planLabel(ticket.account.plan_tier)}</span>
+                    {ticket.account.billing_cycle && ticket.account.plan_tier !== "free" && ` · ${billingCycleLabel(ticket.account.billing_cycle)}`}
                   </Row>
                   {ticket.account.plan_expires_at && <Row label={t("Plan ends")}>{when(ticket.account.plan_expires_at)}</Row>}
                   <Row label={t("Credits")}>

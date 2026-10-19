@@ -68,8 +68,8 @@ type Change<T = unknown> = { from?: T; to?: T };
 
 const PLAN_NAMES: Record<string, string> = {
   free: tr("Free"),
-  student: tr("Student"),
-  professional: tr("Professional"),
+  student: tr("Standard"),
+  professional: tr("Premium"),
 };
 
 const PACK_NAMES: Record<string, string> = {
@@ -108,7 +108,7 @@ function arrow(change: Change | undefined, format: (v: unknown) => string = text
   return `${format(change?.from)} → ${format(change?.to)}`;
 }
 
-/** "Professional plan (monthly) · 199.000 ₫" / "3 × Standard checks · 57.000 ₫". */
+/** "Premium plan (monthly) · 199.000 ₫" / "3 × Standard checks · 57.000 ₫". */
 function order(m: Record<string, unknown>): string {
   const what =
     m.kind === "plan"
