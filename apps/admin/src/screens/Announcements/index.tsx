@@ -4,7 +4,7 @@ import { announcementState, announcementText, cn, type Announcement, type Announ
 import { StatusBadge } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
 import { ListItemsSkeleton } from "../../components/Skeleton";
-import { deleteAnnouncement, listAnnouncements, setAnnouncementActive } from "../../lib/configQueries";
+import { deleteAnnouncement, listAnnouncements, listMaintenanceBypass, setAnnouncementActive } from "../../lib/configQueries";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, getLanguage, t, tr } from "../../lib/i18n";
 import { AnnouncementEditor } from "./Editor";
@@ -24,11 +24,12 @@ function when(iso: string) {
   return new Date(iso).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** One line on timing: start, end, countdown. */
-function schedule(a: Announcement): string {
+/** One line on timing (start, end, countdown) and who gets through maintenance. */
+function schedule(a: Announcement, bypassCount: number): string {
   const bits: string[] = [];
   bits.push(a.starts_at ? t("Starts {{time}}", { time: when(a.starts_at) }) : t("Starts when switched on"));
   if (a.kind === "maintenance") bits.push(t("until ended by an admin"));
+  if (a.kind === "maintenance" && bypassCount > 0) bits.push(t("{{count}} other(s) let through", { count: bypassCount }));
   else if (a.ends_at) bits.push(t("ends {{time}}", { time: when(a.ends_at) }));
   if (a.kind === "banner" && a.countdown_to) bits.push(t("countdown to {{time}}", { time: when(a.countdown_to) }));
   return bits.join(" · ");
@@ -43,7 +44,17 @@ function summary(a: Announcement): string {
 }
 
 /** Live or scheduled maintenance, pinned above everything with a way out. */
-function MaintenanceStatus({ item, onEnd, ending }: { item: Announcement; onEnd: () => void; ending: boolean }) {
+function MaintenanceStatus({
+  item,
+  bypassCount,
+  onEnd,
+  ending,
+}: {
+  item: Announcement;
+  bypassCount: number;
+  onEnd: () => void;
+  ending: boolean;
+}) {
   const live = announcementState(item) === "live";
   return (
     <div
@@ -63,7 +74,9 @@ function MaintenanceStatus({ item, onEnd, ending }: { item: Announcement; onEnd:
         </p>
         <p className="text-caption text-fg-muted">
           {live
-            ? t("Visitors see the maintenance page. Admins can still use the site.")
+            ? bypassCount > 0
+              ? t("Visitors see the maintenance page. Admins and {{count}} other(s) you let through can still use the site.", { count: bypassCount })
+              : t("Visitors see the maintenance page. Admins can still use the site.")
             : t("The site locks at {{time}}. Visitors see a countdown bar until then.", { time: when(item.starts_at!) })}
         </p>
       </div>
@@ -81,6 +94,7 @@ function MaintenanceStatus({ item, onEnd, ending }: { item: Announcement; onEnd:
 
 export default function AnnouncementsPage() {
   const [items, setItems] = useState<Announcement[] | null>(null);
+  const [bypass, setBypass] = useState<Map<string, string[]>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [editing, setEditing] = useState<Announcement | null>(null);
@@ -90,8 +104,11 @@ export default function AnnouncementsPage() {
   const now = useNow(30_000);
 
   function refresh() {
-    return listAnnouncements()
-      .then(setItems)
+    return Promise.all([listAnnouncements(), listMaintenanceBypass()])
+      .then(([list, byId]) => {
+        setItems(list);
+        setBypass(byId);
+      })
       .catch((err: unknown) => setError(friendlyError(err)));
   }
 
@@ -152,11 +169,19 @@ export default function AnnouncementsPage() {
       </div>
 
       {maintenance && (
-        <MaintenanceStatus item={maintenance} ending={busyId === maintenance.id} onEnd={() => toggle(maintenance, false)} />
+        <MaintenanceStatus
+          item={maintenance}
+          bypassCount={bypass.get(maintenance.id)?.length ?? 0}
+          ending={busyId === maintenance.id} onEnd={() => toggle(maintenance, false)} />
       )}
 
       <div id="announcement-editor">
-        <AnnouncementEditor key={editing?.id ?? `new-${editorKey}`} editing={editing} onDone={saved} />
+        <AnnouncementEditor
+          key={editing?.id ?? `new-${editorKey}`}
+          editing={editing}
+          editingBypass={editing ? bypass.get(editing.id) ?? [] : []}
+          onDone={saved}
+        />
       </div>
 
       {error && <p className="text-caption text-destructive">{error}</p>}
@@ -208,7 +233,7 @@ export default function AnnouncementsPage() {
                       {Icon && <Icon size={15} weight="fill" className="shrink-0 text-fg-muted" />}
                       <span className="truncate">{summary(a)}</span>
                     </p>
-                    <p className="mt-0.5 text-caption text-fg-subtle">{schedule(a)}</p>
+                    <p className="mt-0.5 text-caption text-fg-subtle">{schedule(a, bypass.get(a.id)?.length ?? 0)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Switch checked={a.is_active} disabled={busyId === a.id} onChange={(v) => toggle(a, v)} />

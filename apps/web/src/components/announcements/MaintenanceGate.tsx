@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Wrench } from "@phosphor-icons/react";
-import { announcementText, type Announcement } from "@etymos/shared";
+import { announcementText, supabase, type Announcement } from "@etymos/shared";
 import { Logo } from "../layout/Logo";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { useSplashHold } from "../BootSplash";
@@ -10,7 +10,7 @@ import { useAnnouncements } from "../../lib/announcements";
 import { fetchMyProfile } from "../../lib/profileQueries";
 import { currentLocale, t, useLanguage } from "../../lib/i18n";
 
-/** Still reachable during maintenance, so an admin can sign in. */
+/** Still reachable during maintenance, so an admin (or someone let through) can sign in. */
 const OPEN_PATHS = ["/login", "/auth/callback"];
 
 function MaintenanceScreen({ notice }: { notice: Announcement }) {
@@ -45,21 +45,34 @@ function MaintenanceScreen({ notice }: { notice: Announcement }) {
       </main>
       <footer className="pb-6 text-center text-xs text-ink-400">
         <Link to="/login" className="hover:text-ink-600">
-          {t("Admin sign in")}
+          {t("Sign in")}
         </Link>
       </footer>
     </div>
   );
 }
 
+/** Whether the signed-in user gets through this maintenance: an admin, or an
+ * email the admin let through. Asks the database, which keeps that list private. */
+async function canUseSiteDuring(userId: string, announcementId: string): Promise<boolean> {
+  const admin = fetchMyProfile(userId)
+    .then((p) => p.role === "admin")
+    .catch(() => false);
+  const listed = supabase
+    .rpc("my_maintenance_bypass", { p_announcement: announcementId })
+    .then(({ data, error }) => !error && data === true);
+  const [isAdmin, isListed] = await Promise.all([admin, listed]);
+  return isAdmin || isListed;
+}
+
 /**
- * Locks the whole site while a maintenance announcement is live. Admins get
- * through (with a reminder that visitors are locked out); everyone else sees
- * the maintenance screen until an admin switches it off. Signing in stays
- * possible so an admin can get past it.
+ * Locks the whole site while a maintenance announcement is live. Admins, and
+ * anyone an admin let through by email, get through (with a reminder that
+ * visitors are locked out); everyone else sees the maintenance page until an
+ * admin switches it off. Signing in stays possible so they can get past it.
  *
  * Nothing underneath renders until we know whether maintenance is on (and,
- * if it is, whether this user is an admin) — the boot splash covers that
+ * if it is, whether this user gets through) — the boot splash covers that
  * wait. Rendering on the empty first pass is what used to flash the normal
  * page before the maintenance screen replaced it.
  */
@@ -67,33 +80,38 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   const { maintenance, loaded } = useAnnouncements();
   const { user, loading } = useAuth();
   const { pathname } = useLocation();
-  // Whether this user is an admin, checked once per user. Keyed on ids, not
-  // on the announcement object: the list is re-fetched every minute, and
-  // re-checking would swap the site for a loader and remount every page.
-  const [adminFor, setAdminFor] = useState<{ userId: string; admin: boolean } | null>(null);
+  // Whether this user gets through, checked once per user and announcement,
+  // and again when the announcement changes (its list may have). Keyed on
+  // ids, not on the announcement object: the list is re-fetched every minute,
+  // and re-checking would swap the site for a loader and remount every page.
+  // A re-check after an edit keeps the last answer on screen until it lands.
+  const [access, setAccess] = useState<{ userId: string; maintenanceId: string; version: string; through: boolean } | null>(null);
   const maintenanceId = maintenance?.id ?? null;
+  const version = maintenance?.updated_at ?? "";
   const userId = user?.id ?? null;
+  const checked = access && access.userId === userId && access.maintenanceId === maintenanceId ? access : null;
+  const checkedVersion = checked?.version ?? null;
 
   useEffect(() => {
-    if (!maintenanceId || !userId || adminFor?.userId === userId) return;
+    if (!maintenanceId || !userId || checkedVersion === version) return;
     let cancelled = false;
-    fetchMyProfile(userId)
-      .then((p) => !cancelled && setAdminFor({ userId, admin: p.role === "admin" }))
-      .catch(() => !cancelled && setAdminFor({ userId, admin: false }));
+    canUseSiteDuring(userId, maintenanceId).then(
+      (through) => !cancelled && setAccess({ userId, maintenanceId, version, through }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [maintenanceId, userId, adminFor?.userId]);
+  }, [maintenanceId, userId, version, checkedVersion]);
 
-  const admin = !userId ? false : adminFor?.userId === userId ? adminFor.admin : null;
+  const through = !userId ? false : checked ? checked.through : null;
 
   const open = OPEN_PATHS.includes(pathname);
-  const deciding = !loaded || loading || (!!maintenance && !open && admin === null);
+  const deciding = !loaded || loading || (!!maintenance && !open && through === null);
   useSplashHold(deciding);
 
   if (deciding) return null;
   if (!maintenance || open) return <>{children}</>;
-  if (!admin) return <MaintenanceScreen notice={maintenance} />;
+  if (!through) return <MaintenanceScreen notice={maintenance} />;
 
   return (
     <>
@@ -101,7 +119,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
         <p className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-navy-900 px-4 py-2 text-xs font-medium text-white shadow-[var(--shadow-card)]">
           <Wrench size={14} weight="fill" className="text-severity-moderate-line" />
-          {t("Maintenance mode is on. Only admins can use the site; everyone else sees the maintenance page.")}
+          {t("Maintenance mode is on. You can still use the site; other visitors see the maintenance page.")}
         </p>
       </div>
     </>

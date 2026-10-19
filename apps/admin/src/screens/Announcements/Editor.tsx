@@ -12,12 +12,14 @@ import {
   type AnnouncementKind,
   type AnnouncementSeverity,
 } from "@etymos/shared";
+import { EmailPicker } from "../../components/EmailPicker";
 import { useAdminAuth } from "../../lib/auth";
 import {
   ANNOUNCEMENT_IMAGE_MAX_BYTES,
   ANNOUNCEMENT_IMAGE_TYPES,
   createAnnouncement,
   removeAnnouncementImage,
+  setMaintenanceBypass,
   updateAnnouncement,
   uploadAnnouncementImage,
   type AnnouncementInput,
@@ -105,9 +107,12 @@ interface Draft {
   endOn: boolean;
   endsAt: string;
   imagePath: string | null;
+  /** Maintenance only: emails that still get through, besides admins. */
+  bypassOn: boolean;
+  bypassEmails: string[];
 }
 
-function draftFrom(a: Announcement | null): Draft {
+function draftFrom(a: Announcement | null, bypass: string[]): Draft {
   return {
     kind: a?.kind ?? "banner",
     title: a?.title ?? "",
@@ -123,6 +128,8 @@ function draftFrom(a: Announcement | null): Draft {
     endOn: Boolean(a?.ends_at),
     endsAt: toLocalInput(a?.ends_at ?? null),
     imagePath: a?.image_path ?? null,
+    bypassOn: bypass.length > 0,
+    bypassEmails: bypass,
   };
 }
 
@@ -135,6 +142,7 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
   if (starts && !editing && Date.parse(starts) < now - 60_000) return tr("The start time is in the past.");
   const hasMessage = Boolean(d.message.trim() || d.messageVi.trim());
   const hasTitle = Boolean(d.title.trim() || d.titleVi.trim());
+  if (d.kind === "maintenance" && d.bypassOn && d.bypassEmails.length === 0) return tr("Add at least one email, or let only admins through.");
   if (d.kind === "banner" && !hasMessage) return tr("Write the message for the top bar.");
   if (d.kind === "popup" && !hasTitle && !hasMessage && !d.imagePath && !file) {
     return tr("Add a title, text or an image.");
@@ -187,9 +195,18 @@ function toInput(d: Draft, imagePath: string | null, isActive: boolean): Announc
  * live on save (or at their start time). Starting maintenance right away asks
  * for confirmation first, since it locks the site.
  */
-export function AnnouncementEditor({ editing, onDone }: { editing: Announcement | null; onDone: () => void }) {
+export function AnnouncementEditor({
+  editing,
+  editingBypass,
+  onDone,
+}: {
+  editing: Announcement | null;
+  /** Emails currently let through `editing`, when it's maintenance. */
+  editingBypass: string[];
+  onDone: () => void;
+}) {
   const { user } = useAdminAuth();
-  const [d, setD] = useState<Draft>(() => draftFrom(editing));
+  const [d, setD] = useState<Draft>(() => draftFrom(editing, editingBypass));
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,8 +262,14 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
       if (d.kind === "popup" && file) uploaded = await uploadAnnouncementImage(file);
       const imagePath = d.kind === "popup" ? uploaded ?? d.imagePath : null;
       const input = toInput(d, imagePath, editing ? editing.is_active : true);
-      if (editing) await updateAnnouncement(editing.id, input);
-      else await createAnnouncement(input, user.id);
+      const bypass = d.kind === "maintenance" && d.bypassOn ? d.bypassEmails : [];
+      if (editing) {
+        await updateAnnouncement(editing.id, input);
+        if (d.kind === "maintenance") await setMaintenanceBypass(editing.id, bypass);
+      } else {
+        const id = await createAnnouncement(input, user.id);
+        if (bypass.length) await setMaintenanceBypass(id, bypass);
+      }
       // The old image is no longer used once the save went through.
       if (editing?.image_path && editing.image_path !== imagePath) await removeAnnouncementImage(editing.image_path);
       onDone();
@@ -478,7 +501,9 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
             {d.kind === "maintenance" ? (
               <Field label={t("Ends")}>
                 <p className="rounded-control bg-surface-muted px-3 py-2 text-caption text-fg-muted">
-                  {t("When you end it. Visitors see the maintenance page until then; admins can still use the site.")}
+                  {d.bypassOn
+                    ? t("When you end it. Visitors see the maintenance page until then; admins and the people below can still use the site.")
+                    : t("When you end it. Visitors see the maintenance page until then; admins can still use the site.")}
                 </p>
               </Field>
             ) : (
@@ -499,6 +524,29 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
               </Field>
             )}
           </div>
+
+          {d.kind === "maintenance" && (
+            <Field
+              label={t("Who can still use the site")}
+              hint={
+                d.bypassOn
+                  ? t("They sign in as usual and use the site normally. Emails without an account yet work once that account is made.")
+                  : undefined
+              }
+            >
+              <div className="flex flex-col gap-2">
+                <Choice
+                  value={d.bypassOn ? "some" : "admins"}
+                  options={[
+                    ["admins", t("Admins only")],
+                    ["some", t("Admins and chosen people")],
+                  ]}
+                  onChange={(v) => set("bypassOn", v === "some")}
+                />
+                {d.bypassOn && <EmailPicker emails={d.bypassEmails} onChange={(emails) => set("bypassEmails", emails)} />}
+              </div>
+            </Field>
+          )}
         </div>
 
         {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
@@ -507,7 +555,9 @@ export function AnnouncementEditor({ editing, onDone }: { editing: Announcement 
           <div className="mt-5 flex flex-wrap items-center gap-3 rounded-control border border-destructive/40 bg-destructive-bg px-4 py-3">
             <WarningOctagon size={20} weight="fill" className="shrink-0 text-destructive" />
             <p className="flex-1 text-caption font-medium text-destructive">
-              {t("This locks the site for everyone except admins as soon as you confirm. Visitors in the middle of something lose their place.")}
+              {d.bypassOn
+                ? t("This locks the site for everyone except admins and the people you chose as soon as you confirm. Visitors in the middle of something lose their place.")
+                : t("This locks the site for everyone except admins as soon as you confirm. Visitors in the middle of something lose their place.")}
             </p>
             <button
               type="button"
