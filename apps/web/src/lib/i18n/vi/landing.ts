@@ -58,6 +58,9 @@ export const landing: Record<string, string> = {
   "View all": "Xem tất cả",
   "View report": "Xem báo cáo",
   "Waiting for backend": "Đang chờ máy chủ",
+  "Can't reach the server right now. Still trying…": "Tạm thời chưa kết nối được máy chủ. Đang thử lại…",
+  "Your check finished, but we couldn't load the result. It will appear in Documents shortly.":
+    "Lần kiểm tra đã xong nhưng chưa tải được kết quả. Kết quả sẽ sớm hiện trong mục Tài liệu.",
   "We couldn't finish analyzing this document. Please try again.": "Chúng tôi không thể hoàn tất việc phân tích tài liệu này. Vui lòng thử lại.",
   "Web sources": "Nguồn web",
   "Which balance should we use?": "Nên dùng số dư nào?",
