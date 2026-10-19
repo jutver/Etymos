@@ -52,6 +52,19 @@ export const announcements: Record<string, string> = {
   "Visitors see the maintenance page. Admins and {{count}} other(s) you let through can still use the site.":
     "Khách thấy trang bảo trì. Quản trị viên và {{count}} người bạn cho vào vẫn dùng được trang web.",
   "When switched off": "Khi tắt",
+  "Signed-in users": "Người dùng đã đăng nhập",
+  "Chosen people": "Người được chọn",
+  "Who sees it": "Ai thấy thông báo này",
+  "Everyone on the site, signed in or not.": "Mọi người trên trang web, dù đã đăng nhập hay chưa.",
+  "Only people signed in to an account.": "Chỉ những người đã đăng nhập tài khoản.",
+  "Signed-in people on the plans you pick. A paid plan that has run out counts as Free.":
+    "Người đã đăng nhập thuộc các gói bạn chọn. Gói trả phí đã hết hạn được tính là gói Miễn phí.",
+  "Signed-in people with one of these emails. Emails without an account yet work once that account is made.":
+    "Người đã đăng nhập bằng một trong các email này. Email chưa có tài khoản sẽ có hiệu lực khi tài khoản được tạo.",
+  "Pick at least one plan.": "Chọn ít nhất một gói.",
+  "signed-in users only": "chỉ người đã đăng nhập",
+  "only {{plans}}": "chỉ gói {{plans}}",
+  "only {{count}} chosen person(s)": "chỉ {{count}} người được chọn",
   "This locks the site for everyone except admins as soon as you confirm. Visitors in the middle of something lose their place.":
     "Trang web sẽ bị khóa với mọi người trừ quản trị viên ngay khi bạn xác nhận. Khách đang thao tác dở sẽ bị gián đoạn.",
   "Lock the site now": "Khóa trang web ngay",

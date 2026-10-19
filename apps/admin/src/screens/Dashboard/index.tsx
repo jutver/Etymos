@@ -27,6 +27,7 @@ import {
 import { StatCard } from "../../components/StatCard";
 import { ChartCard, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, CHART_COLORS } from "../../components/ChartCard";
 import { DateRangePicker } from "../../components/DateRangePicker";
+import { planLabel } from "../../lib/plans";
 import {
   fetchDashboardMetrics,
   formatRangeLabel,
@@ -178,9 +179,9 @@ export default function DashboardPage() {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={metrics?.planDistribution}
+                data={metrics?.planDistribution.map((entry) => ({ ...entry, label: planLabel(entry.plan) }))}
                 dataKey="count"
-                nameKey="plan"
+                nameKey="label"
                 innerRadius={50}
                 outerRadius={80}
                 paddingAngle={2}

@@ -7,6 +7,7 @@ import {
   announcementText,
   cn,
   type Announcement,
+  type AnnouncementAudience,
   type AnnouncementLanguage,
   type AnnouncementIcon,
   type AnnouncementKind,
@@ -19,13 +20,15 @@ import {
   ANNOUNCEMENT_IMAGE_TYPES,
   createAnnouncement,
   removeAnnouncementImage,
-  setMaintenanceBypass,
+  setAnnouncementEmails,
   updateAnnouncement,
   uploadAnnouncementImage,
   type AnnouncementInput,
 } from "../../lib/configQueries";
 import { friendlyError } from "../../lib/errors";
 import { getLanguage, t, tr } from "../../lib/i18n";
+import { planLabel } from "../../lib/plans";
+import type { PlanTier } from "../../lib/types";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
 import { AnnouncementPreview } from "./Preview";
 import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, SEVERITY_BAR, SEVERITY_LABELS, fromLocalInput, toLocalInput } from "./shared";
@@ -37,6 +40,15 @@ const KINDS: { kind: AnnouncementKind; icon: typeof Rows; hint: string }[] = [
 ];
 
 const SEVERITIES = Object.keys(SEVERITY_LABELS) as AnnouncementSeverity[];
+
+const AUDIENCES: [AnnouncementAudience, string][] = [
+  ["everyone", tr("Everyone")],
+  ["signed_in", tr("Signed-in users")],
+  ["plans", tr("Plans")],
+  ["emails", tr("Chosen people")],
+];
+
+const PLAN_TIERS: PlanTier[] = ["free", "student", "professional"];
 
 /** One column of text boxes per site language. Labels are each language's own name. */
 const TEXT_LANGUAGES: {
@@ -73,7 +85,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 /** Two-option toggle (e.g. "Right away" / "At a set time"). */
 function Choice<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex self-start rounded-control border border-border bg-surface-muted p-0.5">
+    <div className="inline-flex flex-wrap self-start rounded-control border border-border bg-surface-muted p-0.5">
       {options.map(([v, label]) => (
         <button
           key={v}
@@ -110,9 +122,16 @@ interface Draft {
   /** Maintenance only: emails that still get through, besides admins. */
   bypassOn: boolean;
   bypassEmails: string[];
+  /** Top bar and pop-up only: who sees it. */
+  audience: AnnouncementAudience;
+  audiencePlans: PlanTier[];
+  audienceEmails: string[];
 }
 
-function draftFrom(a: Announcement | null, bypass: string[]): Draft {
+/** `emails` is the announcement's saved list: who gets through maintenance,
+ * or who sees a top bar or pop-up aimed at chosen people. */
+function draftFrom(a: Announcement | null, emails: string[]): Draft {
+  const maintenance = a?.kind === "maintenance";
   return {
     kind: a?.kind ?? "banner",
     title: a?.title ?? "",
@@ -128,8 +147,11 @@ function draftFrom(a: Announcement | null, bypass: string[]): Draft {
     endOn: Boolean(a?.ends_at),
     endsAt: toLocalInput(a?.ends_at ?? null),
     imagePath: a?.image_path ?? null,
-    bypassOn: bypass.length > 0,
-    bypassEmails: bypass,
+    bypassOn: maintenance && emails.length > 0,
+    bypassEmails: maintenance ? emails : [],
+    audience: a?.audience ?? "everyone",
+    audiencePlans: (a?.audience_plans ?? []) as PlanTier[],
+    audienceEmails: maintenance ? [] : emails,
   };
 }
 
@@ -143,6 +165,8 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
   const hasMessage = Boolean(d.message.trim() || d.messageVi.trim());
   const hasTitle = Boolean(d.title.trim() || d.titleVi.trim());
   if (d.kind === "maintenance" && d.bypassOn && d.bypassEmails.length === 0) return tr("Add at least one email, or let only admins through.");
+  if (d.kind !== "maintenance" && d.audience === "plans" && d.audiencePlans.length === 0) return tr("Pick at least one plan.");
+  if (d.kind !== "maintenance" && d.audience === "emails" && d.audienceEmails.length === 0) return tr("Add at least one email.");
   if (d.kind === "banner" && !hasMessage) return tr("Write the message for the top bar.");
   if (d.kind === "popup" && !hasTitle && !hasMessage && !d.imagePath && !file) {
     return tr("Add a title, text or an image.");
@@ -187,7 +211,15 @@ function toInput(d: Draft, imagePath: string | null, isActive: boolean): Announc
     starts_at: d.startMode === "at" ? fromLocalInput(d.startsAt) : null,
     ends_at: d.kind !== "maintenance" && d.endOn ? fromLocalInput(d.endsAt) : null,
     is_active: isActive,
+    audience: d.kind === "maintenance" ? "everyone" : d.audience,
+    audience_plans: d.kind !== "maintenance" && d.audience === "plans" ? d.audiencePlans : null,
   };
+}
+
+/** The email list to save with the draft (see draftFrom). */
+function emailsFor(d: Draft): string[] {
+  if (d.kind === "maintenance") return d.bypassOn ? d.bypassEmails : [];
+  return d.audience === "emails" ? d.audienceEmails : [];
 }
 
 /**
@@ -197,16 +229,16 @@ function toInput(d: Draft, imagePath: string | null, isActive: boolean): Announc
  */
 export function AnnouncementEditor({
   editing,
-  editingBypass,
+  editingEmails,
   onDone,
 }: {
   editing: Announcement | null;
-  /** Emails currently let through `editing`, when it's maintenance. */
-  editingBypass: string[];
+  /** `editing`'s saved email list (see draftFrom). */
+  editingEmails: string[];
   onDone: () => void;
 }) {
   const { user } = useAdminAuth();
-  const [d, setD] = useState<Draft>(() => draftFrom(editing, editingBypass));
+  const [d, setD] = useState<Draft>(() => draftFrom(editing, editingEmails));
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -262,13 +294,13 @@ export function AnnouncementEditor({
       if (d.kind === "popup" && file) uploaded = await uploadAnnouncementImage(file);
       const imagePath = d.kind === "popup" ? uploaded ?? d.imagePath : null;
       const input = toInput(d, imagePath, editing ? editing.is_active : true);
-      const bypass = d.kind === "maintenance" && d.bypassOn ? d.bypassEmails : [];
+      const emails = emailsFor(d);
       if (editing) {
         await updateAnnouncement(editing.id, input);
-        if (d.kind === "maintenance") await setMaintenanceBypass(editing.id, bypass);
+        await setAnnouncementEmails(editing.id, emails);
       } else {
         const id = await createAnnouncement(input, user.id);
-        if (bypass.length) await setMaintenanceBypass(id, bypass);
+        if (emails.length) await setAnnouncementEmails(id, emails);
       }
       // The old image is no longer used once the save went through.
       if (editing?.image_path && editing.image_path !== imagePath) await removeAnnouncementImage(editing.image_path);
@@ -479,6 +511,51 @@ export function AnnouncementEditor({
                   e.target.value = "";
                 }}
               />
+            </Field>
+          )}
+
+          {d.kind !== "maintenance" && (
+            <Field
+              label={t("Who sees it")}
+              hint={
+                d.audience === "everyone"
+                  ? t("Everyone on the site, signed in or not.")
+                  : d.audience === "signed_in"
+                    ? t("Only people signed in to an account.")
+                    : d.audience === "plans"
+                      ? t("Signed-in people on the plans you pick. A paid plan that has run out counts as Free.")
+                      : t("Signed-in people with one of these emails. Emails without an account yet work once that account is made.")
+              }
+            >
+              <div className="flex flex-col gap-2">
+                <Choice value={d.audience} options={AUDIENCES.map(([v, label]) => [v, t(label)])} onChange={(v) => set("audience", v)} />
+                {d.audience === "plans" && (
+                  <div className="flex flex-wrap gap-2">
+                    {PLAN_TIERS.map((tier) => {
+                      const on = d.audiencePlans.includes(tier);
+                      return (
+                        <button
+                          key={tier}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            set("audiencePlans", on ? d.audiencePlans.filter((p) => p !== tier) : PLAN_TIERS.filter((p) => p === tier || d.audiencePlans.includes(p)))
+                          }
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-caption font-medium transition-colors",
+                            on ? "border-accent bg-accent-bg text-accent" : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
+                          )}
+                        >
+                          {planLabel(tier)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {d.audience === "emails" && (
+                  <EmailPicker emails={d.audienceEmails} onChange={(emails) => set("audienceEmails", emails)} />
+                )}
+              </div>
             </Field>
           )}
 

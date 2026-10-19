@@ -5,6 +5,7 @@ import {
   supabase,
   type Announcement,
 } from "@etymos/shared";
+import { useAuth } from "./auth";
 
 /** How often to look for announcements an admin just switched on (maintenance included). */
 const REFRESH_MS = 60_000;
@@ -29,10 +30,13 @@ interface AnnouncementsValue {
 const EMPTY: AnnouncementsValue = { banner: null, popup: null, maintenance: null, upcomingMaintenance: null, loaded: false };
 const AnnouncementsContext = createContext<AnnouncementsValue>(EMPTY);
 
-/** Loads switched-on announcements once for the whole app, refreshes them
- * every minute and when the tab comes back, and re-evaluates exactly when a
- * scheduled one starts or ends. */
+/** Loads the switched-on announcements meant for this visitor once for the
+ * whole app, refreshes them every minute, when the tab comes back and when
+ * they sign in or out, and re-evaluates exactly when a scheduled one starts
+ * or ends. */
 export function AnnouncementsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [rows, setRows] = useState<Announcement[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(false);
@@ -40,11 +44,10 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const load = () =>
+      // Filtered by audience on the server: announcements aimed at someone
+      // else aren't readable here at all.
       supabase
-        .from("announcements")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
+        .rpc("my_announcements")
         .then(({ data, error }) => {
           if (cancelled) return;
           setLoaded(true);
@@ -69,7 +72,7 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [userId]);
 
   // Wake up when the next one starts or ends (setTimeout caps at ~24.8 days).
   useEffect(() => {
