@@ -49,6 +49,10 @@ type PlagiarismPdfViewerProps = {
   /** How the page is sized to start with: the full width of the viewer
    * (reading, the default) or the whole page in view (a quick preview). */
   defaultFit?: FitMode;
+  /** Fires once per file: when the first page's canvas and text layer have
+   * both drawn, or when the file couldn't be loaded. Lets the Report keep
+   * the splash up until the PDF is actually on screen. */
+  onReady?: () => void;
 };
 
 type FitMode = "width" | "page";
@@ -165,6 +169,7 @@ export function PlagiarismPdfViewer({
   activeAiSegmentId = null,
   onAiSegmentClick,
   defaultFit = "width",
+  onReady,
 }: PlagiarismPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   // Only this page is mounted: one canvas and one text layer at a time, however
@@ -246,8 +251,22 @@ export function PlagiarismPdfViewer({
     return fileBuffer;
   }, [pdfUrl, fileBuffer]);
 
+  // First-draw tracking for `onReady`, reset per file below.
+  const firstDraw = useRef({ canvas: false, text: false, fired: false });
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const markDrawn = useCallback((part: "canvas" | "text" | "failed") => {
+    const s = firstDraw.current;
+    if (part === "canvas") s.canvas = true;
+    if (part === "text") s.text = true;
+    if (s.fired || (part !== "failed" && !(s.canvas && s.text))) return;
+    s.fired = true;
+    onReadyRef.current?.();
+  }, []);
+
   // Đổi file (tài liệu mới) -> mọi ref/toạ độ trang cũ không còn hợp lệ nữa.
   useEffect(() => {
+    firstDraw.current = { canvas: false, text: false, fired: false };
     pageContainerRefs.current.clear();
     setPageRects({});
     setAiPageRects({});
@@ -706,12 +725,14 @@ export function PlagiarismPdfViewer({
     const width = el.clientWidth;
     const height = el.clientHeight;
     setRenderedBox((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
-  }, [currentPage]);
+    markDrawn("canvas");
+  }, [currentPage, markDrawn]);
 
   const onTextLayerRendered = useCallback(() => {
     measurePage(currentPage);
     measureAiPage(currentPage);
-  }, [currentPage, measurePage, measureAiPage]);
+    markDrawn("text");
+  }, [currentPage, measurePage, measureAiPage, markDrawn]);
 
   const setPageContainer = useCallback(
     (el: HTMLDivElement | null) => {
@@ -727,6 +748,11 @@ export function PlagiarismPdfViewer({
   }
 
   const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
+
+  // Nothing more will draw once the file has failed — release `onReady` waiters.
+  useEffect(() => {
+    if (bufferError || loadError) markDrawn("failed");
+  }, [bufferError, loadError, markDrawn]);
   // Counted from where matches were located in the text (every page), not
   // from the boxes drawn on the one page currently on screen.
   const severityCounts = useMemo(() => {

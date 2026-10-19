@@ -4,7 +4,7 @@ import { Wrench } from "@phosphor-icons/react";
 import { announcementText, type Announcement } from "@etymos/shared";
 import { Logo } from "../layout/Logo";
 import { LanguageSwitcher } from "../LanguageSwitcher";
-import { PageLoader } from "../ui/PageLoader";
+import { useSplashHold } from "../BootSplash";
 import { useAuth } from "../../lib/auth";
 import { useAnnouncements } from "../../lib/announcements";
 import { fetchMyProfile } from "../../lib/profileQueries";
@@ -57,9 +57,14 @@ function MaintenanceScreen({ notice }: { notice: Announcement }) {
  * through (with a reminder that visitors are locked out); everyone else sees
  * the maintenance screen until an admin switches it off. Signing in stays
  * possible so an admin can get past it.
+ *
+ * Nothing underneath renders until we know whether maintenance is on (and,
+ * if it is, whether this user is an admin) — the boot splash covers that
+ * wait. Rendering on the empty first pass is what used to flash the normal
+ * page before the maintenance screen replaced it.
  */
 export function MaintenanceGate({ children }: { children: ReactNode }) {
-  const { maintenance } = useAnnouncements();
+  const { maintenance, loaded } = useAnnouncements();
   const { user, loading } = useAuth();
   const { pathname } = useLocation();
   // Whether this user is an admin, checked once per user. Keyed on ids, not
@@ -82,8 +87,12 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
 
   const admin = !userId ? false : adminFor?.userId === userId ? adminFor.admin : null;
 
-  if (!maintenance || OPEN_PATHS.includes(pathname)) return <>{children}</>;
-  if (loading || admin === null) return <PageLoader />;
+  const open = OPEN_PATHS.includes(pathname);
+  const deciding = !loaded || loading || (!!maintenance && !open && admin === null);
+  useSplashHold(deciding);
+
+  if (deciding) return null;
+  if (!maintenance || open) return <>{children}</>;
   if (!admin) return <MaintenanceScreen notice={maintenance} />;
 
   return (

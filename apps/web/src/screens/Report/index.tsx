@@ -14,6 +14,7 @@ import {
 import { loadLocalDocumentVersions, saveLocalDocumentVersion } from "../../lib/localDocumentVersions";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
+import { useSplashHold } from "../../components/BootSplash";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { SourceComparisonModal } from "./SourceComparisonModal";
 import { CitationDialog } from "../../components/CitationDialog";
@@ -47,6 +48,8 @@ const NO_PASSAGE_IDS = new Set<string>();
 // historical document — see the signed-URL effect below), matching the
 // pattern already used in apps/admin/src/lib/verificationQueries.ts.
 const PDF_SIGNED_URL_TTL_SECONDS = 300;
+/** Longest the splash waits for the original PDF to draw. */
+const PDF_SPLASH_TIMEOUT_MS = 15_000;
 
 const SCORE_CHIP: Record<DocStatus, string> = {
   clean: "text-success bg-success-bg border-success/20",
@@ -172,6 +175,19 @@ export default function ReportPage() {
 
   const effectivePdfUrl = cachedDoc?.pdfUrl || signedPdfUrl || undefined;
 
+  // The splash (shown by AppShell on entering a report) stays up until the
+  // document is here and, in the Original view, its PDF has drawn — capped,
+  // so a huge or stuck PDF can't hold it forever. A PDF is only waited for
+  // when one is coming: a URL is in hand, or the signed one is being fetched.
+  const [pdfReady, setPdfReady] = useState(false);
+  const handlePdfReady = useCallback(() => setPdfReady(true), []);
+  useEffect(() => {
+    setPdfReady(false);
+    const timer = window.setTimeout(() => setPdfReady(true), PDF_SPLASH_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [id]);
+  const pdfComing = Boolean(effectivePdfUrl) || (!cachedDoc && Boolean(doc?.fileName) && !pdfFetchError);
+
   // --- Editor state --------------------------------------------------------
   const editorRef = useRef<HTMLDivElement>(null);
   // The read-only Document tab's own editor — `editorRef` is always the Edit
@@ -208,6 +224,10 @@ export default function ReportPage() {
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
   const [view, setView] = useState<ReportView>("original");
+  useSplashHold(
+    !!id && !notFound && !loadError && (!doc || (view === "original" && pdfComing && !pdfReady)),
+    { reshow: false },
+  );
   // Only the Edit tab lets the user type; Document and Original are read-only.
   const locked = view !== "edit";
   // Document and Edit show the extracted text; Original swaps in the PDF
@@ -702,6 +722,7 @@ export default function ReportPage() {
                 aiSegments={shownAiSegments}
                 activeAiSegmentId={activeAiSegmentId}
                 onAiSegmentClick={handleSelectAiSegment}
+                onReady={handlePdfReady}
               />
             </div>
           ) : (

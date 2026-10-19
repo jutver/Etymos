@@ -8,6 +8,9 @@ import {
 
 /** How often to look for announcements an admin just switched on (maintenance included). */
 const REFRESH_MS = 60_000;
+/** Give up waiting for the first load after this, so a hung request can't
+ * keep the boot splash up forever. */
+const FIRST_LOAD_TIMEOUT_MS = 8_000;
 
 interface AnnouncementsValue {
   /** Latest live banner, if any. */
@@ -18,9 +21,12 @@ interface AnnouncementsValue {
   maintenance: Announcement | null;
   /** Maintenance switched on with a start time still ahead. */
   upcomingMaintenance: Announcement | null;
+  /** The first fetch has finished (or failed, or timed out). Until then
+   * `maintenance` being null means "unknown", not "off". */
+  loaded: boolean;
 }
 
-const EMPTY: AnnouncementsValue = { banner: null, popup: null, maintenance: null, upcomingMaintenance: null };
+const EMPTY: AnnouncementsValue = { banner: null, popup: null, maintenance: null, upcomingMaintenance: null, loaded: false };
 const AnnouncementsContext = createContext<AnnouncementsValue>(EMPTY);
 
 /** Loads switched-on announcements once for the whole app, refreshes them
@@ -29,6 +35,7 @@ const AnnouncementsContext = createContext<AnnouncementsValue>(EMPTY);
 export function AnnouncementsProvider({ children }: { children: ReactNode }) {
   const [rows, setRows] = useState<Announcement[]>([]);
   const [now, setNow] = useState(() => Date.now());
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +47,7 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (cancelled) return;
+          setLoaded(true);
           if (error) {
             console.error("Failed to load announcements", error);
             return;
@@ -51,11 +59,13 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
           setNow(Date.now());
         });
     load();
+    const giveUp = window.setTimeout(() => setLoaded(true), FIRST_LOAD_TIMEOUT_MS);
     const timer = window.setInterval(load, REFRESH_MS);
     const onVisible = () => document.visibilityState === "visible" && load();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      window.clearTimeout(giveUp);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -74,8 +84,8 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
     const upcoming = rows
       .filter((a) => a.kind === "maintenance" && announcementState(a, now) === "scheduled")
       .sort((a, b) => Date.parse(a.starts_at!) - Date.parse(b.starts_at!))[0];
-    return { banner: live("banner"), popup: live("popup"), maintenance: live("maintenance"), upcomingMaintenance: upcoming ?? null };
-  }, [rows, now]);
+    return { banner: live("banner"), popup: live("popup"), maintenance: live("maintenance"), upcomingMaintenance: upcoming ?? null, loaded };
+  }, [rows, now, loaded]);
 
   return <AnnouncementsContext.Provider value={value}>{children}</AnnouncementsContext.Provider>;
 }
