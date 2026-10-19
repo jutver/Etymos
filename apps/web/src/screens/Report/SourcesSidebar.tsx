@@ -18,6 +18,9 @@ export interface SourcesSidebarProps {
    * Omit to skip the "couldn't locate" hint (e.g. when viewing the PDF). */
   locatedIds?: Set<string>;
   resolvedIds: Set<string>;
+  /** match id -> title of the source its rewritten/edited text still
+   * overlaps (quick check, useQuickCheck.ts). */
+  stillFlaggedNotes?: Map<string, string>;
   explanationLocked: boolean;
   rewriteLocked: boolean;
   /** Same data as the top bar's AiContentChip — rendered as its own section
@@ -49,6 +52,7 @@ export function SourcesSidebar({
   activeMatchId,
   locatedIds,
   resolvedIds,
+  stillFlaggedNotes,
   explanationLocked,
   rewriteLocked,
   aiDetection,
@@ -258,6 +262,7 @@ export function SourcesSidebar({
                     rewriteLocked={rewriteLocked}
                     selected={activeMatchId === m.id}
                     resolved={resolvedIds.has(m.id)}
+                    stillFlaggedBy={stillFlaggedNotes?.get(m.id)}
                     notLocated={locatedIds ? !locatedIds.has(m.id) : false}
                     onSelect={onSelect}
                     onViewComparison={onViewComparison}

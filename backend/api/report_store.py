@@ -533,6 +533,21 @@ def get_report(report_id: str) -> dict[str, Any] | None:
     return deepcopy(report)
 
 
+def get_local_report_file(report_id: str) -> dict[str, Any] | None:
+    """The report's local JSON file only (no cache, no Supabase). Unlike the
+    Supabase copy it keeps each match's `source_paper_id`, which
+    quick_check.py needs to find the source chunk files."""
+    path = REPORT_DIR / f"{report_id}.json"
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        logger.exception("Could not read local report file for report_id=%s", report_id)
+        return None
+
+
 def list_reports(user_id: str | None = None, is_admin: bool = False) -> list[dict[str, Any]]:
     from_supabase = _list_from_supabase(user_id, is_admin)
     if from_supabase is not None:

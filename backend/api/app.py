@@ -34,6 +34,9 @@ from report_store import delete_report, get_report, list_reports, save_report, s
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
 from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
+from quick_check import MAX_QUICK_CHECK_CHARS, check_passage, corpus_from_sources, quick_check_report_passage
+from quick_check import warm_up as warm_up_quick_check
+from report_store import get_local_report_file
 from ai_explain import register_flag as register_explain_flag
 from report_enrichment import register_flags as register_enrichment_flags
 from citations import DEFAULT_REFERENCE_HEADING, add_citation
@@ -117,6 +120,10 @@ app.include_router(support_router)
 RATE_LIMIT_CHECK_PDF = os.getenv("RATE_LIMIT_CHECK_PDF", "10/hour")
 RATE_LIMIT_CHECK_TEXT = os.getenv("RATE_LIMIT_CHECK_TEXT", "20/hour")
 RATE_LIMIT_AI_REWRITE = os.getenv("RATE_LIMIT_AI_REWRITE", "30/hour")
+# Quick check runs after every accepted rewrite and every hand edit of a
+# flagged passage, but only against already-downloaded sources (no search,
+# no download), so it can afford a loose limit.
+RATE_LIMIT_QUICK_CHECK = os.getenv("RATE_LIMIT_QUICK_CHECK", "300/hour")
 # Citing is a cheap pure-text transform, so it gets a much looser limit
 # than the model-backed endpoints — a user adding a bibliography can
 # easily insert dozens of citations in one editing session.
@@ -240,6 +247,18 @@ class UnlockDocumentRequest(BaseModel):
 class RewriteRequest(BaseModel):
     input_sentence: str
     source_sentence: str
+
+
+class QuickCheckSource(BaseModel):
+    title: str = Field("", max_length=1000)
+    text: str = Field("", max_length=5000)
+
+
+class QuickCheckRequest(BaseModel):
+    text: str = Field(..., max_length=MAX_QUICK_CHECK_CHARS)
+    # The matched source sentences the page shows — only used when the
+    # backend has no copy of this report (see quick_check.corpus_from_sources).
+    sources: list[QuickCheckSource] = Field(default_factory=list, max_length=500)
 
 
 class ReferenceModel(BaseModel):
@@ -602,6 +621,65 @@ def rewrite_text_with_ai(request: Request, body: RewriteRequest,
         "model": result["model"],
         "fallback_used": result["fallback_used"],
     }
+
+
+@app.post("/api/reports/{report_id}/quick-check")
+@limiter.limit(RATE_LIMIT_QUICK_CHECK)
+def quick_check_passage(request: Request, report_id: str, body: QuickCheckRequest,
+                        user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Quick check ("check nhanh") of one rewritten / hand-edited passage
+    against the sources this report already found (quick_check.py). No
+    search and no downloads, and it does not use a check from the quota.
+    A clean result only means "no overlap with this report's sources";
+    finding new sources takes a full re-check.
+    """
+    report = get_report(report_id)
+    if report is None:
+        if not body.sources:
+            raise HTTPException(status_code=404, detail="Report not found.")
+        # Nothing stored server-side for this id: compare with the source
+        # sentences the caller sent (its own data, so no ownership to check).
+        try:
+            return check_passage(body.text, corpus_from_sources([s.model_dump() for s in body.sources]))
+        except Exception:
+            logger.exception("Quick check (client sources) failed for report_id=%s", report_id)
+            raise HTTPException(status_code=500, detail="Quick check failed.")
+    require_owner_or_admin(report.get("user_id"), user)
+
+    # The local JSON still has each match's source_paper_id (the Supabase
+    # copy does not), which is what finds the source chunk files.
+    local = get_local_report_file(report_id)
+    if local is not None and local.get("matches"):
+        report = local
+
+    try:
+        result = quick_check_report_passage(report_id, report, body.text)
+    except Exception:
+        logger.exception("Quick check failed for report_id=%s", report_id)
+        raise HTTPException(status_code=500, detail="Quick check failed.")
+    return result
+
+
+@app.post("/api/reports/{report_id}/quick-check/warm", status_code=202)
+@limiter.limit(RATE_LIMIT_QUICK_CHECK)
+def warm_quick_check(request: Request, report_id: str,
+                     user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Called when the reader opens the Edit view: loads this report's source
+    sentences and the embedding model in the background, so the first quick
+    check answers in well under a second instead of waiting ~10 s for the
+    model. Returns immediately.
+    """
+    report = get_report(report_id)
+    if report is None:
+        return {"status": "skipped"}
+    require_owner_or_admin(report.get("user_id"), user)
+    local = get_local_report_file(report_id)
+    if local is not None and local.get("matches"):
+        report = local
+    threading.Thread(target=warm_up_quick_check, args=(report_id, report), daemon=True).start()
+    return {"status": "warming"}
 
 
 @app.post("/api/documents/cite")

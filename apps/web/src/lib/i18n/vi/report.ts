@@ -189,4 +189,22 @@ export const report: Record<string, string> = {
     "Chưa thể xác định văn bản này có do AI viết hay không: văn bản không phải tiếng Anh hoặc quá ngắn so với phạm vi hiệu chỉnh của bộ phát hiện, nên không hiển thị phần trăm.",
   "This is a statistical estimate, not proof. Edited AI text and very formulaic human writing can be misjudged, so use it as a prompt to review the flagged paragraphs, not as a verdict.":
     "Đây là ước tính thống kê, không phải bằng chứng. Văn bản AI đã chỉnh sửa và văn người viết rất khuôn mẫu đều có thể bị đánh giá sai, vì vậy hãy dùng kết quả này để xem lại các đoạn được đánh dấu, không phải như một kết luận.",
+  "Checking the rewrite against this report's sources...":
+    "Đang kiểm tra bản viết lại với các nguồn trong báo cáo này...",
+  "Couldn't check the rewrite right now. Your score will be marked as estimated.":
+    "Chưa kiểm tra được bản viết lại lúc này. Điểm của bạn sẽ được ghi là ước tính.",
+  "No overlap with any source in this report.":
+    "Không còn trùng với nguồn nào trong báo cáo này.",
+  "Still overlaps \"{{title}}\". Try Regenerate, or edit it yourself after accepting.":
+    "Vẫn trùng với \"{{title}}\". Hãy bấm Tạo lại, hoặc tự sửa sau khi chấp nhận.",
+  "a source":
+    "một nguồn",
+  "Estimated similarity {{score}}% after your edits. Edited passages were only compared with the sources already in this report; a full re-check gives the exact score.":
+    "Độ tương đồng ước tính {{score}}% sau khi bạn chỉnh sửa. Các đoạn đã sửa chỉ được so với những nguồn đã có trong báo cáo này; kiểm tra lại toàn bộ mới cho điểm chính xác.",
+  "estimated":
+    "ước tính",
+  "The edited passage still overlaps a source":
+    "Đoạn đã sửa vẫn trùng với một nguồn",
+  "It is similar to \"{{title}}\". Reword it again, or quote and cite the source.":
+    "Đoạn này giống với \"{{title}}\". Hãy diễn đạt lại lần nữa, hoặc trích dẫn nguồn.",
 };
