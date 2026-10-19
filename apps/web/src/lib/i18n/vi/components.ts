@@ -129,4 +129,8 @@ export const components: Record<string, string> = {
   "Admin sign in": "Đăng nhập quản trị",
   "Maintenance mode is on. Only admins can use the site; everyone else sees the maintenance page.":
     "Đang bật chế độ bảo trì. Chỉ quản trị viên dùng được trang web; mọi người khác sẽ thấy trang bảo trì.",
+  "Your new wording still overlaps \"{{title}}\".":
+    "Cách viết mới của bạn vẫn trùng với \"{{title}}\".",
+  "Still similar":
+    "Vẫn trùng",
 };

@@ -8,6 +8,7 @@ import {
   LockSimple,
   MagicWand,
   Quotes,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
@@ -26,6 +27,9 @@ interface MatchCardProps {
   rewriteLocked?: boolean;
   selected?: boolean;
   resolved?: boolean;
+  /** Set when this passage was rewritten/edited but the quick check found
+   * the new text still overlapping a source: that source's title. */
+  stillFlaggedBy?: string;
   /** True when this match has no highlight anywhere in the document view, so
    * selecting it can't jump to a place. Surfaced instead of a silent no-op. */
   notLocated?: boolean;
@@ -50,6 +54,7 @@ export function MatchCard({
   rewriteLocked = locked,
   selected = false,
   resolved = false,
+  stillFlaggedBy,
   notLocated = false,
   onSelect,
   onViewComparison,
@@ -105,6 +110,13 @@ export function MatchCard({
         {resolved && (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-[0.625rem] font-bold text-success">
             <CheckCircle size={11} weight="fill" />{" "}{t("Fixed")}</span>
+        )}
+        {stillFlaggedBy !== undefined && (
+          <span
+            title={t("Your new wording still overlaps \"{{title}}\".", { title: stillFlaggedBy })}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-severity-moderate-bg px-2 py-0.5 text-[0.625rem] font-bold text-severity-moderate"
+          >
+            <WarningCircle size={11} weight="fill" />{" "}{t("Still similar")}</span>
         )}
       </button>
 

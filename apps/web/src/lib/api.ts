@@ -260,6 +260,52 @@ export async function rewriteText(inputSentence: string, sourceSentence: string)
   });
 }
 
+/** One source sentence the checked passage still overlaps (backend/quick_check.py). */
+export interface QuickCheckHit {
+  label: "likely_plagiarism" | "suspicious" | "common_academic_definition";
+  /** LABEL_WEIGHT of `label` (1 / 0.5 / 0.1) — what it adds to the score. */
+  weight: number;
+  input_sentence: string;
+  source_sentence: string;
+  source_paper_id: string;
+  source_title: string;
+  semantic_similarity: number;
+  word_overlap: number;
+  char_ngram_overlap: number;
+}
+
+export interface QuickCheckResponse {
+  status: "clean" | "flagged";
+  hits: QuickCheckHit[];
+  checked_sentences: number;
+  corpus_size: number;
+}
+
+/** "Check nhanh": compares one rewritten / hand-edited passage with the sources
+ * this report already found. No search, no download, no check used from the quota. */
+export async function quickCheckPassage(
+  reportId: string,
+  text: string,
+  /** The page's matched source sentences, used only when the backend has no copy of the report. */
+  sources: { title: string; text: string }[] = [],
+): Promise<QuickCheckResponse> {
+  return requestJson<QuickCheckResponse>(`/api/reports/${encodeURIComponent(reportId)}/quick-check`, {
+    method: "POST",
+    body: JSON.stringify({
+      text: text.slice(0, 4000),
+      sources: sources.slice(0, 500).map((s) => ({ title: s.title.slice(0, 1000), text: s.text.slice(0, 5000) })),
+    }),
+  });
+}
+
+/** Asks the backend to load this report's sources and the embedding model
+ * ahead of the first quick check. Fire and forget. */
+export async function warmQuickCheck(reportId: string): Promise<void> {
+  await requestJson<{ status: string }>(`/api/reports/${encodeURIComponent(reportId)}/quick-check/warm`, {
+    method: "POST",
+  });
+}
+
 export interface DeleteAccountResponse {
   deleted: boolean;
   user_id: string;

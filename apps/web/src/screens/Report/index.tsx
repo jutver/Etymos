@@ -31,6 +31,8 @@ import { isOverLimit } from "./renderPassageText";
 import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
 import { applySavedVersion } from "./applySavedVersion";
+import { useQuickCheck } from "./useQuickCheck";
+import { estimateScore, type PassageCheck } from "./rewriteScore";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
 import { effectiveTier, paywallPath } from "../../lib/paywall";
@@ -58,17 +60,27 @@ const SCORE_CHIP: Record<DocStatus, string> = {
   high: "text-severity-high bg-severity-high-bg border-severity-high-line",
 };
 
-/** Compact similarity readout, sized to live in the top bar. */
-function ScoreChip({ score }: { score: number }) {
+/** Compact similarity readout, sized to live in the top bar. `estimated` once
+ * passages were rewritten/edited (rewriteScore.ts); `checking` while a quick
+ * check is still running. */
+function ScoreChip({ score, estimated = false, checking = false }: { score: number; estimated?: boolean; checking?: boolean }) {
   const status = statusFromScore(score);
   return (
     <span
-      title={tl("Similarity score {{score}}%", { score: score })}
+      title={
+        estimated
+          ? tl("Estimated similarity {{score}}% after your edits. Edited passages were only compared with the sources already in this report; a full re-check gives the exact score.", { score: score })
+          : tl("Similarity score {{score}}%", { score: score })
+      }
       className={cn(
         "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums sm:inline-flex",
         SCORE_CHIP[status],
       )}
     >
+      {checking && (
+        <span aria-hidden="true" className="size-2.5 animate-spin motion-reduce:animate-none rounded-full border border-current border-t-transparent" />
+      )}
+      {estimated && <span aria-label={tl("estimated")}>≈</span>}
       {score}{tl("% similar")}</span>
   );
 }
@@ -374,7 +386,9 @@ export default function ReportPage() {
   );
 
   const baseScore = doc ? (isFree ? doc.similarityScoreFree : doc.similarityScore) : 0;
-  const displayScore = Math.max(0, baseScore - resolvedIds.size * 4);
+  // displayScore (was `baseScore - resolvedIds.size * 4`) is now computed
+  // below the quick-check hook: each fixed passage takes off its own share of
+  // the score (rewriteScore.ts) instead of a flat 4 points.
 
   const handleInput = useCallback((text: string) => {
     setStats({ words: countWords(text), characters: text.length });
@@ -421,6 +435,52 @@ export default function ReportPage() {
   );
   const focusMatchId = activeMatchId ? (focusMap.get(activeMatchId) ?? null) : null;
   const locatedIds = useMemo(() => new Set(focusMap.keys()), [focusMap]);
+
+  // Quick check of rewritten / hand-edited passages against this report's
+  // own sources (useQuickCheck.ts) — catches a rewrite that still copies the
+  // source, or an edit that now copies a different one.
+  const handleQuickCheckResult = useCallback(
+    (check: PassageCheck) => {
+      if (check.status !== "flagged") return;
+      pushToast({
+        kind: "warning",
+        title: tr("The edited passage still overlaps a source"),
+        description: tl("It is similar to \"{{title}}\". Reword it again, or quote and cite the source.", {
+          title: check.hits[0]?.source_title || tl("a source"),
+        }),
+      });
+    },
+    [pushToast],
+  );
+  const quickCheck = useQuickCheck({
+    reportId: id ?? null,
+    editorRef,
+    enabled: view === "edit",
+    matches: visibleMatches,
+    focusMap,
+    setResolvedIds,
+    onResult: handleQuickCheckResult,
+  });
+  const scoreEstimate = useMemo(
+    () => estimateScore(baseScore, doc?.matches ?? [], resolvedIds, quickCheck.checks.values()),
+    [baseScore, doc?.matches, resolvedIds, quickCheck.checks],
+  );
+  const displayScore = scoreEstimate.score;
+  // A passage the quick check found still overlapping a source is not "Fixed":
+  // its card says what it still overlaps instead.
+  const stillFlaggedNotes = useMemo(() => {
+    const notes = new Map<string, string>();
+    for (const check of quickCheck.checks.values()) {
+      if (check.status !== "flagged") continue;
+      const title = check.hits[0]?.source_title || tl("a source");
+      check.matchIds.forEach((matchId) => notes.set(matchId, title));
+    }
+    return notes;
+  }, [quickCheck.checks]);
+  const sidebarResolvedIds = useMemo(() => {
+    if (stillFlaggedNotes.size === 0) return resolvedIds;
+    return new Set([...resolvedIds].filter((matchId) => !stillFlaggedNotes.has(matchId)));
+  }, [resolvedIds, stillFlaggedNotes]);
 
   // Picking a source focuses it: the Document view then shows only that
   // source's highlight. Picking the one already focused lets go again, so the
@@ -486,6 +546,8 @@ export default function ReportPage() {
     }
 
     setResolvedIds((prev) => new Set(prev).add(match.id));
+    // Is the rewrite itself clean? (Same request as the panel's pre-check.)
+    quickCheck.checkAcceptedRewrite(targetId, rewritten);
     // Its highlight is gone; a lingering selection would hide every other one.
     setActiveMatchId(null);
     pushToast({
@@ -679,7 +741,7 @@ export default function ReportPage() {
         exportLocked={isFree}
         scoreSlot={
           <>
-            <ScoreChip score={displayScore} />
+            <ScoreChip score={displayScore} estimated={scoreEstimate.estimated} checking={scoreEstimate.checking} />
             <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate(paywallPath("ai-detection", id))} />
           </>
         }
@@ -798,7 +860,8 @@ export default function ReportPage() {
           lockedCount={lockedMatches.length}
           activeMatchId={activeMatchId}
           locatedIds={showsText ? locatedIds : undefined}
-          resolvedIds={resolvedIds}
+          resolvedIds={sidebarResolvedIds}
+          stillFlaggedNotes={stillFlaggedNotes}
           explanationLocked={isFree}
           rewriteLocked={tier !== "professional"}
           aiDetection={doc.aiDetection}
@@ -846,6 +909,7 @@ export default function ReportPage() {
         open={rewriteMatch !== null}
         onClose={() => setRewriteMatch(null)}
         onAccept={handleAcceptRewrite}
+        precheck={quickCheck.runCheck}
       />
     </div>
   );
