@@ -7,6 +7,8 @@ import { SeverityTag } from "../../components/Severity";
 import type { MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { rewriteText } from "../../lib/api";
+import type { QuickCheckResponse } from "../../lib/api";
+import { WarningCircle, CheckCircle } from "@phosphor-icons/react";
 import { t } from "../../lib/i18n";
 
 export function RewritePanel({
@@ -14,7 +16,12 @@ export function RewritePanel({
   open,
   onClose,
   onAccept,
+  precheck,
 }: {
+  /** Quick check of the shown rewrite against the report's sources
+   * (useQuickCheck.ts), so the reader sees whether it still overlaps one
+   * before accepting it. Omit to skip. */
+  precheck?: (text: string) => Promise<QuickCheckResponse>;
   match: MatchedSource | null;
   open: boolean;
   onClose: () => void;
@@ -35,6 +42,27 @@ export function RewritePanel({
       handleRegenerate();
     }
   }, [open, match?.id]);
+
+  // Quick check of each rewrite as soon as it is on screen.
+  const [precheckState, setPrecheckState] = useState<
+    { text: string; status: "checking" | "error" } | { text: string; status: "done"; result: QuickCheckResponse } | null
+  >(null);
+  useEffect(() => {
+    const text = variant.trim();
+    if (!precheck || !open || regenerating || failed || !text) {
+      setPrecheckState(null);
+      return;
+    }
+    let cancelled = false;
+    setPrecheckState({ text, status: "checking" });
+    precheck(text).then(
+      (result) => !cancelled && setPrecheckState({ text, status: "done", result }),
+      () => !cancelled && setPrecheckState({ text, status: "error" }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [precheck, open, regenerating, failed, variant]);
 
   if (!match) return null;
 
@@ -113,6 +141,46 @@ export function RewritePanel({
             <p className="text-sm leading-relaxed text-ink-900">{variant}</p>
           )}
         </div>
+
+        {precheckState && (
+          <div
+            role="status"
+            className={cn(
+              "mt-3 flex items-start gap-2 rounded-[var(--radius-card)] border px-3 py-2 text-xs leading-relaxed",
+              precheckState.status === "done" && precheckState.result.status === "flagged"
+                ? "border-severity-moderate-line bg-severity-moderate-bg text-severity-moderate"
+                : precheckState.status === "done"
+                  ? "border-success/20 bg-success-bg text-success"
+                  : "border-line bg-surface-muted text-ink-500",
+            )}
+          >
+            {precheckState.status === "checking" && (
+              <>
+                <ArrowClockwise size={14} className="mt-0.5 shrink-0 animate-spin motion-reduce:animate-none" />
+                <span>{t("Checking the rewrite against this report's sources...")}</span>
+              </>
+            )}
+            {precheckState.status === "error" && (
+              <span>{t("Couldn't check the rewrite right now. Your score will be marked as estimated.")}</span>
+            )}
+            {precheckState.status === "done" && precheckState.result.status === "clean" && (
+              <>
+                <CheckCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
+                <span>{t("No overlap with any source in this report.")}</span>
+              </>
+            )}
+            {precheckState.status === "done" && precheckState.result.status === "flagged" && (
+              <>
+                <WarningCircle size={14} weight="fill" className="mt-0.5 shrink-0" />
+                <span>
+                  {t("Still overlaps \"{{title}}\". Try Regenerate, or edit it yourself after accepting.", {
+                    title: precheckState.result.hits[0]?.source_title || t("a source"),
+                  })}
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         <p className="mt-3 text-xs text-ink-500">
           {t("Accepting this rewrite replaces the flagged passage in your document and recalculates your similarity score.")}</p>

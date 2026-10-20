@@ -26,6 +26,9 @@ export function markText(mark: Element): string {
  * than a plagiarism colour, so it reads as "fixed". */
 export const REWRITTEN_CLASS = "rounded-[3px] bg-success-bg px-[1px]";
 
+/** Rewritten text the quick check found still overlapping a source. */
+export const REWRITTEN_FLAGGED_CLASS = "rounded-[3px] bg-severity-moderate-bg px-[1px]";
+
 /**
  * Replaces the highlight for `matchId` with `newText`.
  *
@@ -47,6 +50,9 @@ export function replaceMarkWithText(
 
   const replacement = document.createElement("span");
   replacement.dataset.rewritten = "true";
+  // Which highlight this rewrite replaced, so a later hand edit of the
+  // rewritten words can be quick-checked again (useQuickCheck.ts).
+  replacement.dataset.rewrittenFrom = matchId;
   replacement.className = REWRITTEN_CLASS;
   replacement.textContent = newText;
   mark.replaceWith(replacement);
