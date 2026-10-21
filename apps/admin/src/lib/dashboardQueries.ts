@@ -161,6 +161,10 @@ export interface DashboardMetrics {
   /** SePay transfers the webhook couldn't settle (Revenue → Transactions →
    * Needs attention). Live queue depth, not range-scoped. */
   paymentAttentionDepth: number;
+  /** Save & re-checks finished within the selected range (document_checks).
+   * Free ones cost search/download time without a check, so they're watched. */
+  freeRechecksInRange: number;
+  paidRechecksInRange: number;
 }
 
 const SEVERITY_ORDER = ["clean", "low", "moderate", "high", "unscored"];
@@ -265,5 +269,22 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     verificationQueueDepth: verificationQueueRes.count ?? 0,
     accessQueueDepth: accessQueueRes.count ?? 0,
     paymentAttentionDepth: paymentAttentionRes.count ?? 0,
+    ...(await countRechecks(gte, lte)),
+  };
+}
+
+/** Best-effort: a database without document_checks yet just shows zeros. */
+async function countRechecks(gte: string, lte: string): Promise<{ freeRechecksInRange: number; paidRechecksInRange: number }> {
+  const count = (kind: string) =>
+    supabase
+      .from("document_checks")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", kind)
+      .gte("created_at", gte)
+      .lte("created_at", lte);
+  const [free, paid] = await Promise.all([count("free_recheck"), count("paid_recheck")]);
+  return {
+    freeRechecksInRange: free.error ? 0 : (free.count ?? 0),
+    paidRechecksInRange: paid.error ? 0 : (paid.count ?? 0),
   };
 }

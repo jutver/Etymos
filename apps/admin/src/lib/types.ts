@@ -90,6 +90,11 @@ export interface AdminPlanDefinition {
   features: string[];
   doc_limit: number | null;
   word_limit: number | null;
+  /** Save & re-check free allowance (20261021000000_document_checks.sql);
+   * absent until that migration is applied. */
+  recheck_free_limit?: number;
+  /** Share of the text (0..1) a free re-check may change. */
+  recheck_change_limit?: number;
   sort_order: number;
   updated_at: string;
 }

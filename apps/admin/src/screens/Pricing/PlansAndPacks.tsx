@@ -59,6 +59,9 @@ export default function PlansAndPacksPage() {
         price_annual: plan.price_annual,
         doc_limit: plan.doc_limit,
         word_limit: plan.word_limit,
+        // Only when the columns exist (re-check migration applied).
+        ...(plan.recheck_free_limit !== undefined ? { recheck_free_limit: plan.recheck_free_limit } : {}),
+        ...(plan.recheck_change_limit !== undefined ? { recheck_change_limit: plan.recheck_change_limit } : {}),
       });
     } catch (err) {
       setError(friendlyError(err));
@@ -118,6 +121,26 @@ export default function PlansAndPacksPage() {
                     value={plan.word_limit ?? 0}
                     onChange={(v) => setPlans((p) => p.map((x) => (x.id === plan.id ? { ...x, word_limit: v } : x)))}
                   />
+                  {plan.recheck_free_limit !== undefined && (
+                    <NumberField
+                      label={t("Free re-checks")}
+                      value={plan.recheck_free_limit}
+                      onChange={(v) => setPlans((p) => p.map((x) => (x.id === plan.id ? { ...x, recheck_free_limit: v } : x)))}
+                    />
+                  )}
+                  {plan.recheck_change_limit !== undefined && (
+                    <NumberField
+                      label={t("Free re-check change limit (%)")}
+                      value={Math.round(plan.recheck_change_limit * 100)}
+                      onChange={(v) =>
+                        setPlans((p) =>
+                          p.map((x) =>
+                            x.id === plan.id ? { ...x, recheck_change_limit: Math.min(100, Math.max(0, v)) / 100 } : x,
+                          ),
+                        )
+                      }
+                    />
+                  )}
                 </div>
                 <button
                   type="button"

@@ -70,7 +70,6 @@ export const components: Record<string, string> = {
   "Next page": "Trang sau",
   "No original PDF available to preview.": "Không có file PDF gốc để hiển thị preview.",
   "No reason was provided.": "Không có lý do nào được cung cấp.",
-  "Page": "Trang",
   "Plan": "Gói",
   "Premium": "Premium",
   "Preparing file...": "Đang chuẩn bị file...",
@@ -133,4 +132,11 @@ export const components: Record<string, string> = {
     "Cách viết mới của bạn vẫn trùng với \"{{title}}\".",
   "Still similar":
     "Vẫn trùng",
+  "This document gets Standard features.": "Tài liệu này được dùng các tính năng Standard.",
+  "This document gets Premium features.": "Tài liệu này được dùng các tính năng Premium.",
+  "This document gets your plan's features.": "Tài liệu này được dùng các tính năng trong gói của bạn.",
+  "Use 1 check from {{balance}}?": "Dùng 1 lượt kiểm tra từ {{balance}}?",
+  "Confirm & check": "Xác nhận & kiểm tra",
+  "{{count}} check left after this one.": "Còn {{count}} lượt kiểm tra sau lượt này.",
+  "{{count}} checks left after this one.": "Còn {{count}} lượt kiểm tra sau lượt này.",
 };

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  ArrowsClockwise,
   ClockCounterClockwise,
   DownloadSimple,
   FloppyDisk,
@@ -168,7 +169,15 @@ export interface ReportTopBarProps {
   dirty: boolean;
   saving: boolean;
   onSave: () => void;
+  /** Save & re-check; omit to hide the button (it only shows in the Edit view). */
+  onRecheck?: () => void;
+  /** There are edits since the last check, and no re-check is running. */
+  canRecheck?: boolean;
+  /** 0-100 while a re-check runs, else null. */
+  recheckProgress?: number | null;
   versions: DocumentVersion[];
+  /** Show AI-writing scores in Version History (false when that feature is locked). */
+  showAiScores?: boolean;
   onRestoreVersion: (version: DocumentVersion) => void;
   exporting: boolean;
   onExport: () => void;
@@ -189,7 +198,11 @@ export function ReportTopBar({
   dirty,
   saving,
   onSave,
+  onRecheck,
+  canRecheck = false,
+  recheckProgress = null,
   versions,
+  showAiScores = true,
   onRestoreVersion,
   exporting,
   onExport,
@@ -215,7 +228,7 @@ export function ReportTopBar({
 
           <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
-          <VersionHistoryMenu versions={versions} onRestore={onRestoreVersion}>
+          <VersionHistoryMenu versions={versions} onRestore={onRestoreVersion} showAi={showAiScores}>
             {(toggle, open) => (
               <BarIconButton
                 label={t("Version history")}
@@ -266,6 +279,23 @@ export function ReportTopBar({
               )}
             </span>
           </BarIconButton>
+
+          {(onRecheck || recheckProgress !== null) && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={recheckProgress !== null}
+              onClick={onRecheck}
+              disabled={!canRecheck || recheckProgress !== null}
+              iconLeft={<ArrowsClockwise size={15} weight="bold" />}
+              className="ml-1"
+              title={canRecheck ? undefined : t("Edit the document to re-check it")}
+            >
+              {recheckProgress !== null
+                ? t("Re-checking… {{progress}}%", { progress: Math.round(recheckProgress) })
+                : t("Save & re-check")}
+            </Button>
+          )}
 
           <Button
             size="sm"

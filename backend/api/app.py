@@ -49,6 +49,17 @@ import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
 from supabase_client import get_client
 from usage import credit_tier, ensure_quota_available, record_check_used, unlock_document_with_credit
+from recheck_quota import TIER_RANK, original_text, quote_recheck
+from recheck_store import (
+    RecheckStoreError,
+    fetch_check_result,
+    fetch_passages,
+    insert_check,
+    latest_check_result,
+    version_belongs_to,
+)
+from report_store import replace_report
+from quick_check import forget_report as forget_quick_check_corpus
 import marker_preview
 from marker_preview_store import (
     get_marker_preview,
@@ -128,6 +139,12 @@ RATE_LIMIT_QUICK_CHECK = os.getenv("RATE_LIMIT_QUICK_CHECK", "300/hour")
 # than the model-backed endpoints — a user adding a bibliography can
 # easily insert dozens of citations in one editing session.
 RATE_LIMIT_CITE = os.getenv("RATE_LIMIT_CITE", "300/hour")
+# A re-check quote is read-only (a diff plus two small lookups), asked for each
+# time the user opens the Save & re-check dialog.
+RATE_LIMIT_RECHECK_QUOTE = os.getenv("RATE_LIMIT_RECHECK_QUOTE", "120/hour")
+# A re-check searches and downloads sources for the changed paragraphs, like
+# a text check.
+RATE_LIMIT_RECHECK = os.getenv("RATE_LIMIT_RECHECK", "20/hour")
 
 # Cấu hình AI Gemini.
 #
@@ -259,6 +276,34 @@ class QuickCheckRequest(BaseModel):
     # The matched source sentences the page shows — only used when the
     # backend has no copy of this report (see quick_check.corpus_from_sources).
     sources: list[QuickCheckSource] = Field(default_factory=list, max_length=500)
+
+
+# Same overall size cap as /api/check/text.
+MAX_RECHECK_CHARS = 100_000
+
+
+class RecheckBlock(BaseModel):
+    # The editor's data-block-id, i.e. the passage id from the last check.
+    block_id: str = Field(..., max_length=100)
+    text: str = Field("", max_length=MAX_RECHECK_CHARS)
+
+
+class RecheckQuoteRequest(BaseModel):
+    blocks: list[RecheckBlock] = Field(..., min_length=1, max_length=5000)
+
+    def joined_text(self) -> str:
+        text = "\n\n".join(b.text.strip() for b in self.blocks if b.text.strip())
+        if len(text) > MAX_RECHECK_CHARS:
+            raise HTTPException(status_code=413, detail="This document is too long to re-check.")
+        return text
+
+
+class RecheckRequest(RecheckQuoteRequest):
+    # The document_versions row saved for this text just before re-checking.
+    version_id: UUID | None = None
+    # The cost the user confirmed from the quote; refused (409) if it changed.
+    expected_cost: Literal["free", "check"]
+    balance_source: BalanceSource | None = None
 
 
 class ReferenceModel(BaseModel):
@@ -681,6 +726,176 @@ def warm_quick_check(request: Request, report_id: str,
     threading.Thread(target=warm_up_quick_check, args=(report_id, report), daemon=True).start()
     return {"status": "warming"}
 
+
+@app.post("/api/reports/{report_id}/recheck/quote")
+@limiter.limit(RATE_LIMIT_RECHECK_QUOTE)
+def quote_report_recheck(request: Request, report_id: str, body: RecheckQuoteRequest,
+                         user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    What "Save & re-check" would cost for the editor's current text: free
+    (within the tier's limits) or one check. Read-only; the re-check itself
+    recomputes this and refuses if it no longer matches (recheck_quota.py).
+    """
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+    return quote_recheck(report_id, report, body.joined_text())
+
+
+# One running re-check per document. Held from the request until the job
+# ends, so the free re-check count a quote is based on can't change under it.
+_RECHECKS_RUNNING: set[str] = set()
+_RECHECKS_LOCK = threading.Lock()
+
+
+def _previous_check(report_id: str, report: dict) -> dict:
+    """The last check's full report: the local JSON (re-checks rewrite it),
+    else the newest re-check's stored result, else the stored report."""
+    local = get_local_report_file(report_id)
+    if local is not None and local.get("matches") is not None:
+        return local
+    return latest_check_result(report_id) or report
+
+
+def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict], text: str,
+                    quote: dict, version_id: str | None, user_id: str,
+                    balance_source: str | None) -> None:
+    callback = make_progress_callback(job_id)
+    paid = quote["cost"] == "check"
+    try:
+        from recheck import ai_score, run_recheck
+
+        previous = _previous_check(report_id, report)
+        passages = fetch_passages(report_id)
+        # The text this re-check replaces, read before the passages change.
+        previous_text = original_text(report_id, previous)
+        with gpu_slot(on_wait=make_queue_callback(job_id)):
+            update_job(job_id, status="processing", progress=1,
+                       current_step="starting", message="Starting re-check")
+            result = run_recheck(previous, blocks, passages, progress_callback=callback)
+
+        insert_check(
+            document_id=report_id, version_id=version_id,
+            kind="paid_recheck" if paid else "free_recheck",
+            balance_source=balance_source if paid else None,
+            changed_ratio=quote["changed_ratio"], similarity_score=result["overall_score"],
+            baseline_text=text, result=result,
+            ai_score=ai_score(result),
+            previous_score=previous.get("overall_score", report.get("overall_score")),
+            previous_ai_score=ai_score(previous) if previous.get("ai_detection") else ai_score(report),
+            previous_text=previous_text,
+        )
+
+        # A credit unlocks its tier, as on a new check, but never lowers one.
+        new_tier = credit_tier(balance_source) if paid and balance_source else None
+        current_tier = previous.get("unlocked_tier") or report.get("unlocked_tier")
+        if new_tier and TIER_RANK.get(current_tier or "free", 0) >= TIER_RANK[new_tier]:
+            new_tier = None
+        replace_report(report_id, result, {**report, **{k: previous.get(k) for k in ("input", "created_at") if previous.get(k)}},
+                       unlocked_tier=new_tier)
+        forget_quick_check_corpus(report_id)
+
+        if paid and balance_source:
+            record_check_used(user_id, balance_source)
+        update_job(job_id, status="completed", progress=100, current_step="completed",
+                   message="Re-check complete", report_id=report_id)
+    except RecheckStoreError as exc:
+        update_job(job_id, status="failed", current_step="failed",
+                   message="Re-check failed", error=str(exc))
+    except Exception as exc:
+        traceback.print_exc()
+        update_job(job_id, status="failed", current_step="failed",
+                   message="Re-check failed", error=str(exc))
+    finally:
+        with _RECHECKS_LOCK:
+            _RECHECKS_RUNNING.discard(report_id)
+
+
+@app.post("/api/reports/{report_id}/recheck", status_code=202)
+@limiter.limit(RATE_LIMIT_RECHECK)
+def recheck_report(request: Request, report_id: str, body: RecheckRequest,
+                   user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Save & re-check: run the full check on only the paragraphs that changed
+    (recheck.py) and replace this report with the result, under the same id.
+    Free within the tier's limits, otherwise one check from `balance_source`,
+    charged only after success. The server prices it again here and refuses
+    with 409 if that no longer matches what the user confirmed.
+    """
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+    text = body.joined_text()
+
+    version_id = str(body.version_id) if body.version_id else None
+    if version_id and not version_belongs_to(version_id, report_id):
+        raise HTTPException(status_code=400, detail="Save this version to the server before re-checking it.")
+
+    with _RECHECKS_LOCK:
+        if report_id in _RECHECKS_RUNNING:
+            raise HTTPException(status_code=409, detail={"code": "already_running",
+                                                         "message": "This document is already being re-checked."})
+        _RECHECKS_RUNNING.add(report_id)
+    try:
+        quote = quote_recheck(report_id, report, text)
+        if quote["cost"] != body.expected_cost:
+            raise HTTPException(status_code=409, detail={"code": "cost_changed", "quote": quote,
+                                                         "message": "The cost of this re-check changed. Please review it again."})
+        if quote["cost"] == "check":
+            if body.balance_source is None:
+                raise HTTPException(status_code=422, detail="Choose which balance this re-check should use.")
+            ensure_quota_available(user.user_id, body.balance_source)
+
+        job_id = create_job(input_type="recheck", input_name=(report.get("input") or {}).get("name") or "Re-check",
+                            user_id=user.user_id)
+        threading.Thread(
+            target=run_recheck_job,
+            kwargs={"job_id": job_id, "report_id": report_id, "report": report,
+                    "blocks": [b.model_dump() for b in body.blocks], "text": text, "quote": quote,
+                    "version_id": version_id, "user_id": user.user_id,
+                    "balance_source": body.balance_source if quote["cost"] == "check" else None},
+            daemon=True,
+        ).start()
+    except BaseException:
+        with _RECHECKS_LOCK:
+            _RECHECKS_RUNNING.discard(report_id)
+        raise
+    return {"job_id": job_id, "status": "queued", "quote": quote}
+
+
+
+@app.post("/api/reports/{report_id}/checks/{check_id}/restore")
+@limiter.limit(RATE_LIMIT_RECHECK_QUOTE)
+def restore_report_check(request: Request, report_id: str, check_id: UUID,
+                         user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Version History: make an earlier re-check's result the current report
+    again (its text, matches and score). Nothing is re-run and nothing is
+    charged, and the re-check history is unchanged, so the free allowance and
+    its baseline stay as they were.
+    """
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+    with _RECHECKS_LOCK:
+        if report_id in _RECHECKS_RUNNING:
+            raise HTTPException(status_code=409, detail={"code": "already_running",
+                                                         "message": "This document is being re-checked."})
+    try:
+        result = fetch_check_result(str(check_id), report_id)
+    except RecheckStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Check not found.")
+    # Only the check's own report fields: never let a stored result change
+    # who owns the document or its unlocked tier.
+    result = {k: v for k, v in result.items() if k not in ("user_id", "unlocked_tier", "report_id", "input")}
+    replace_report(report_id, result, report)
+    forget_quick_check_corpus(report_id)
+    return {"status": "restored", "overall_score": result.get("overall_score")}
 
 @app.post("/api/documents/cite")
 @limiter.limit(RATE_LIMIT_CITE)

@@ -3,7 +3,7 @@
 -- starting data to edit. Safe to re-run (upsert on primary key).
 
 insert into public.plan_definitions
-  (id, name, tagline, price_monthly, price_annual, audience, most_popular, requires_verification, features, doc_limit, word_limit, sort_order)
+  (id, name, tagline, price_monthly, price_annual, audience, most_popular, requires_verification, features, doc_limit, word_limit, sort_order, recheck_free_limit, recheck_change_limit)
 values
   (
     'free', 'Free', 'Get started and try a real check', 0, 0,
@@ -15,7 +15,7 @@ values
       'Basic report',
       '7-day history'
     ],
-    2, 3000, 1
+    2, 3000, 1, 3, 0.30
   ),
   (
     'student', 'Standard', 'For students, grad and PhD researchers', 69000, 490000,
@@ -29,7 +29,7 @@ values
       '9-month history',
       'Priority support'
     ],
-    10, 10000, 2
+    10, 10000, 2, 6, 0.50
   ),
   (
     'professional', 'Premium', 'For lecturers, researchers & agencies', 199000, 1790000,
@@ -44,7 +44,7 @@ values
       '12-month history',
       '24/7 priority support'
     ],
-    50, 25000, 3
+    50, 25000, 3, 10, 0.65
   )
 on conflict (id) do update set
   name = excluded.name,
@@ -58,6 +58,8 @@ on conflict (id) do update set
   doc_limit = excluded.doc_limit,
   word_limit = excluded.word_limit,
   sort_order = excluded.sort_order,
+  recheck_free_limit = excluded.recheck_free_limit,
+  recheck_change_limit = excluded.recheck_change_limit,
   updated_at = now();
 
 insert into public.credit_packs (id, label, description, checks, price, sort_order)

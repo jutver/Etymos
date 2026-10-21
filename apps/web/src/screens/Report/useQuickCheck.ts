@@ -268,5 +268,12 @@ export function useQuickCheck({
     };
   }, [enabled, editorRef, matchIdsFor, revert, startCheck]);
 
-  return { checks, runCheck, checkAcceptedRewrite };
+  /** Forget every estimate, e.g. once a real re-check scored the document. */
+  const reset = useCallback(() => {
+    setChecks(new Map());
+    cacheRef.current.clear();
+    seqRef.current.clear();
+  }, []);
+
+  return { checks, runCheck, checkAcceptedRewrite, reset };
 }

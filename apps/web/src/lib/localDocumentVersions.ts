@@ -16,6 +16,7 @@ interface StoredVersion {
   html: string;
   wordCount: number;
   createdAt: string;
+  changedRatio?: number;
 }
 
 function readStored(documentId: string): StoredVersion[] {
@@ -35,6 +36,7 @@ function toVersion(v: StoredVersion): DocumentVersion {
     savedAt: new Date(v.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     wordCount: v.wordCount,
     html: v.html,
+    changedRatio: v.changedRatio ?? null,
   };
 }
 
@@ -46,13 +48,14 @@ export function loadLocalDocumentVersions(documentId: string): DocumentVersion[]
 /** Saves a snapshot locally; returns it, or null when storage is unavailable. */
 export function saveLocalDocumentVersion(
   documentId: string,
-  version: { label: string; html: string; wordCount: number },
+  version: { label: string; html: string; wordCount: number; changedRatio?: number },
 ): DocumentVersion | null {
   const stored: StoredVersion = {
     id: `local-${Date.now()}`,
     label: version.label,
     html: version.html,
     wordCount: version.wordCount,
+    changedRatio: version.changedRatio,
     createdAt: new Date().toISOString(),
   };
   try {

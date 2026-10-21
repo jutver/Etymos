@@ -31,7 +31,7 @@ export async function listPlanDefinitions(): Promise<AdminPlanDefinition[]> {
 
 export async function updatePlanDefinition(
   id: string,
-  patch: Partial<Pick<AdminPlanDefinition, "price_monthly" | "price_annual" | "doc_limit" | "word_limit">>,
+  patch: Partial<Pick<AdminPlanDefinition, "price_monthly" | "price_annual" | "doc_limit" | "word_limit" | "recheck_free_limit" | "recheck_change_limit">>,
 ): Promise<void> {
   const { error } = await supabase.from("plan_definitions").update(patch).eq("id", id);
   if (error) throw error;
