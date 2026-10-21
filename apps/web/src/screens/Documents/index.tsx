@@ -291,18 +291,6 @@ export default function DocumentsPage() {
           <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR RESEARCH LIBRARY")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Documents")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">{t("Organize your checks into projects, Finder-style.")}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <ViewModeToggle
-            value={viewMode}
-            onChange={(mode) => {
-              setViewMode(mode);
-              setActiveFolder(null);
-            }}
-          />
-          <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
-            {manageMode ? t("Done") : t("Manage")}
-          </Button>
-        </div>
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -316,13 +304,25 @@ export default function DocumentsPage() {
           />
         </div>
 
-        {manageMode && selectionCount > 0 && (
-          <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
-            <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
-            <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
-              {t("Delete")}</Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {manageMode && selectionCount > 0 && (
+            <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
+              <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
+              <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
+                {t("Delete")}</Button>
+            </div>
+          )}
+          <ViewModeToggle
+            value={viewMode}
+            onChange={(mode) => {
+              setViewMode(mode);
+              setActiveFolder(null);
+            }}
+          />
+          <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
+            {manageMode ? t("Done") : t("Manage")}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4">

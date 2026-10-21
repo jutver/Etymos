@@ -406,9 +406,8 @@
 .upload-editorial .studio-dropzone > * { position: relative; z-index: 1; }
 .upload-editorial .upload-document-icon { position: relative; border-radius: 18px 18px 18px 4px; background: white; box-shadow: 6px 7px 0 #dbeafe; }
 .upload-editorial > div:nth-child(2) > div:last-child > .studio-card { border-color: #d7e3f1; box-shadow: 0 12px 26px #142b4a08; }
-.library-shell > div:nth-child(2), .history-shell > .studio-card, .trash-shell > .studio-card { position: relative; border-color: #d6e2f0; box-shadow: 0 16px 34px #142b4a0a; }
-.library-shell > div:nth-child(2)::before { content: 'LIBRARY'; position: absolute; z-index: 0; top: -37px; right: 12px; color: #2563eb12; font-size: 54px; font-weight: 800; letter-spacing: .08em; pointer-events: none; }
-.library-shell > div:nth-child(2) > *, .history-shell > .studio-card > *, .trash-shell > .studio-card > * { position: relative; z-index: 1; }
+.history-shell > .studio-card, .trash-shell > .studio-card { position: relative; border-color: #d6e2f0; box-shadow: 0 16px 34px #142b4a0a; }
+.history-shell > .studio-card > *, .trash-shell > .studio-card > * { position: relative; z-index: 1; }
 .library-shell input, .history-shell input { box-shadow: 0 5px 15px #142b4a08; }
 .library-shell .studio-card, .history-shell .studio-card, .trash-shell .studio-card { overflow: hidden; }
 .history-shell > .studio-card { border-radius: 20px; }
@@ -426,7 +425,6 @@
   .upload-editorial > div:nth-child(2) { margin-top: 24px; }
   .upload-editorial .studio-dropzone { border-radius: 18px 46px 18px 18px; }
   .upload-editorial > div:nth-child(2) > .studio-card:first-child::before { width: 52px; height: 52px; }
-  .library-shell > div:nth-child(2)::before { display: none; }
   .history-shell > .studio-card > div:first-child::after { display: none; }
   .trash-shell > .studio-card { overflow-x: auto; }
 }
