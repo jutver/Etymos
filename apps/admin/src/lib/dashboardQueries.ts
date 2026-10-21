@@ -72,6 +72,56 @@ function bucketByDay(dates: string[], days: string[]): DailyPoint[] {
   return days.map((date) => ({ date, value: counts.get(date) ?? 0 }));
 }
 
+export interface PaidPlanOrder {
+  user_id: string;
+  plan_tier: string | null;
+  billing_cycle: string | null;
+  amount: number | null;
+  paid_amount: number | null;
+  paid_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+function addTerm(from: Date, cycle: string | null): Date {
+  const end = new Date(from);
+  if (cycle === "annual") end.setUTCFullYear(end.getUTCFullYear() + 1);
+  else end.setUTCMonth(end.getUTCMonth() + 1);
+  return end;
+}
+
+/**
+ * Monthly recurring revenue from plans people actually paid for.
+ *
+ * A profile's plan_tier alone can't tell a paid plan from one an admin
+ * granted by hand (which creates no order), so this replays each user's
+ * successful plan orders the way grant_checkout_entitlement applies them:
+ * the same plan bought while active extends the term, anything else starts
+ * a new term. A user counts only while that paid term is still running and
+ * still matches their current plan, at what their latest order cost per month.
+ */
+export function paidMrr(
+  profiles: { id: string; plan_tier: string }[],
+  orders: PaidPlanOrder[],
+  now: Date = new Date(),
+): number {
+  const paidAt = (o: PaidPlanOrder) => new Date(o.paid_at ?? o.reviewed_at ?? o.created_at);
+  const terms = new Map<string, { tier: string; end: Date; monthly: number }>();
+  for (const o of [...orders].sort((a, b) => paidAt(a).getTime() - paidAt(b).getTime())) {
+    if (!o.plan_tier) continue;
+    const at = paidAt(o);
+    const cur = terms.get(o.user_id);
+    const end = cur && cur.tier === o.plan_tier && cur.end > at ? addTerm(cur.end, o.billing_cycle) : addTerm(at, o.billing_cycle);
+    const value = Number(o.paid_amount ?? o.amount ?? 0);
+    terms.set(o.user_id, { tier: o.plan_tier, end, monthly: o.billing_cycle === "annual" ? value / 12 : value });
+  }
+  return profiles.reduce((sum, p) => {
+    const term = terms.get(p.id);
+    if (!term || p.plan_tier === "free" || term.tier !== p.plan_tier || term.end <= now) return sum;
+    return sum + term.monthly;
+  }, 0);
+}
+
 export interface DailyPoint {
   date: string;
   value: number;
@@ -90,7 +140,8 @@ export interface SeverityDistributionPoint {
 export interface DashboardMetrics {
   /** Lifetime total, not scoped to the selected range. */
   totalUsers: number;
-  /** Current MRR snapshot from active profiles, not scoped to the selected range. */
+  /** Current MRR snapshot from paid, still-running plan terms (admin-granted
+   * plans excluded). Not scoped to the selected range. */
   mrr: number;
   signupsByDay: DailyPoint[];
   documentsByDay: DailyPoint[];
@@ -123,12 +174,12 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     signupsRes,
     documentsRes,
     checkoutRes,
-    plansRes,
+    planOrdersRes,
     verificationQueueRes,
     accessQueueRes,
     paymentAttentionRes,
   ] = await Promise.all([
-    supabase.from("profiles").select("id, plan_tier, billing_cycle").limit(FETCH_LIMIT),
+    supabase.from("profiles").select("id, plan_tier").limit(FETCH_LIMIT),
     supabase.from("profiles").select("created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
     supabase
       .from("documents")
@@ -143,7 +194,12 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
       .gte("created_at", gte)
       .lte("created_at", lte)
       .limit(FETCH_LIMIT),
-    supabase.from("plan_definitions").select("id, price_monthly, price_annual"),
+    supabase
+      .from("checkout_events")
+      .select("user_id, plan_tier, billing_cycle, amount, paid_amount, paid_at, reviewed_at, created_at")
+      .eq("kind", "plan")
+      .eq("status", "success")
+      .limit(FETCH_LIMIT),
     supabase.from("student_verification_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("access_status", "waitlisted"),
     supabase
@@ -156,7 +212,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   if (signupsRes.error) throw signupsRes.error;
   if (documentsRes.error) throw documentsRes.error;
   if (checkoutRes.error) throw checkoutRes.error;
-  if (plansRes.error) throw plansRes.error;
+  if (planOrdersRes.error) throw planOrdersRes.error;
   if (verificationQueueRes.error) throw verificationQueueRes.error;
   if (accessQueueRes.error) throw accessQueueRes.error;
   if (paymentAttentionRes.error) throw paymentAttentionRes.error;
@@ -165,15 +221,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   const signups = signupsRes.data ?? [];
   const documents = documentsRes.data ?? [];
   const checkoutEvents = checkoutRes.data ?? [];
-  const plans = plansRes.data ?? [];
-
-  const priceByPlan = new Map(plans.map((p) => [p.id, p]));
-
-  const mrr = profiles.reduce((sum, p) => {
-    const plan = priceByPlan.get(p.plan_tier);
-    if (!plan || p.plan_tier === "free") return sum;
-    return sum + (p.billing_cycle === "annual" ? plan.price_annual / 12 : plan.price_monthly);
-  }, 0);
+  const mrr = paidMrr(profiles, planOrdersRes.data ?? []);
 
   const planCounts = new Map<string, number>();
   for (const p of profiles) {
