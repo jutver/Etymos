@@ -471,7 +471,7 @@ export async function saveDocumentVersion(
   documentId: string,
   version: { label: string; html: string; wordCount: number; changedRatio?: number },
 ): Promise<DocumentVersion> {
-  const row = {
+  const row: { document_id: string; label: string; html: string; word_count: number; changed_ratio?: number } = {
     document_id: documentId,
     label: version.label,
     html: version.html,

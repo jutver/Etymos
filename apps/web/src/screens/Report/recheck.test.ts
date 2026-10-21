@@ -74,7 +74,7 @@ describe("version tags", () => {
     const { versionTag } = await import("./versionStats");
     const base = { id: "v1", label: "Version 1", savedAt: "10:00", wordCount: 10, html: "" };
     expect(versionTag(base)).toBe("Draft");
-    expect(versionTag({ ...base, check: { id: "c1", paid: false, score: 14.4 } })).toBe("Checked · 14%");
+    expect(versionTag({ ...base, check: { id: "c1", paid: false, score: 14.4, previousScore: null, aiScore: null, previousAiScore: null } })).toBe("Checked · 14%");
   });
 });
 
