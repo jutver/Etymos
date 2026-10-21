@@ -191,6 +191,12 @@ export default function AnalyzingPage() {
   const updateHistoryEntry = useAppStore((s) => s.updateHistoryEntry);
   const replaceHistoryEntryId = useAppStore((s) => s.replaceHistoryEntryId);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const refreshBalances = useAppStore((s) => s.refreshBalances);
+  // Upload subtracted a check locally before submitting; a failed check is
+  // never charged by the server, so show its real balances again.
+  useEffect(() => {
+    if (jobStatus === "failed") void refreshBalances();
+  }, [jobStatus, refreshBalances]);
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<number | null>(null);
 
@@ -493,11 +499,16 @@ export default function AnalyzingPage() {
             return;
           }
           const interrupted = error instanceof JobDeadlineError || isJobMissingError(error);
+          // fetch() rejects with a TypeError when the connection itself fails
+          // (e.g. an upload cut off on the way to the server).
+          const connectionLost = error instanceof TypeError;
           const message = interrupted
             ? INTERRUPTED_MESSAGE
-            : error instanceof Error
-              ? error.message
-              : tr("Analysis failed.");
+            : connectionLost
+              ? tr("The connection to the server dropped before your file finished uploading. You weren't charged. Please try again.")
+              : error instanceof Error
+                ? error.message
+                : tr("Analysis failed.");
           setJobStatus("failed");
           setJobMessage(message);
           if (state.documentId) {

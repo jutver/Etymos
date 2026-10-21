@@ -419,11 +419,13 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
                     "Failed to start marker-pdf preview job for report_id=%s", report_id
                 )
 
+        # Charge before reporting "completed", so a client that re-reads the
+        # balances as soon as the job settles already sees the check spent.
+        if user_id is not None:
+            record_check_used(user_id, balance_source)
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
-        if user_id is not None:
-            record_check_used(user_id, balance_source)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
@@ -449,11 +451,13 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
             report = check_text_plagiarism(user_text=user_text, progress_callback=callback)
         report_id = save_report(report, input_type="text", input_name="Pasted text", user_id=user_id,
                                 unlocked_tier=credit_tier(balance_source))
+        # Charge before reporting "completed", so a client that re-reads the
+        # balances as soon as the job settles already sees the check spent.
+        if user_id is not None:
+            record_check_used(user_id, balance_source)
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
-        if user_id is not None:
-            record_check_used(user_id, balance_source)
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",

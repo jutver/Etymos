@@ -726,7 +726,7 @@ export default function ReportPage() {
   // (backend/recheck.py). The quote says whether it is free; the backend
   // prices it again and answers 409 if that changed in the meantime.
   const balances = useAppStore((s) => s.balances());
-  const requestCheck = useAppStore((s) => s.requestCheck);
+  const refreshBalances = useAppStore((s) => s.refreshBalances);
   const availableBalances = useMemo(() => balances.filter((b) => b.remaining > 0), [balances]);
   const [recheckOpen, setRecheckOpen] = useState(false);
   const [recheckQuote, setRecheckQuote] = useState<RecheckQuote | null>(null);
@@ -815,8 +815,8 @@ export default function ReportPage() {
     try {
       const job = await pollJob(jobId, (j) => setRecheckProgress(j.progress ?? 0));
       if (job.status !== "completed") throw new Error(job.error || tr("The re-check failed. You weren't charged."));
-      // Mirror the server's deduction locally (backend/api/usage.py is the real gate).
-      if (quote.cost === "check" && source) requestCheck(source);
+      // The server has charged a paid re-check by now; show its balances.
+      if (quote.cost === "check") void refreshBalances();
       trackEvent("recheck_completed");
       setResolvedIds(new Set());
       quickCheck.reset();
