@@ -3,6 +3,10 @@
 import type { HistoryEntry } from "@etymos/shared";
 import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
 
+/** A document as the Documents screen lists it: its latest check, plus how
+ * many checks (versions) of the same file exist. */
+export type DocumentItem = HistoryEntryWithCheck & { checkCount: number };
+
 /** A project "folder" for the Finder-style Documents screen. `documents.project`
  * is a plain nullable text column (no backing projects table), so a project
  * is purely a client-side grouping — `isDefault` marks the implicit
@@ -10,7 +14,7 @@ import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
  * that can't be renamed or deleted. */
 export interface ProjectGroup {
   name: string;
-  docs: HistoryEntryWithCheck[];
+  docs: DocumentItem[];
   isDefault: boolean;
 }
 

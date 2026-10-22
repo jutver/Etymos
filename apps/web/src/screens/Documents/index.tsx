@@ -10,14 +10,14 @@ import {
   renameDocument,
   renameProjectDocuments,
 } from "../../lib/documentsQueries";
-import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
+import { groupByFile } from "../../lib/fileGroups";
 import { ViewModeToggle } from "./ViewModeToggle";
 import { DocumentsListView } from "./DocumentsListView";
 import { DocumentsIconView } from "./DocumentsIconView";
 import { ProjectContextMenu, DocumentContextMenu } from "./ContextMenus";
 import { PromptModal } from "./PromptModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import type { ContextMenuState, DocumentsViewMode, ProjectGroup } from "./types";
+import type { ContextMenuState, DocumentItem, DocumentsViewMode, ProjectGroup } from "./types";
 import { t, tr, tn } from "../../lib/i18n";
 
 type PromptState =
@@ -77,15 +77,17 @@ export default function DocumentsPage() {
 
   const groups = useMemo<ProjectGroup[]>(() => {
     const q = query.trim().toLowerCase();
-    const byName = new Map<string, HistoryEntryWithCheck[]>();
+    const byName = new Map<string, DocumentItem[]>();
     byName.set(PROJECTS[0], []);
     for (const name of knownProjects) if (!byName.has(name)) byName.set(name, []);
 
-    for (const h of history) {
-      const name = h.project ?? PROJECTS[0];
-      if (q && !h.title.toLowerCase().includes(q) && !name.toLowerCase().includes(q)) continue;
+    // Every check of the same file is one document, shown by its latest check
+    // and filed under that check's project (History lists the versions).
+    for (const { latest, versions } of groupByFile(history)) {
+      const name = latest.project ?? PROJECTS[0];
+      if (q && !latest.title.toLowerCase().includes(q) && !name.toLowerCase().includes(q)) continue;
       if (!byName.has(name)) byName.set(name, []);
-      byName.get(name)!.push(h);
+      byName.get(name)!.push({ ...latest, checkCount: versions.length });
     }
 
     const names = [...byName.keys()].sort((a, b) => {

@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { CaretRight, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/react";
+import { CaretRight, ClockCounterClockwise, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { formatDate } from "../../lib/format";
@@ -135,6 +135,11 @@ export function DocumentsListView({
                         )}
                         <FileText size={16} className="shrink-0 text-ink-400" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{doc.title}</span>
+                        {doc.checkCount > 1 && (
+                          <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
+                            <ClockCounterClockwise size={12} />
+                            {doc.checkCount}{" "}{t("checks")}</span>
+                        )}
                         <span className="hidden shrink-0 text-xs text-ink-400 sm:inline">{formatDate(doc.date)}</span>
                         <span className="hidden shrink-0 text-xs font-semibold text-ink-700 sm:inline">
                           {doc.checkState === "completed" ? `${doc.similarityScore}%` : "—"}
