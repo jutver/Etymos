@@ -57,6 +57,7 @@ export default function UploadPage() {
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const requestCheck = useAppStore((s) => s.requestCheck);
+  const refreshBalances = useAppStore((s) => s.refreshBalances);
   const selectedBalance = useAppStore((s) => s.selectedBalance);
   const setSelectedBalance = useAppStore((s) => s.setSelectedBalance);
   const balances = useAppStore((s) => s.balances());
@@ -276,8 +277,15 @@ export default function UploadPage() {
 
       throw new Error(tr("Please add content before checking."));
     } catch (error) {
-      const message = error instanceof Error ? error.message : tr("Unable to start analysis.");
+      const message =
+        error instanceof TypeError
+          ? tr("The connection to the server dropped before your file finished uploading. You weren't charged. Please try again.")
+          : error instanceof Error
+            ? error.message
+            : tr("Unable to start analysis.");
       setSubmitError(message);
+      // requestCheck subtracted a check locally; nothing was charged.
+      void refreshBalances();
       // The job never started, so settle its row instead of leaving a
       // permanent "Checking" entry behind.
       if (placeholderId) {

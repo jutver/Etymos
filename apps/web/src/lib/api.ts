@@ -218,7 +218,19 @@ export async function submitTextCheck(text: string, balanceSource: BalanceSource
   });
 }
 
-export async function submitPdfCheck(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
+// Uploads go to Supabase Storage first, then the backend fetches them from
+// there (POST /api/check/stored-file). For some networks (e.g. ISPs in
+// Vietnam) Cloudflare routes api.etymos.site through Europe, where a multi-MB
+// upload crawls at a few KB/s and is cut off after ~3 minutes ("Failed to
+// fetch"), while Supabase Storage is served from Hong Kong.
+const DOCUMENTS_BUCKET = "documents";
+
+function fileExtension(file: File): "pdf" | "docx" {
+  return file.name.toLowerCase().endsWith(".docx") ? "docx" : "pdf";
+}
+
+/** Sends the file straight to the API (the old path), for when Storage is unavailable. */
+async function submitPdfCheckDirect(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
   const authHeader = await getAuthHeader();
   const formData = new FormData();
   formData.append("file", file);
@@ -234,6 +246,38 @@ export async function submitPdfCheck(file: File, balanceSource: BalanceSource): 
   }
 
   return response.json() as Promise<BackendJob>;
+}
+
+export async function submitPdfCheck(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) throw new Error(tr("Your session has expired. Please sign in again and retry."));
+
+  const ext = fileExtension(file);
+  const storagePath = `${userId}/uploads/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(DOCUMENTS_BUCKET).upload(storagePath, file, {
+    contentType:
+      ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    upsert: false,
+  });
+  if (error) {
+    console.warn("Upload to storage failed; sending the file to the API instead:", error);
+    return submitPdfCheckDirect(file, balanceSource);
+  }
+
+  try {
+    return await requestJson<BackendJob>("/api/check/stored-file", {
+      method: "POST",
+      body: JSON.stringify({ storage_path: storagePath, file_name: file.name, balance_source: balanceSource }),
+    });
+  } catch (err) {
+    // The check never started, so the upload has no use (the backend only
+    // removes the uploads it was given).
+    void supabase.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+    // A backend from before this endpoint existed: use the old path.
+    if (err instanceof ApiError && err.status === 404) return submitPdfCheckDirect(file, balanceSource);
+    throw err;
+  }
 }
 
 // --- Save & re-check (backend/api/recheck_quota.py, backend/recheck.py) -----

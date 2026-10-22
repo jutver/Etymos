@@ -257,6 +257,14 @@ class TextCheckRequest(BaseModel):
     text: str = Field(min_length=30, max_length=100_000)
     balance_source: BalanceSource
 
+class StoredFileCheckRequest(BaseModel):
+    # Where the browser uploaded the file in the documents bucket:
+    # "{user_id}/uploads/{name}.pdf" (see _check_upload_path).
+    storage_path: str = Field(..., min_length=1, max_length=500)
+    file_name: str = Field(..., min_length=1, max_length=255)
+    balance_source: BalanceSource
+
+
 class UnlockDocumentRequest(BaseModel):
     tier: Literal["student", "professional"]
 
@@ -371,6 +379,21 @@ def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
             pass
 
 
+# Shown to users when a check fails for a reason they can't act on. The
+# traceback goes to the log (traceback.print_exc / logger.exception), never
+# to the page: raw errors carry server paths and library internals.
+GENERIC_CHECK_ERROR = "Something went wrong on our side while checking this document. You weren't charged. Please try again."
+
+
+def user_error_message(exc: Exception) -> str:
+    """The job error a user sees. ValueError is what our own code raises with
+    a message meant for the user (e.g. "The document is empty."); anything
+    else is an internal failure and gets the generic message."""
+    if type(exc) is ValueError and str(exc):
+        return str(exc)
+    return GENERIC_CHECK_ERROR
+
+
 def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
                  balance_source: BalanceSource, input_type: Literal["pdf", "docx"] = "pdf") -> None:
     """
@@ -429,7 +452,7 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
-                   message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=str(exc))
+                   message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=user_error_message(exc))
     finally:
         try:
             Path(pdf_path).unlink(missing_ok=True)
@@ -461,7 +484,7 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
-                   message="Text analysis failed", error=str(exc))
+                   message="Text analysis failed", error=user_error_message(exc))
 
 
 @app.post("/api/check/pdf", status_code=202)
@@ -515,6 +538,98 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
         daemon=True,
     ).start()
 
+    return {"job_id": job_id, "status": "queued", "input_type": input_type}
+
+
+# Uploads the browser puts in the documents bucket for a check, under the
+# user's own folder (storage policy documents_bucket_owner_write already
+# limits writes to "{auth.uid()}/..."). Removed again once the check ends:
+# a checked PDF is kept at _storage_path() as before.
+UPLOADS_FOLDER = "uploads"
+
+
+def _check_upload_path(storage_path: str, user_id: str) -> Literal["pdf", "docx"]:
+    """The file type of a browser upload, or 400 unless the path is a PDF or
+    DOCX inside this user's own uploads folder."""
+    parts = storage_path.split("/")
+    name = parts[-1].lower() if parts else ""
+    if (
+        len(parts) != 3
+        or parts[0] != user_id
+        or parts[1] != UPLOADS_FOLDER
+        or not parts[2]
+        or ".." in storage_path
+        or "\\" in storage_path
+    ):
+        raise HTTPException(status_code=400, detail="That file isn't in your uploads.")
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".docx"):
+        return "docx"
+    raise HTTPException(status_code=400, detail="Only PDF or DOCX files are supported.")
+
+
+def run_stored_file_job(*, job_id: str, storage_path: str, original_name: str, user_id: str,
+                        balance_source: BalanceSource, input_type: Literal["pdf", "docx"]) -> None:
+    """Fetch the browser's upload from Supabase Storage, then check it exactly
+    like an uploaded file (run_pdf_job). The upload is removed afterwards,
+    whatever the outcome."""
+    client = get_client()
+    try:
+        update_job(job_id, status="processing", progress=1, current_step="receiving_file",
+                   message="Receiving your file")
+        data = client.storage.from_(DOCUMENTS_BUCKET).download(storage_path) if client else None
+        if not data:
+            raise ValueError("The uploaded file is missing or empty. Please upload it again.")
+        temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
+        local_path = temp_dir / f"input.{input_type}"
+        local_path.write_bytes(data)
+    except Exception as exc:
+        logger.exception("Could not fetch upload %s for job %s", storage_path, job_id)
+        update_job(job_id, status="failed", current_step="failed",
+                   message="Couldn't receive your file", error=user_error_message(exc))
+        _remove_upload(storage_path)
+        return
+
+    try:
+        run_pdf_job(job_id=job_id, pdf_path=str(local_path), original_name=original_name,
+                    user_id=user_id, balance_source=balance_source, input_type=input_type)
+    finally:
+        _remove_upload(storage_path)
+
+
+def _remove_upload(storage_path: str) -> None:
+    client = get_client()
+    if client is None:
+        return
+    try:
+        client.storage.from_(DOCUMENTS_BUCKET).remove([storage_path])
+    except Exception:
+        logger.exception("Could not remove upload %s", storage_path)
+
+
+@app.post("/api/check/stored-file", status_code=202)
+@limiter.limit(RATE_LIMIT_CHECK_PDF)
+def create_stored_file_check(request: Request, body: StoredFileCheckRequest,
+                             user: AuthedUser = Depends(verify_supabase_jwt)):
+    """
+    Check a PDF/DOCX the browser already uploaded to Supabase Storage. The
+    file never passes through api.etymos.site: for some networks Cloudflare
+    routes that host far away, where large uploads crawl and get cut off,
+    while Supabase Storage stays close. This request is a few hundred bytes.
+    """
+    input_type = _check_upload_path(body.storage_path, user.user_id)
+    if get_client() is None:
+        raise HTTPException(status_code=503, detail="File storage isn't available right now.")
+    ensure_quota_available(user.user_id, body.balance_source)
+
+    job_id = create_job(input_type=input_type, input_name=body.file_name, user_id=user.user_id)
+    threading.Thread(
+        target=run_stored_file_job,
+        kwargs={"job_id": job_id, "storage_path": body.storage_path, "original_name": body.file_name,
+                "user_id": user.user_id, "balance_source": body.balance_source, "input_type": input_type},
+        daemon=True,
+    ).start()
     return {"job_id": job_id, "status": "queued", "input_type": input_type}
 
 
@@ -810,7 +925,7 @@ def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict
     except Exception as exc:
         traceback.print_exc()
         update_job(job_id, status="failed", current_step="failed",
-                   message="Re-check failed", error=str(exc))
+                   message="Re-check failed", error=user_error_message(exc))
     finally:
         with _RECHECKS_LOCK:
             _RECHECKS_RUNNING.discard(report_id)
