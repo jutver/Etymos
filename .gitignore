@@ -22,6 +22,11 @@ backend/marker_env
 # marker_preview_store.py's docstring) — same tier as the existing
 # storage/processed_pdfs local PDF fallback.
 backend/storage/marker_previews
+# Runtime data the backend writes: saved report JSON and downloaded source
+# papers (chunks, sections, PDFs, papers.db). Wherever these folders appear
+# (backend/, backend/api/, repo root), only their contents are ignored.
+**/api_reports/*
+**/paper_cache/*
 
 # Editor directories and files
 **/__pycache__/

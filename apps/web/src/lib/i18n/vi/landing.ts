@@ -75,4 +75,5 @@ export const landing: Record<string, string> = {
   "{{count}} files ready to check": "{{count}} file sẵn sàng để kiểm tra",
   "{{count}} words / {{limit}} limit": "{{count}} từ / giới hạn {{limit}}",
   "~3 minutes": "~3 phút",
+  "The connection to the server dropped before your file finished uploading. You weren't charged. Please try again.": "Kết nối tới máy chủ bị ngắt trước khi tệp của bạn tải lên xong. Bạn không bị trừ lượt. Vui lòng thử lại.",
 };

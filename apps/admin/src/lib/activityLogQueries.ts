@@ -244,6 +244,17 @@ export function describeActivity(entry: ActivityLogEntry): ActivityDescription {
       return { title: t("Deleted a document permanently"), detail: subject };
     case "document.version_saved":
       return { title: t("Saved a document version"), detail: [subject, m.label ? text(m.label) : null].filter(Boolean).join(" · ") };
+    case "document.rechecked":
+      return {
+        title: m.kind === "paid_recheck" ? t("Re-checked a document (1 check)") : t("Re-checked a document (free)"),
+        detail: [
+          subject,
+          typeof m.changed_ratio === "number" ? t("{{percent}}% changed", { percent: Math.round(m.changed_ratio * 100) }) : null,
+          typeof m.similarity_score === "number" ? t("{{score}}% similarity", { score: Math.round(m.similarity_score) }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
     case "document.moderated":
       return { title: t("Document moderation changed"), detail: `${subject ?? ""} · ${arrow(m as Change)}` };
 

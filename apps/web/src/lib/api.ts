@@ -143,14 +143,24 @@ function buildUrl(path: string) {
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
+  return (await errorFromResponse(response)).message;
+}
+
+/** An ApiError for a failed response. A structured `detail` (an object, e.g.
+ * the re-check endpoint's `{code, message, quote}`) is kept on `.detail`. */
+async function errorFromResponse(response: Response): Promise<ApiError> {
   const text = await response.text();
   try {
-    const parsed = JSON.parse(text) as { detail?: string };
-    if (parsed.detail) return parsed.detail;
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (typeof parsed.detail === "string") return new ApiError(parsed.detail, response.status);
+    if (parsed.detail && typeof parsed.detail === "object") {
+      const message = (parsed.detail as { message?: unknown }).message;
+      return new ApiError(typeof message === "string" ? message : text, response.status, parsed.detail);
+    }
   } catch {
     // response wasn't JSON — fall back to raw text
   }
-  return text || t("Request failed with {{status}}", { status: response.status });
+  return new ApiError(text || t("Request failed with {{status}}", { status: response.status }), response.status);
 }
 
 async function getAuthHeader(): Promise<Record<string, string>> {
@@ -169,11 +179,13 @@ async function getAuthHeader(): Promise<Record<string, string>> {
  * that difference: only the former may resolve a job to `failed`. */
 export class ApiError extends Error {
   readonly status: number;
+  readonly detail?: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, detail?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -191,7 +203,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new ApiError(await errorMessageFromResponse(response), response.status);
+    throw await errorFromResponse(response);
   }
 
   return response.json() as Promise<T>;
@@ -206,7 +218,19 @@ export async function submitTextCheck(text: string, balanceSource: BalanceSource
   });
 }
 
-export async function submitPdfCheck(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
+// Uploads go to Supabase Storage first, then the backend fetches them from
+// there (POST /api/check/stored-file). For some networks (e.g. ISPs in
+// Vietnam) Cloudflare routes api.etymos.site through Europe, where a multi-MB
+// upload crawls at a few KB/s and is cut off after ~3 minutes ("Failed to
+// fetch"), while Supabase Storage is served from Hong Kong.
+const DOCUMENTS_BUCKET = "documents";
+
+function fileExtension(file: File): "pdf" | "docx" {
+  return file.name.toLowerCase().endsWith(".docx") ? "docx" : "pdf";
+}
+
+/** Sends the file straight to the API (the old path), for when Storage is unavailable. */
+async function submitPdfCheckDirect(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
   const authHeader = await getAuthHeader();
   const formData = new FormData();
   formData.append("file", file);
@@ -222,6 +246,108 @@ export async function submitPdfCheck(file: File, balanceSource: BalanceSource): 
   }
 
   return response.json() as Promise<BackendJob>;
+}
+
+export async function submitPdfCheck(file: File, balanceSource: BalanceSource): Promise<BackendJob> {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) throw new Error(tr("Your session has expired. Please sign in again and retry."));
+
+  const ext = fileExtension(file);
+  const storagePath = `${userId}/uploads/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(DOCUMENTS_BUCKET).upload(storagePath, file, {
+    contentType:
+      ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    upsert: false,
+  });
+  if (error) {
+    console.warn("Upload to storage failed; sending the file to the API instead:", error);
+    return submitPdfCheckDirect(file, balanceSource);
+  }
+
+  try {
+    return await requestJson<BackendJob>("/api/check/stored-file", {
+      method: "POST",
+      body: JSON.stringify({ storage_path: storagePath, file_name: file.name, balance_source: balanceSource }),
+    });
+  } catch (err) {
+    // The check never started, so the upload has no use (the backend only
+    // removes the uploads it was given).
+    void supabase.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+    // A backend from before this endpoint existed: use the old path.
+    if (err instanceof ApiError && err.status === 404) return submitPdfCheckDirect(file, balanceSource);
+    throw err;
+  }
+}
+
+// --- Save & re-check (backend/api/recheck_quota.py, backend/recheck.py) -----
+
+/** One editor block: its data-block-id (the passage id) and its text. */
+export interface RecheckBlock {
+  block_id: string;
+  text: string;
+}
+
+export type RecheckCost = "free" | "check";
+
+export interface RecheckQuote {
+  tier: "free" | "student" | "professional";
+  /** Added or replaced words since the last paid check, 0..1. */
+  changed_ratio: number;
+  change_limit: number;
+  free_used: number;
+  free_limit: number;
+  free_left: number;
+  cost: RecheckCost;
+}
+
+export function quoteRecheck(reportId: string, blocks: RecheckBlock[]): Promise<RecheckQuote> {
+  return requestJson<RecheckQuote>(`/api/reports/${encodeURIComponent(reportId)}/recheck/quote`, {
+    method: "POST",
+    body: JSON.stringify({ blocks }),
+  });
+}
+
+export interface RecheckRequest {
+  blocks: RecheckBlock[];
+  versionId: string | null;
+  expectedCost: RecheckCost;
+  balanceSource?: BalanceSource;
+}
+
+export interface RecheckJob {
+  job_id: string;
+  status: string;
+  quote: RecheckQuote;
+}
+
+/** 409 with `{code: "cost_changed", quote}` when the price moved since the
+ * quote, or `{code: "already_running"}`; 402 when the balance is empty. */
+export function submitRecheck(reportId: string, request: RecheckRequest): Promise<RecheckJob> {
+  return requestJson<RecheckJob>(`/api/reports/${encodeURIComponent(reportId)}/recheck`, {
+    method: "POST",
+    body: JSON.stringify({
+      blocks: request.blocks,
+      version_id: request.versionId,
+      expected_cost: request.expectedCost,
+      balance_source: request.balanceSource ?? null,
+    }),
+  });
+}
+
+/** Makes an earlier re-check's result (text, matches, score) the current
+ * report again. Free: nothing is re-run. */
+export function restoreCheck(reportId: string, checkId: string): Promise<{ status: string; overall_score: number }> {
+  return requestJson(`/api/reports/${encodeURIComponent(reportId)}/checks/${encodeURIComponent(checkId)}/restore`, {
+    method: "POST",
+  });
+}
+
+/** The fresh quote a 409 "cost_changed" carries, if this is one. */
+export function changedRecheckQuote(error: unknown): RecheckQuote | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const detail = error.detail as { code?: string; quote?: RecheckQuote } | undefined;
+  return detail?.code === "cost_changed" && detail.quote ? detail.quote : null;
 }
 
 export interface UnlockDocumentResponse {

@@ -168,7 +168,8 @@ def _status_from_score(score: float) -> str:
 def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                           user_id: Optional[str], input_type: str,
                           input_name: Optional[str],
-                          unlocked_tier: Optional[str] = None) -> None:
+                          unlocked_tier: Optional[str] = None,
+                          existing: bool = False) -> None:
     """
     Upsert the completed report into Supabase (`documents` +
     `document_matches`) so it survives a process restart / redeploy, not
@@ -185,16 +186,24 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
     overall_score = float(report.get("overall_score", 0.0) or 0.0)
 
     try:
-        document_row = {
-            "id": report_id,
-            "user_id": user_id,
-            "title": input_name or ("Pasted text" if input_type == "text" else "Untitled"),
-            "file_name": input_name if input_type == "pdf" else None,
-            "status": _status_from_score(overall_score),
-            "similarity_score": overall_score,
-            "uploaded_at": _now_iso(),
-        }
-        client.table("documents").upsert(document_row, on_conflict="id").execute()
+        if existing:
+            # A re-check of a document the user already has: only the result
+            # changes, never its title (possibly renamed), project or dates.
+            client.table("documents").update({
+                "status": _status_from_score(overall_score),
+                "similarity_score": overall_score,
+            }).eq("id", report_id).execute()
+        else:
+            document_row = {
+                "id": report_id,
+                "user_id": user_id,
+                "title": input_name or ("Pasted text" if input_type == "text" else "Untitled"),
+                "file_name": input_name if input_type == "pdf" else None,
+                "status": _status_from_score(overall_score),
+                "similarity_score": overall_score,
+                "uploaded_at": _now_iso(),
+            }
+            client.table("documents").upsert(document_row, on_conflict="id").execute()
     except Exception:
         logger.exception("Failed to upsert documents row for report_id=%s", report_id)
         return  # No point trying to insert matches for a document row that didn't land.
@@ -495,6 +504,40 @@ def save_report(report: dict[str, Any], *, input_type: str,
                          unlocked_tier=unlocked_tier)
 
     return report_id
+
+
+def replace_report(report_id: str, report: dict[str, Any], previous: dict[str, Any], *,
+                   unlocked_tier: str | None = None) -> dict[str, Any]:
+    """
+    Overwrite an existing report with a re-check's result (recheck.py), under
+    the same id: local JSON, in-memory cache, and the Supabase rows (score,
+    matches, passages). Keeps the owner, name, type and upload time of
+    `previous`. `unlocked_tier` is the tier the re-check's credit unlocks, if
+    any; the caller makes sure it never lowers the document's tier.
+    """
+    init_report_store()
+    source = previous.get("input") or {}
+    tier = unlocked_tier or previous.get("unlocked_tier")
+    wrapped = {
+        "report_id": report_id,
+        "status": "completed",
+        "input": {"type": source.get("type") or "text", "name": source.get("name")},
+        "user_id": previous.get("user_id"),
+        "created_at": previous.get("created_at") or _now_iso(),
+        "rechecked_at": _now_iso(),
+        "unlocked_tier": tier,
+        **report,
+    }
+    path = REPORT_DIR / f"{report_id}.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(wrapped, f, ensure_ascii=False, indent=2)
+    with _LOCK:
+        _REPORTS[report_id] = wrapped
+
+    _persist_to_supabase(report_id, report, user_id=previous.get("user_id"),
+                         input_type=wrapped["input"]["type"], input_name=wrapped["input"]["name"],
+                         unlocked_tier=unlocked_tier, existing=True)
+    return wrapped
 
 
 def set_cached_unlocked_tier(report_id: str, tier: str | None) -> None:

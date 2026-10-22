@@ -11,6 +11,8 @@ import {
 } from "./documentsQueries";
 import type { CheckState, HistoryEntryWithCheck } from "./documentsQueries";
 import { getJob, getReport, isJobMissingError } from "./api";
+import { supabase } from "@etymos/shared";
+import { fetchMyProfile } from "./profileQueries";
 import { statusFromScore } from "../components/Severity";
 import type {
   BillingCycle,
@@ -168,6 +170,11 @@ interface AppState {
     result: { unlockedTier: "student" | "professional"; standardCredits: number; premiumCredits: number },
   ) => void;
   markFirstCheckComplete: () => void;
+  /** Re-reads the balances from the server. requestCheck only subtracts a
+   * check locally, as a preview; the server charges only a check that
+   * succeeds, so once a check settles (finished, failed or interrupted) this
+   * puts back what a failed one never actually cost. Never throws. */
+  refreshBalances: () => Promise<void>;
   moveToTrash: (id: string) => Promise<void>;
   restoreFromTrash: (id: string) => Promise<void>;
   permanentlyDeleteTrash: (id: string) => Promise<void>;
@@ -486,6 +493,8 @@ export const useAppStore = create<AppState>()(
             // as "Checking"; the next mount retries.
           }
         }
+        // Whatever these settled to, show the balances the server has.
+        void get().refreshBalances();
       },
 
       recordCheckedDocument: (doc) =>
@@ -501,6 +510,16 @@ export const useAppStore = create<AppState>()(
         })),
 
       markFirstCheckComplete: () => set({ hasCompletedFirstCheck: true }),
+
+      refreshBalances: async () => {
+        try {
+          const { data } = await supabase.auth.getUser();
+          if (!data.user) return;
+          get().syncFromProfile(await fetchMyProfile(data.user.id));
+        } catch {
+          // Keep the local numbers; the next sign-in or reload re-syncs them.
+        }
+      },
 
       // These three persist to Supabase first and only mutate local state once
       // the write is confirmed — previously they only ever touched the local

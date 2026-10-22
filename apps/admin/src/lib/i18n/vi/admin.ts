@@ -534,4 +534,10 @@ export const admin: Record<string, string> = {
   "Discount deleted": "Đã xóa giảm giá",
   "Lower the price of a plan or credit pack automatically, for everyone or only the people you pick.": "Tự động giảm giá một gói hoặc gói lượt, cho mọi người hoặc chỉ những người bạn chọn.",
   "{{used}} / {{max}} used": "Đã dùng {{used}} / {{max}}",
+  "Re-checked a document (1 check)": "Đã kiểm tra lại tài liệu (1 lượt kiểm tra)",
+  "Re-checked a document (free)": "Đã kiểm tra lại tài liệu (miễn phí)",
+  "{{percent}}% changed": "Thay đổi {{percent}}%",
+  "Re-checks: {{free}} free · {{paid}} paid": "Kiểm tra lại: {{free}} miễn phí · {{paid}} trả phí",
+  "Free re-checks": "Lượt kiểm tra lại miễn phí",
+  "Free re-check change limit (%)": "Giới hạn thay đổi khi kiểm tra lại miễn phí (%)",
 };

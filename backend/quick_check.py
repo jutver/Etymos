@@ -211,6 +211,12 @@ def _cached_corpus(report_id: str, report: dict[str, Any]) -> list[dict[str, Any
     return corpus
 
 
+def forget_report(report_id: str) -> None:
+    """Drop a report's cached sources, e.g. after a re-check found new ones."""
+    with _CORPUS_LOCK:
+        _CORPUS_CACHE.pop(report_id, None)
+
+
 def _encode(texts: list[str]) -> list[Any]:
     """One batched encode for every text a check needs (already prefixed
     with "query: " / "passage: " as embedding_model does)."""

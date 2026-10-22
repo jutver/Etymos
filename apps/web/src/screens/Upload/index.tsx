@@ -5,7 +5,6 @@ import {
   CaretDown,
   CheckCircle,
   ClockCounterClockwise,
-  Coins,
   FileText,
   FolderSimple,
   GraduationCap,
@@ -18,7 +17,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
-import { Modal, ModalCloseButton } from "../../components/ui/Modal";
+import { BalancePickerDialog } from "../../components/BalancePickerDialog";
 import { StatusPill } from "../../components/Severity";
 import { CheckStatePill } from "../Documents/CheckStatePill";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
@@ -37,12 +36,6 @@ const languages: { id: Language; label: string }[] = [
   { id: "vi", label: "Tiếng Việt" },
   { id: "en", label: tr("English") },
 ];
-
-const BALANCE_ICON: Record<BalanceSource, typeof GraduationCap> = {
-  plan: GraduationCap,
-  standard: Coins,
-  premium: Sparkle,
-};
 
 // The file preview has no matches to highlight; a stable empty list keeps the
 // viewer from re-scanning the PDF on every render of this screen.
@@ -64,6 +57,7 @@ export default function UploadPage() {
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const requestCheck = useAppStore((s) => s.requestCheck);
+  const refreshBalances = useAppStore((s) => s.refreshBalances);
   const selectedBalance = useAppStore((s) => s.selectedBalance);
   const setSelectedBalance = useAppStore((s) => s.setSelectedBalance);
   const balances = useAppStore((s) => s.balances());
@@ -283,8 +277,15 @@ export default function UploadPage() {
 
       throw new Error(tr("Please add content before checking."));
     } catch (error) {
-      const message = error instanceof Error ? error.message : tr("Unable to start analysis.");
+      const message =
+        error instanceof TypeError
+          ? tr("The connection to the server dropped before your file finished uploading. You weren't charged. Please try again.")
+          : error instanceof Error
+            ? error.message
+            : tr("Unable to start analysis.");
       setSubmitError(message);
+      // requestCheck subtracted a check locally; nothing was charged.
+      void refreshBalances();
       // The job never started, so settle its row instead of leaving a
       // permanent "Checking" entry behind.
       if (placeholderId) {
@@ -654,41 +655,15 @@ export default function UploadPage() {
       </div>
 
       {/* Ask-which-balance dialog — only ever opened when 2 or 3 balances
-          have remaining > 0 (see handleCheckClick). With exactly one (or
-          zero) available, submission skips this and goes straight through. */}
-      <Modal open={balanceDialogOpen} onClose={() => setBalanceDialogOpen(false)} maxWidth="max-w-md" labelledBy="balance-dialog-title">
-        <div className="relative p-6">
-          <ModalCloseButton onClose={() => setBalanceDialogOpen(false)} />
-          <h2 id="balance-dialog-title" className="text-h3 font-bold text-navy-900">
-            {t("Which balance should we use?")}</h2>
-          <p className="mt-1.5 text-sm text-ink-500">
-            {t("You have credits available in more than one place. Pick which one this check should spend.")}</p>
-          <div className="mt-5 flex flex-col gap-2.5">
-            {availableBalances.map((b) => {
-              const Icon = BALANCE_ICON[b.source];
-              return (
-                <button
-                  key={b.source}
-                  onClick={() => confirmBalanceChoice(b.source)}
-                  className="studio-card flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-white px-4 py-3.5 text-left transition-colors hover:border-brand-400 hover:bg-brand-100/30"
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
-                      <Icon size={18} weight="bold" />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold text-navy-900">{t(b.label)}</span>
-                      <span className="block text-xs text-ink-500">
-                        {tn(b.remaining, "{{count}} check remaining", "{{count}} checks remaining")}</span>
-                    </span>
-                  </span>
-                  <span className="size-2.5 shrink-0 rounded-full border-2 border-line" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </Modal>
+          have remaining > 0 (see handleCheckClick). Picking a balance asks
+          for confirmation before anything is spent. */}
+      <BalancePickerDialog
+        open={balanceDialogOpen}
+        onClose={() => setBalanceDialogOpen(false)}
+        balances={availableBalances}
+        onConfirm={confirmBalanceChoice}
+        busy={submitting}
+      />
     </div>
   );
 }

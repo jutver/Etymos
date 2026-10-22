@@ -8,7 +8,7 @@
 // explicit scoping keeps intent clear and avoids relying on RLS alone.
 import { supabase } from "@etymos/shared";
 import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSource } from "@etymos/shared";
-import type { DocumentVersion } from "../screens/Report/VersionHistoryMenu";
+import type { DocumentVersion, VersionCheck } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
 import { parseExplanationFacts } from "./matchExplanation";
 import { tr } from "./i18n";
@@ -403,6 +403,7 @@ interface DocumentVersionRow {
   html: string;
   word_count: number;
   created_at: string;
+  changed_ratio?: number | null;
 }
 
 function toDocumentVersion(row: DocumentVersionRow): DocumentVersion {
@@ -412,6 +413,7 @@ function toDocumentVersion(row: DocumentVersionRow): DocumentVersion {
     savedAt: new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     wordCount: row.word_count,
     html: row.html,
+    changedRatio: row.changed_ratio == null ? null : Number(row.changed_ratio),
   };
 }
 
@@ -427,23 +429,64 @@ export async function fetchDocumentVersions(documentId: string): Promise<Documen
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) throw error;
-  return (data ?? []).map(toDocumentVersion);
+  const versions = (data ?? []).map(toDocumentVersion);
+  const checks = await fetchVersionChecks(documentId);
+  return versions.map((v) => (checks.has(v.id) ? { ...v, check: checks.get(v.id) } : v));
+}
+
+/** Save & re-check results by version id (document_checks, written only by
+ * the backend). Best-effort: a database without the table yet, or a failed
+ * read, just shows every version as a draft. */
+async function fetchVersionChecks(documentId: string): Promise<Map<string, VersionCheck>> {
+  const { data, error } = await supabase
+    .from("document_checks")
+    .select("id, version_id, kind, similarity_score, ai_score, previous_score, previous_ai_score")
+    .eq("document_id", documentId)
+    .not("version_id", "is", null);
+  const checks = new Map<string, VersionCheck>();
+  if (error) return checks;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  for (const row of (data ?? []) as {
+    id: string;
+    version_id: string;
+    kind: string;
+    similarity_score: number;
+    ai_score: number | null;
+    previous_score: number | null;
+    previous_ai_score: number | null;
+  }[]) {
+    checks.set(row.version_id, {
+      id: row.id,
+      paid: row.kind === "paid_recheck",
+      score: Number(row.similarity_score),
+      previousScore: num(row.previous_score),
+      aiScore: num(row.ai_score),
+      previousAiScore: num(row.previous_ai_score),
+    });
+  }
+  return checks;
 }
 
 export async function saveDocumentVersion(
   documentId: string,
-  version: { label: string; html: string; wordCount: number },
+  version: { label: string; html: string; wordCount: number; changedRatio?: number },
 ): Promise<DocumentVersion> {
-  const { data, error } = await supabase
-    .from("document_versions")
-    .insert({
-      document_id: documentId,
-      label: version.label,
-      html: version.html,
-      word_count: version.wordCount,
-    })
-    .select()
-    .single();
+  const row: { document_id: string; label: string; html: string; word_count: number; changed_ratio?: number } = {
+    document_id: documentId,
+    label: version.label,
+    html: version.html,
+    word_count: version.wordCount,
+  };
+  const insert = (withRatio: boolean) =>
+    supabase
+      .from("document_versions")
+      .insert(withRatio && version.changedRatio !== undefined ? { ...row, changed_ratio: version.changedRatio } : row)
+      .select()
+      .single();
+  let { data, error } = await insert(true);
+  // A database without the changed_ratio column yet (re-check migration not
+  // applied) still saves the version, just without the change label.
+  if (error && /changed_ratio/.test(error.message ?? "")) ({ data, error } = await insert(false));
   if (error) throw error;
-  return toDocumentVersion(data);
+  return { ...toDocumentVersion(data), changedRatio: version.changedRatio ?? null };
 }

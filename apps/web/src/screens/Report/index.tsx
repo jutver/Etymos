@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FileMagnifyingGlass } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
-import { useAppStore, planWordLimit } from "../../lib/store";
+import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
+import { changedRecheckQuote, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { trackEvent } from "../../lib/analytics";
 import {
@@ -32,6 +33,9 @@ import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
 import { applySavedVersion } from "./applySavedVersion";
 import { useQuickCheck } from "./useQuickCheck";
+import { RecheckDialog } from "./RecheckDialog";
+import { collectEditorBlocks } from "./recheck";
+import { changedRatio, htmlToText } from "../../lib/textChange";
 import { estimateScore, type PassageCheck } from "./rewriteScore";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
@@ -103,9 +107,11 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  // Nothing bumps this since the "Recheck document" button was removed; it
-  // stays 0 so the cached report is used, as before.
-  const [refetchNonce] = useState(0);
+  // Bumped after a Save & re-check finishes, to load the re-checked report.
+  // While it is 0 the cached report (if any) is used.
+  const [refetchNonce, setRefetchNonce] = useState(0);
+  // The refetchNonce whose report has arrived; the editor is rebuilt from it.
+  const [loadedNonce, setLoadedNonce] = useState(0);
 
   useEffect(() => {
     if (!id || (cachedDoc && refetchNonce === 0)) return;
@@ -120,6 +126,7 @@ export default function ReportPage() {
           setNotFound(true);
         } else {
           setRemoteDoc(result as CheckedDocument);
+          setLoadedNonce(refetchNonce);
         }
       })
       .catch((err) => {
@@ -241,7 +248,9 @@ export default function ReportPage() {
     { reshow: false },
   );
   // Only the Edit tab lets the user type; Document and Original are read-only.
-  const locked = view !== "edit";
+  // While a re-check runs the text it checks must not change under it.
+  const [recheckRunning, setRecheckRunning] = useState(false);
+  const locked = view !== "edit" || recheckRunning;
   // Document and Edit show the extracted text; Original swaps in the PDF
   // viewer. They are two separate editors: Document always shows the text as
   // it was checked, Edit shows the user's (saved) edits. The Edit editor stays
@@ -258,15 +267,26 @@ export default function ReportPage() {
   }, [doc, historyMeta?.title]);
 
   // Remounting the editor is the only way to discard the browser-owned DOM and
-  // re-render from fresh data, so a recheck bumps this key.
-  const resetKey = refetchNonce;
+  // re-render from fresh data, so a finished re-check bumps this key (once
+  // the re-checked report has arrived).
+  const resetKey = loadedNonce;
 
   // The document body is rendered once and then owned by the browser (the user
   // types into it), so the initial counts are read back off the DOM rather than
   // recomputed from `doc.passages`.
+  // The text as last checked, and whether the editor now differs from it —
+  // what makes "Save & re-check" worth pressing (a saved draft counts too).
+  const checkedTextRef = useRef<string | null>(null);
+  const [editedSinceCheck, setEditedSinceCheck] = useState(false);
+  const refreshEditedSinceCheck = useCallback((text: string) => {
+    setEditedSinceCheck(checkedTextRef.current !== null && text.trim() !== checkedTextRef.current.trim());
+  }, []);
+
   useEffect(() => {
     const text = editorRef.current?.innerText ?? "";
     baselineTextRef.current = text;
+    checkedTextRef.current = editorRef.current ? text : null;
+    setEditedSinceCheck(false);
     setStats({ words: countWords(text), characters: text.length });
     setDirty(false);
   }, [doc?.id, resetKey]);
@@ -298,7 +318,8 @@ export default function ReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+    // loadedNonce: reload after a re-check or restore, for the new scores.
+  }, [id, loadedNonce]);
 
   // Show the latest saved version in the Document/Edit editor, not the text
   // from the check: the editor is rebuilt from `doc.passages` whenever it
@@ -316,6 +337,9 @@ export default function ReportPage() {
     if (syncedEditorRef.current !== editor) {
       syncedEditorRef.current = editor;
       baselineTextRef.current = editor.innerText;
+      // A fresh editor shows the checked passages until a saved version is applied below.
+      checkedTextRef.current = editor.innerText;
+      setEditedSinceCheck(false);
       setStats({ words: countWords(editor.innerText), characters: editor.innerText.length });
       setDirty(false);
     }
@@ -324,9 +348,10 @@ export default function ReportPage() {
     if (!applySavedVersion(editor, latestSavedHtml)) return;
     const text = editor.innerText;
     baselineTextRef.current = text;
+    refreshEditedSinceCheck(text);
     setStats({ words: countWords(text), characters: text.length });
     setDirty(false);
-  }, [showsText, latestSavedHtml, doc?.id, resetKey]);
+  }, [showsText, latestSavedHtml, doc?.id, resetKey, refreshEditedSinceCheck]);
 
   const visibleMatches = useMemo(
     () =>
@@ -393,7 +418,8 @@ export default function ReportPage() {
   const handleInput = useCallback((text: string) => {
     setStats({ words: countWords(text), characters: text.length });
     setDirty(text !== baselineTextRef.current);
-  }, []);
+    refreshEditedSinceCheck(text);
+  }, [refreshEditedSinceCheck]);
 
   // The Document tab is read-only, so it has nothing to report.
   const ignoreInput = useCallback(() => {}, []);
@@ -610,16 +636,25 @@ export default function ReportPage() {
     }
   }
 
+  /** How much `text` changed since the newest saved version (or, with none,
+   * since the text as checked) — the "% changed" in Version History. */
+  function changeSinceLastVersion(text: string): number | undefined {
+    const before = versions[0] ? htmlToText(versions[0].html) : checkedTextRef.current;
+    return before === null ? undefined : changedRatio(before, text);
+  }
+
   async function handleSave() {
     if (!id) return;
     const text = editorRef.current?.innerText ?? "";
     const html = editorRef.current?.innerHTML ?? "";
+    const changed = changeSinceLastVersion(text);
     setSaving(true);
     try {
       const version = await saveDocumentVersion(id, {
         label: tl("Version {{v}}", { v: versions.length + 1 }),
         html,
         wordCount: countWords(text),
+        changedRatio: changed,
       });
       baselineTextRef.current = text;
       setVersions((prev) => [version, ...prev].slice(0, 20));
@@ -632,6 +667,7 @@ export default function ReportPage() {
         label: tl("Version {{v}}", { v: versions.length + 1 }),
         html,
         wordCount: countWords(text),
+        changedRatio: changed,
       });
       if (localVersion) {
         baselineTextRef.current = text;
@@ -650,15 +686,156 @@ export default function ReportPage() {
     }
   }
 
-  function handleRestoreVersion(version: DocumentVersion) {
+  async function handleRestoreVersion(version: DocumentVersion) {
+    if (version.check && id) {
+      // A re-checked version comes back with its own results: the backend
+      // makes that check the current report again, then the page reloads it.
+      if (dirty) {
+        pushToast({ kind: "warning", title: tr("Save your edits first"), description: tr("Restoring this version would replace them.") });
+        return;
+      }
+      try {
+        await restoreCheck(id, version.check.id);
+      } catch (err) {
+        pushToast({
+          kind: "error",
+          title: tr("Couldn't restore this version"),
+          description: err instanceof Error ? err.message : tr("Please try again."),
+        });
+        return;
+      }
+      setResolvedIds(new Set());
+      quickCheck.reset();
+      setRefetchNonce((n) => n + 1);
+      pushToast({ kind: "info", title: tl("Restored {{label}} with its check results", { label: version.label }) });
+      return;
+    }
     // Block by block first, so the Document tab stays read-only afterwards;
     // the whole-HTML swap is kept for snapshots with no matching blocks.
     if (editorRef.current && !applySavedVersion(editorRef.current, version.html)) {
       editorRef.current.innerHTML = version.html;
     }
     baselineTextRef.current = editorRef.current?.innerText ?? "";
+    refreshEditedSinceCheck(baselineTextRef.current);
     setDirty(false);
     pushToast({ kind: "info", title: tl("Restored {{label}}", { label: version.label }) });
+  }
+
+  // --- Save & re-check (PLAN.md) --------------------------------------------
+  // Saves the editor as a version, then checks only the changed paragraphs
+  // (backend/recheck.py). The quote says whether it is free; the backend
+  // prices it again and answers 409 if that changed in the meantime.
+  const balances = useAppStore((s) => s.balances());
+  const refreshBalances = useAppStore((s) => s.refreshBalances);
+  const availableBalances = useMemo(() => balances.filter((b) => b.remaining > 0), [balances]);
+  const [recheckOpen, setRecheckOpen] = useState(false);
+  const [recheckQuote, setRecheckQuote] = useState<RecheckQuote | null>(null);
+  const [recheckSubmitting, setRecheckSubmitting] = useState(false);
+  /** Progress of a running re-check (0-100), null when none is running. */
+  const [recheckProgress, setRecheckProgress] = useState<number | null>(null);
+  const recheckBlocksRef = useRef<RecheckBlock[]>([]);
+
+  async function handleOpenRecheck() {
+    if (!id || !editorRef.current) return;
+    const blocks = collectEditorBlocks(editorRef.current);
+    if (blocks.every((b) => !b.text)) return;
+    recheckBlocksRef.current = blocks;
+    setRecheckQuote(null);
+    setRecheckOpen(true);
+    try {
+      setRecheckQuote(await quoteRecheck(id, blocks));
+    } catch (err) {
+      setRecheckOpen(false);
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't start the re-check"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
+      });
+    }
+  }
+
+  async function handleConfirmRecheck(source?: BalanceSource) {
+    if (!id || !recheckQuote || !editorRef.current) return;
+    const quote = recheckQuote;
+    const text = editorRef.current.innerText;
+    setRecheckSubmitting(true);
+
+    // The version first: a re-check belongs to a version saved on the server
+    // (a version kept only on this device can't be re-checked).
+    let versionId: string;
+    try {
+      const version = await saveDocumentVersion(id, {
+        label: tl("Version {{v}}", { v: versions.length + 1 }),
+        html: editorRef.current.innerHTML,
+        wordCount: countWords(text),
+        changedRatio: changeSinceLastVersion(text),
+      });
+      versionId = version.id;
+      baselineTextRef.current = text;
+      setVersions((prev) => [version, ...prev].slice(0, 20));
+      setDirty(false);
+    } catch (err) {
+      console.error("Saving the version before a re-check failed:", err);
+      setRecheckSubmitting(false);
+      pushToast({ kind: "error", title: tr("Couldn't save to the server"), description: tr("Nothing was checked. Please try again.") });
+      return;
+    }
+
+    let jobId: string;
+    try {
+      const job = await submitRecheck(id, {
+        blocks: recheckBlocksRef.current,
+        versionId,
+        expectedCost: quote.cost,
+        balanceSource: quote.cost === "check" ? source : undefined,
+      });
+      jobId = job.job_id;
+    } catch (err) {
+      setRecheckSubmitting(false);
+      const fresh = changedRecheckQuote(err);
+      if (fresh) {
+        // Your version is saved; show the new price and let the user decide again.
+        setRecheckQuote(fresh);
+        pushToast({ kind: "warning", title: tr("The cost of this re-check changed"), description: tr("Please review it again.") });
+        return;
+      }
+      setRecheckOpen(false);
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't start the re-check"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
+      });
+      return;
+    }
+
+    setRecheckOpen(false);
+    setRecheckSubmitting(false);
+    setRecheckProgress(0);
+    setRecheckRunning(true);
+    try {
+      const job = await pollJob(jobId, (j) => setRecheckProgress(j.progress ?? 0));
+      if (job.status !== "completed") throw new Error(job.error || tr("The re-check failed. You weren't charged."));
+      // The server has charged a paid re-check by now; show its balances.
+      if (quote.cost === "check") void refreshBalances();
+      trackEvent("recheck_completed");
+      setResolvedIds(new Set());
+      quickCheck.reset();
+      setRefetchNonce((n) => n + 1);
+      pushToast({
+        kind: "success",
+        title: tr("Re-check complete"),
+        description: quote.cost === "free" ? tr("This free re-check updated your score.") : tr("Your score is up to date."),
+      });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: tr("Re-check failed"),
+        description: err instanceof Error ? err.message : tr("You weren't charged. Please try again."),
+      });
+    } finally {
+      setRecheckProgress(null);
+      setRecheckRunning(false);
+    }
   }
 
   function handleCite(match: MatchedSource) {
@@ -734,14 +911,23 @@ export default function ReportPage() {
         dirty={dirty}
         saving={saving}
         onSave={handleSave}
+        onRecheck={view === "edit" ? handleOpenRecheck : undefined}
+        canRecheck={editedSinceCheck && recheckProgress === null && !recheckOpen}
+        recheckProgress={recheckProgress}
         versions={versions}
+        showAiScores={!isFree}
         onRestoreVersion={handleRestoreVersion}
         exporting={exporting}
         onExport={handleExport}
         exportLocked={isFree}
         scoreSlot={
           <>
-            <ScoreChip score={displayScore} estimated={scoreEstimate.estimated} checking={scoreEstimate.checking} />
+            <ScoreChip
+              score={displayScore}
+              // Edits since the last check make the score an estimate until re-checked.
+              estimated={scoreEstimate.estimated || editedSinceCheck}
+              checking={scoreEstimate.checking}
+            />
             <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate(paywallPath("ai-detection", id))} />
           </>
         }
@@ -898,6 +1084,16 @@ export default function ReportPage() {
         match={comparisonMatch}
         open={comparisonMatch !== null}
         onClose={() => setComparisonMatch(null)}
+      />
+      <RecheckDialog
+        open={recheckOpen}
+        onClose={() => {
+          if (!recheckSubmitting) setRecheckOpen(false);
+        }}
+        quote={recheckQuote}
+        balances={availableBalances}
+        busy={recheckSubmitting}
+        onConfirm={(source) => void handleConfirmRecheck(source)}
       />
       <CitationDialog
         match={citingMatch}

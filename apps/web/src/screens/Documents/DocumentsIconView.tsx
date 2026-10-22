@@ -118,7 +118,10 @@ export function DocumentsIconView({
                     <FileText size={22} />
                   </span>
                   <span className="line-clamp-2 w-full text-xs font-semibold text-ink-900">{doc.title}</span>
-                  <span className="text-[11px] text-ink-400">{formatDate(doc.date)}</span>
+                  <span className="text-[11px] text-ink-400">
+                    {formatDate(doc.date)}
+                    {doc.checkCount > 1 && <> &middot; {doc.checkCount}{" "}{t("checks")}</>}
+                  </span>
                   {doc.checkState === "completed" ? (
                     <StatusPill status={doc.status} className="scale-90" />
                   ) : (

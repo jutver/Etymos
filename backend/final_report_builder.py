@@ -43,6 +43,75 @@ def _build_explanation(label, semantic_similarity, source_title, source_sentence
     return sentence
 
 
+def coverage_score(matches, total_chars):
+    """
+    Weighted character coverage (see build_final_report's docstring) of
+    final match records, from each record's `input_offset` and label.
+    Records without offsets don't count. Shared by build_final_report and
+    Save & re-check (recheck.py), so a re-checked document is scored by
+    exactly the same formula as a fresh check.
+    """
+    intervals = [
+        (m["input_offset"]["start"], m["input_offset"]["end"], LABEL_WEIGHT.get(m.get("label"), 0))
+        for m in matches
+        if m.get("input_offset") and m["input_offset"].get("start") is not None
+        and m["input_offset"].get("end") is not None
+    ]
+    return weighted_coverage(intervals, total_chars)
+
+
+def group_by_source(matches):
+    """`matched_papers`: final match records grouped per source paper,
+    strongest source first."""
+    groups = defaultdict(lambda: {
+        "source_paper_id": "",
+        "source_title": "",
+        "matches": [],
+        "likely_count": 0,
+        "suspicious_count": 0,
+        "common_definition_count": 0,
+        "max_similarity": 0.0
+    })
+
+    for record in matches:
+        source_id = record.get("source_paper_id") or ""
+        group = groups[source_id or record.get("source_title") or ""]
+        group["source_paper_id"] = source_id
+        group["source_title"] = record.get("source_title", "")
+        group["matches"].append(record)
+        group["max_similarity"] = max(group["max_similarity"], record.get("semantic_similarity") or 0.0)
+
+        label = record.get("label")
+        if label == "likely_plagiarism":
+            group["likely_count"] += 1
+        elif label == "suspicious":
+            group["suspicious_count"] += 1
+        elif label == "common_academic_definition":
+            group["common_definition_count"] += 1
+
+    return sorted(
+        groups.values(),
+        key=lambda x: (
+            x["likely_count"],
+            x["suspicious_count"],
+            x["max_similarity"]
+        ),
+        reverse=True
+    )
+
+
+def sort_matches(matches):
+    """Likely plagiarism first, then by similarity."""
+    return sorted(
+        matches,
+        key=lambda x: (
+            x["label"] == "likely_plagiarism",
+            x["semantic_similarity"]
+        ),
+        reverse=True
+    )
+
+
 def build_final_report(verified_matches, input_chunks, input_text=None, document=None,
                         source_metadata=None):
     """
@@ -116,16 +185,6 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
 
     # (start, end, weight) spans feeding the new coverage-based score.
     coverage_intervals = []
-
-    paper_groups = defaultdict(lambda: {
-        "source_paper_id": "",
-        "source_title": "",
-        "matches": [],
-        "likely_count": 0,
-        "suspicious_count": 0,
-        "common_definition_count": 0,
-        "max_similarity": 0.0
-    })
 
     final_matches = []
 
@@ -228,29 +287,13 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
 
             final_matches.append(record)
 
-            group = paper_groups[source_id]
-            group["source_paper_id"] = source_id
-            group["source_title"] = item.get("source_title", "")
-            group["matches"].append(record)
-            group["max_similarity"] = max(
-                group["max_similarity"],
-                sm["semantic_similarity"]
-            )
-
-            if label == "likely_plagiarism":
-                group["likely_count"] += 1
-            elif label == "suspicious":
-                group["suspicious_count"] += 1
-            elif label == "common_academic_definition":
-                group["common_definition_count"] += 1
-
     legacy_overall_score = 0.0
     if legacy_total_chars > 0:
         legacy_overall_score = min(
             100.0, legacy_matched_chars / legacy_total_chars * 100
         )
 
-    coverage = weighted_coverage(coverage_intervals, document_total_chars)
+    coverage = coverage_score(final_matches, document_total_chars)
 
     # Use the coverage score whenever we have real offsets to compute it
     # from. Without a document (a caller that hasn't been migrated yet)
@@ -263,24 +306,8 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
         overall_score = legacy_overall_score
         scoring_method = "legacy_weighted_sentence_sum"
 
-    matched_papers = sorted(
-        paper_groups.values(),
-        key=lambda x: (
-            x["likely_count"],
-            x["suspicious_count"],
-            x["max_similarity"]
-        ),
-        reverse=True
-    )
-
-    final_matches = sorted(
-        final_matches,
-        key=lambda x: (
-            x["label"] == "likely_plagiarism",
-            x["semantic_similarity"]
-        ),
-        reverse=True
-    )
+    matched_papers = group_by_source(final_matches)
+    final_matches = sort_matches(final_matches)
 
     report = {
         "overall_score": round(overall_score, 2),

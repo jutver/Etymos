@@ -1020,28 +1020,6 @@ export function PlagiarismPdfViewer({
           </Document>
         ) : null}
       </div>
-
-      {/* Chỉ báo trang nào có match, để nhảy nhanh */}
-      {numPages && Object.keys(matchesByPage).length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {Object.keys(matchesByPage)
-            .map(Number)
-            .sort((a, b) => a - b)
-            .map((p) => (
-              <button
-                key={p}
-                onClick={() => goToPage(p)}
-                className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                  p === currentPage
-                    ? "border-brand-400 bg-brand-100 text-brand-700"
-                    : "border-line bg-white text-ink-500 hover:border-brand-300"
-                }`}
-              >
-                {t("Page")}{" "}{p} ({matchesByPage[p].length})
-              </button>
-            ))}
-        </div>
-      )}
     </div>
   );
 }

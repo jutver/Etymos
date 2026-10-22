@@ -95,6 +95,14 @@ export default function DashboardPage() {
           label={t("Documents")}
           value={loading ? "…" : String(metrics?.documentsByDay.reduce((s, p) => s + p.value, 0) ?? 0)}
           icon={FileText}
+          hint={
+            metrics
+              ? t("Re-checks: {{free}} free · {{paid}} paid", {
+                  free: metrics.freeRechecksInRange,
+                  paid: metrics.paidRechecksInRange,
+                })
+              : undefined
+          }
         />
         <StatCard
           label={t("Checkout volume")}

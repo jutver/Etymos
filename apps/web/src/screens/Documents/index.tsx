@@ -10,14 +10,14 @@ import {
   renameDocument,
   renameProjectDocuments,
 } from "../../lib/documentsQueries";
-import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
+import { groupByFile } from "../../lib/fileGroups";
 import { ViewModeToggle } from "./ViewModeToggle";
 import { DocumentsListView } from "./DocumentsListView";
 import { DocumentsIconView } from "./DocumentsIconView";
 import { ProjectContextMenu, DocumentContextMenu } from "./ContextMenus";
 import { PromptModal } from "./PromptModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import type { ContextMenuState, DocumentsViewMode, ProjectGroup } from "./types";
+import type { ContextMenuState, DocumentItem, DocumentsViewMode, ProjectGroup } from "./types";
 import { t, tr, tn } from "../../lib/i18n";
 
 type PromptState =
@@ -77,15 +77,17 @@ export default function DocumentsPage() {
 
   const groups = useMemo<ProjectGroup[]>(() => {
     const q = query.trim().toLowerCase();
-    const byName = new Map<string, HistoryEntryWithCheck[]>();
+    const byName = new Map<string, DocumentItem[]>();
     byName.set(PROJECTS[0], []);
     for (const name of knownProjects) if (!byName.has(name)) byName.set(name, []);
 
-    for (const h of history) {
-      const name = h.project ?? PROJECTS[0];
-      if (q && !h.title.toLowerCase().includes(q) && !name.toLowerCase().includes(q)) continue;
+    // Every check of the same file is one document, shown by its latest check
+    // and filed under that check's project (History lists the versions).
+    for (const { latest, versions } of groupByFile(history)) {
+      const name = latest.project ?? PROJECTS[0];
+      if (q && !latest.title.toLowerCase().includes(q) && !name.toLowerCase().includes(q)) continue;
       if (!byName.has(name)) byName.set(name, []);
-      byName.get(name)!.push(h);
+      byName.get(name)!.push({ ...latest, checkCount: versions.length });
     }
 
     const names = [...byName.keys()].sort((a, b) => {
@@ -291,18 +293,6 @@ export default function DocumentsPage() {
           <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR RESEARCH LIBRARY")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("Documents")}</h1>
           <p className="mt-1.5 text-sm text-ink-500">{t("Organize your checks into projects, Finder-style.")}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <ViewModeToggle
-            value={viewMode}
-            onChange={(mode) => {
-              setViewMode(mode);
-              setActiveFolder(null);
-            }}
-          />
-          <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
-            {manageMode ? t("Done") : t("Manage")}
-          </Button>
-        </div>
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -316,13 +306,25 @@ export default function DocumentsPage() {
           />
         </div>
 
-        {manageMode && selectionCount > 0 && (
-          <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
-            <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
-            <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
-              {t("Delete")}</Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {manageMode && selectionCount > 0 && (
+            <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
+              <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
+              <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
+                {t("Delete")}</Button>
+            </div>
+          )}
+          <ViewModeToggle
+            value={viewMode}
+            onChange={(mode) => {
+              setViewMode(mode);
+              setActiveFolder(null);
+            }}
+          />
+          <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
+            {manageMode ? t("Done") : t("Manage")}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4">

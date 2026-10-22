@@ -10,19 +10,13 @@ import { cn } from "@etymos/shared";
 import { CheckStatePill } from "../Documents/CheckStatePill";
 import { analyzingStateFor } from "../../lib/documentsQueries";
 import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
+import { groupByFile } from "../../lib/fileGroups";
 import { t, tr, tn } from "../../lib/i18n";
 
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
 const TODAY = new Date("2026-07-05T23:59:59");
 
-/** One source file's check history: every check that shares the same
- * `fileName` (or `title`, for pasted-text checks with no file), newest first. */
-interface FileGroup {
-  key: string;
-  latest: HistoryEntryWithCheck;
-  versions: HistoryEntryWithCheck[];
-}
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -65,24 +59,7 @@ export default function HistoryPage() {
 
   const filtered = visible.filter((h) => h.title.toLowerCase().includes(query.toLowerCase()));
 
-  /** Group checks by source file (falling back to title for pasted-text
-   * checks, which have no file) — this is check-history grouping, not exact
-   * content dedup. Groups sort by most-recent check descending; versions
-   * within a group sort newest-first. */
-  const groups = useMemo<FileGroup[]>(() => {
-    const byKey = new Map<string, HistoryEntryWithCheck[]>();
-    for (const h of filtered) {
-      const key = h.fileName?.trim() || h.title;
-      if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key)!.push(h);
-    }
-    return [...byKey.entries()]
-      .map(([key, entries]) => {
-        const versions = [...entries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-        return { key, latest: versions[0], versions };
-      })
-      .sort((a, b) => (a.latest.date < b.latest.date ? 1 : a.latest.date > b.latest.date ? -1 : 0));
-  }, [filtered]);
+  const groups = useMemo(() => groupByFile(filtered), [filtered]);
 
   /** A check that hasn't finished has no report to show — send it back to the
    * progress view instead of an empty report. */
