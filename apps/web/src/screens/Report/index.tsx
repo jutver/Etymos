@@ -209,9 +209,6 @@ export default function ReportPage() {
 
   // --- Editor state --------------------------------------------------------
   const editorRef = useRef<HTMLDivElement>(null);
-  // The read-only Document tab's own editor — `editorRef` is always the Edit
-  // tab's, which is what Save, rewrites and version restores work on.
-  const documentViewEditorRef = useRef<HTMLDivElement>(null);
   // Lets FormatToolbar's "Insert table" button ask the canvas to add a
   // structural block — no longer possible via `document.execCommand` now
   // that the document is a real block array (see DocumentCanvas.tsx).
@@ -247,15 +244,12 @@ export default function ReportPage() {
     !!id && !notFound && !loadError && (!doc || (view === "original" && pdfComing && !pdfReady)),
     { reshow: false },
   );
-  // Only the Edit tab lets the user type; Document and Original are read-only.
-  // While a re-check runs the text it checks must not change under it.
+  // The Document tab is read-only until the user unlocks it ("edit"); Original
+  // always is. While a re-check runs the text it checks must not change under it.
   const [recheckRunning, setRecheckRunning] = useState(false);
   const locked = view !== "edit" || recheckRunning;
-  // Document and Edit show the extracted text; Original swaps in the PDF
-  // viewer. They are two separate editors: Document always shows the text as
-  // it was checked, Edit shows the user's (saved) edits. The Edit editor stays
-  // mounted, hidden, while Document is showing, so unsaved typing survives a
-  // look at the unedited text.
+  // Document shows the extracted text with the user's (saved) edits, locked or
+  // unlocked; Original swaps in the PDF viewer.
   const showsText = view !== "original";
   const [stats, setStats] = useState({ words: 0, characters: 0 });
   const [pageState, setPageState] = useState({ page: 1, pageCount: 1 });
@@ -421,9 +415,6 @@ export default function ReportPage() {
     refreshEditedSinceCheck(text);
   }, [refreshEditedSinceCheck]);
 
-  // The Document tab is read-only, so it has nothing to report.
-  const ignoreInput = useCallback(() => {}, []);
-
   const handlePageChange = useCallback((page: number, pageCount: number) => {
     setPageState({ page, pageCount });
   }, []);
@@ -587,14 +578,13 @@ export default function ReportPage() {
   // the Edit view first and applies the rewrite once the editor is mounted.
   const pendingRewriteRef = useRef<{ match: MatchedSource; rewritten: string } | null>(null);
 
-  // Document and Original are read-only views, so neither opening a rewrite
-  // nor accepting one may edit through them: tell the user to switch to the
-  // Edit tab instead.
+  // Reading mode and Original are read-only, so neither opening a rewrite nor
+  // accepting one may edit through them: tell the user to unlock editing.
   function notifyReadingMode() {
     pushToast({
       kind: "warning",
       title: tr("You're in reading mode"),
-      description: tr("The document can only be edited in the Edit tab. Switch to it in the toolbar, then try again."),
+      description: tr("Unlock editing from the toolbar, then try again."),
     });
   }
 
@@ -935,6 +925,7 @@ export default function ReportPage() {
           <FormatToolbar
             locked={locked}
             onRequestUnlock={() => setView("edit")}
+            onRequestLock={() => setView("document")}
             hasOriginal={hasOriginal}
             view={view}
             onViewChange={setView}
@@ -974,30 +965,7 @@ export default function ReportPage() {
               />
             </div>
           ) : (
-            <>
-            {view === "document" && (
-              <div className="relative flex min-h-0 flex-1 flex-col">
-                {/* The text exactly as checked: never takes saved edits, always read-only. */}
-                <DocumentCanvas
-                  rendered={rendered}
-                  colorIndexByMatch={colorIndexByMatch}
-                  activeMatchId={focusMatchId}
-                  focusTick={focusTick}
-                  showHighlights={showSourceHighlights}
-                  onSelectMatch={handleSelectMatch}
-                  onClearSelection={clearSelection}
-                  locked
-                  onInput={ignoreInput}
-                  onPageChange={handlePageChange}
-                  resetKey={resetKey}
-                  editorRef={documentViewEditorRef}
-                  overLimitOffset={overLimitOffset}
-                  aiFlaggedPassageIds={shownAiFlaggedIds}
-                  activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
-                />
-              </div>
-            )}
-            <div className={cn("relative min-h-0 flex-1 flex-col", view === "edit" ? "flex" : "hidden")}>
+            <div className="relative flex min-h-0 flex-1 flex-col">
               <DocumentCanvas
                 ref={canvasRef}
                 rendered={rendered}
@@ -1017,10 +985,9 @@ export default function ReportPage() {
                 activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
               />
             </div>
-            </>
           )}
 
-          {view === "edit" ? (
+          {showsText ? (
             <WordCountPill
               words={stats.words}
               characters={stats.characters}
@@ -1033,8 +1000,8 @@ export default function ReportPage() {
             <WordCountPill
               words={originalStats.words}
               characters={originalStats.characters}
-              page={view === "document" ? pageState.page : originalPageState.page}
-              pageCount={view === "document" ? pageState.pageCount : originalPageState.pageCount}
+              page={originalPageState.page}
+              pageCount={originalPageState.pageCount}
               dirty={false}
               locked
             />

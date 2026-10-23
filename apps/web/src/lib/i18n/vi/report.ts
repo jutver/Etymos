@@ -39,7 +39,6 @@ export const report: Record<string, string> = {
   "Delete column": "Xóa cột",
   "Delete row": "Xóa hàng",
   "Document": "Tài liệu",
-  "Edit": "Chỉnh sửa",
   "Document formatting": "Định dạng tài liệu",
   "Document name": "Tên tài liệu",
   "Document text": "Nội dung tài liệu",
@@ -121,8 +120,6 @@ export const report: Record<string, string> = {
   "Teal": "Xanh ngọc",
   "Text colour": "Màu chữ",
   "Text colour {{label}}": "Màu chữ {{label}}",
-  "The document can only be edited in the Edit tab. Switch to it in the toolbar, then try again.":
-    "Chỉ có thể chỉnh sửa tài liệu ở tab Chỉnh sửa. Hãy chuyển sang tab đó trên thanh công cụ, rồi thử lại.",
   "The flagged sentence now reads as your rewrite. Save to keep this version.":
     "Câu bị đánh dấu giờ đã là bản viết lại của bạn. Hãy lưu để giữ phiên bản này.",
   "The new name is shown locally but could not be saved.": "Tên mới chỉ hiển thị tại máy này và chưa được lưu.",
@@ -131,6 +128,7 @@ export const report: Record<string, string> = {
   "Undo": "Hoàn tác",
   "Unlock": "Mở khóa",
   "Unlock editing": "Mở khóa chỉnh sửa",
+  "Unlock editing from the toolbar, then try again.": "Hãy mở khóa chỉnh sửa trên thanh công cụ, rồi thử lại.",
   "Unsaved": "Chưa lưu",
   "Upgrade to catch paraphrased and reworded copying too.": "Nâng cấp để phát hiện cả việc sao chép có diễn đạt lại.",
   "Upgrade to see which paragraphs look AI-written.": "Nâng cấp để xem đoạn nào có vẻ do AI viết.",
