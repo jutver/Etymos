@@ -36,7 +36,10 @@ export interface DocBlock {
   /** Present when this block was derived from a backend/Supabase passage. */
   passage?: DocPassage;
   spans: PassageSpan[];
-  level?: 1 | 2 | 3;
+  level?: 1 | 2 | 3 | 4;
+  /** Set on a heading that is the document's title or subtitle (a "title"
+   * passage), which is styled apart from the section headings. */
+  variant?: "title" | "subtitle";
   listType?: "bullet" | "number";
   table?: TableData;
   imageUrl?: string;
@@ -89,9 +92,18 @@ export function blocksFromRendered(rendered: RenderedPassage[]): DocBlock[] {
   return rendered.map(({ passage, spans }) => {
     const kind = kindFromBlockType(passage.blockType);
     const block: DocBlock = { id: passage.id, kind, passage, spans };
-    if (kind === "heading") block.level = passage.blockType === "title" ? 1 : (passage.level ?? 2);
+    if (kind === "heading" && passage.blockType === "title") {
+      block.level = 1;
+      block.variant = passage.level === 2 ? "subtitle" : "title";
+    } else if (kind === "heading") {
+      block.level = passage.level ?? 2;
+    }
     if (kind === "list_item") block.listType = passage.listType ?? "bullet";
-    if (kind === "table") block.table = tableDataFromRows(passage.tableRows, passage.text);
+    if (kind === "table") {
+      block.table = tableDataFromRows(passage.tableRows, passage.text);
+      // A table read only as a picture of itself (see DocPassage.imageUrl).
+      if (passage.imageUrl) block.imageUrl = passage.imageUrl;
+    }
     if (kind === "image") {
       block.imageUrl = passage.imageUrl;
       block.imageCaption = passage.text;

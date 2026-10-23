@@ -223,6 +223,10 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
         "[&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-h2 [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:text-navy-900",
         "[&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-h3 [&_h2]:font-bold [&_h2]:leading-tight [&_h2]:text-navy-900",
         "[&_h3]:mb-2.5 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:leading-tight [&_h3]:text-navy-900",
+        "[&_h4]:mb-2 [&_h4]:mt-5 [&_h4]:font-semibold [&_h4]:leading-snug [&_h4]:text-navy-900",
+        // The document's title and subtitle, above the section headings.
+        "[&_h1[data-variant=title]]:mb-3 [&_h1[data-variant=title]]:mt-0 [&_h1[data-variant=title]]:text-h1",
+        "[&_p[data-variant=subtitle]]:mb-8 [&_p[data-variant=subtitle]]:text-xl [&_p[data-variant=subtitle]]:font-medium [&_p[data-variant=subtitle]]:leading-snug [&_p[data-variant=subtitle]]:text-ink-600",
         "[&_ul]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-7 [&_ol]:mb-1.5 [&_ol]:list-decimal [&_ol]:pl-7",
         "[&_li]:mb-0",
         locked && "cursor-default caret-transparent select-text",

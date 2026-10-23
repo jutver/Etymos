@@ -49,6 +49,7 @@ backend/storage/marker_previews
 .npm-cache
 graphify-out/
 diagrams/
+brag-output*/
 .mcp.json
 *.md
 !docs/**/*.md

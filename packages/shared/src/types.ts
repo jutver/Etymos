@@ -116,8 +116,10 @@ export interface DocPassage {
    * pasted-text check path (which has no structure to report) keep working
    * unchanged. */
   blockType?: DocBlockType;
-  /** Heading level 1-3, meaningful only when `blockType === "heading"`. */
-  level?: 1 | 2 | 3;
+  /** Heading level 1-4 when `blockType === "heading"` (1 a chapter/part,
+   * 2 a section, 3 a subsection, 4 deeper). When `blockType === "title"`,
+   * 1 is the main title and 2 a subtitle. */
+  level?: 1 | 2 | 3 | 4;
   /** Bullet vs. numbered, meaningful only when `blockType === "list_item"`. */
   listType?: "bullet" | "number";
   /** 1-based source page number (PDF page, or a synthetic bucket for
@@ -130,8 +132,10 @@ export interface DocPassage {
   page?: number;
   /** Grid contents, meaningful only when `blockType === "table"`. */
   tableRows?: string[][];
-  /** Supabase Storage URL for an extracted image, meaningful only when
-   * `blockType === "image"`. Undefined when extraction/upload failed, the
+  /** Supabase Storage URL for an extracted image, meaningful when
+   * `blockType === "image"`, or on a "table" whose grid could not be read
+   * reliably (a rotated table, merged cells): the Document view then shows
+   * this picture of the table instead of the grid. Undefined when extraction/upload failed, the
    * source document had no image at this position, or the report predates
    * image extraction — the Document view falls back to a placeholder box
    * in that case (see DocumentCanvas's "image" case). */
@@ -192,6 +196,20 @@ export interface MatchedSource {
    * reader's language. Absent for LLM-written explanations and old reports:
    * `explanation` is then shown as stored. */
   explanationFacts?: MatchExplanationFacts;
+  /** Where the match sits on the uploaded PDF's pages (backend
+   * pdf_geometry.py): the Original view draws these boxes instead of
+   * searching the page text. Absent for .docx uploads, pages the PDF
+   * rotates, and reports checked before this existed. */
+  pdfRects?: PdfRect[];
+}
+
+/** A box on a PDF page, in PDF points from the page's top-left corner. */
+export interface PdfRect {
+  page: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
 export interface MatchExplanationFacts {
@@ -224,6 +242,8 @@ export interface AiDetectionSegment {
   /** The detector's three measurements for this paragraph (absent on reports
    * checked before they were stored) — lets the UI explain the score. */
   features?: AiSegmentFeatures;
+  /** Where the paragraph sits on the uploaded PDF's pages (see MatchedSource.pdfRects). */
+  pdfRects?: PdfRect[];
 }
 
 export interface AiSegmentFeatures {

@@ -99,9 +99,9 @@ def _extract_and_upload_images(report_id: str, report: dict[str, Any], user_id: 
     blocks = document.get("blocks") or []
 
     try:
+        # Figures, and tables shown as a picture of themselves.
         image_blocks = [
-            b for b in blocks if isinstance(b, dict) and b.get("type") == "image"
-            and b.get("_image_bytes") is not None
+            b for b in blocks if isinstance(b, dict) and b.get("_image_bytes") is not None
         ]
         if not image_blocks:
             return
@@ -278,24 +278,36 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 "source_url": m.get("source_url") or m.get("source_pdf_url") or None,
                 "source_year": str(m.get("source_year") or "").strip() or None,
                 "source_doi": m.get("source_doi") or None,
+                # supabase/migrations/20261023010000_document_match_pdf_rects.sql:
+                # where the match sits on the PDF's pages (pdf_geometry.py),
+                # so the Original view highlights it exactly after a reload.
+                "pdf_rects": m.get("pdf_rects") or None,
             })
         # Idempotent re-save: clear any previous match rows for this
         # document before inserting the current set.
         client.table("document_matches").delete().eq("document_id", report_id).execute()
         if rows:
-            try:
-                client.table("document_matches").insert(rows).execute()
-            except Exception:
-                # Most likely the explanation_facts migration hasn't been
-                # applied yet: keep the matches, just without the new columns.
-                logger.warning(
-                    "Inserting document_matches with explanation facts failed for report_id=%s; "
-                    "retrying without them.", report_id, exc_info=True,
-                )
-                new_columns = {"explanation_facts", "source_url", "source_year", "source_doi"}
-                client.table("document_matches").insert(
-                    [{k: v for k, v in row.items() if k not in new_columns} for row in rows]
-                ).execute()
+            # Newer columns are dropped one migration at a time when their
+            # migration hasn't been applied yet: the matches are kept, just
+            # without what the database can't store.
+            attempts = [
+                set(),
+                {"pdf_rects"},
+                {"pdf_rects", "explanation_facts", "source_url", "source_year", "source_doi"},
+            ]
+            for number, dropped in enumerate(attempts):
+                try:
+                    client.table("document_matches").insert(
+                        [{k: v for k, v in row.items() if k not in dropped} for row in rows]
+                    ).execute()
+                    break
+                except Exception:
+                    if number == len(attempts) - 1:
+                        raise
+                    logger.warning(
+                        "Inserting document_matches failed for report_id=%s; retrying without %s.",
+                        report_id, sorted(attempts[number + 1]), exc_info=True,
+                    )
     except Exception:
         logger.exception("Failed to persist document_matches for report_id=%s", report_id)
 
@@ -381,15 +393,22 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             try:
                 client.table("document_passages").insert(passage_rows).execute()
             except Exception:
-                # Most likely the text_marks migration hasn't been applied
-                # yet: keep the passages, just without inline formatting.
+                # Most likely a migration hasn't been applied yet: the
+                # text_marks column, or level 4 headings (20261023000000_
+                # document_passage_level_4.sql). Keep the passages, without
+                # inline formatting and with level-4 headings as level 3.
                 logger.warning(
-                    "Inserting document_passages with text_marks failed for report_id=%s; "
-                    "retrying without inline formatting.", report_id, exc_info=True,
+                    "Inserting document_passages failed for report_id=%s; "
+                    "retrying without inline formatting and level-4 headings.",
+                    report_id, exc_info=True,
                 )
-                client.table("document_passages").insert(
-                    [{k: v for k, v in row.items() if k != "text_marks"} for row in passage_rows]
-                ).execute()
+                client.table("document_passages").insert([
+                    {
+                        **{k: v for k, v in row.items() if k != "text_marks"},
+                        "level": min(row["level"], 3) if row.get("level") else row.get("level"),
+                    }
+                    for row in passage_rows
+                ]).execute()
     except Exception:
         logger.exception("Failed to persist document_passages for report_id=%s", report_id)
 

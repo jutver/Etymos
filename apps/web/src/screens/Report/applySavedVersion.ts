@@ -5,7 +5,7 @@
 //
 // It copies text block by block instead of replacing the editor's whole
 // innerHTML: React keeps owning each block's wrapper and editable element, so
-// the Document tab stays read-only, the Edit tab editable, and the drag
+// reading mode stays read-only, editing stays editable, and the drag
 // handles keep working — the result is the same as if the user had typed the
 // saved text in again. Block ids are passage ids, so they match across mounts.
 // Tables (React state) and block order are not restored.

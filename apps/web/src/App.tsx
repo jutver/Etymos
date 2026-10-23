@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { PublicShell } from "./components/layout/PublicShell";
 import { AppShell } from "./components/layout/AppShell";
@@ -47,6 +47,14 @@ import {
   SupportTicketPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
+
+/** A fresh Report screen per document: its editor holds the text as live,
+ * uncontrolled DOM, so moving from one report straight to another must not
+ * reuse it. */
+function ReportRoute() {
+  const { id } = useParams();
+  return <ReportPage key={id} />;
+}
 
 /** Where a signed-in user belongs whenever the URL doesn't name a real screen. */
 const APP_HOME = "/upload";
@@ -172,7 +180,7 @@ function App() {
             <Route element={<AppShellWithBanner />}>
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/analyzing" element={<AnalyzingPage />} />
-              <Route path="/report/:id" element={<ReportPage />} />
+              <Route path="/report/:id" element={<ReportRoute />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/trash" element={<TrashPage />} />

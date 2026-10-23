@@ -52,6 +52,8 @@ export interface BackendReport {
     input_offset?: BackendMatchInputOffset;
     /** Offsets of `source_sentence` inside its own source chunk. */
     source_offset?: BackendMatchSourceOffset;
+    /** Boxes of the match on the uploaded PDF (backend pdf_geometry.py). */
+    pdf_rects?: unknown;
   }>;
   coverage?: Record<string, unknown>;
   /** Present since the scoring fix; carries the new figure's provenance plus

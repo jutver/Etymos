@@ -164,7 +164,7 @@ export interface ReportTopBarProps {
   onRename: (next: string) => void;
   onGoHome: () => void;
   locked: boolean;
-  /** Omit to hide the lock button (the Report screen edits via the Edit tab). */
+  /** Omit to hide the lock button (the Report screen unlocks editing from FormatToolbar). */
   onToggleLock?: () => void;
   dirty: boolean;
   saving: boolean;
@@ -242,7 +242,7 @@ export function ReportTopBar({
             )}
           </VersionHistoryMenu>
 
-          {/* Editing now happens in the toolbar's "Edit" tab, so the Report
+          {/* Editing is unlocked from FormatToolbar, so the Report
               screen no longer passes a lock toggle; the button stays for any
               caller that still does. */}
           {onToggleLock && (

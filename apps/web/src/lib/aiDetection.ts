@@ -5,6 +5,7 @@
 // way. Tolerant on purpose: anything unrecognised becomes `undefined` — the
 // report then simply shows no AI chip — rather than throwing.
 import type { AiDetection, AiDetectionLevel, AiDetectionSegment, AiSegmentFeatures } from "@etymos/shared";
+import { parsePdfRects } from "./pdfRects";
 import { t, tr } from "./i18n";
 
 const LEVELS: readonly AiDetectionLevel[] = ["low", "possible", "likely"];
@@ -54,6 +55,7 @@ export function parseAiDetection(raw: unknown): AiDetection | undefined {
           score: num(s.score),
           excerpt: typeof s.excerpt === "string" ? s.excerpt : undefined,
           features: parseSegmentFeatures(s.features),
+          pdfRects: parsePdfRects(s.pdf_rects),
         }))
     : [];
 

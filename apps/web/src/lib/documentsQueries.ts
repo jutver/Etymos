@@ -11,6 +11,7 @@ import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSourc
 import type { DocumentVersion, VersionCheck } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
 import { parseExplanationFacts } from "./matchExplanation";
+import { parsePdfRects } from "./pdfRects";
 import { tr } from "./i18n";
 
 interface DocumentRow {
@@ -74,6 +75,8 @@ interface DocumentMatchRow {
   source_url?: string | null;
   source_year?: string | null;
   source_doi?: string | null;
+  // Added by supabase/migrations/20261023010000_document_match_pdf_rects.sql.
+  pdf_rects?: unknown;
 }
 
 interface DocumentPassageRow {
@@ -178,6 +181,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     sourceUrl: m.source_url || undefined,
     sourceYear: m.source_year || undefined,
     sourceDoi: m.source_doi || undefined,
+    pdfRects: parsePdfRects(m.pdf_rects),
   }));
 
   const passages: DocPassage[] = passageRows.map((p) => ({

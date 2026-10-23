@@ -11,8 +11,8 @@ import {
   ListBullets,
   ListNumbers,
   LockSimple,
+  LockSimpleOpen,
   PaintBucket,
-  PencilSimple,
   Table,
   TextAlignCenter,
   TextAlignJustify,
@@ -181,15 +181,17 @@ function Divider() {
   return <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-line" />;
 }
 
+/** "edit" is the Document tab unlocked: the same text, made editable with the
+ * formatting tools. Only "document" and "original" are tabs. */
 export type ReportView = "document" | "original" | "edit";
 
 export interface FormatToolbarProps {
   locked: boolean;
   onRequestUnlock: () => void;
+  /** Back to reading mode from editing. */
+  onRequestLock: () => void;
   /** The Original tab is only rendered when the document actually has an original PDF to show. */
   hasOriginal: boolean;
-  /** "document" is the read-only extracted text, "edit" the same text made
-   * editable with the formatting tools. */
   view: ReportView;
   onViewChange: (view: ReportView) => void;
   /** Plagiarism highlights on/off in the Document view. The switch only
@@ -211,6 +213,7 @@ export interface FormatToolbarProps {
 export function FormatToolbar({
   locked,
   onRequestUnlock,
+  onRequestLock,
   hasOriginal,
   view,
   onViewChange,
@@ -221,7 +224,8 @@ export function FormatToolbar({
   onInsertTable,
 }: FormatToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
-  const viewPill = usePill<HTMLDivElement>(view);
+  const tab = view === "original" ? "original" : "document";
+  const viewPill = usePill<HTMLDivElement>(tab);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -233,28 +237,30 @@ export function FormatToolbar({
       aria-controls="report-document-editor"
       className="flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-thin"
     >
-      <div ref={viewPill.ref} className="relative flex items-center rounded-full bg-surface-muted p-0.5">
-        <PillIndicator box={viewPill.box} className="bg-white shadow-sm" />
-        {(hasOriginal ? (["document", "original", "edit"] as const) : (["document", "edit"] as const)).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => onViewChange(v)}
-            aria-pressed={view === v}
-            data-pill-active={view === v}
-            className={cn(
-              "relative rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-              view === v ? "text-ink-900" : "text-ink-500 hover:text-ink-900",
-            )}
-          >
-            <span className="relative flex items-center gap-1">
-              {v === "edit" && <PencilSimple size={12} weight="bold" />}
-              {v === "document" ? t("Document") : v === "original" ? t("Original") : t("Edit")}
-            </span>
-          </button>
-        ))}
-      </div>
-      <Divider />
+      {hasOriginal && (
+        <>
+          <div ref={viewPill.ref} className="relative flex items-center rounded-full bg-surface-muted p-0.5">
+            <PillIndicator box={viewPill.box} className="bg-white shadow-sm" />
+            {(["document", "original"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                // Coming back to Document keeps editing on if it was on.
+                onClick={() => v !== tab && onViewChange(v)}
+                aria-pressed={tab === v}
+                data-pill-active={tab === v}
+                className={cn(
+                  "relative rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                  tab === v ? "text-ink-900" : "text-ink-500 hover:text-ink-900",
+                )}
+              >
+                <span className="relative">{v === "document" ? t("Document") : t("Original")}</span>
+              </button>
+            ))}
+          </div>
+          <Divider />
+        </>
+      )}
 
       {view !== "original" && onToggleHighlights && (
         <>
@@ -300,6 +306,12 @@ export function FormatToolbar({
           {t("Reading mode — unlock to edit")}</button>
       ) : (
         <>
+          <ToolButton label={t("Lock editing")} onAction={onRequestLock}>
+            <LockSimpleOpen size={16} />
+          </ToolButton>
+
+          <Divider />
+
           <ToolButton label={t("Undo")} onAction={() => exec("undo")}>
             <ArrowUUpLeft size={16} />
           </ToolButton>

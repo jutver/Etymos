@@ -19,6 +19,7 @@ import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQu
 import { trackEvent } from "../../lib/analytics";
 import { parseExplanationFacts } from "../../lib/matchExplanation";
 import { parseAiDetection } from "../../lib/aiDetection";
+import { parsePdfRects } from "../../lib/pdfRects";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
 
@@ -117,8 +118,8 @@ const KNOWN_BLOCK_TYPES = new Set(["title", "heading", "paragraph", "list_item",
  * for inputs that don't carry a `document` (the pasted-text check path,
  * and any report generated before this shipped).
  */
-function toHeadingLevel(level: number | undefined): 1 | 2 | 3 | undefined {
-  return level === 1 || level === 2 || level === 3 ? level : undefined;
+function toHeadingLevel(level: number | undefined): 1 | 2 | 3 | 4 | undefined {
+  return level === 1 || level === 2 || level === 3 || level === 4 ? level : undefined;
 }
 
 function toListType(listType: string | undefined): "bullet" | "number" | undefined {
@@ -369,6 +370,7 @@ export default function AnalyzingPage() {
               explanation: match.explanation ?? tl("Matched {{label}}.", { label: match.label.replace(/_/g, " ") }),
               // Lets MatchCard write the explanation in the UI language (lib/matchExplanation.ts).
               explanationFacts: parseExplanationFacts(match.explanation_facts),
+              pdfRects: parsePdfRects(match.pdf_rects),
               rewriteSuggestions: [],
               // `input_offset` is omitted (never zeroed) when the backend could
               // not localise the sentence, so its presence is the capability
