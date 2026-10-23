@@ -434,6 +434,16 @@ def build_document(
                     # Inline bold/italic, offsets relative to this block's
                     # start (the hint text IS the block text).
                     block["marks"] = hint["marks"]
+                if hint.get("_geometry"):
+                    # Where the block's lines sit on the PDF page; turned
+                    # into match rectangles by pdf_geometry.py, then dropped.
+                    block["_geometry"] = hint["_geometry"]
+                if hint.get("_image_bytes") is not None:
+                    # A table shown as a picture of itself (extractor.
+                    # _layout_item_blocks); same in-process carrier as image
+                    # blocks, turned into `image_url` by report_store.
+                    block["_image_bytes"] = hint["_image_bytes"]
+                    block["_image_ext"] = hint.get("_image_ext") or "png"
             section_blocks.append(block)
 
         # Only interleave images when the text zip above was reliable

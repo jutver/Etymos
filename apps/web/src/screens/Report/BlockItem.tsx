@@ -42,6 +42,22 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
       )
     : undefined;
 
+  if (block.kind === "table" && block.imageUrl) {
+    // The grid could not be read reliably (a rotated table, merged cells),
+    // so the table is shown as it looks on the page. Its text still counts
+    // in the check.
+    return (
+      <div contentEditable={false} className="my-5 flex justify-center">
+        <img
+          src={block.imageUrl}
+          alt={t("Table")}
+          title={t("Shown as an image: this table's layout could not be turned into editable cells")}
+          className="max-w-full rounded-[2px]"
+        />
+      </div>
+    );
+  }
+
   if (block.kind === "table" && block.table) {
     return (
       <TableBlock
@@ -57,7 +73,9 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
     if (block.imageUrl) {
       return (
         <div contentEditable={false} className="my-5 flex justify-center">
-          <img src={block.imageUrl} alt="" className="max-w-full rounded-[2px]" />
+          {/* Tall figures (a pipeline diagram) are capped to the screen, as
+              they would fit on the page. */}
+          <img src={block.imageUrl} alt="" className="max-h-[75vh] max-w-full rounded-[2px] object-contain" />
         </div>
       );
     }
@@ -84,9 +102,12 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
   } as const;
 
   if (block.kind === "heading") {
+    if (block.variant === "title") return <h1 {...editableProps} data-variant="title">{text}</h1>;
+    if (block.variant === "subtitle") return <p {...editableProps} data-variant="subtitle">{text}</p>;
     const level = block.level ?? 2;
     if (level === 1) return <h1 {...editableProps}>{text}</h1>;
     if (level === 3) return <h3 {...editableProps}>{text}</h3>;
+    if (level === 4) return <h4 {...editableProps}>{text}</h4>;
     return <h2 {...editableProps}>{text}</h2>;
   }
 

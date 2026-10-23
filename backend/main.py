@@ -125,7 +125,7 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
     print("\n===== EXPERIMENT =====")
     print(experiment[:500])
 
-    return _run_matching_pipeline(
+    report = _run_matching_pipeline(
         sections=sections,
         document=document,
         input_text=input_text,
@@ -133,6 +133,11 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
         section_texts=section_texts,
         progress_callback=progress_callback,
     )
+    # Where each match sits on the PDF's pages, for the Original view.
+    from pdf_geometry import attach_pdf_rects
+
+    attach_pdf_rects(report, pdf_path)
+    return report
 
 
 def check_docx_plagiarism(docx_path, progress_callback=None):

@@ -150,6 +150,9 @@ def build_edited_document(
         if not is_changed:
             if passage.get("table_rows") is not None:
                 doc_block["rows"] = passage["table_rows"]
+            if block_type == "table" and passage.get("image_url"):
+                # A table shown as a picture of itself keeps its picture.
+                doc_block["image_url"] = passage["image_url"]
             if passage.get("text_marks"):
                 doc_block["marks"] = passage["text_marks"]
         doc_blocks.append(doc_block)

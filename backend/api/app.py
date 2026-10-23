@@ -394,6 +394,22 @@ def user_error_message(exc: Exception) -> str:
     return GENERIC_CHECK_ERROR
 
 
+def _upload_docx_rendering(user_id: str, report_id: str, docx_path: Path) -> None:
+    """Store a PDF rendering of a checked .docx where a PDF upload's original
+    goes, when LibreOffice is available. Never raises."""
+    from docx_to_pdf import convert_docx_to_pdf
+
+    work_dir = Path(tempfile.mkdtemp(prefix="docx-pdf-"))
+    try:
+        converted = convert_docx_to_pdf(docx_path, work_dir)
+        if converted is not None:
+            _upload_pdf(user_id, report_id, converted)
+    except Exception:
+        logger.exception("Could not store a PDF rendering for report_id=%s", report_id)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
                  balance_source: BalanceSource, input_type: Literal["pdf", "docx"] = "pdf") -> None:
     """
@@ -402,13 +418,11 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
     reached exclusively via the `/api/check/pdf` endpoint below, which now
     accepts both extensions — see create_pdf_check().
 
-    Original-PDF Storage upload (`_upload_pdf`) only happens for actual
-    PDFs: a .docx has no PDF rendering to show in the Report page's
-    Original view (owned by MarkerDocumentViewer.tsx, via the marker-pdf
-    preview kicked off right below), so that view simply has nothing to
-    switch to for a docx-sourced report — the Document view is the only
-    view, which is the correct degraded behaviour rather than uploading the
-    wrong bytes under a `.pdf`-suffixed Storage key.
+    The original PDF is stored (`_upload_pdf`) for the Report page's
+    Original view. A .docx is first rendered to PDF with LibreOffice
+    (docx_to_pdf.py); without LibreOffice it gets no Original view and the
+    Document view is the only view, rather than the wrong bytes being
+    stored under a `.pdf`-suffixed Storage key.
     """
     callback = make_progress_callback(job_id)
 
@@ -441,6 +455,9 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
                 logger.exception(
                     "Failed to start marker-pdf preview job for report_id=%s", report_id
                 )
+
+        if user_id is not None and input_type == "docx":
+            _upload_docx_rendering(user_id, report_id, Path(pdf_path))
 
         # Charge before reporting "completed", so a client that re-reads the
         # balances as soon as the job settles already sees the check spent.

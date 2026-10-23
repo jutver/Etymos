@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FileMagnifyingGlass } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
+import type { PdfRect } from "@etymos/shared";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
 import { changedRecheckQuote, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -48,7 +49,7 @@ const DOCUMENTS_BUCKET = "documents";
 // Stable empties for the highlight kind that is switched off (see
 // highlightMode), so the PDF viewer doesn't re-search on every render.
 const NO_MATCHES: MatchedSource[] = [];
-const NO_AI_SEGMENTS: { id: string; start: number; end: number; excerpt: string; score: number }[] = [];
+const NO_AI_SEGMENTS: { id: string; start: number; end: number; excerpt: string; score: number; pdfRects?: PdfRect[] }[] = [];
 const NO_PASSAGE_IDS = new Set<string>();
 // Short-lived on purpose (regenerated fresh every time this screen loads a
 // historical document — see the signed-URL effect below), matching the
@@ -165,8 +166,14 @@ export default function ReportPage() {
   const [signedPdfUrl, setSignedPdfUrl] = useState<string | null>(null);
   const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
 
+  // A .docx has a PDF there only when the server could render one (backend
+  // docx_to_pdf.py, needs LibreOffice). Without it the document simply has
+  // no Original view - not an error.
+  const isDocx = /\.docx$/i.test(doc?.fileName ?? "");
   useEffect(() => {
-    if (!id || cachedDoc || !doc || !doc.fileName || !user) {
+    // A fresh check of a PDF already has the file in memory (pdfUrl); a fresh
+    // .docx check doesn't, but its rendering may be in Storage by now.
+    if (!id || cachedDoc?.pdfUrl || !doc || !doc.fileName || !user) {
       setSignedPdfUrl(null);
       setPdfFetchError(null);
       return;
@@ -181,7 +188,7 @@ export default function ReportPage() {
         if (error || !data?.signedUrl) {
           setSignedPdfUrl(null);
           setPdfFetchError(
-            error?.message ?? tl("Could not create a preview link for the original PDF."),
+            isDocx ? null : (error?.message ?? tl("Could not create a preview link for the original PDF.")),
           );
           return;
         }
@@ -190,7 +197,7 @@ export default function ReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, cachedDoc, doc, user]);
+  }, [id, cachedDoc, doc, user, isDocx]);
 
   const effectivePdfUrl = cachedDoc?.pdfUrl || signedPdfUrl || undefined;
 
@@ -370,7 +377,7 @@ export default function ReportPage() {
     () =>
       (doc?.aiDetection?.available ? doc.aiDetection.segments : [])
         .filter((s) => s.score >= 60)
-        .map((s) => ({ id: `${s.start}-${s.end}`, start: s.start, end: s.end, excerpt: s.excerpt ?? "", score: s.score })),
+        .map((s) => ({ id: `${s.start}-${s.end}`, start: s.start, end: s.end, excerpt: s.excerpt ?? "", score: s.score, pdfRects: s.pdfRects })),
     [doc],
   );
   // Which passage (Document view block) each flagged segment falls inside —

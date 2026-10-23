@@ -11,6 +11,8 @@ import {
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import type { MatchedSource, Severity } from "../lib/types";
+import type { PdfRect } from "@etymos/shared";
+import { pdfRectPages, pdfRectsOnPage } from "../lib/pdfRects";
 import { extractWordTokens, findFuzzyMatch, normalize, normalizeWithMap } from "../lib/textMatch";
 import { t, tr } from "../lib/i18n";
 
@@ -43,7 +45,7 @@ type PlagiarismPdfViewerProps = {
    * matches are searched for `userSnippet` — this viewer only ever sees
    * rendered PDF text, never the backend's character offsets. Optional so
    * existing callers (e.g. Upload's bare file preview) don't need it. */
-  aiSegments?: { id: string; excerpt: string; score: number }[];
+  aiSegments?: { id: string; excerpt: string; score: number; pdfRects?: PdfRect[] }[];
   activeAiSegmentId?: string | null;
   onAiSegmentClick?: (segmentId: string) => void;
   /** How the page is sized to start with: the full width of the viewer
@@ -311,8 +313,11 @@ export function PlagiarismPdfViewer({
   const measurePage = useCallback(
     (page: number) => {
       const container = pageContainerRefs.current.get(page);
-      const locations = matchLocationsCache.current[page];
-      if (!container || !locations || locations.length === 0) {
+      const locations = matchLocationsCache.current[page] ?? [];
+      // Matches the backend placed on the page (MatchedSource.pdfRects): their
+      // boxes are drawn as given, scaled to the zoom - no text search.
+      const placed = matches.filter((m) => m.pdfRects?.some((r) => r.page === page));
+      if (!container || (locations.length === 0 && placed.length === 0)) {
         setPageRects((prev) => {
           if (!(page in prev)) return prev;
           const next: Record<number, HighlightRect[]> = {};
@@ -325,12 +330,19 @@ export function PlagiarismPdfViewer({
         return;
       }
       const spans = container.querySelectorAll<HTMLElement>("span");
-      if (spans.length === 0) {
+      if (spans.length === 0 && placed.length === 0) {
         setPageRects((prev) => ({ ...prev, [page]: [] }));
         return;
       }
       const containerRect = container.getBoundingClientRect();
       const rects: HighlightRect[] = [];
+
+      for (const m of placed) {
+        if (m.startOffset != null && m.startOffset >= overLimitOffset) continue;
+        for (const box of pdfRectsOnPage(m.pdfRects ?? [], page, scale)) {
+          rects.push({ matchId: m.id, severity: m.severity, ...box });
+        }
+      }
 
       for (const loc of locations) {
         // --- Ẩn highlight của các match đã vượt giới hạn số từ ---------------
@@ -375,7 +387,7 @@ export function PlagiarismPdfViewer({
 
       setPageRects((prev) => ({ ...prev, [page]: dedupeOverlappingRects(rects) }));
     },
-    [matchById, overLimitOffset],
+    [matches, matchById, overLimitOffset, scale],
   );
 
   // Song song measurePage() ở trên, nhưng đo vị trí pixel của đoạn AI-flagged
@@ -385,8 +397,9 @@ export function PlagiarismPdfViewer({
   // khái niệm đó.
   const measureAiPage = useCallback((page: number) => {
     const container = pageContainerRefs.current.get(page);
-    const locations = aiLocationsCache.current[page];
-    if (!container || !locations || locations.length === 0) {
+    const locations = aiLocationsCache.current[page] ?? [];
+    const placed = aiSegments.filter((s) => s.pdfRects?.some((r) => r.page === page));
+    if (!container || (locations.length === 0 && placed.length === 0)) {
       setAiPageRects((prev) => {
         if (!(page in prev)) return prev;
         const next: Record<number, AiHighlightRect[]> = {};
@@ -399,12 +412,18 @@ export function PlagiarismPdfViewer({
       return;
     }
     const spans = container.querySelectorAll<HTMLElement>("span");
-    if (spans.length === 0) {
+    if (spans.length === 0 && placed.length === 0) {
       setAiPageRects((prev) => ({ ...prev, [page]: [] }));
       return;
     }
     const containerRect = container.getBoundingClientRect();
     const rects: AiHighlightRect[] = [];
+
+    for (const s of placed) {
+      for (const box of pdfRectsOnPage(s.pdfRects ?? [], page, scale)) {
+        rects.push({ segmentId: s.id, ...box });
+      }
+    }
 
     for (const loc of locations) {
       const startSpan = spans[loc.itemStart];
@@ -436,7 +455,7 @@ export function PlagiarismPdfViewer({
     }
 
     setAiPageRects((prev) => ({ ...prev, [page]: rects }));
-  }, []);
+  }, [aiSegments, scale]);
 
   // --- 3. Quét toàn bộ văn bản để biết trang nào có match nào, và lưu lại vị
   //         trí "logic" (item + offset ký tự) của từng match. KHÔNG tính toạ
@@ -466,7 +485,17 @@ export function PlagiarismPdfViewer({
         const aiByPage: Record<number, string[]> = {};
         const aiLocCache: Record<number, AiSegmentLocation[]> = {};
 
+        // Matches and paragraphs the backend already placed need no search:
+        // only their pages are recorded (for jumping to them and counts).
+        for (const m of matches) {
+          for (const p of pdfRectPages(m.pdfRects ?? [])) (byPage[p] ??= []).push(m.id);
+        }
+        for (const s of aiSegments) {
+          for (const p of pdfRectPages(s.pdfRects ?? [])) (aiByPage[p] ??= []).push(s.id);
+        }
+
         const normalizedSnippets = matches
+          .filter((m) => !m.pdfRects?.length)
           .filter((m) => m.userSnippet && m.userSnippet.trim().length > 0)
           .map((m) => ({ id: m.id, severity: m.severity, snippet: normalize(m.userSnippet) }));
 
@@ -474,10 +503,13 @@ export function PlagiarismPdfViewer({
         // bỏ ký tự đó trước khi tìm, không thì indexOf/fuzzy sẽ không bao
         // giờ khớp (trang PDF không có ký tự "…" ở giữa câu).
         const normalizedAiSegments = aiSegments
+          .filter((s) => !s.pdfRects?.length)
           .map((s) => ({ id: s.id, snippet: normalize(s.excerpt.replace(/…$/, "").trim()) }))
           .filter((s) => s.snippet.length >= 8);
 
-        for (let pageIdx = 1; pageIdx <= pdfDoc.numPages; pageIdx++) {
+        // Every match and paragraph placed already: no page text to read.
+        const pagesToSearch = normalizedSnippets.length + normalizedAiSegments.length > 0 ? pdfDoc.numPages : 0;
+        for (let pageIdx = 1; pageIdx <= pagesToSearch; pageIdx++) {
           if (cancelled) return;
           const page = await pdfDoc.getPage(pageIdx);
           const textContent = await page.getTextContent();

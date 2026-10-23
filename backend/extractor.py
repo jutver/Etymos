@@ -1,7 +1,8 @@
-import fitz
 import logging
 import re
-from collections import Counter
+from collections import Counter, defaultdict
+
+import pdf_layout
 
 logger = logging.getLogger(__name__)
 
@@ -168,53 +169,77 @@ def compute_text_marks(pieces, joiner, target_text):
     return marks
 
 
-def extract_lines_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    lines = []
+# Zero-width characters some editors (Google Docs) put after a heading
+# number ("I.\u200b INTRODUCTION"): invisible, but they hide the numbering.
+ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 
-    for page_idx, page in enumerate(doc):
-        data = page.get_text("dict")
 
-        for block in data.get("blocks", []):
-            for line in block.get("lines", []):
-                texts, sizes, fonts = [], [], []
-                bold_flags = []
-                styled_spans = []
+def line_from_layout(raw):
+    """One pdf_layout line as the line dict the rest of this module reads.
+    Span text is stripped and joined with " " - the "text" and "spans"
+    contract build_structured_blocks()/compute_text_marks() rely on."""
+    texts, sizes, fonts = [], [], []
+    bold_flags = []
+    styled_spans = []
 
-                for span in line.get("spans", []):
-                    text = span.get("text", "").strip()
-                    if text:
-                        texts.append(text)
-                        sizes.append(span.get("size", 0))
-                        fonts.append(span.get("font", ""))
-                        # PyMuPDF span flag bit 4 (value 16) = bold.
-                        bold_flags.append(bool(span.get("flags", 0) & 16))
-                        styled_spans.append((
-                            text,
-                            _span_is_bold(span),
-                            _span_is_italic(span),
-                        ))
+    for span in raw.get("spans", []):
+        text = ZERO_WIDTH_RE.sub("", span.get("text", "")).strip()
+        if text:
+            texts.append(text)
+            sizes.append(span.get("size", 0))
+            fonts.append(span.get("font", ""))
+            # PyMuPDF span flag bit 4 (value 16) = bold.
+            bold_flags.append(bool(span.get("flags", 0) & 16))
+            styled_spans.append((
+                text,
+                _span_is_bold(span),
+                _span_is_italic(span),
+            ))
 
-                line_text = " ".join(texts).strip()
+    line_text = " ".join(texts).strip()
+    if not line_text or not sizes:
+        return None
+    line = {
+        "text": line_text,
+        "page": raw["page"],
+        "size": max(sizes),
+        "font": " ".join(fonts),
+        "words": len(line_text.split()),
+        # True when every text span on the line is bold - used by
+        # classify_block_type() to recognise numbered headings set in body
+        # size but bold.
+        "bold": bool(bold_flags) and all(bold_flags),
+        # (text, bold, italic) per span, joined by " " exactly like "text"
+        # above - lets build_structured_blocks() keep inline bold/italic as
+        # block "marks".
+        "spans": styled_spans,
+        # Position on the page (pdf_layout.py): paragraph breaks, page
+        # furniture, and where tables and figures go back into the flow.
+        "bbox": raw.get("bbox"),
+        "block": raw.get("block"),
+        "block_x0": raw.get("block_x0"),
+        "block_x1": raw.get("block_x1"),
+        "page_height": raw.get("page_height"),
+        "exact_position": raw.get("exact_position", False),
+    }
+    if raw.get("caption"):
+        line["caption"] = raw["caption"]
+        line["caption_id"] = raw["caption_id"]
+    return line
 
-                if line_text and sizes:
-                    lines.append({
-                        "text": line_text,
-                        "page": page_idx + 1,
-                        "size": max(sizes),
-                        "font": " ".join(fonts),
-                        "words": len(line_text.split()),
-                        # True when every text span on the line is bold -
-                        # used by classify_block_type() to recognise
-                        # numbered headings set in body size but bold.
-                        "bold": bool(bold_flags) and all(bold_flags),
-                        # (text, bold, italic) per span, joined by " " exactly
-                        # like "text" above - lets build_structured_blocks()
-                        # keep inline bold/italic as block "marks".
-                        "spans": styled_spans,
-                    })
 
+def _lines_from_layout(layout):
+    lines = [line for line in map(line_from_layout, layout["lines"]) if line is not None]
+    for index, line in enumerate(lines):
+        line["idx"] = index
     return lines
+
+
+def extract_lines_from_pdf(pdf_path):
+    """Content lines of a PDF in reading order, without page furniture or
+    the table of contents (see pdf_layout.analyze_pdf). Table and figure
+    text is kept: this is the text-only view."""
+    return _lines_from_layout(pdf_layout.analyze_pdf(pdf_path, media=False))
 
 
 def get_body_font_size(lines):
@@ -674,6 +699,15 @@ def build_heading_candidates(lines):
         if is_probable_title_or_author(line, body_size):
             continue
 
+        # "4. Save the result to disk." - a numbered list item in body text
+        # (body size, not bold, a full sentence), not section 4.
+        list_like = (
+            not line.get("bold")
+            and line.get("size", body_size) < body_size + 0.5
+            and text.rstrip().endswith((".", ";", ","))
+            and is_major_marker(text.split()[0])
+        )
+
         candidate = None
 
         if text.lower().startswith("abstract"):
@@ -684,6 +718,9 @@ def build_heading_candidates(lines):
                 "inline_content": extract_inline_abstract(text),
                 "level": "major"
             }
+
+        elif list_like:
+            pass
 
         elif is_valid_major_heading(text):
             section = section_from_heading(text) or "unknown"
@@ -1142,6 +1179,11 @@ def _looks_bold(line):
     font = (line.get("font") or "").lower()
     return any(token in font for token in BOLD_FONT_TOKENS)
 
+
+def _looks_italic(line):
+    spans = line.get("spans") or []
+    return bool(spans) and all(italic for _text, _bold, italic in spans)
+
 # Section catch-all label, used for any block whose home is the extraction
 # fallback described in extract_structured_sections_from_pdf() below rather
 # than one of the seven recognized academic-paper buckets.
@@ -1196,11 +1238,19 @@ def classify_block_type(line, body_size):
     if (
         word_count <= 12
         and not text.endswith((".", ",", ";"))
+        and _is_clean_heading_rest(text)
+        and SUBSECTION_HEADING_RE.match(text)
+        and (_looks_bold(line) or (_looks_italic(line) and word_count <= 8))
+    ):
+        # "2.1 Data" in bold, or "2.1.1. Encoders" in italics (Interspeech).
+        return "heading", 3, None, text
+
+    if (
+        word_count <= 12
+        and not text.endswith((".", ",", ";"))
         and _looks_bold(line)
         and _is_clean_heading_rest(text)
     ):
-        if SUBSECTION_HEADING_RE.match(text):
-            return "heading", 3, None, text
         if NUMBERED_SECTION_HEADING_RE.match(text) and word_count <= 10:
             return "heading", 2, None, text
 
@@ -1215,6 +1265,33 @@ def classify_block_type(line, body_size):
     return "paragraph", None, None, text
 
 
+def _continues_list_item(item_lines, line):
+    """Whether a body line is the wrapped continuation of a list item: right
+    under it, indented past the item's bullet or number."""
+    first, last = item_lines[0], item_lines[-1]
+    if not first.get("bbox") or not line.get("bbox") or line["page"] != last["page"]:
+        return False
+    size = line.get("size") or 10
+    indent = line["bbox"][0] - first["bbox"][0]
+    gap = line["bbox"][1] - last["bbox"][3]
+    return 0.4 * size < indent < 3 * size and -size < gap < 0.9 * size
+
+
+def _stamp_positions(block, source_lines):
+    indices = [line["idx"] for line in source_lines if line.get("idx") is not None]
+    if indices:
+        block["_first_idx"] = min(indices)
+        block["_last_idx"] = max(indices)
+    # Where each line of the block sits on its page, so a match inside the
+    # block can be highlighted in the original PDF (pdf_geometry.py). An
+    # in-process carrier like `_image_bytes`: never persisted.
+    if source_lines and all(line.get("exact_position") and line.get("bbox") for line in source_lines):
+        block["_geometry"] = [
+            {"page": line["page"], "bbox": list(line["bbox"]), "text": clean_text(line["text"])}
+            for line in source_lines
+        ]
+
+
 def _block_marks(source_lines, block_text):
     pieces = [piece for line in source_lines for piece in (line.get("spans") or [])]
     try:
@@ -1227,11 +1304,16 @@ def _block_marks(source_lines, block_text):
 def build_structured_blocks(section_lines, body_size):
     """
     Turn a list of raw line dicts (already stripped of equation/junk lines)
-    into merged structural blocks: consecutive paragraph lines are merged
-    into one paragraph block (the natural line-wrap of a PDF), while every
+    into merged structural blocks: the wrapped lines of one paragraph are
+    merged into one paragraph block (a new paragraph starts where the
+    layout shows one - see pdf_layout.starts_new_paragraph), while every
     heading or list line becomes its own block.
 
     Returns a list of {"type", "level", "list_type", "text", "page"} dicts.
+    Blocks built from positioned lines also carry `_first_idx`/`_last_idx`
+    (their lines' reading-order indices, for placing tables and figures)
+    and headings `_size` (for heading levels); both are dropped before the
+    structure leaves extract_structured_sections_from_pdf.
     """
     blocks = []
     current = None
@@ -1246,6 +1328,7 @@ def build_structured_blocks(section_lines, body_size):
                 marks = _block_marks(source_lines, cleaned)
                 if marks:
                     current["marks"] = marks
+                _stamp_positions(current, source_lines)
                 blocks.append(current)
         current = None
 
@@ -1256,7 +1339,13 @@ def build_structured_blocks(section_lines, body_size):
             continue
 
         if btype == "paragraph":
-            if current is not None and current["type"] == "paragraph":
+            if (
+                current is not None and current["type"] == "paragraph"
+                and not pdf_layout.starts_new_paragraph(current["_lines"][-1], line, body_size)
+            ) or (
+                current is not None and current["type"] == "list_item"
+                and _continues_list_item(current["_lines"], line)
+            ):
                 current["text"] = current["text"] + " " + text
                 current["_lines"].append(line)
             else:
@@ -1273,152 +1362,136 @@ def build_structured_blocks(section_lines, body_size):
                 "text": text, "page": line["page"],
             }
             if btype == "list_item":
-                marks = _block_marks([line], text)
-                if marks:
-                    block["marks"] = marks
-            else:
-                # Headings keep their marks too: a line read as a heading
-                # can later be shown as a plain paragraph
-                # (_front_matter_blocks, _enforce_heading_sequence), and
-                # its bold words must then still be bold.
-                marks = _block_marks([line], text)
-                if marks:
-                    block["marks"] = marks
+                # Kept open: the item's wrapped lines follow as "paragraph"
+                # lines and join it in the branch above.
+                block["_lines"] = [line]
+                current = block
+                continue
+            _stamp_positions(block, [line])
+            block["_size"] = line.get("size")
+            # Headings keep their marks too: a line read as a heading can
+            # later be shown as a plain paragraph (_front_matter_blocks,
+            # _enforce_heading_sequence), and its bold words must then still
+            # be bold.
+            marks = _block_marks([line], text)
+            if marks:
+                block["marks"] = marks
             blocks.append(block)
 
     flush()
     return blocks
 
 
-def extract_pdf_images(pdf_path):
+def _anchor_index(lines, anchor):
     """
-    Best-effort raster-image extraction per PDF page, for the Document
-    view's "image" blocks. Returns {page_number (1-based): [block, ...]}
-    where each block is {"type": "image", "level": None, "list_type":
-    None, "text": "", "page": N, "_image_bytes": bytes, "_image_ext": str}.
+    Reading-order index of the last line before a table or figure at
+    `anchor` = (page, x0, x1, y0), or -1 when it comes before every line.
 
-    `_image_bytes` / `_image_ext` are an in-process-only carrier consumed
-    by report_store._extract_and_upload_images (turned into a Storage
-    `image_url` and stripped before the report is persisted/returned) —
-    they are never meant to reach a JSON response as-is.
-
-    Uses fitz.Pixmap per xref (page.get_images(full=True) returns xref
-    ids, not bytes) rather than page.get_image_info(), which only reports
-    geometry. Never raises: any page/xref PyMuPDF can't materialize is
-    skipped — image extraction is additive and must never break the core
-    text-extraction pipeline this module also implements.
+    A line wider than the item's column above it (a full-width title, a
+    paragraph across both columns) starts the item's band. Within the band
+    the item follows the lines above it in its own column and, when it sits
+    in the right column, the whole left column. With neither, it follows
+    the band's top line, else the previous pages.
     """
-    images_by_page = {}
-    try:
-        doc = fitz.open(pdf_path)
-    except Exception:
-        logger.exception("Failed to open PDF for image extraction: %s", pdf_path)
-        return images_by_page
+    page, x0, x1, y0 = anchor
+    same_page = [l for l in lines if l["page"] == page and l.get("bbox")]
+    earlier = max((l["idx"] for l in lines if l["page"] < page), default=-1)
+    if not same_page:
+        return earlier
 
-    try:
-        for page_idx, page in enumerate(doc):
-            page_number = page_idx + 1
-            try:
-                image_list = page.get_images(full=True)
-            except Exception:
-                logger.exception("Failed to list images on PDF page %d", page_number)
-                continue
+    above = [
+        l for l in same_page
+        if l["bbox"][3] <= y0 + 2 and min(l["bbox"][2], x1) - max(l["bbox"][0], x0) > 0
+    ]
+    in_column = [l for l in above if l["bbox"][0] >= x0 - 20 and l["bbox"][2] <= x1 + 20]
+    spanning = [l for l in above if l not in in_column]
+    band_top = max((l["bbox"][3] for l in spanning), default=float("-inf"))
+    in_column = [l for l in in_column if l["bbox"][1] >= band_top - 1]
 
-            seen_xrefs = set()
-            for img in image_list:
-                xref = img[0]
-                if xref in seen_xrefs:
-                    continue
-                seen_xrefs.add(xref)
-
-                pixmap = None
-                try:
-                    pixmap = fitz.Pixmap(doc, xref)
-                    if pixmap.colorspace is None:
-                        # Stencil/mask image with no colour data of its own —
-                        # nothing meaningful to render standalone.
-                        continue
-                    if pixmap.n - pixmap.alpha >= 4:
-                        # CMYK (or similar) — PNG encoding needs RGB/gray.
-                        pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
-                    image_bytes = pixmap.tobytes("png")
-                except Exception:
-                    logger.exception(
-                        "Failed to materialize PDF image xref=%s on page %d", xref, page_number
-                    )
-                    continue
-                finally:
-                    if pixmap is not None:
-                        pixmap = None
-
-                if not image_bytes:
-                    continue
-
-                images_by_page.setdefault(page_number, []).append({
-                    "type": "image", "level": None, "list_type": None,
-                    "text": "", "page": page_number,
-                    "_image_bytes": image_bytes, "_image_ext": "png",
-                })
-    finally:
-        doc.close()
-
-    return images_by_page
+    left_margin = min(l["bbox"][0] for l in same_page)
+    right_margin = max(l["bbox"][2] for l in same_page)
+    left_column = []
+    if x0 > (left_margin + right_margin) / 2 - 20:
+        left_column = [
+            l for l in same_page
+            if l["bbox"][2] <= x0 + 2 and l["bbox"][1] >= band_top - 1
+        ]
+    before = in_column + left_column
+    if before:
+        return max(l["idx"] for l in before)
+    if spanning:
+        return max(l["idx"] for l in spanning)
+    return earlier
 
 
-def _insert_page_images(result_sections, images_by_page):
+def _layout_item_blocks(layout, lines):
+    """Table and figure blocks from pdf_layout.analyze_pdf(), each with the
+    reading-order index it follows (`_anchor`).
+
+    A table becomes a "table" block: its cells joined as its text (no "\\n",
+    see extract_docx._table_block for why) so it is checked like DOCX
+    tables are, and its grid in "rows". A table whose grid could not be
+    read reliably (a rotated table, merged cells) also carries a picture of
+    itself (`_image_bytes`), which the Document view shows instead of the
+    grid. A figure becomes an "image" block with its picture."""
+    items = []
+    for table in layout.get("tables", []):
+        rows = [row for row in table["rows"] if any(cell for cell in row)]
+        text = " ¶ ".join(" | ".join(cell for cell in row) for row in rows)
+        if not rows or not clean_text(text.replace("|", " ").replace("¶", " ")):
+            continue
+        block = {
+            "type": "table", "level": None, "list_type": None,
+            "text": text, "page": table["page"], "rows": rows,
+            "_anchor": _anchor_index(lines, table["anchor"]),
+        }
+        if table.get("image_bytes"):
+            block["_image_bytes"] = table["image_bytes"]
+            block["_image_ext"] = "png"
+        items.append(block)
+    for figure in layout.get("figures", []):
+        items.append({
+            "type": "image", "level": None, "list_type": None,
+            "text": "", "page": figure["page"],
+            "_image_bytes": figure["image_bytes"], "_image_ext": "png",
+            "_anchor": _anchor_index(lines, figure["anchor"]),
+        })
+    return items
+
+
+def _insert_layout_items(result_sections, items):
     """
-    Splice extracted PDF images into `result_sections` (mutated in place),
-    each positioned right after the LAST block anywhere in the document
-    (walking sections in `result_sections`'s own iteration order, which
-    mirrors document_model.SECTION_ORDER — recognized sections in order,
-    then the "body" catch-all last) that shares its page number. This is
-    the same fidelity level PDF text extraction already has (per-block
-    page numbers, no finer in-page positioning) — see this module's and
-    document_model.py's module docstrings.
+    Put tables and figures (mutating `result_sections`) right after the
+    block holding the line they follow in the original page, or at the
+    very start when they come before every line.
 
-    A page whose images have no matching text block anywhere (e.g. a page
-    that is entirely a figure, with no text PyMuPDF recognized as content)
-    falls back to the end of the "body" section, so the image is
-    surfaced rather than silently dropped.
-
-    Never raises: image placement is a display nicety layered on top of
-    already-extracted text, not something that should ever take down
-    extraction — see this module's docstring.
+    Never raises: placement is layered on top of already-extracted text,
+    and a failure here must not take extraction down.
     """
-    if not images_by_page:
+    if not items:
         return
-
     try:
-        last_position = {}
-        for section_name, blocks in result_sections.items():
-            for index, block in enumerate(blocks):
-                page = block.get("page")
-                if page is not None:
-                    last_position[page] = (section_name, index)
-
-        # Group insertions per section, applied in descending index order
-        # so an earlier insert never shifts a later insertion's index.
-        insertions = {}
-        fallback_images = []
-
-        for page, images in images_by_page.items():
-            target = last_position.get(page)
-            if target is None:
-                fallback_images.extend(images)
-                continue
-            section_name, index = target
-            insertions.setdefault(section_name, []).append((index, images))
-
-        for section_name, items in insertions.items():
-            blocks = result_sections[section_name]
-            for index, images in sorted(items, key=lambda item: item[0], reverse=True):
-                blocks[index + 1:index + 1] = images
-
-        if fallback_images:
-            result_sections.setdefault(FALLBACK_SECTION, [])
-            result_sections[FALLBACK_SECTION].extend(fallback_images)
+        order = list(result_sections)
+        targets = defaultdict(list)
+        for item in sorted(items, key=lambda i: i["_anchor"]):
+            anchor = item.pop("_anchor")
+            best = None
+            for name in order:
+                for index, block in enumerate(result_sections[name]):
+                    last = block.get("_last_idx")
+                    if last is not None and last <= anchor and (best is None or last >= best[2]):
+                        best = (name, index, last)
+            if best is None:
+                first = order[0] if order else FALLBACK_SECTION
+                result_sections.setdefault(first, [])
+                targets[(first, -1)].append(item)
+            else:
+                targets[(best[0], best[1])].append(item)
+        for (name, index), placed in sorted(targets.items(), key=lambda t: t[0][1], reverse=True):
+            blocks = result_sections[name]
+            blocks[index + 1:index + 1] = placed
     except Exception:
-        logger.exception("Failed to splice extracted PDF images into structured sections.")
+        logger.exception("Failed to place extracted tables and figures in the document.")
 
 
 # Position-based buckets for content outside the recognized sections, so
@@ -1440,9 +1513,21 @@ def _running_noise_line_indices(lines):
     numbers ("4", "4 / 19", "Page 4") and running headers/footers - short
     lines whose text (digits ignored) repeats on many pages, like a journal
     name or the paper title printed atop every page.
+
+    pdf_layout.analyze_pdf already removes furniture by position; this is a
+    second net for what it misses. A positioned line is only considered at
+    the top or bottom of its page, so a real heading whose words a running
+    header repeats ("3 Dataset and Preprocessing Pipeline") is kept.
     """
     if not lines:
         return set()
+
+    def at_page_edge(line):
+        bbox, height = line.get("bbox"), line.get("page_height")
+        if not bbox or not height:
+            return True
+        edge = pdf_layout.FURNITURE_REGION * height
+        return bbox[3] <= edge or bbox[1] >= height - edge
 
     total_pages = max(line["page"] for line in lines)
     pages_by_key = {}
@@ -1452,6 +1537,8 @@ def _running_noise_line_indices(lines):
 
     noise = set()
     for i, line in enumerate(lines):
+        if not at_page_edge(line):
+            continue
         text = normalize_heading_text(line["text"])
         if PAGE_NUMBER_LINE_RE.match(text):
             noise.add(i)
@@ -1545,6 +1632,11 @@ def _leading_section_number(text):
     return None
 
 
+HEADING_WRAP_WORD_RE = re.compile(
+    r"\b(?:for|and|of|with|in|on|to|the|a|an|via|from|by|using|towards|toward|its|their|or)$"
+)
+
+
 def _normalize_heading_blocks(blocks):
     """
     Give numbered headings the level their numbering implies ("3 Method" ->
@@ -1574,7 +1666,15 @@ def _normalize_heading_blocks(blocks):
                 previous is not None
                 and previous.get("type") == "heading"
                 and not previous.get("section_heading")
-                and previous.get("_numbered")
+                and (
+                    previous.get("_numbered")
+                    # "... representations for" + "BERT-based models": a
+                    # heading broken after a word that can't end it.
+                    or (
+                        HEADING_WRAP_WORD_RE.search(previous.get("text", ""))
+                        and abs((previous.get("_size") or 0) - (block.get("_size") or 0)) < 0.5
+                    )
+                )
                 and previous.get("page") == block.get("page")
                 and not HEADING_NUMBER_PREFIX_RE.match(text)
                 and len((previous["text"] + " " + text).split()) <= 24
@@ -1587,6 +1687,10 @@ def _normalize_heading_blocks(blocks):
                 block["_numbered"] = True
             elif _leading_section_number(text) is not None:
                 block["level"] = 2
+                block["_numbered"] = True
+            elif heading_depth(text) is not None:
+                # "D Actual examples ..." / "A.1 Setup": numbered too, so a
+                # title wrapped onto the next line joins it.
                 block["_numbered"] = True
         result.append(block)
     for block in result:
@@ -1601,8 +1705,12 @@ def _enforce_heading_sequence(result_sections, order):
     "1 Introduction", step "2" of an algorithm box inside section 3) is a
     mis-detection: a section-heading block is dropped (it has no text in the
     matching document anyway), any other is shown as a plain paragraph.
+
+    Reports that number parts in Roman numerals ("II. PEST ANALYSIS") and
+    the sections inside each part from 1 again count each scheme on its
+    own, the Arabic count starting over under every new part.
     """
-    last = 0
+    last = {"roman": 0, "arabic": 0}
     for name in order:
         blocks = result_sections.get(name)
         if not blocks:
@@ -1612,26 +1720,34 @@ def _enforce_heading_sequence(result_sections, order):
             if block.get("type") == "heading" and block.get("level") == 2:
                 number = _leading_section_number(block.get("text", ""))
                 if number is not None:
-                    if number <= last:
+                    kind = "roman" if ROMAN_HEADING_RE.match(normalize_heading_text(block.get("text", ""))) else "arabic"
+                    if number <= last[kind]:
                         if block.get("section_heading"):
                             continue
                         block = {**block, "type": "paragraph", "level": None}
                     else:
-                        last = number
+                        last[kind] = number
+                        if kind == "roman":
+                            last["arabic"] = 0
             kept.append(block)
         result_sections[name] = kept
 
 
-def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
-    
-    lines = extract_lines_from_pdf(pdf_path)
+def extract_structured_sections_from_pdf(pdf_path, heading_labels=None, media=True):
+    """
+    Structured reading of a PDF: {"title", "sections": {name: [block]},
+    "section_order"}. With media=False (source papers, where only the text
+    is compared) tables and figures are not extracted and their text stays
+    in the flow.
+    """
+    layout = pdf_layout.analyze_pdf(pdf_path, media=media)
+    lines = _lines_from_layout(layout)
     body_size = get_body_font_size(lines)
     candidates = build_heading_candidates(lines)
     headings = classify_heading_candidates(candidates, heading_labels)
     noise_indices = _running_noise_line_indices(lines)
-    title_indices = _title_line_indices(lines)
-    title_continuation = _title_continuation_indices(lines, title_indices)
-    title_indices |= set(title_continuation)
+    title_part, subtitle_part = _title_parts(lines)
+    title_indices = set(title_part) | set(subtitle_part)
 
     section_names = [
         "abstract", "introduction", "related_work",
@@ -1668,12 +1784,19 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
         # document_model.build_document as a zero-length block instead.
         heading_text = clean_text(heading.get("text", ""))
         if heading_text and re.search(r"[^\W\d_]{2}", strip_major_marker(heading_text)):
-            blocks_by_section[section].append({
+            heading_block = {
                 "type": "heading", "level": 2, "list_type": None,
                 "text": heading_text,
                 "page": lines[heading["index"]]["page"] if lines else 1,
                 "section_heading": True,
-            })
+            }
+            if lines:
+                heading_lines = [lines[heading["index"]]]
+                if second_index is not None:
+                    heading_lines.append(lines[second_index])
+                _stamp_positions(heading_block, heading_lines)
+                heading_block["_size"] = lines[heading["index"]].get("size")
+            blocks_by_section[section].append(heading_block)
 
         inline_content = heading.get("inline_content", "")
         if inline_content:
@@ -1690,6 +1813,7 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
                 )
                 if inline_marks:
                     blocks_by_section[section][-1]["marks"] = inline_marks
+                _stamp_positions(blocks_by_section[section][-1], [lines[heading["index"]]])
 
         survivors = []
         for i in range(start, min(end, len(lines))):
@@ -1772,12 +1896,15 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
         )
         if refs_heading is not None:
             refs_text = clean_text(refs_heading.get("text", "")) or "References"
-            back_blocks.append({
+            refs_block = {
                 "type": "heading", "level": 2, "list_type": None,
                 "text": refs_text,
                 "page": lines[refs_index]["page"],
                 "section_heading": True,
-            })
+                "_size": lines[refs_index].get("size"),
+            }
+            _stamp_positions(refs_block, [lines[refs_index]])
+            back_blocks.append(refs_block)
             back_blocks.extend(build_structured_blocks(
                 [lines[i] for i in back_lines if i > refs_index], body_size
             ))
@@ -1802,24 +1929,216 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None):
     _enforce_heading_sequence(
         ordered_sections, [n for n in ordered_sections if n != FRONT_MATTER_SECTION]
     )
+    _assign_heading_levels(ordered_sections)
     result_sections = {name: blocks for name, blocks in ordered_sections.items() if blocks}
 
-    try:
-        images_by_page = extract_pdf_images(pdf_path)
-        _insert_page_images(result_sections, images_by_page)
-    except Exception:
-        logger.exception("PDF image extraction failed for %s; continuing without images.", pdf_path)
+    title = clean_text(" ".join(lines[i]["text"] for i in sorted(title_indices)))
 
-    title = extract_title_from_lines(lines)
-    if title and title_continuation:
-        title = clean_text(" ".join([title] + [lines[i]["text"] for i in title_continuation]))
+    # The title as its own part: the main title, plus a subtitle when the
+    # cover sets one in a smaller size. `title` above stays the plain joined
+    # string the query builders use.
+    title_blocks = _title_blocks(lines, title_part, subtitle_part) if title else []
+    if title_blocks:
+        result_sections = {"title": title_blocks, **result_sections}
 
+    _insert_layout_items(result_sections, _layout_item_blocks(layout, lines))
+
+    for blocks in result_sections.values():
+        for block in blocks:
+            for key in ("_first_idx", "_last_idx", "_size"):
+                block.pop(key, None)
+
+    order = list(result_sections)
     return {
         "title": title,
         "sections": result_sections,
         # Reading order of the parts, for document_model.build_document.
-        "section_order": ["title"] + list(result_sections),
+        "section_order": order if "title" in result_sections else ["title"] + order,
     }
+
+
+AUTHOR_LINE_RE = re.compile(r"[^\W\d_]\s?\d(?:\s?,\s?\d)*\s*(?:,|$)")
+
+
+def _author_like(text):
+    """Author and affiliation lines: several names, an e-mail, or names
+    with affiliation numbers ("Luan Thanh Nguyen 1 , 2")."""
+    return text.count(",") >= 2 or "@" in text or AUTHOR_LINE_RE.search(text) is not None
+
+
+def _title_parts(lines):
+    """
+    (title line indices, subtitle line indices) on the first page.
+
+    The title is the largest text before the abstract/introduction, with
+    the lines right under it in the same size. A subtitle is the group set
+    right below it in a smaller size that is still well above the body
+    text - not the author line, which often is too. Without line positions
+    the old rule applies (every large line is the title, no subtitle).
+    """
+    if not lines:
+        return [], []
+    body_size = get_body_font_size(lines)
+    first_page = lines[0]["page"]
+    head = []
+    for line in lines[:40]:
+        if line["page"] != first_page:
+            break
+        lower = normalize_heading_text(line["text"]).lower()
+        if lower.startswith("abstract") or re.match(r"^(?:\d+\.?\s+|[ivx]+\.\s+)?introduction\b", lower):
+            break
+        head.append(line)
+    if not head or any(not line.get("bbox") for line in head):
+        indices = _title_line_indices(lines)
+        indices |= set(_title_continuation_indices(lines, indices))
+        return sorted(indices), []
+
+    big = [
+        l for l in head
+        if l["size"] > body_size + 2 and re.search(r"[^\W\d_]{2}", l["text"]) and not _author_like(l["text"])
+    ]
+    if not big:
+        return [], []
+    top = max(l["size"] for l in big)
+    by_y = sorted(head, key=lambda l: (l["bbox"][1], l["bbox"][0]))
+    first = min((l for l in big if abs(l["size"] - top) < 0.6), key=lambda l: l["bbox"][1])
+    position = by_y.index(first)
+    title = [first]
+    for line in by_y[position + 1:]:
+        if abs(line["size"] - top) < 0.6 and line["bbox"][1] - title[-1]["bbox"][3] < 0.8 * top:
+            title.append(line)
+        else:
+            break
+    rest = by_y[position + len(title):]
+    subtitle = []
+    if rest:
+        candidate = rest[0]
+        if (
+            body_size + 2 <= candidate["size"] < top - 0.6
+            and candidate["words"] >= 2 and not _author_like(candidate["text"])
+        ):
+            subtitle = [candidate]
+            for line in rest[1:]:
+                if (
+                    abs(line["size"] - candidate["size"]) < 0.6
+                    and line["bbox"][1] - subtitle[-1]["bbox"][3] < 0.8 * candidate["size"]
+                    and not _author_like(line["text"])
+                ):
+                    subtitle.append(line)
+                else:
+                    break
+    return [l["idx"] for l in title], [l["idx"] for l in subtitle]
+
+
+def _title_blocks(lines, title_part, subtitle_part):
+    """The title as "title" blocks: the main title (level 1) and, when the
+    cover has one, its subtitle (level 2), in page order."""
+    blocks = []
+    for indices, level in ((title_part, 1), (subtitle_part, 2)):
+        group = [lines[i] for i in indices]
+        text = clean_text(" ".join(l["text"] for l in group))
+        if not text:
+            continue
+        block = {
+            "type": "title", "level": level, "list_type": None,
+            "text": text, "page": group[0]["page"],
+        }
+        _stamp_positions(block, group)
+        blocks.append(block)
+    blocks.sort(key=lambda b: b.get("_first_idx", 0))
+    return blocks
+
+
+HEADING_NUMBER_DEPTH_RE = re.compile(r'^(\d{1,2}(?:\.\d{1,2}){0,4})\.?\s+\S')
+APPENDIX_NUMBER_DEPTH_RE = re.compile(r'^[A-Z]((?:\.\d{1,2}){1,3})\.?\s+\S')
+APPENDIX_LETTER_RE = re.compile(r'^[A-Z]\.\s+[A-Z]')
+ROMAN_HEADING_RE = re.compile(r'^[IVX]{1,4}\.\s+\S')
+CHAPTER_HEADING_RE = re.compile(
+    r'^(?:chapter|chương|chuong|part|phần|phan)\s+(?:\d+|[ivxlc]+)\b', re.IGNORECASE
+)
+
+
+def heading_depth(text):
+    """How deep a heading's own numbering goes: "3 Method" -> 1, "3.1" -> 2,
+    "3.1.2" -> 3, "A.1" -> 2, "IV. RESULTS" -> 1, "Chapter 2" -> 0. None
+    for an unnumbered heading."""
+    text = normalize_heading_text(text)
+    if CHAPTER_HEADING_RE.match(text):
+        return 0
+    match = HEADING_NUMBER_DEPTH_RE.match(text)
+    if match:
+        return match.group(1).count(".") + 1
+    match = APPENDIX_NUMBER_DEPTH_RE.match(text)
+    if match:
+        return match.group(1).count(".") + 1
+    if ROMAN_HEADING_RE.match(text) or APPENDIX_LETTER_RE.match(text):
+        return 1
+    return None
+
+
+def _assign_heading_levels(sections):
+    """
+    Heading levels for the whole document, so the Document view shows a
+    real outline. Level 1 is a chapter/part, 2 a top-level section, 3 a
+    subsection, 4 anything deeper (the title has its own "title" blocks).
+
+    A numbered heading's level comes from its numbering ("3" -> 2, "3.1" ->
+    3, "3.1.2" -> 4). An unnumbered one takes the level of numbered
+    headings set in the same size; with no numbered headings to compare
+    with, the distinct heading sizes are ranked, largest first.
+    Front matter keeps its own rules (_front_matter_blocks).
+    """
+    headings = [
+        block
+        for name, blocks in sections.items() if name not in (FRONT_MATTER_SECTION, "title")
+        for block in blocks if block.get("type") == "heading"
+    ]
+    texts = [normalize_heading_text(block.get("text", "")) for block in headings]
+    # Roman-numbered parts with Arabic-numbered sections inside them: the
+    # Arabic outline sits one level down.
+    nested = any(ROMAN_HEADING_RE.match(t) for t in texts) and any(
+        HEADING_NUMBER_DEPTH_RE.match(t) for t in texts
+    )
+    numbered, unnumbered = [], []
+    for block, text in zip(headings, texts):
+        depth = heading_depth(text)
+        if depth is None:
+            unnumbered.append(block)
+            continue
+        if nested and HEADING_NUMBER_DEPTH_RE.match(text):
+            depth += 1
+        block["level"] = 1 if depth == 0 else min(depth + 1, 4)
+        numbered.append(block)
+
+    sized = [b for b in unnumbered if b.get("_size")]
+    if not sized:
+        return
+    by_size = defaultdict(Counter)
+    for block in numbered:
+        if block.get("_size"):
+            by_size[block["_size"]][block["level"]] += 1
+    if by_size:
+        for block in sized:
+            size = block["_size"]
+            close = [s for s in by_size if abs(s - size) < 0.75]
+            if close:
+                nearest = min(close, key=lambda s: abs(s - size))
+                block["level"] = by_size[nearest].most_common(1)[0][0]
+                continue
+            larger = [s for s in by_size if s > size]
+            if not larger:
+                block["level"] = min(by_size[max(by_size)].most_common(1)[0][0], 2)
+            else:
+                block["level"] = min(by_size[min(larger)].most_common(1)[0][0] + 1, 4)
+        return
+    ranks = []
+    for size in sorted({b["_size"] for b in sized}, reverse=True):
+        if ranks and ranks[-1] - size < 0.75:
+            continue
+        ranks.append(size)
+    for block in sized:
+        rank = max(i for i, size in enumerate(ranks) if size >= block["_size"] - 0.75)
+        block["level"] = min(2 + rank, 4)
 
 
 def flatten_structured_sections(structured):
@@ -1853,8 +2172,10 @@ def flatten_structured_sections(structured):
     return sections
 
 
-def extract_sections_from_pdf(pdf_path, heading_labels=None):
-    structured = extract_structured_sections_from_pdf(pdf_path, heading_labels)
+def extract_sections_from_pdf(pdf_path, heading_labels=None, media=False):
+    # Text only by default: this is how source papers are read, and their
+    # tables and figures are never shown.
+    structured = extract_structured_sections_from_pdf(pdf_path, heading_labels, media=media)
     sections = flatten_structured_sections(structured)
 
     print("\n===== DETECTED HEADINGS =====")

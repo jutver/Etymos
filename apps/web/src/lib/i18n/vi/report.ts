@@ -106,6 +106,8 @@ export const report: Record<string, string> = {
   "Search title, author or text…": "Tìm theo tiêu đề, tác giả hoặc nội dung…",
   "Show every highlight again (Esc)": "Hiện lại mọi vùng tô sáng (Esc)",
   "Show plagiarism highlights": "Hiện tô sáng đạo văn",
+  "Shown as an image: this table's layout could not be turned into editable cells":
+    "Hiển thị dạng hình ảnh: không thể chuyển bố cục bảng này thành các ô chỉnh sửa được",
   "Showing 1 source · Show all": "Đang hiện 1 nguồn · Hiện tất cả",
   "Similarity score {{score}}%": "Điểm tương đồng {{score}}%",
   "Sky": "Xanh da trời",
@@ -117,6 +119,7 @@ export const report: Record<string, string> = {
   "Start typing to draft here, or open the original file from the toolbar above.":
     "Hãy bắt đầu gõ để soạn thảo tại đây, hoặc mở file gốc từ thanh công cụ phía trên.",
   "Strikethrough": "Gạch ngang",
+  "Table": "Bảng",
   "Teal": "Xanh ngọc",
   "Text colour": "Màu chữ",
   "Text colour {{label}}": "Màu chữ {{label}}",
