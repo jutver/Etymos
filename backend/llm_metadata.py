@@ -679,6 +679,16 @@ def build_queries_from_metadata(metadata):
     return queries
 
 
+def title_search_query(title):
+    """The document's own title as a search query: the surest way to find the
+    published paper it was copied from. Empty when it isn't title-like."""
+    title = re.sub(r"\s+", " ", title or "").strip()
+    words = title.split()
+    if not 3 <= len(words) <= 30 or len(title) > 250:
+        return ""
+    return title
+
+
 def build_queries_from_section_metadata(section_metadata):
     """
     Build queries from multiple section metadata objects.

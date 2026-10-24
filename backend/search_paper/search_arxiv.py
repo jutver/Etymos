@@ -1,4 +1,5 @@
 
+import re
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
@@ -11,8 +12,30 @@ _last_request_time = 0.0
 _session = requests.Session()
 
 _session.headers.update({
-    "User-Agent": "Etymos/1.0 (academic research; contact: your-email@example.com)"
+    "User-Agent": "Etymos/1.0 (academic plagiarism checker; https://etymos.site)"
 })
+
+
+_STOPWORDS = frozenset(
+    "the and for with from that this these into using based via are was were has have "
+    "its their our can may also than such each more other which while when".split()
+)
+
+
+def arxiv_search_query(query: str, max_words: int = 4) -> str:
+    """arXiv ORs the words of a plain query, which ranks loosely related papers
+    first. ANDing the query's first few content words finds the paper itself."""
+    words = []
+    for word in re.findall(r"[^\W_]{3,}", query.lower()):
+        if word not in _STOPWORDS and word not in words:
+            words.append(word)
+    return "+AND+".join(f"all:{urllib.parse.quote(w)}" for w in words[:max_words])
+
+
+def arxiv_id_from_url(url: str) -> str:
+    """"http://arxiv.org/abs/1408.5882v2" -> "1408.5882"."""
+    match = re.search(r"arxiv\.org/abs/(.+?)(?:v\d+)?$", url or "")
+    return match.group(1) if match else ""
 
 
 def search_arxiv(
@@ -37,11 +60,14 @@ def search_arxiv(
     # ---------------------------------------------------------
     # 2. Encode query
     # ---------------------------------------------------------
-    encoded_query = urllib.parse.quote(query)
+    search_query = arxiv_search_query(query)
+
+    if not search_query:
+        return []
 
     url = (
         "https://export.arxiv.org/api/query"
-        f"?search_query=all:{encoded_query}"
+        f"?search_query={search_query}"
         f"&max_results={max_results}"
     )
 
@@ -129,7 +155,8 @@ def search_arxiv(
             root = ET.fromstring(response.text)
 
             ns = {
-                "atom": "http://www.w3.org/2005/Atom"
+                "atom": "http://www.w3.org/2005/Atom",
+                "arxiv": "http://arxiv.org/schemas/atom",
             }
 
             for entry in root.findall("atom:entry", ns):
@@ -146,6 +173,14 @@ def search_arxiv(
                     and a.find("atom:name", ns).text
                 ]
 
+                entry_url = (
+                    url_id.text.strip()
+                    if url_id is not None and url_id.text
+                    else ""
+                )
+                arxiv_id = arxiv_id_from_url(entry_url)
+                doi = entry.find("arxiv:doi", ns)
+
                 year = ""
 
                 if published is not None and published.text:
@@ -158,17 +193,15 @@ def search_arxiv(
                         else ""
                     ),
                     "year": year,
-                    "doi": "",
+                    "doi": doi.text.strip() if doi is not None and doi.text else "",
                     "abstract": (
                         summary.text.strip().replace("\n", " ")
                         if summary is not None and summary.text
                         else ""
                     ),
-                    "url": (
-                        url_id.text.strip()
-                        if url_id is not None and url_id.text
-                        else ""
-                    ),
+                    "url": f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else entry_url,
+                    "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}" if arxiv_id else "",
+                    "arxiv_id": arxiv_id,
                     "authors": authors,
                     "source": "arXiv",
                 })

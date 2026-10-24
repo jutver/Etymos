@@ -1,5 +1,10 @@
+import os
 import requests
 import time
+
+# Without a key, Semantic Scholar shares one rate limit among all keyless
+# callers and answers 429 most of the time. Keys are free on request.
+SEMANTIC_SCHOLAR_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
 
 _last_semantic_time = 0.0
 
@@ -22,7 +27,8 @@ def search_semantic_scholar(query: str, max_results: int = 10, delay_seconds: fl
     }
 
     try:
-        response = requests.get(url, params=params, timeout=15)
+        extra = {"headers": {"x-api-key": SEMANTIC_SCHOLAR_API_KEY}} if SEMANTIC_SCHOLAR_API_KEY else {}
+        response = requests.get(url, params=params, timeout=15, **extra)
 
         if response.status_code == 429:
             print("Semantic Scholar rate limited. Skipping this query.")

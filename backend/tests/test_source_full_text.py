@@ -7,6 +7,7 @@ ranking, so paper_cache can download the paper.
 import numpy as np
 
 import paper_cache
+import paper_store
 import similarity
 from search_paper import search_openalex, search_semantic_scholar
 from search_paper.search_sources import deduplicate_papers
@@ -106,6 +107,8 @@ def _cache_in(tmp_path, monkeypatch):
     monkeypatch.setattr(paper_cache, "SECTIONS_DIR", str(tmp_path / "sections"))
     monkeypatch.setattr(paper_cache, "CHUNKS_DIR", str(tmp_path / "chunks"))
     monkeypatch.setattr(paper_cache, "DB_PATH", str(tmp_path / "papers.db"))
+    monkeypatch.setattr(paper_cache, "_store", paper_store.SqlitePaperStore(str(tmp_path / "papers.db")))
+    monkeypatch.setattr(paper_cache, "find_open_access_pdf", lambda paper: "")
     attempts = []
 
     def fake_download(url, path, paper_page_url=""):
@@ -136,3 +139,22 @@ def test_a_link_that_failed_is_not_retried_every_check(tmp_path, monkeypatch):
     assert paper_cache.cache_candidate_paper(paper)["downloaded"] is False
     assert paper_cache.cache_candidate_paper(paper)["status"] == "exists"
     assert attempts == ["https://publisher.example/landing"]
+
+
+def test_api_keys_are_sent_when_configured(monkeypatch):
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        seen[url] = (params, headers)
+        return _Response({"results": [], "data": []})
+
+    monkeypatch.setattr(search_openalex.requests, "get", fake_get)
+    monkeypatch.setattr(search_semantic_scholar.requests, "get", fake_get)
+    monkeypatch.setattr(search_openalex, "OPENALEX_API_KEY", "oa-key")
+    monkeypatch.setattr(search_semantic_scholar, "SEMANTIC_SCHOLAR_API_KEY", "s2-key")
+
+    search_openalex.search_openalex("cnn", delay_seconds=0)
+    search_semantic_scholar.search_semantic_scholar("cnn", delay_seconds=0)
+
+    assert seen["https://api.openalex.org/works"][0]["api_key"] == "oa-key"
+    assert seen["https://api.semanticscholar.org/graph/v1/paper/search"][1] == {"x-api-key": "s2-key"}
