@@ -8,7 +8,7 @@ import threading
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from uuid import UUID
 import sys
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -272,6 +272,9 @@ class UnlockDocumentRequest(BaseModel):
 class RewriteRequest(BaseModel):
     input_sentence: str
     source_sentence: str
+    # The report the passage belongs to: the rewrite is then checked against
+    # its sources and regenerated while it still overlaps one.
+    report_id: Optional[str] = Field(None, max_length=100)
 
 
 class QuickCheckSource(BaseModel):
@@ -780,10 +783,25 @@ def rewrite_text_with_ai(request: Request, body: RewriteRequest,
     Response is additive: `success` and `rewritten_text` are unchanged;
     `provider` / `model` / `fallback_used` are new.
     """
+    check = None
+    if body.report_id:
+        report = get_report(body.report_id)
+        if report is not None:
+            require_owner_or_admin(report.get("user_id"), user)
+            # As in quick_check_passage: the local JSON has the source_paper_ids.
+            local = get_local_report_file(body.report_id)
+            if local is not None and local.get("matches"):
+                report = local
+            report_id = body.report_id
+
+            def check(text: str) -> dict:
+                return quick_check_report_passage(report_id, report, text)
+
     try:
         result = rewrite_sentence(
             input_sentence=body.input_sentence,
             source_sentence=body.source_sentence,
+            check=check,
         )
     except RewriteUnavailable as exc:
         logger.warning("AI rewrite unavailable: %s", exc)
@@ -801,6 +819,8 @@ def rewrite_text_with_ai(request: Request, body: RewriteRequest,
         "provider": result["provider"],
         "model": result["model"],
         "fallback_used": result["fallback_used"],
+        # Quick-check verdict of the returned rewrite, when it was checked.
+        "check": result.get("check"),
     }
 
 

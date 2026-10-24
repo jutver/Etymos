@@ -471,6 +471,83 @@ async function fetchVersionChecks(documentId: string): Promise<Map<string, Versi
   return checks;
 }
 
+/** One saved edit of a document, as the History tab lists it. */
+export interface SavedVersionSummary {
+  id: string;
+  documentId: string;
+  label: string;
+  /** Raw `created_at`. */
+  createdAt: string;
+  /** Similarity score of the Save & re-check run on this version; null for a
+   * version that was only saved. */
+  score: number | null;
+}
+
+/** Per document: its saved versions (newest first) and, when it was
+ * re-checked, the score of the original upload's check (the oldest
+ * re-check's previous_score; null when unknown). */
+export interface DocumentVersionHistory {
+  versions: SavedVersionSummary[];
+  uploadScore: number | null;
+  rechecked: boolean;
+}
+
+/** Saved versions and re-check scores of many documents in two queries, for
+ * the History tab. Leaves out each version's HTML. Best-effort for the
+ * checks: without them every version just shows as saved. */
+export async function fetchVersionHistories(documentIds: string[]): Promise<Map<string, DocumentVersionHistory>> {
+  const histories = new Map<string, DocumentVersionHistory>();
+  if (documentIds.length === 0) return histories;
+  const historyOf = (documentId: string) => {
+    let history = histories.get(documentId);
+    if (!history) {
+      history = { versions: [], uploadScore: null, rechecked: false };
+      histories.set(documentId, history);
+    }
+    return history;
+  };
+
+  const [versionsResult, checksResult] = await Promise.all([
+    supabase
+      .from("document_versions")
+      .select("id, document_id, label, created_at")
+      .in("document_id", documentIds)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("document_checks")
+      .select("document_id, version_id, similarity_score, previous_score, created_at")
+      .in("document_id", documentIds)
+      .order("created_at", { ascending: true }),
+  ]);
+  if (versionsResult.error) throw versionsResult.error;
+
+  const scoreByVersion = new Map<string, number>();
+  for (const row of (checksResult.error ? [] : (checksResult.data ?? [])) as {
+    document_id: string;
+    version_id: string | null;
+    similarity_score: number;
+    previous_score: number | null;
+  }[]) {
+    const history = historyOf(row.document_id);
+    if (!history.rechecked) {
+      history.rechecked = true;
+      history.uploadScore = row.previous_score == null ? null : Number(row.previous_score);
+    }
+    if (row.version_id) scoreByVersion.set(row.version_id, Number(row.similarity_score));
+  }
+
+  for (const row of (versionsResult.data ?? []) as { id: string; document_id: string; label: string; created_at: string }[]) {
+    historyOf(row.document_id).versions.push({
+      id: row.id,
+      documentId: row.document_id,
+      label: row.label,
+      createdAt: row.created_at,
+      score: scoreByVersion.get(row.id) ?? null,
+    });
+  }
+  return histories;
+}
+
 export async function saveDocumentVersion(
   documentId: string,
   version: { label: string; html: string; wordCount: number; changedRatio?: number },

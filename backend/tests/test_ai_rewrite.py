@@ -127,3 +127,54 @@ class TestRewriteSentenceLanguageGuard:
 
         with pytest.raises(RewriteUnavailable):
             rewrite_sentence(USER_TEXT, SOURCE_TEXT)
+
+
+def _verdict(text, weight=0.0):
+    if not weight:
+        return {"status": "clean", "hits": []}
+    return {"status": "flagged", "hits": [{"input_sentence": text, "weight": weight, "source_sentence": SOURCE_TEXT}]}
+
+
+class TestRewriteCheckedAgainstTheReport:
+    def test_a_rewrite_that_still_overlaps_is_regenerated_with_feedback(self, monkeypatch, gemini_first):
+        feedbacks = []
+
+        def fake_gemini(input_sentence, source_sentence, *, strict=False, feedback=None):
+            feedbacks.append(feedback)
+            return "first try" if feedback is None else "second try"
+
+        monkeypatch.setattr(ai_rewrite, "rewrite_with_gemini", fake_gemini)
+        verdicts = {"first try": _verdict("first try", 1.0), "second try": _verdict("second try")}
+
+        result = rewrite_sentence(USER_TEXT, SOURCE_TEXT, check=verdicts.__getitem__)
+
+        assert result["rewritten_text"] == "second try"
+        assert result["check"]["status"] == "clean"
+        assert result["attempts"] == 2
+        assert feedbacks[1] == {"previous": "first try", "overlaps": [SOURCE_TEXT]}
+
+    def test_returns_the_least_overlapping_attempt_when_none_is_clean(self, monkeypatch, gemini_first):
+        replies = iter(["heavy overlap", "light overlap", "heavy again"])
+        monkeypatch.setattr(ai_rewrite, "rewrite_with_gemini", lambda *a, **k: next(replies))
+        weights = {"heavy overlap": 1.0, "light overlap": 0.1, "heavy again": 1.0}
+
+        result = rewrite_sentence(USER_TEXT, SOURCE_TEXT, check=lambda text: _verdict(text, weights[text]))
+
+        assert result["rewritten_text"] == "light overlap"
+        assert result["attempts"] == ai_rewrite.MAX_REWRITE_ATTEMPTS
+
+    def test_a_failing_check_still_returns_the_rewrite(self, monkeypatch, gemini_first):
+        monkeypatch.setattr(ai_rewrite, "rewrite_with_gemini", lambda *a, **k: ENGLISH_REWRITE)
+
+        def broken_check(text):
+            raise RuntimeError("no corpus")
+
+        result = rewrite_sentence(USER_TEXT, SOURCE_TEXT, check=broken_check)
+        assert result["rewritten_text"] == ENGLISH_REWRITE
+        assert "check" not in result
+
+    def test_feedback_names_the_overlapping_sentences_in_the_prompt(self):
+        prompt = ai_rewrite.build_rewrite_prompt(
+            USER_TEXT, SOURCE_TEXT, feedback={"previous": "my old try", "overlaps": ["the copied sentence"]}
+        )
+        assert "my old try" in prompt and '"the copied sentence"' in prompt

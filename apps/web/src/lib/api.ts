@@ -379,12 +379,18 @@ export async function getReport(reportId: string): Promise<BackendReport> {
 export interface RewriteResponse {
   success: boolean;
   rewritten_text: string;
+  /** Quick check of the rewrite against the report's sources, when a report
+   * id was sent. The backend regenerates a rewrite that still overlaps one,
+   * so this is the least-overlapping attempt's verdict. */
+  check?: QuickCheckResponse | null;
 }
 
-export async function rewriteText(inputSentence: string, sourceSentence: string): Promise<RewriteResponse> {
+/** With `reportId`, the rewrite is checked against that report's sources and
+ * regenerated while it still overlaps one (backend ai_rewrite.py). */
+export async function rewriteText(inputSentence: string, sourceSentence: string, reportId?: string): Promise<RewriteResponse> {
   return requestJson<RewriteResponse>("/api/ai/rewrite", {
     method: "POST",
-    body: JSON.stringify({ input_sentence: inputSentence, source_sentence: sourceSentence }),
+    body: JSON.stringify({ input_sentence: inputSentence, source_sentence: sourceSentence, report_id: reportId }),
   });
 }
 

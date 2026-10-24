@@ -262,3 +262,44 @@ def test_warm_endpoint_hides_someone_elses_report(api_client, monkeypatch):
     api_app, client = api_client
     monkeypatch.setattr(api_app, "get_report", lambda rid: {"user_id": "someone-else", "matches": []})
     assert client.post("/api/reports/r-6/quick-check/warm").status_code == 404
+
+
+# --- POST /api/ai/rewrite with a report ---------------------------------------
+
+def test_rewrite_endpoint_checks_the_rewrite_against_the_reports_sources(api_client, monkeypatch):
+    api_app, client = api_client
+    report = {"user_id": "user-1", "matches": [{"source_title": "Paper A", "source_sentence": SOURCE_A}]}
+    monkeypatch.setattr(api_app, "get_report", lambda rid: report)
+    monkeypatch.setattr(api_app, "get_local_report_file", lambda rid: None)
+    quick_check._CORPUS_CACHE.clear()
+    seen = {}
+
+    def fake_rewrite(input_sentence, source_sentence, check=None):
+        seen["verdict"] = check(SOURCE_A)
+        return {"rewritten_text": SOURCE_A, "provider": "local", "model": "m", "fallback_used": False,
+                "check": seen["verdict"]}
+
+    monkeypatch.setattr(api_app, "rewrite_sentence", fake_rewrite)
+    res = client.post("/api/ai/rewrite", json={"input_sentence": SOURCE_A, "source_sentence": SOURCE_A, "report_id": "r-1"})
+    assert res.status_code == 200
+    assert seen["verdict"]["status"] == "flagged"
+    assert res.json()["check"]["status"] == "flagged"
+
+
+def test_rewrite_endpoint_without_a_report_does_not_check(api_client, monkeypatch):
+    api_app, client = api_client
+
+    def fake_rewrite(input_sentence, source_sentence, check=None):
+        assert check is None
+        return {"rewritten_text": "new", "provider": "local", "model": "m", "fallback_used": False}
+
+    monkeypatch.setattr(api_app, "rewrite_sentence", fake_rewrite)
+    res = client.post("/api/ai/rewrite", json={"input_sentence": "a", "source_sentence": "b"})
+    assert res.status_code == 200 and res.json()["check"] is None
+
+
+def test_rewrite_endpoint_hides_someone_elses_report(api_client, monkeypatch):
+    api_app, client = api_client
+    monkeypatch.setattr(api_app, "get_report", lambda rid: {"user_id": "someone-else", "matches": []})
+    res = client.post("/api/ai/rewrite", json={"input_sentence": "a", "source_sentence": "b", "report_id": "r-2"})
+    assert res.status_code == 404

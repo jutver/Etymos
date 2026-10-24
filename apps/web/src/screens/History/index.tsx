@@ -3,14 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { CaretRight, ClockCounterClockwise, MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel, planLabel, PROJECTS } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
-import { formatDate } from "../../lib/format";
-import { StatusPill } from "../../components/Severity";
+import { formatDate, formatDateTime } from "../../lib/format";
+import { StatusPill, statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { cn } from "@etymos/shared";
 import { CheckStatePill } from "../Documents/CheckStatePill";
-import { analyzingStateFor } from "../../lib/documentsQueries";
-import type { HistoryEntryWithCheck } from "../../lib/documentsQueries";
+import { analyzingStateFor, fetchVersionHistories } from "../../lib/documentsQueries";
+import type { DocumentVersionHistory, HistoryEntryWithCheck } from "../../lib/documentsQueries";
 import { groupByFile } from "../../lib/fileGroups";
+import { buildHistoryRows } from "./historyRows";
 import { t, tr, tn } from "../../lib/i18n";
 
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
@@ -60,6 +61,22 @@ export default function HistoryPage() {
   const filtered = visible.filter((h) => h.title.toLowerCase().includes(query.toLowerCase()));
 
   const groups = useMemo(() => groupByFile(filtered), [filtered]);
+
+  // Versions saved from each report (with or without a re-check), listed
+  // under the file alongside its checks.
+  const [versionHistories, setVersionHistories] = useState<Map<string, DocumentVersionHistory>>(new Map());
+  const documentIdsKey = history.filter((h) => h.checkState === "completed").map((h) => h.id).join(",");
+  useEffect(() => {
+    if (!documentIdsKey) return;
+    let cancelled = false;
+    fetchVersionHistories(documentIdsKey.split(",")).then(
+      (histories) => !cancelled && setVersionHistories(histories),
+      (err) => console.error("Loading saved versions for History failed:", err),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [documentIdsKey]);
 
   /** A check that hasn't finished has no report to show — send it back to the
    * progress view instead of an empty report. */
@@ -145,7 +162,8 @@ export default function HistoryPage() {
           <div className="divide-y divide-line">
             {groups.map((group) => {
               const isOpen = expanded.has(group.key);
-              const hasVersions = group.versions.length > 1;
+              const rows = buildHistoryRows(group.versions, versionHistories);
+              const hasVersions = rows.length > 1;
               return (
                 <div key={group.key}>
                   <div
@@ -165,7 +183,7 @@ export default function HistoryPage() {
                     {hasVersions && (
                       <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
                         <ClockCounterClockwise size={12} />
-                        {group.versions.length}{" "}{t("checks")}</span>
+                        {tn(rows.length, "{{count}} version", "{{count}} versions")}</span>
                     )}
                     <span className="hidden shrink-0 whitespace-nowrap text-sm text-ink-500 sm:inline">
                       {formatDate(group.latest.date)}
@@ -196,35 +214,42 @@ export default function HistoryPage() {
 
                   {hasVersions && isOpen && (
                     <div className="border-t border-line bg-surface-tint/50">
-                      {group.versions.map((v, i) => (
+                      {rows.map((row) => (
                         <div
-                          key={v.id}
-                          onClick={() => openEntry(v)}
+                          key={row.key}
+                          onClick={() => openEntry(row.entry)}
                           className="flex cursor-pointer items-center gap-3 border-t border-line/60 py-3 pl-11 pr-5 text-left transition-colors first:border-t-0 hover:bg-white"
                         >
-                          <span className="w-16 shrink-0 text-xs font-medium text-ink-400">
-                            {i === 0 ? t("Latest") : `v${group.versions.length - i}`}
+                          <span className="w-24 shrink-0 truncate text-xs font-medium text-ink-400">
+                            {row.kind === "check" ? t("Checked") : row.version.label}
                           </span>
                           <span className="min-w-0 flex-1 truncate text-sm text-ink-700">
-                            {formatDate(v.date)}
+                            {row.kind === "check" ? formatDate(row.entry.date) : formatDateTime(row.at)}
                           </span>
                           <span className="hidden shrink-0 text-xs font-semibold text-ink-700 sm:inline">
-                            {v.checkState === "completed" ? `${v.similarityScore}%` : "—"}
+                            {row.score !== null ? `${row.score}%` : row.kind === "check" ? "—" : ""}
                           </span>
                           <span className="shrink-0">
-                            {v.checkState === "completed" ? (
-                              <StatusPill status={v.status} />
-                            ) : (
-                              <CheckStatePill state={v.checkState} />
-                            )}
+                            {row.kind === "check" && row.entry.checkState !== "completed" ? (
+                              <CheckStatePill state={row.entry.checkState} />
+                            ) : row.score !== null ? (
+                              <StatusPill status={statusFromScore(row.score)} />
+                            ) : row.kind === "version" ? (
+                              <span className="inline-flex items-center whitespace-nowrap rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-500">
+                                {t("Saved, not re-checked")}</span>
+                            ) : null}
                           </span>
-                          <button
-                            onClick={(e) => handleDelete(e, v.id)}
-                            aria-label={t("Move to trash")}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
-                          >
-                            <Trash size={15} />
-                          </button>
+                          {row.kind === "check" ? (
+                            <button
+                              onClick={(e) => handleDelete(e, row.entry.id)}
+                              aria-label={t("Move to trash")}
+                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-severity-high-bg hover:text-severity-high"
+                            >
+                              <Trash size={15} />
+                            </button>
+                          ) : (
+                            <span className="inline-block size-8 shrink-0" />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -246,7 +271,7 @@ export default function HistoryPage() {
         )}
 
         <p className="border-t border-line px-5 py-3 text-xs text-ink-400 sm:hidden">
-          {t("Tip: tap a file with multiple checks to see its version history.")}</p>
+          {t("Tip: tap a file with several versions to see its history.")}</p>
       </div>
     </div>
   );

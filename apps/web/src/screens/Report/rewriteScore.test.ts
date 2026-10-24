@@ -75,17 +75,23 @@ describe("estimateScore", () => {
     expect(estimateScore(40, MATCHES, new Set(["long"]), [check]).score).toBe(15);
   });
 
-  it("marks the score estimated, and checking while a quick check runs", () => {
+  it("keeps a passage's share until its quick check answers", () => {
     const checking: PassageCheck = { matchIds: ["short"], text: "...", status: "checking", hits: [] };
     expect(estimateScore(40, MATCHES, new Set(["short"]), [checking])).toEqual({
-      score: 30,
+      score: 40,
       estimated: true,
       checking: true,
     });
+    const clean: PassageCheck = { ...checking, status: "clean" };
+    expect(estimateScore(40, MATCHES, new Set(["short"]), [clean]).score).toBe(30);
   });
 
-  it("never goes below 0 or above 100", () => {
+  it("never counts a rewrite as worse than the passage it replaced", () => {
     const check: PassageCheck = { matchIds: ["short"], text: "...", status: "flagged", hits: [hit("y".repeat(5000))] };
-    expect(estimateScore(40, MATCHES, new Set(["short"]), [check]).score).toBe(100);
+    expect(estimateScore(40, MATCHES, new Set(["short"]), [check]).score).toBe(40);
+  });
+
+  it("never goes below 0", () => {
+    expect(estimateScore(40, MATCHES, new Set(["long", "short"]), []).score).toBe(0);
   });
 });
