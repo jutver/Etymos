@@ -84,6 +84,22 @@ def test_whitespace_differences_are_not_changes():
     assert changed == [False]
 
 
+def test_highlight_numbers_from_old_editors_are_not_changes():
+    # The old editor's innerText carried each highlight's <sup> number,
+    # including one that landed mid-word when a highlight ended there.
+    leaked = P1.replace("study", "study41").replace("some", "so62me")
+    doc, changed = recheck.build_edited_document(blocks(leaked), passages(P1), [])
+    assert changed == [False]
+    assert doc["text"] == P1
+
+
+def test_real_edits_next_to_numbers_still_count():
+    _doc, changed = recheck.build_edited_document(
+        blocks(P1.replace("study", "study1234"), P1.replace("background", "context")),
+        passages(P1, P1), [])
+    assert changed == [True, True]
+
+
 def test_images_and_formatting_are_kept():
     stored = {
         "h": {"id": "h", "text": "Introduction", "block_type": "heading", "level": 2},
@@ -450,3 +466,22 @@ def test_previous_ai_result_is_kept_when_detection_cannot_run(monkeypatch):
     result = recheck.run_recheck(prev, blocks(P1), passages(P1))
     assert result["ai_detection"] == {"available": True, "overall_score": 12.0, "stale": True}
     assert recheck.ai_score(result) is None  # a stale score isn't this text's score
+
+
+def test_previous_sources_load_from_the_store_on_a_fresh_server(tmp_path, monkeypatch):
+    """The report's own sources stay in the re-check pool when their chunks are
+    only in the paper store, not on this server's disk."""
+    import paper_cache
+    import paper_store
+    from plagiarism_matcher import load_candidate_chunks
+
+    monkeypatch.setattr(paper_cache, "CHUNKS_DIR", str(tmp_path / "chunks"))
+    store = paper_store.SqlitePaperStore(str(tmp_path / "store.db"))
+    monkeypatch.setattr(paper_cache, "_store", store)
+    store.save_chunks("paper-1", [{"chunk_id": "s0", "section": "abstract", "text": P2}], "pdf")
+
+    papers = recheck.previous_source_papers(previous_report((P1, P2), P2))
+    assert [p["paper_id"] for p in papers] == ["paper-1"]
+    chunks = load_candidate_chunks(papers)
+    assert [c["text"] for c in chunks] == [P2]
+    assert chunks[0]["source_title"] == "Attention Is All You Need"

@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { quickCheckPassage, warmQuickCheck, type QuickCheckResponse } from "../../lib/api";
 import type { MatchedSource } from "../../lib/types";
-import { markText, normalizeWhitespace, REWRITTEN_CLASS, REWRITTEN_FLAGGED_CLASS } from "./replaceMatch";
+import { isEditedHighlight, markText, normalizeWhitespace, REWRITTEN_CLASS, REWRITTEN_FLAGGED_CLASS } from "./replaceMatch";
 import type { PassageCheck } from "./rewriteScore";
 
 /** How long the reader must stop typing before an edited passage is checked.
@@ -191,6 +191,10 @@ export function useQuickCheck({
     [setResolvedIds],
   );
 
+  // Each highlight's words before the reader first typed in it, so it can be
+  // shown as edited (and back, if the words are restored).
+  const originalTextRef = useRef(new WeakMap<HTMLElement, string>());
+
   // Hand edits: remember which highlights / rewrites the reader is changing
   // (on beforeinput, while the selection is still inside them — a deletion
   // can remove the element itself), then check them once typing settles.
@@ -199,7 +203,13 @@ export function useQuickCheck({
     if (!enabled || !editor) return;
 
     const pending = new Map<string, HTMLElement>();
+    const originalText = originalTextRef.current;
     let timer: number | undefined;
+
+    const track = (key: string, host: HTMLElement) => {
+      pending.set(key, host);
+      if (host.tagName === "MARK" && !originalText.has(host)) originalText.set(host, markText(host));
+    };
 
     const collect = () => {
       const selection = window.getSelection();
@@ -211,12 +221,12 @@ export function useQuickCheck({
       const around = anchorEl?.closest<HTMLElement>(HOST_SELECTOR);
       if (around && editor.contains(around)) {
         const key = hostKey(around);
-        if (key) pending.set(key, around);
+        if (key) track(key, around);
       }
       if (!range.collapsed) {
         editor.querySelectorAll<HTMLElement>(HOST_SELECTOR).forEach((host) => {
           const key = hostKey(host);
-          if (key && range.intersectsNode(host)) pending.set(key, host);
+          if (key && range.intersectsNode(host)) track(key, host);
         });
       }
     };
@@ -242,6 +252,15 @@ export function useQuickCheck({
     };
 
     const onInput = () => {
+      // Typed-over words take the highlight's colour and source number with
+      // them, which no longer describe them: data-edited mutes both (globals.css)
+      // and is saved with the version, so a restored draft shows them muted too.
+      for (const host of pending.values()) {
+        const before = host.tagName === "MARK" ? originalText.get(host) : undefined;
+        if (before === undefined || !host.isConnected) continue;
+        if (isEditedHighlight(markText(host), before)) host.dataset.edited = "true";
+        else delete host.dataset.edited;
+      }
       if (pending.size === 0) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(flush, EDIT_SETTLE_MS);

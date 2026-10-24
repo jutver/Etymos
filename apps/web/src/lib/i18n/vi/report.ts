@@ -31,6 +31,9 @@ export const report: Record<string, string> = {
   "Clear search": "Xóa tìm kiếm",
   "Col {{n}}": "Cột {{n}}",
   "Page {{page}} of {{count}}": "Trang {{page}}/{{count}}",
+  "Paste to replace": "Dán để thay thế",
+  "This passage couldn't be replaced automatically. It's selected and the rewrite is copied: press Ctrl+V (⌘V on Mac) to paste it in.":
+    "Không thể tự động thay thế đoạn này. Đoạn văn đã được chọn và bản viết lại đã được sao chép: nhấn Ctrl+V (⌘V trên Mac) để dán vào.",
   "Collapse sources panel": "Thu gọn bảng nguồn",
   "Copy": "Sao chép",
   "Could not create a preview link for the original PDF.": "Không thể tạo liên kết xem trước cho file PDF gốc.",

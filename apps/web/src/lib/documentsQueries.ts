@@ -8,6 +8,7 @@
 // explicit scoping keeps intent clear and avoids relying on RLS alone.
 import { supabase } from "@etymos/shared";
 import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSource } from "@etymos/shared";
+import { statusFromScore } from "../components/Severity";
 import type { DocumentVersion, VersionCheck } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
 import { parseExplanationFacts } from "./matchExplanation";
@@ -109,7 +110,9 @@ function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
     fileName: row.file_name ?? undefined,
     date: row.uploaded_at.slice(0, 10),
     similarityScore: row.similarity_score != null ? Number(row.similarity_score) : 0,
-    status: row.status ?? "clean",
+    // From the score, not the stored status: a re-check updates the score but
+    // the status stays the original check's ("High similarity" at 44%).
+    status: row.similarity_score != null ? statusFromScore(Number(row.similarity_score)) : (row.status ?? "clean"),
     project: row.project ?? undefined,
     wordCount: row.word_count ?? 0,
     checkState: row.check_state ?? "completed",
