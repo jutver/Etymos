@@ -40,10 +40,12 @@ def load_candidate_chunks(cached_papers):
         paper_id = paper.get("paper_id")
         chunks_path = paper.get("chunks_path")
 
-        if not chunks_path:
-            chunks_path = os.path.join(CHUNKS_DIR, paper_id + ".json")
-
         chunks = load_chunks_from_file(chunks_path)
+
+        if not chunks and paper_id:
+            # Not on this server yet: the shared paper store has them.
+            from paper_cache import load_paper_chunks
+            chunks = load_paper_chunks(paper_id)
 
         for chunk in chunks:
             chunk["source_paper_id"] = paper_id

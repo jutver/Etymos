@@ -15,7 +15,8 @@ from llm_metadata import (
     extract_all_section_metadata,
     extract_all_section_metadata_gemini,
     is_gemini_metadata_extraction_enabled,
-    build_queries_from_section_metadata
+    build_queries_from_section_metadata,
+    title_search_query
 )
 from document_model import build_document
 from search_paper.search_sources import search_all_sources
@@ -234,6 +235,9 @@ def _run_matching_pipeline(*, sections, document, input_text, weighted_sections,
     # Tạm thời dùng title_abstract metadata để build query chính
     main_metadata = section_metadata.get("title_abstract", {})
     queries = build_queries_from_section_metadata(section_metadata)
+    title_query = title_search_query(sections.get("title", ""))
+    if title_query and title_query not in queries:
+        queries.insert(0, title_query)
 
     if progress_callback:
       progress_callback(

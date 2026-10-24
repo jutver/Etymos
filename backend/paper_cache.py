@@ -1,12 +1,23 @@
+"""
+The source-paper cache: every candidate paper a check finds is recorded once,
+its PDF downloaded when there's an open-access link, and its text cut into the
+chunks plagiarism_matcher compares against.
+
+The records and chunks live in paper_store (Supabase in production, SQLite
+locally), so they outlive the server. The local folders are only a working
+copy: pdf/ keeps the downloaded PDFs (never uploaded anywhere), and
+chunks/{paper_id}.json is filled from the store the first time a server needs
+a paper's chunks.
+"""
 import os
 import re
 import json
-import time
 import hashlib
-import sqlite3
 import requests
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from extractor import extract_sections_from_pdf
+import paper_store
 
 CACHE_DIR = "paper_cache"
 
@@ -15,34 +26,35 @@ SECTIONS_DIR = os.path.join(CACHE_DIR, "sections")
 CHUNKS_DIR = os.path.join(CACHE_DIR, "chunks")
 DB_PATH = os.path.join(CACHE_DIR, "papers.db")
 
+# Bump when the chunking changes: a paper whose chunks are older is rebuilt
+# the next time a check finds it, if this server still has its PDF.
+CHUNK_VERSION = 1
+
+# A paper whose PDF couldn't be downloaded gets another try after this many
+# days even if no new link turned up: most failures are timeouts and rate
+# limits, not papers that will never be reachable.
+PDF_RETRY_DAYS = float(os.getenv("PDF_RETRY_DAYS", "7"))
+
+_store = None
+
+
+def get_store():
+    global _store
+    if _store is None:
+        _store = paper_store.make_store(DB_PATH)
+    return _store
+
+
+def set_store(store):
+    """Tests (and scripts) pick the store explicitly."""
+    global _store
+    _store = store
+
 
 def init_cache():
     os.makedirs(PDF_DIR, exist_ok=True)
     os.makedirs(SECTIONS_DIR, exist_ok=True)
     os.makedirs(CHUNKS_DIR, exist_ok=True)
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS papers (
-        paper_id TEXT PRIMARY KEY,
-        title TEXT,
-        year TEXT,
-        doi TEXT,
-        arxiv_id TEXT,
-        source TEXT,
-        url TEXT,
-        pdf_url TEXT,
-        pdf_path TEXT,
-        sections_path TEXT,
-        downloaded INTEGER DEFAULT 0,
-        created_at TEXT
-    )
-    """)
-
-    conn.commit()
-    conn.close()
 
 
 def normalize_title(title):
@@ -79,21 +91,6 @@ def make_paper_id(paper):
     title = normalize_title(paper.get("title", ""))
 
     return "title_" + hashlib.sha1(title.encode()).hexdigest()
-
-
-def paper_exists(paper_id):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute(
-        "SELECT paper_id, pdf_path, downloaded, pdf_url FROM papers WHERE paper_id = ?",
-        (paper_id,)
-    )
-
-    row = cur.fetchone()
-    conn.close()
-
-    return row
 
 
 def guess_pdf_url(paper):
@@ -243,77 +240,180 @@ def download_pdf(pdf_url, save_path, timeout=30, paper_page_url=""):
     return False
 
 
-def save_paper_record(paper, paper_id, pdf_url="", pdf_path="", downloaded=False):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
 
-    sections_path = os.path.join(SECTIONS_DIR, paper_id + ".json")
+_STOPWORDS = frozenset("""
+the and for with from that this these those into onto over under using use used
+based via are was were has have had not but its their our your can may also than
+then such each more most other which while where when what who how why all any
+một các của và cho với trong được những này khi theo như là có không để từ trên
+""".split())
 
-    cur.execute("""
-    INSERT OR REPLACE INTO papers (
-        paper_id,
-        title,
-        year,
-        doi,
-        arxiv_id,
-        source,
-        url,
-        pdf_url,
-        pdf_path,
-        sections_path,
-        downloaded,
-        created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        paper_id,
-        paper.get("title", ""),
-        str(paper.get("year", "")),
-        paper.get("doi", ""),
-        paper.get("arxiv_id", "") or extract_arxiv_id(paper.get("url", "")),
-        paper.get("source", ""),
-        paper.get("url", ""),
-        pdf_url,
-        pdf_path,
-        sections_path,
-        1 if downloaded else 0,
-        time.strftime("%Y-%m-%d %H:%M:%S")
-    ))
 
-    conn.commit()
-    conn.close()
+def search_terms(queries, max_terms=40):
+    """The distinct content words of a check's search queries, for searching
+    the cached papers by title and abstract."""
+    terms = []
+    seen = set()
 
-def cache_candidate_paper(paper):
+    for query in queries or []:
+        for word in re.findall(r"[^\W_]{3,}", str(query).lower()):
+            if word in _STOPWORDS or word.isdigit() or word in seen:
+                continue
+            seen.add(word)
+            terms.append(word)
+
+    return terms[:max_terms]
+
+
+def paper_from_record(record):
+    """A cached paper in the shape the search clients return, so it is ranked
+    and cached like any other candidate."""
+    return {
+        "title": record.get("title") or "",
+        "year": record.get("year") or "",
+        "doi": record.get("doi") or "",
+        "abstract": record.get("abstract") or "",
+        "url": record.get("url") or "",
+        "pdf_url": record.get("pdf_url") or "",
+        "arxiv_id": record.get("arxiv_id") or "",
+        "acl_id": record.get("acl_id") or "",
+        "authors": record.get("authors") or [],
+        "source": record.get("source") or "",
+        "source_kind": record.get("source_kind") or "academic",
+        "from_cache": True,
+    }
+
+
+def search_cached_papers(queries, limit=15):
+    """Papers an earlier check already found that share words with this
+    check's queries. They need no network to be compared, and they keep a
+    known source from being missed when the search APIs are rate limited."""
+    terms = search_terms(queries)
+
+    if not terms:
+        return []
+
+    return [paper_from_record(record) for record in get_store().search(terms, limit)]
+
+
+def find_open_access_pdf(paper):
+    """A PDF link for a paper the search result gave none for, looked up by
+    DOI. Empty when there is none or the lookup fails."""
+    doi = paper.get("doi") or ""
+
+    if not doi:
+        return ""
+
+    try:
+        from search_paper.search_openalex import lookup_openalex_pdf_url
+        return lookup_openalex_pdf_url(doi)
+    except Exception as e:
+        print(f"  [open access lookup error] {e} - {doi}")
+        return ""
+
+
+def _record_for(paper, paper_id, existing):
+    """The paper's metadata merged over what is already cached: a later
+    search result with fewer fields never blanks out an earlier one's."""
+    old = existing or {}
+
+    def pick(key, value):
+        return value if value else (old.get(key) or "")
+
+    title = pick("title", paper.get("title"))
+
+    return {
+        "paper_id": paper_id,
+        "title": title,
+        "normalized_title": normalize_title(title),
+        "year": pick("year", str(paper.get("year") or "")),
+        "doi": pick("doi", paper.get("doi")),
+        "arxiv_id": pick("arxiv_id", paper.get("arxiv_id") or extract_arxiv_id(paper.get("url", ""))),
+        "acl_id": pick("acl_id", paper.get("acl_id")),
+        "source": pick("source", paper.get("source")),
+        "source_kind": paper.get("source_kind") or old.get("source_kind") or "academic",
+        "url": pick("url", paper.get("url")),
+        "pdf_url": pick("pdf_url", guess_pdf_url(paper)),
+        "authors": paper.get("authors") or old.get("authors") or [],
+        "abstract": pick("abstract", paper.get("abstract")),
+    }
+
+
+def _changed(record, existing):
+    return existing is None or any(record[k] != existing.get(k) for k in record)
+
+
+def _attempt_is_stale(existing):
+    attempted = paper_store.parse_time(existing.get("pdf_attempted_at"))
+
+    if attempted is None:
+        return True
+
+    age = datetime.now(timezone.utc) - attempted
+    return age.total_seconds() > PDF_RETRY_DAYS * 86400
+
+
+_UNKNOWN = object()
+
+
+def cache_candidate_paper(paper, existing=_UNKNOWN):
     init_cache()
 
     paper_id = make_paper_id(paper)
-    existing = paper_exists(paper_id)
-    pdf_url = guess_pdf_url(paper)
+    store = get_store()
 
-    # A paper cached without its PDF is tried again once a search turns up
-    # a link it didn't have; the same failing link isn't retried every check.
-    if existing and (existing[2] or not pdf_url or pdf_url == existing[3]):
+    if existing is _UNKNOWN:
+        existing = store.get_many([paper_id]).get(paper_id)
+
+    record = _record_for(paper, paper_id, existing)
+    pdf_path = os.path.join(PDF_DIR, paper_id + ".pdf")
+    has_local_pdf = os.path.exists(pdf_path)
+
+    if existing and (existing.get("has_full_text") or has_local_pdf):
+        # Full text already built (its chunks are in the store), or this
+        # server still has the PDF to build it from.
+        if _changed(record, existing):
+            store.upsert(record)
+
         return {
             "paper_id": paper_id,
             "status": "exists",
-            "pdf_path": existing[1],
-            "downloaded": bool(existing[2])
+            "pdf_path": pdf_path if has_local_pdf else "",
+            "downloaded": True,
+            "chunk_version": existing.get("chunk_version"),
         }
 
-    pdf_path = os.path.join(PDF_DIR, paper_id + ".pdf")
+    pdf_url = guess_pdf_url(paper) or record["pdf_url"]
 
-    downloaded = download_pdf(pdf_url, pdf_path, paper_page_url=paper.get("url", ""))
+    # A paper cached without its PDF is tried again once a search turns up
+    # a link it didn't have, or once the last attempt is old; the same
+    # failing link isn't retried every check.
+    if existing and not has_local_pdf:
+        new_link = pdf_url and pdf_url != (existing.get("pdf_attempted_url") or "")
+
+        if not new_link and not _attempt_is_stale(existing):
+            if _changed(record, existing):
+                store.upsert(record)
+
+            return {
+                "paper_id": paper_id,
+                "status": "exists",
+                "pdf_path": "",
+                "downloaded": False
+            }
+
+    if not pdf_url:
+        pdf_url = find_open_access_pdf(record)
+
+    downloaded = has_local_pdf or download_pdf(pdf_url, pdf_path, paper_page_url=paper.get("url", ""))
 
     if not downloaded:
         pdf_path = ""
 
-    save_paper_record(
-        paper=paper,
-        paper_id=paper_id,
-        pdf_url=pdf_url,
-        pdf_path=pdf_path,
-        downloaded=downloaded
-    )
+    record["pdf_url"] = pdf_url or record["pdf_url"]
+    record["pdf_attempted_url"] = pdf_url or ""
+    record["pdf_attempted_at"] = paper_store.now_iso()
+    store.upsert(record)
 
     return {
         "paper_id": paper_id,
@@ -323,7 +423,43 @@ def cache_candidate_paper(paper):
         "downloaded": downloaded
     }
 
-def build_fallback_chunks_from_abstract(paper_id, title, abstract, chunk_size=900, overlap=150):
+
+def _write_local_chunks(paper_id, chunks):
+    os.makedirs(CHUNKS_DIR, exist_ok=True)
+    chunks_path = os.path.join(CHUNKS_DIR, paper_id + ".json")
+
+    with open(chunks_path, "w", encoding="utf-8") as f:
+        json.dump(chunks, f, ensure_ascii=False, indent=2)
+
+    return chunks_path
+
+
+def load_paper_chunks(paper_id):
+    """A paper's chunks: this server's copy, else the store's (saved locally
+    for next time). Empty when the paper has none anywhere."""
+    chunks_path = os.path.join(CHUNKS_DIR, paper_id + ".json")
+
+    if os.path.exists(chunks_path):
+        with open(chunks_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    stored = get_store().load_chunks(paper_id)
+
+    if not stored or not stored.get("chunks"):
+        return []
+
+    _write_local_chunks(paper_id, stored["chunks"])
+    return stored["chunks"]
+
+
+def ids_by_titles(titles):
+    """{title: paper_id} for the titles that are cached."""
+    wanted = {normalize_title(t): t for t in titles if t}
+    found = get_store().ids_by_normalized_titles(list(wanted))
+    return {wanted[key]: paper_id for key, paper_id in found.items() if key in wanted}
+
+
+def build_fallback_chunks_from_abstract(paper_id, title, abstract, chunk_size=900, overlap=150, save=True):
     """
     Dùng khi KHÔNG tải được PDF. Tạo chunk trực tiếp từ title+abstract
     (dữ liệu đã có sẵn từ search_all_sources) để vẫn có gì đó để so khớp,
@@ -358,10 +494,10 @@ def build_fallback_chunks_from_abstract(paper_id, title, abstract, chunk_size=90
 
         start += chunk_size - overlap
 
-    chunks_path = os.path.join(CHUNKS_DIR, paper_id + ".json")
+    chunks_path = _write_local_chunks(paper_id, chunks)
 
-    with open(chunks_path, "w", encoding="utf-8") as f:
-        json.dump(chunks, f, ensure_ascii=False, indent=2)
+    if save:
+        get_store().save_chunks(paper_id, chunks, "abstract")
 
     return {
         "paper_id": paper_id,
@@ -373,13 +509,41 @@ def build_fallback_chunks_from_abstract(paper_id, title, abstract, chunk_size=90
     }
 
 
+def _full_text_chunks(result, existing):
+    """Chunks for a paper whose full text is (or can be) available. Empty
+    dict when there are none, so the caller falls back to the abstract."""
+    paper_id = result["paper_id"]
+    stale = (result.get("chunk_version") or 0) < CHUNK_VERSION
+
+    if result.get("pdf_path") and (result["status"] != "exists" or stale or not (existing or {}).get("has_full_text")):
+        built = build_sections_and_chunks_for_paper(paper_id=paper_id, pdf_path=result["pdf_path"])
+        return built if built.get("num_chunks") else {}
+
+    chunks = load_paper_chunks(paper_id)
+
+    if not chunks:
+        return {}
+
+    return {
+        "paper_id": paper_id,
+        "sections_built": False,
+        "chunks_built": True,
+        "chunks_path": os.path.join(CHUNKS_DIR, paper_id + ".json"),
+        "num_chunks": len(chunks),
+        "chunks_source": "full_text"
+    }
+
+
 def cache_candidate_papers(candidate_papers, top_k=10, build_text=True):
     init_cache()
 
+    papers = candidate_papers[:top_k]
+    existing_by_id = get_store().get_many([make_paper_id(p) for p in papers])
     cached = []
 
-    for paper in candidate_papers[:top_k]:
-        result = cache_candidate_paper(paper)
+    for paper in papers:
+        existing = existing_by_id.get(make_paper_id(paper))
+        result = cache_candidate_paper(paper, existing)
 
         # đảm bảo luôn có thông tin nguồn cho report/frontend
         result["title"] = result.get("title") or paper.get("title", "")
@@ -393,20 +557,27 @@ def cache_candidate_papers(candidate_papers, top_k=10, build_text=True):
         result["year"] = result.get("year") or paper.get("year") or ""
         result["doi"] = result.get("doi") or paper.get("doi") or ""
 
-        if build_text and result.get("downloaded") and result.get("pdf_path"):
-            build_result = build_sections_and_chunks_for_paper(
-                paper_id=result["paper_id"],
-                pdf_path=result["pdf_path"]
-            )
-            result.update(build_result)
-        elif build_text:
-            # Không tải được PDF -> fallback dùng abstract để vẫn so khớp được.
-            fallback_result = build_fallback_chunks_from_abstract(
-                paper_id=result["paper_id"],
-                title=result.get("title", ""),
-                abstract=paper.get("abstract", "")
-            )
-            result.update(fallback_result)
+        if build_text:
+            built = _full_text_chunks(result, existing) if result.get("downloaded") else {}
+
+            if not built and (existing or {}).get("has_full_text"):
+                # Marked full text but its chunks are gone: say so, so the
+                # PDF is looked for again.
+                get_store().upsert({"paper_id": result["paper_id"], "has_full_text": False, "chunk_version": None})
+
+            if not built:
+                # Không tải được PDF -> fallback dùng abstract để vẫn so khớp được.
+                # Only saved to the store when it is new or the abstract changed.
+                abstract = paper.get("abstract", "") or (existing or {}).get("abstract", "")
+                built = build_fallback_chunks_from_abstract(
+                    paper_id=result["paper_id"],
+                    title=result.get("title", ""),
+                    abstract=abstract,
+                    save=existing is None or (existing.get("abstract") or "") != abstract
+                    or bool(existing.get("has_full_text")),
+                )
+
+            result.update(built)
 
         cached.append(result)
 
@@ -434,8 +605,8 @@ def build_sections_and_chunks_for_paper(paper_id, pdf_path, chunk_size=900, over
 
     sections = extract_sections_from_pdf(pdf_path)
 
+    os.makedirs(SECTIONS_DIR, exist_ok=True)
     sections_path = os.path.join(SECTIONS_DIR, paper_id + ".json")
-    chunks_path = os.path.join(CHUNKS_DIR, paper_id + ".json")
 
     with open(sections_path, "w", encoding="utf-8") as f:
         json.dump(sections, f, ensure_ascii=False, indent=2)
@@ -468,23 +639,19 @@ def build_sections_and_chunks_for_paper(paper_id, pdf_path, chunk_size=900, over
 
             start += chunk_size - overlap
 
-    with open(chunks_path, "w", encoding="utf-8") as f:
-        json.dump(chunks, f, ensure_ascii=False, indent=2)
+    chunks_path = _write_local_chunks(paper_id, chunks)
 
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-    UPDATE papers
-    SET sections_path = ?
-    WHERE paper_id = ?
-    """, (
-        sections_path,
-        paper_id
-    ))
-
-    conn.commit()
-    conn.close()
+    if chunks:
+        store = get_store()
+        store.save_chunks(paper_id, chunks, "full_text")
+        update = {"paper_id": paper_id, "has_full_text": True, "chunk_version": CHUNK_VERSION}
+        # The abstract is what the cache is searched by; a paper found
+        # without one gets it from its own text.
+        abstract = (sections.get("abstract") or "").strip()
+        existing = store.get_many([paper_id]).get(paper_id) or {}
+        if abstract and not existing.get("abstract"):
+            update["abstract"] = abstract[:4000]
+        store.upsert(update)
 
     return {
         "paper_id": paper_id,
@@ -492,5 +659,6 @@ def build_sections_and_chunks_for_paper(paper_id, pdf_path, chunk_size=900, over
         "chunks_built": True,
         "sections_path": sections_path,
         "chunks_path": chunks_path,
-        "num_chunks": len(chunks)
+        "num_chunks": len(chunks),
+        "chunks_source": "full_text"
     }

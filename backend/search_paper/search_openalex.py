@@ -1,6 +1,12 @@
+import os
 import re
 import requests
 import time
+
+# Without a key, OpenAlex charges every request to a small free daily budget
+# shared by everyone on the server's IP address; once it is spent, every search
+# answers 429 until midnight UTC. A key (free from openalex.org) has its own budget.
+OPENALEX_API_KEY = os.getenv("OPENALEX_API_KEY", "").strip()
 
 _last_openalex_time = 0.0
 
@@ -48,6 +54,24 @@ def openalex_arxiv_id(item):
     return ""
 
 
+def lookup_openalex_pdf_url(doi: str, timeout: float = 15) -> str:
+    """The open-access PDF link OpenAlex knows for one DOI, for a cached paper
+    whose search result had none. Empty when there is none."""
+    doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", doi or "", flags=re.I).strip()
+    if not doi:
+        return ""
+
+    params = {"api_key": OPENALEX_API_KEY} if OPENALEX_API_KEY else {}
+    try:
+        response = requests.get(f"https://api.openalex.org/works/doi:{doi}", params=params, timeout=timeout)
+        if response.status_code != 200:
+            return ""
+        return openalex_pdf_url(response.json())
+    except Exception as e:
+        print(f"OpenAlex lookup error for '{doi}': {e}")
+        return ""
+
+
 def search_openalex(query: str, max_results: int = 10, delay_seconds: float = 1.0) -> list[dict]:
     global _last_openalex_time
     results = []
@@ -64,6 +88,8 @@ def search_openalex(query: str, max_results: int = 10, delay_seconds: float = 1.
         "search": query,
         "per-page": max_results
     }
+    if OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
 
     try:
         response = requests.get(url, params=params, timeout=15)

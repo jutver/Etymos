@@ -8,10 +8,10 @@ take minutes and spend search/download quota, so this only compares the new
 text with the sources the report ALREADY found:
 
   * the chunks of every source paper in the report, which paper_cache saved
-    to disk during the original check (no network access here), and
+    during the original check (this server's copy, else the shared paper
+    store; no search or download here), and
   * every matched source sentence stored on the report itself, as a fallback
-    for sources whose chunks are not on this machine (e.g. a report restored
-    from Supabase after a redeploy).
+    for sources whose chunks can't be found.
 
 So it catches "the rewrite still copies source A" and "the edit now copies
 source B from the same report". It cannot catch a match with a source the
@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sqlite3
 import threading
 from collections import OrderedDict
 from typing import Any
@@ -80,35 +79,32 @@ _CORPUS_LOCK = threading.Lock()
 
 
 def _paper_ids_by_title(titles: set[str]) -> dict[str, str]:
-    """Looks paper ids up by title in paper_cache's SQLite index.
+    """Looks paper ids up by title in the paper store.
 
     Reports restored from Supabase keep each match's source title but not its
     source_paper_id (document_matches has no such column), so this is how
-    their chunk files are found again.
+    their chunks are found again.
     """
     if not titles:
         return {}
     try:
-        from paper_cache import DB_PATH, normalize_title
+        from paper_cache import ids_by_titles
+        return ids_by_titles(titles)
     except Exception:
-        return {}
-    if not os.path.exists(DB_PATH):
+        logger.exception("Quick check: could not read the paper store.")
         return {}
 
-    wanted = {normalize_title(t): t for t in titles if t}
-    found: dict[str, str] = {}
+
+def _stored_chunks(paper_id: str) -> list[dict[str, Any]]:
+    """Chunks this server doesn't have yet, from the shared paper store."""
+    if not paper_id:
+        return []
     try:
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            for paper_id, title in conn.execute("SELECT paper_id, title FROM papers"):
-                key = normalize_title(title or "")
-                if key in wanted and wanted[key] not in found:
-                    found[wanted[key]] = paper_id
-        finally:
-            conn.close()
+        from paper_cache import load_paper_chunks
+        return load_paper_chunks(paper_id)
     except Exception:
-        logger.exception("Quick check: could not read the paper cache index.")
-    return found
+        logger.exception("Quick check: could not load the chunks of %s.", paper_id)
+        return []
 
 
 def _features(text: str) -> tuple[frozenset[str], frozenset[str]]:
@@ -180,7 +176,7 @@ def build_source_corpus(report: dict[str, Any]) -> list[dict[str, Any]]:
         corpus.append(entry)
 
     for paper_id, title in titles_by_id.items():
-        chunks = load_chunks_from_file(os.path.join(CHUNKS_DIR, paper_id + ".json"))
+        chunks = load_chunks_from_file(os.path.join(CHUNKS_DIR, paper_id + ".json")) or _stored_chunks(paper_id)
         for chunk in chunks:
             for span in split_sentences_with_spans(chunk.get("text", "")):
                 add(span["text"], paper_id, title)
