@@ -41,12 +41,15 @@ import {
   RecoverAccountPage,
   WaitlistPage,
   ContactPage,
+  LegalPage,
   GuestSupportTicketPage,
   SupportRequestsPage,
   NewSupportRequestPage,
   SupportTicketPage,
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
+import { TermsGate } from "./components/legal/TermsGate";
+import { POLICIES } from "./components/legal/policies";
 
 /** A fresh Report screen per document: its editor holds the text as live,
  * uncontrolled DOM, so moving from one report straight to another must not
@@ -153,11 +156,15 @@ function App() {
       <PageViewTracker />
       <MaintenanceGate>
         <AnnouncementPopup />
+        <TermsGate />
         <Routes>
           <Route element={<PublicShellWithBanner />}>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            {POLICIES.map((p) => (
+              <Route key={p.slug} path={p.path} element={<LegalPage slug={p.slug} />} />
+            ))}
             <Route path="/support/t/:token" element={<GuestSupportTicketPage />} />
           </Route>
 

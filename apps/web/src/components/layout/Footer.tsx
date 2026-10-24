@@ -3,11 +3,12 @@ import { EnvelopeSimple } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
 import { SUPPORT_EMAIL } from "../support/labels";
+import { POLICIES } from "../legal/policies";
 
 export function Footer() {
   return (
     <footer className="editorial-footer border-t border-navy-700/60 bg-navy-900 text-white/70">
-      <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
         <div>
           <Logo variant="light" /><p className="footer-statement">Thoughtful writing.<br /><em>Original by you.</em></p>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
@@ -54,6 +55,18 @@ export function Footer() {
               <Link to="/contact" className="hover:text-white">
                 {t("Contact support")}</Link>
             </li>
+          </ul>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Policies & terms")}</p>
+          <ul className="mt-4 space-y-3 text-sm">
+            {POLICIES.map((p) => (
+              <li key={p.slug}>
+                <Link to={p.path} className="hover:text-white">
+                  {t(p.title)}</Link>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
