@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowClockwise, Check, Copy, MagicWand } from "@phosphor-icons/react";
 import { SlideOver } from "../../components/ui/SlideOver";
 import { ModalCloseButton } from "../../components/ui/Modal";
@@ -17,7 +17,11 @@ export function RewritePanel({
   onClose,
   onAccept,
   precheck,
+  reportId,
 }: {
+  /** The report this passage is in: the AI rewrite is then checked against
+   * its sources and regenerated while it still overlaps one. */
+  reportId?: string;
   /** Quick check of the shown rewrite against the report's sources
    * (useQuickCheck.ts), so the reader sees whether it still overlaps one
    * before accepting it. Omit to skip. */
@@ -43,6 +47,9 @@ export function RewritePanel({
     }
   }, [open, match?.id]);
 
+  // Verdicts the rewrite request already returned, so they aren't asked for twice.
+  const knownChecks = useRef(new Map<string, QuickCheckResponse>());
+
   // Quick check of each rewrite as soon as it is on screen.
   const [precheckState, setPrecheckState] = useState<
     { text: string; status: "checking" | "error" } | { text: string; status: "done"; result: QuickCheckResponse } | null
@@ -51,6 +58,11 @@ export function RewritePanel({
     const text = variant.trim();
     if (!precheck || !open || regenerating || failed || !text) {
       setPrecheckState(null);
+      return;
+    }
+    const known = knownChecks.current.get(text);
+    if (known) {
+      setPrecheckState({ text, status: "done", result: known });
       return;
     }
     let cancelled = false;
@@ -75,7 +87,8 @@ export function RewritePanel({
 
     try {
       // Gọi API Rewrite mới tạo ở Backend
-      const data = await rewriteText(match.userSnippet, match.sourceSnippet);
+      const data = await rewriteText(match.userSnippet, match.sourceSnippet, reportId);
+      if (data.check) knownChecks.current.set(data.rewritten_text.trim(), data.check);
       setVariant(data.rewritten_text);
     } catch (err) {
       console.error("Rewrite error:", err);

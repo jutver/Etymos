@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import Any, Callable, Optional
 
 from feature_flags import ensure_flag_registered, is_flag_enabled
 
@@ -33,6 +34,11 @@ AI_REWRITE_FLAG_DESCRIPTION = (
 )
 
 GEMINI_REWRITE_MODEL = os.getenv("GEMINI_REWRITE_MODEL", "gemini-flash-latest")
+
+# With a report to check against, a rewrite that still overlaps one of its
+# sources is generated again (with that overlap pointed out), up to this many
+# attempts in all. The least-overlapping attempt is returned.
+MAX_REWRITE_ATTEMPTS = int(os.getenv("MAX_REWRITE_ATTEMPTS", "3"))
 
 # Local generation budget. Rewrites are a sentence or two, so this is
 # deliberately much smaller than the metadata extraction budget.
@@ -72,11 +78,19 @@ REWRITE_SYSTEM_PROMPT = (
 )
 
 
-def build_rewrite_prompt(input_sentence: str, source_sentence: str, *, strict: bool = False) -> str:
+def build_rewrite_prompt(
+    input_sentence: str,
+    source_sentence: str,
+    *,
+    strict: bool = False,
+    feedback: Optional[dict] = None,
+) -> str:
     """User-turn prompt shared by the Gemini and local-Qwen paths.
 
     `strict` adds a final reminder about the language; it is used for the one
-    retry after a reply came back in the wrong language.
+    retry after a reply came back in the wrong language. `feedback`
+    ({"previous": str, "overlaps": [str]}) says which earlier attempt still
+    overlapped which source sentences.
     """
     prompt = f"""
 A passage in a student's academic document was flagged as too similar to a published source. Rewrite the passage so it no longer overlaps with the source, while saying exactly the same thing.
@@ -96,6 +110,16 @@ Rules:
 
 Output only the rewritten passage as plain text: no quotation marks, no labels such as "Rewritten:", no explanation, no alternatives.
 """.strip()
+
+    if feedback:
+        overlaps = "\n".join(f'- "{sentence}"' for sentence in feedback.get("overlaps") or [])
+        prompt += f"""
+
+Your previous attempt was still too close to the source:
+\"\"\"{feedback.get("previous", "")}\"\"\"
+It overlapped with these source sentences:
+{overlaps}
+Write a new version that differs clearly from both the source and your previous attempt: restructure the sentence more boldly and use different words, keeping the meaning and every technical term."""
 
     if strict:
         prompt += "\n\nIMPORTANT: your previous answer was not in English. Reply in English only."
@@ -161,7 +185,9 @@ def _clean_output(text: str) -> str:
     return cleaned
 
 
-def rewrite_with_gemini(input_sentence: str, source_sentence: str, *, strict: bool = False) -> str:
+def rewrite_with_gemini(
+    input_sentence: str, source_sentence: str, *, strict: bool = False, feedback: Optional[dict] = None
+) -> str:
     import google.generativeai as genai
 
     api_key = os.getenv("GEMINI_API_KEY")
@@ -172,12 +198,16 @@ def rewrite_with_gemini(input_sentence: str, source_sentence: str, *, strict: bo
     # The system instruction carries the "always English" rule at the highest
     # priority; the user turn repeats it next to the concrete rewriting rules.
     model = genai.GenerativeModel(GEMINI_REWRITE_MODEL, system_instruction=REWRITE_SYSTEM_PROMPT)
-    response = model.generate_content(build_rewrite_prompt(input_sentence, source_sentence, strict=strict))
+    response = model.generate_content(
+        build_rewrite_prompt(input_sentence, source_sentence, strict=strict, feedback=feedback)
+    )
 
     return _clean_output(getattr(response, "text", "") or "")
 
 
-def rewrite_with_local_model(input_sentence: str, source_sentence: str, *, strict: bool = False) -> str:
+def rewrite_with_local_model(
+    input_sentence: str, source_sentence: str, *, strict: bool = False, feedback: Optional[dict] = None
+) -> str:
     """Run the rewrite on the local Qwen2.5 model.
 
     Shares llm_metadata's weights (the same model the metadata extractor
@@ -193,7 +223,7 @@ def rewrite_with_local_model(input_sentence: str, source_sentence: str, *, stric
         {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": build_rewrite_prompt(input_sentence, source_sentence, strict=strict),
+            "content": build_rewrite_prompt(input_sentence, source_sentence, strict=strict, feedback=feedback),
         },
     ]
 
@@ -227,15 +257,69 @@ def rewrite_with_local_model(input_sentence: str, source_sentence: str, *, stric
         return _clean_output(tokenizer.decode(generated, skip_special_tokens=True))
 
 
-def rewrite_sentence(input_sentence: str, source_sentence: str) -> dict:
+def _overlap_cost(verdict: dict) -> float:
+    """How much a quick-check verdict would add to the score: the flagged
+    sentences' length times their label weight."""
+    return sum(len(hit.get("input_sentence") or "") * float(hit.get("weight") or 0) for hit in verdict.get("hits") or [])
+
+
+def rewrite_sentence(
+    input_sentence: str,
+    source_sentence: str,
+    check: Optional[Callable[[str], dict[str, Any]]] = None,
+) -> dict:
     """
     Rewrite `input_sentence`, routed by the `gemini_ai_rewrite` flag.
 
     Falls back to the other provider if the selected one fails, so a
     missing GPU (or a missing API key) degrades instead of 500-ing.
 
-    Returns {"rewritten_text", "provider", "model", "fallback_used"}.
+    With `check` (quick_check against the report's own sources), a rewrite
+    that still overlaps a source is generated again, told which source
+    sentences it overlapped, up to MAX_REWRITE_ATTEMPTS attempts. The
+    attempt that overlaps least is returned, with its verdict as "check".
+
+    Returns {"rewritten_text", "provider", "model", "fallback_used"}, plus
+    "check" and "attempts" when `check` was given and could run.
     """
+    result = _rewrite_once(input_sentence, source_sentence)
+    if check is None:
+        return result
+
+    best: Optional[tuple[float, dict, dict]] = None
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            verdict = check(result["rewritten_text"])
+        except Exception:
+            logger.exception("Quick check of an AI rewrite failed; returning it unchecked.")
+            return result if best is None else {**best[1], "check": best[2], "attempts": attempts - 1}
+
+        cost = _overlap_cost(verdict)
+        if best is None or cost < best[0]:
+            best = (cost, result, verdict)
+        if verdict.get("status") != "flagged" or attempts >= MAX_REWRITE_ATTEMPTS:
+            break
+
+        feedback = {
+            "previous": result["rewritten_text"],
+            "overlaps": list(dict.fromkeys(hit.get("source_sentence") or "" for hit in verdict.get("hits") or [])),
+        }
+        try:
+            result = _rewrite_once(input_sentence, source_sentence, feedback=feedback)
+        except RewriteUnavailable:
+            logger.warning("AI rewrite retry failed; keeping the best attempt so far.")
+            break
+
+    _cost, best_result, best_verdict = best
+    return {**best_result, "check": best_verdict, "attempts": attempts}
+
+
+def _rewrite_once(input_sentence: str, source_sentence: str, feedback: Optional[dict] = None) -> dict:
+    """One rewrite from the flagged provider, falling back to the other."""
+    # Only passed when set, so providers stubbed with the older signature still work.
+    extra = {"feedback": feedback} if feedback else {}
     use_gemini = is_gemini_ai_rewrite_enabled()
 
     primary = "gemini" if use_gemini else "local"
@@ -253,14 +337,14 @@ def rewrite_sentence(input_sentence: str, source_sentence: str) -> dict:
                 from config import LLM_MODEL_NAME
                 model_name = LLM_MODEL_NAME
 
-            text = generate(input_sentence, source_sentence)
+            text = generate(input_sentence, source_sentence, **extra)
 
             # The rewrite must be English. If it came back Vietnamese anyway,
             # ask once more with an explicit reminder; if it is still not
             # English, treat this provider as failed so the other one gets a go.
             if text and _looks_vietnamese(text):
                 logger.info("AI rewrite via %s came back in Vietnamese; retrying once.", provider)
-                text = generate(input_sentence, source_sentence, strict=True)
+                text = generate(input_sentence, source_sentence, strict=True, **extra)
                 if text and _looks_vietnamese(text):
                     raise RewriteUnavailable(f"{provider} did not return an English rewrite.")
 

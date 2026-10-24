@@ -16,6 +16,8 @@ export const support: Record<string, string> = {
   "Couldn't reach Etymos. Check your connection and try again.": "Không thể kết nối tới Etymos. Hãy kiểm tra kết nối mạng và thử lại.",
   "Each file must be 5 MB or smaller.": "Mỗi tệp tối đa 5 MB.",
   "Email Etymos support": "Gửi email cho bộ phận hỗ trợ Etymos",
+  "Etymos on Facebook": "Etymos trên Facebook",
+  "Etymos on TikTok": "Etymos trên TikTok",
   "Etymos Support": "Hỗ trợ Etymos",
   "Help & support": "Trợ giúp & hỗ trợ",
   "How can we help?": "Chúng tôi có thể giúp gì cho bạn?",

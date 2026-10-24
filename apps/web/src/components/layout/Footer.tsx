@@ -1,9 +1,15 @@
 import { Link } from "react-router-dom";
-import { EnvelopeSimple } from "@phosphor-icons/react";
+import { EnvelopeSimple, FacebookLogo, TiktokLogo } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
 import { SUPPORT_EMAIL } from "../support/labels";
 import { POLICIES } from "../legal/policies";
+
+// Labels are functions so they follow the UI language at render time.
+const SOCIAL_LINKS = [
+  { label: () => t("Etymos on Facebook"), href: "https://www.facebook.com/profile.php?id=61595158266498", Icon: FacebookLogo },
+  { label: () => t("Etymos on TikTok"), href: "https://www.tiktok.com/@etymosofficial", Icon: TiktokLogo },
+];
 
 export function Footer() {
   return (
@@ -20,6 +26,22 @@ export function Footer() {
           >
             <EnvelopeSimple size={16} />
             {SUPPORT_EMAIL}</a>
+          <ul className="mt-5 flex items-center gap-3">
+            {SOCIAL_LINKS.map(({ label, href, Icon }) => (
+              <li key={href}>
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label()}
+                  title={label()}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                >
+                  <Icon size={18} weight="fill" />
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div>

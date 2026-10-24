@@ -1080,6 +1080,7 @@ export default function ReportPage() {
         onClose={() => setRewriteMatch(null)}
         onAccept={handleAcceptRewrite}
         precheck={quickCheck.runCheck}
+        reportId={id}
       />
     </div>
   );

@@ -10,3 +10,14 @@ export function formatDate(iso: string): string {
     year: "numeric",
   }).format(d);
 }
+
+/** A timestamp as date and time in the UI language: "22 Sep 2026, 14:05". */
+export function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat(currentLocale() === "vi-VN" ? "vi-VN" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}

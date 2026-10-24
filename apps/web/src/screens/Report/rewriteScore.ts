@@ -16,7 +16,13 @@
  *
  * A rewrite can itself still overlap a source — the same one, or another
  * one from the report. The quick check (backend/quick_check.py) reports
- * those overlaps as `hits`, and each hit adds its sentence's share back.
+ * those overlaps as `hits`, and each hit adds its sentence's share back —
+ * at most the share of the passage it replaced: a rewrite is never counted
+ * as worse than the copy it replaced (only a full re-check is exact).
+ *
+ * A passage whose quick check is still running counts as it was, so the
+ * score moves once, when its verdict is in, instead of dropping first and
+ * coming back up when the rewrite turns out to still overlap.
  */
 import type { MatchedSource } from "../../lib/types";
 import type { QuickCheckHit } from "../../lib/api";
@@ -100,48 +106,53 @@ export function estimateScore(
   const estimated = resolvedIds.size > 0 || checkList.length > 0;
   const checking = checkList.some((c) => c.status === "checking");
 
+  // Passages still being checked keep their old share until the verdict.
+  const pending = new Set(checkList.filter((c) => c.status === "checking").flatMap((c) => c.matchIds));
+
   // Matches on the same words (one sentence, several sources) are one span,
   // fixed as soon as any of them is.
-  const spans = new Map<string, { match: MatchedSource; weight: number; fixed: boolean }>();
+  const spans = new Map<string, { match: MatchedSource; weight: number; fixed: boolean; ids: string[] }>();
   for (const match of matches) {
     const key = spanKey(match);
     const span = spans.get(key);
-    const fixed = resolvedIds.has(match.id);
+    const fixed = resolvedIds.has(match.id) && !pending.has(match.id);
     if (span) {
       span.weight = Math.max(span.weight, matchWeight(match));
       span.fixed ||= fixed;
+      span.ids.push(match.id);
     } else {
-      spans.set(key, { match, weight: matchWeight(match), fixed });
+      spans.set(key, { match, weight: matchWeight(match), fixed, ids: [match.id] });
     }
   }
 
-  // Spans with offsets: weighted union of character ranges, like the
-  // backend's weighted_coverage (partly overlapping spans count once).
-  // Spans without offsets: their snippet length.
-  const all: Interval[] = [];
-  const kept: Interval[] = [];
-  let total = 0;
-  let remaining = 0;
-  for (const { match, weight, fixed } of spans.values()) {
-    if (match.startOffset != null && match.endOffset != null) {
-      const interval = { start: match.startOffset, end: match.endOffset, weight };
-      all.push(interval);
-      if (!fixed) kept.push(interval);
-    } else {
-      const weighted = spanLength(match) * weight;
-      total += weighted;
-      if (!fixed) remaining += weighted;
+  // Weighted characters of `list`. Spans with offsets: weighted union of
+  // character ranges, like the backend's weighted_coverage (partly
+  // overlapping spans count once). Spans without offsets: their snippet length.
+  const coverage = (list: { match: MatchedSource; weight: number }[]): number => {
+    const intervals: Interval[] = [];
+    let sum = 0;
+    for (const { match, weight } of list) {
+      if (match.startOffset != null && match.endOffset != null) {
+        intervals.push({ start: match.startOffset, end: match.endOffset, weight });
+      } else {
+        sum += spanLength(match) * weight;
+      }
     }
-  }
-  total += weightedCoverage(all);
-  remaining += weightedCoverage(kept);
-  const removed = total - remaining;
+    return sum + weightedCoverage(intervals);
+  };
+  const spanList = [...spans.values()];
+  const total = coverage(spanList);
+  const removed = total - coverage(spanList.filter((span) => !span.fixed));
   if (total <= 0 || baseScore <= 0) return { score: roundScore(baseScore), estimated, checking };
 
   let addedBack = 0;
   for (const check of checkList) {
     if (check.status !== "flagged") continue;
-    for (const hit of check.hits) addedBack += normalizeWhitespace(hit.input_sentence).length * hit.weight;
+    const ids = new Set(check.matchIds);
+    const replacedShare = coverage(spanList.filter((span) => span.fixed && span.ids.some((id) => ids.has(id))));
+    let overlap = 0;
+    for (const hit of check.hits) overlap += normalizeWhitespace(hit.input_sentence).length * hit.weight;
+    addedBack += Math.min(overlap, replacedShare);
   }
 
   const pointsPerWeightedChar = baseScore / total;
