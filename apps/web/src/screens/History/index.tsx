@@ -193,7 +193,7 @@ export default function HistoryPage() {
                     </span>
                     <span className="shrink-0">
                       {group.latest.checkState === "completed" ? (
-                        <StatusPill status={group.latest.status} />
+                        <StatusPill status={statusFromScore(group.latest.similarityScore)} />
                       ) : (
                         <CheckStatePill state={group.latest.checkState} />
                       )}

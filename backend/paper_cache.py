@@ -16,7 +16,7 @@ import hashlib
 import requests
 from datetime import datetime, timezone
 from urllib.parse import urlparse
-from extractor import extract_sections_from_pdf
+from extractor import extract_sections_from_pdf, sentence_windows
 import paper_store
 
 CACHE_DIR = "paper_cache"
@@ -28,7 +28,7 @@ DB_PATH = os.path.join(CACHE_DIR, "papers.db")
 
 # Bump when the chunking changes: a paper whose chunks are older is rebuilt
 # the next time a check finds it, if this server still has its PDF.
-CHUNK_VERSION = 1
+CHUNK_VERSION = 2
 
 # A paper whose PDF couldn't be downloaded gets another try after this many
 # days even if no new link turned up: most failures are timeouts and rate
@@ -620,11 +620,9 @@ def build_sections_and_chunks_for_paper(paper_id, pdf_path, chunk_size=900, over
         if not section_text or len(section_text.strip()) < 50:
             continue
 
-        start = 0
         text = section_text.strip()
 
-        while start < len(text):
-            end = start + chunk_size
+        for start, end in sentence_windows(text, chunk_size, overlap):
             chunk_text = text[start:end].strip()
 
             if len(chunk_text) >= 80:
@@ -633,11 +631,9 @@ def build_sections_and_chunks_for_paper(paper_id, pdf_path, chunk_size=900, over
                     "section": section_name,
                     "chunk_id": f"{paper_id}_{section_name}_{len(chunks)}",
                     "start_char": start,
-                    "end_char": min(end, len(text)),
+                    "end_char": end,
                     "text": chunk_text
                 })
-
-            start += chunk_size - overlap
 
     chunks_path = _write_local_chunks(paper_id, chunks)
 

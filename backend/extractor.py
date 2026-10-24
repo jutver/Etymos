@@ -1,8 +1,10 @@
 import logging
 import re
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 
 import pdf_layout
+from document_model import SENTENCE_BOUNDARY
 
 logger = logging.getLogger(__name__)
 
@@ -618,6 +620,64 @@ def is_valid_plain_heading(text):
 
     return compact in allowed_compacts or text.lower().startswith("abstract")
 
+def sentence_windows(text, chunk_size=900, overlap=150):
+    """
+    (start, end) windows of about `chunk_size` characters over `text`.
+
+    Windows start and end where a sentence starts (the same boundaries
+    split_sentences_with_spans uses), so no chunk begins or ends
+    mid-sentence. Fixed character windows used to
+    cut words in half; the matcher then treated the cut-off pieces
+    ("ic vectors (CNN-static)...", "...perform well o") as sentences of
+    their own, which showed up as duplicate, overlapping matches.
+
+    Consecutive windows share whole sentences, about `overlap`
+    characters' worth. A single sentence longer than twice `chunk_size`
+    is cut at a space.
+    """
+    n = len(text)
+    starts = sorted({0} | {m.end() for m in SENTENCE_BOUNDARY.finditer(text) if m.end() < n})
+
+    windows = []
+    start = 0
+
+    while start < n:
+        limit = start + chunk_size
+
+        if limit >= n:
+            end = n
+        else:
+            end = starts[bisect_right(starts, limit) - 1]
+
+            if end <= start:
+                # The sentence at `start` alone is longer than chunk_size.
+                i = bisect_right(starts, start)
+                end = starts[i] if i < len(starts) else n
+
+                if end - start > 2 * chunk_size:
+                    space = text.rfind(" ", start + 1, limit)
+                    end = space if space > start else limit
+
+        windows.append((start, end))
+
+        if end >= n:
+            break
+
+        # The next window starts on the last sentence that begins at least
+        # `overlap` characters before this window's end, but never in its
+        # first half, so windows always move forward.
+        middle = start + (end - start) // 2
+        i = bisect_right(starts, end - overlap) - 1
+
+        if i >= 0 and starts[i] > middle:
+            start = starts[i]
+        else:
+            i = bisect_left(starts, end) - 1
+            start = starts[i] if i >= 0 and starts[i] > middle else end
+
+    return windows
+
+
 def build_chunks_from_sections(
     sections,
     paper_id="input_paper",
@@ -626,7 +686,8 @@ def build_chunks_from_sections(
     section_offsets=None
 ):
     """
-    Split each section into overlapping chunks.
+    Split each section into overlapping chunks that start and end on
+    sentence boundaries (see sentence_windows).
 
     `section_offsets` (optional) maps a section name to the start offset
     of that section's stripped text inside the canonical document string
@@ -649,12 +710,10 @@ def build_chunks_from_sections(
         if not section_text or len(section_text.strip()) < 50:
             continue
 
-        start = 0
         text = section_text.strip()
         base = section_offsets.get(section_name)
 
-        while start < len(text):
-            end = min(start + chunk_size, len(text))
+        for start, end in sentence_windows(text, chunk_size, overlap):
             raw = text[start:end]
             chunk_text = raw.strip()
 
@@ -677,8 +736,6 @@ def build_chunks_from_sections(
                     chunk["doc_end_char"] = base + exact_end
 
                 chunks.append(chunk)
-
-            start += chunk_size - overlap
 
     return chunks
 

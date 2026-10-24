@@ -30,9 +30,8 @@ import { AiContentChip } from "./AiContentChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { aiFlaggedPassageIds, buildMatchFocusMap, buildRenderedPassages, countWords, mapAiSegmentsToPassages } from "./highlights";
 import { isOverLimit } from "./renderPassageText";
-import { normalizeWhitespace } from "./replaceMatch";
 import { computeWordLimitOffset } from "./wordLimit";
-import { applySavedVersion } from "./applySavedVersion";
+import { applySavedVersion, withoutLegacyBadges } from "./applySavedVersion";
 import { useQuickCheck } from "./useQuickCheck";
 import { RecheckDialog } from "./RecheckDialog";
 import { collectEditorBlocks } from "./recheck";
@@ -547,31 +546,23 @@ export default function ReportPage() {
   function replaceFlaggedPassage(match: MatchedSource, rewritten: string) {
     // The highlight that covers this match — its own, or the stronger one it was merged into.
     const targetId = focusMap.get(match.id);
-    const target = targetId ? visibleMatches.find((m) => m.id === targetId) : undefined;
 
-    // A merged match's highlight may span different words than this match's
-    // sentence; replacing it with a rewrite of *this* sentence would then
-    // rewrite the wrong text, so only proceed when they are the same words.
-    const sameWords =
-      target !== undefined && normalizeWhitespace(target.userSnippet) === normalizeWhitespace(match.userSnippet);
-
+    // A merged highlight can cover more words than this match's sentence; then
+    // only the sentence is replaced and the rest stays highlighted ("part").
     const replaced =
-      targetId !== undefined &&
-      sameWords &&
-      (canvasRef.current?.replaceMatchText(targetId, rewritten, match.userSnippet) ?? false);
+      targetId !== undefined
+        ? (canvasRef.current?.replaceMatchText(targetId, rewritten, match.userSnippet, match.id) ?? null)
+        : null;
 
     if (!replaced) {
-      pushToast({
-        kind: "error",
-        title: tr("Couldn't replace the passage"),
-        description: tr("It no longer matches the document text exactly. Use Copy and paste the rewrite in yourself."),
-      });
+      offerPasteInstead(match, rewritten, targetId);
       return;
     }
 
     setResolvedIds((prev) => new Set(prev).add(match.id));
-    // Is the rewrite itself clean? (Same request as the panel's pre-check.)
-    quickCheck.checkAcceptedRewrite(targetId, rewritten);
+    // Is the rewrite itself clean? (Same request as the panel's pre-check.) A
+    // partial replace is checked as this match alone, not the whole highlight.
+    quickCheck.checkAcceptedRewrite(replaced === "whole" ? targetId! : match.id, rewritten);
     // Its highlight is gone; a lingering selection would hide every other one.
     setActiveMatchId(null);
     pushToast({
@@ -579,6 +570,34 @@ export default function ReportPage() {
       title: tr("Passage replaced"),
       description: tr("The flagged sentence now reads as your rewrite. Save to keep this version."),
     });
+  }
+
+  // When the rewrite can't go in by itself (the passage spans several
+  // paragraphs, or its words were already edited), select the passage and put
+  // the rewrite on the clipboard, so one paste replaces it.
+  function offerPasteInstead(match: MatchedSource, rewritten: string, targetId: string | undefined) {
+    const failed = () =>
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't replace the passage"),
+        description: tr("It no longer matches the document text exactly. Use Copy and paste the rewrite in yourself."),
+      });
+    const selected = targetId !== undefined && (canvasRef.current?.selectMatchText(targetId, match.userSnippet) ?? false);
+    if (!selected || !navigator.clipboard) {
+      failed();
+      return;
+    }
+    navigator.clipboard.writeText(rewritten).then(
+      () =>
+        pushToast({
+          kind: "info",
+          title: tr("Paste to replace"),
+          description: tr(
+            "This passage couldn't be replaced automatically. It's selected and the rewrite is copied: press Ctrl+V (⌘V on Mac) to paste it in.",
+          ),
+        }),
+      failed,
+    );
   }
 
   // Only the Edit view has editable text, so accepting from another view switches to
@@ -710,7 +729,7 @@ export default function ReportPage() {
     // Block by block first, so the Document tab stays read-only afterwards;
     // the whole-HTML swap is kept for snapshots with no matching blocks.
     if (editorRef.current && !applySavedVersion(editorRef.current, version.html)) {
-      editorRef.current.innerHTML = version.html;
+      editorRef.current.innerHTML = withoutLegacyBadges(version.html);
     }
     baselineTextRef.current = editorRef.current?.innerText ?? "";
     refreshEditedSinceCheck(baselineTextRef.current);

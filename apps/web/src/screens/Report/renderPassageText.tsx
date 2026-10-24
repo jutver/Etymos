@@ -62,6 +62,11 @@ export function renderChunks(
       <mark
         key={i}
         data-match-id={chunk.matchId}
+        // The source number is drawn by CSS from this attribute (globals.css),
+        // not as a child element: the editor's text is read back with
+        // innerText, and a real <sup>41</sup> ended up saved into the
+        // document as "…results.41".
+        data-badge={colorIdx + 1}
         // Non-colour signal #1: every highlight is underlined, so it survives
         // greyscale and colour-blind viewing. Dotted means we know the exact
         // span; dashed means we could only approximate it. Mutually
@@ -73,12 +78,6 @@ export function renderChunks(
         )}
       >
         {content}
-        <sup
-          contentEditable={false}
-          className="ml-0.5 select-none text-[0.625rem] font-bold tabular-nums opacity-70"
-        >
-          {colorIdx + 1}
-        </sup>
       </mark>
     );
   });

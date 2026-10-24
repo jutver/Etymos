@@ -13,10 +13,20 @@
 const EDITABLE_SELECTOR =
   ":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > ul > li, :scope > ol > li";
 
+/** Versions saved before highlight numbers moved to CSS (renderPassageText.tsx)
+ * carry each number as a <sup> inside its <mark>; drop them so they don't come
+ * back as text. */
+export function withoutLegacyBadges(html: string): string {
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("mark > sup").forEach((badge) => badge.remove());
+  return root.innerHTML;
+}
+
 /** Returns true when at least one block's text was taken from `savedHtml`. */
 export function applySavedVersion(editor: HTMLElement, savedHtml: string): boolean {
   const saved = document.createElement("div");
-  saved.innerHTML = savedHtml;
+  saved.innerHTML = withoutLegacyBadges(savedHtml);
   let applied = false;
   saved.querySelectorAll<HTMLElement>("[data-block-id]").forEach((savedBlock) => {
     const id = savedBlock.dataset.blockId;

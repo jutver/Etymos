@@ -230,8 +230,37 @@
   cursor: inherit;
 }
 
-[data-highlights="off"] mark[data-match-id]:not([data-active="true"]) > sup,
-[data-focus="on"] mark[data-match-id]:not([data-active="true"]) > sup {
+/* A highlight's source number. Generated content is never part of innerText,
+   textContent or innerHTML, so it can't leak into saved or re-checked text
+   (renderPassageText.tsx). */
+mark[data-badge]::after {
+  content: attr(data-badge);
+  margin-left: 0.125rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  vertical-align: super;
+  line-height: 0;
+  opacity: 0.7;
+  user-select: none;
+}
+
+[data-highlights="off"] mark[data-match-id]:not([data-active="true"])::after,
+[data-focus="on"] mark[data-match-id]:not([data-active="true"])::after {
+  display: none;
+}
+
+/* A highlight the reader has typed over (useQuickCheck.ts sets data-edited):
+   the source's colour and number no longer describe its words, so it is muted
+   to a thin dashed underline until the next check. */
+mark[data-edited] {
+  background: transparent !important;
+  color: inherit !important;
+  text-decoration: underline dashed var(--color-ink-300) !important;
+  text-decoration-thickness: 1px !important;
+}
+
+mark[data-edited]::after {
   display: none;
 }
 

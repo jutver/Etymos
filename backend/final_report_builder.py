@@ -134,6 +134,53 @@ def group_by_source(matches):
     )
 
 
+def drop_nested_duplicates(matches):
+    """
+    Keep one match per source for any input span: when two matches from
+    the same source cover the same span, or one span lies inside the
+    other, only the stronger one stays. Overlapping chunks used to yield
+    the same passage twice (a full sentence plus a cut-off piece of it),
+    which showed as duplicate cards and merged highlights.
+
+    Matches from different sources are left alone, and so are matches
+    without offsets. Order is preserved.
+    """
+    # Label first, then the longer span: a cut-off piece of a sentence
+    # often scores higher similarity than the whole sentence.
+    def strength(m):
+        offset = m["input_offset"]
+        return (
+            LABEL_WEIGHT.get(m.get("label"), 0),
+            offset["end"] - offset["start"],
+            m.get("semantic_similarity") or 0,
+        )
+
+    kept_by_source = defaultdict(list)
+    dropped = set()
+
+    ranked = sorted(
+        (i for i, m in enumerate(matches) if (m.get("input_offset") or {}).get("start") is not None),
+        key=lambda i: strength(matches[i]),
+        reverse=True,
+    )
+
+    for i in ranked:
+        m = matches[i]
+        start, end = m["input_offset"]["start"], m["input_offset"]["end"]
+        kept = kept_by_source[m.get("source_paper_id") or m.get("source_title")]
+
+        if any(
+            (s <= start and end <= e) or (start <= s and e <= end)
+            for s, e in kept
+        ):
+            dropped.add(i)
+            continue
+
+        kept.append((start, end))
+
+    return [m for i, m in enumerate(matches) if i not in dropped]
+
+
 def sort_matches(matches):
     """Likely plagiarism first, then by similarity."""
     return sorted(
@@ -332,6 +379,7 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
 
     references = reference_span(document, input_text) if document is not None else None
     final_matches = outside_references(final_matches, references)
+    final_matches = drop_nested_duplicates(final_matches)
     coverage = coverage_score(final_matches, document_total_chars, references)
 
     # Use the coverage score whenever we have real offsets to compute it

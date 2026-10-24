@@ -30,9 +30,9 @@ kept and marked `stale`.
 from __future__ import annotations
 
 import logging
-import os
 import re
 from collections import Counter
+from difflib import SequenceMatcher
 from typing import Any, Callable, Optional
 
 from document_model import SECTION_LABELS, block_at_offset
@@ -53,6 +53,30 @@ _WS_RE = re.compile(r"\s+")
 def normalize_block_text(text: str) -> str:
     """One block is one paragraph: collapse every whitespace run to a space."""
     return _WS_RE.sub(" ", text or "").strip()
+
+
+_MAX_BADGE_DIGITS = 3
+
+
+def only_badges_added(text: str, stored: str) -> bool:
+    """
+    True when `text` is `stored` plus nothing but short digit runs.
+
+    The editor used to draw each highlight's source number as a <sup> and read
+    the text back with innerText, so an untouched paragraph arrived as
+    "…new best results.41" (or "o62n" when a highlight ended mid-word). A
+    browser still running that bundle must not make every highlighted
+    paragraph count as changed.
+    """
+    if len(text) <= len(stored):
+        return False
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, stored, text, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        inserted = text[j1:j2]
+        if tag != "insert" or not inserted.isdigit() or len(inserted) > _MAX_BADGE_DIGITS:
+            return False
+    return True
 
 
 def _emit(callback: Optional[ProgressCallback], progress: int, step: str, message: str) -> None:
@@ -127,7 +151,10 @@ def build_edited_document(
             continue
 
         if passage:
-            is_changed = text != normalize_block_text(passage.get("text") or "")
+            stored = normalize_block_text(passage.get("text") or "")
+            if text != stored and only_badges_added(text, stored):
+                text = stored
+            is_changed = text != stored
         else:
             is_changed = remaining[text] <= 0
         if not is_changed:
@@ -247,8 +274,8 @@ def carry_over_matches(
 
 def previous_source_papers(report: dict[str, Any]) -> list[dict[str, Any]]:
     """The previous report's sources, in load_candidate_chunks' paper shape.
-    Only sources whose chunk files are on this machine yield chunks."""
-    from plagiarism_matcher import CHUNKS_DIR
+    Their chunks come from this server's disk or, failing that, the paper store;
+    a source with chunks in neither simply yields none."""
     from quick_check import _paper_ids_by_title
 
     papers: dict[str, dict[str, Any]] = {}
@@ -269,7 +296,7 @@ def previous_source_papers(report: dict[str, Any]) -> list[dict[str, Any]]:
             titles_without_id.setdefault(meta["title"], meta)
     for title, paper_id in _paper_ids_by_title(set(titles_without_id)).items():
         papers.setdefault(paper_id, {"paper_id": paper_id, **titles_without_id[title]})
-    return [p for p in papers.values() if os.path.exists(os.path.join(CHUNKS_DIR, p["paper_id"] + ".json"))]
+    return list(papers.values())
 
 
 def _search_queries(changed_text: str) -> list[str]:
@@ -401,7 +428,8 @@ def merge_report(
     from document_model import LABEL_WEIGHT
     from cited_sources import reference_span
     from final_report_builder import (
-        SCORING_VERSION, references_summary, coverage_score, group_by_source, outside_references, sort_matches,
+        SCORING_VERSION, references_summary, coverage_score, drop_nested_duplicates, group_by_source,
+        outside_references, sort_matches,
     )
 
     merged = list(carried)
@@ -415,7 +443,7 @@ def merge_report(
             merged.append(m)
 
     references = reference_span(document, document["text"])
-    merged = outside_references(merged, references)
+    merged = drop_nested_duplicates(outside_references(merged, references))
     coverage = coverage_score(merged, document["total_chars"], references)
     ai_detection = previous_report.get("ai_detection")
     previous_coverage = previous_report.get("coverage") or {}

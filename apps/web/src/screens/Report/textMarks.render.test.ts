@@ -25,7 +25,17 @@ describe("renderPassageText with text marks", () => {
   it("keeps bold inside a plagiarism highlight", () => {
     const span: PassageSpan = { matchId: "m1", tone: "heavy", start: 3, end: 18, approximate: false };
     const out = html(renderPassageText(text, [span], new Map([["m1", 0]]), false, [bold]));
-    expect(out).toMatch(/<mark[^>]*><span>use <\/span><strong>PhoBERT<\/strong><span> for<\/span><sup/);
+    expect(out).toMatch(/<mark[^>]*><span>use <\/span><strong>PhoBERT<\/strong><span> for<\/span><\/mark>/);
+  });
+
+  it("keeps the source number out of the text", () => {
+    // The number is drawn by CSS from data-badge; as an element it used to be
+    // read back by innerText and saved into the document ("…for1").
+    const span: PassageSpan = { matchId: "m1", tone: "heavy", start: 3, end: 18, approximate: false };
+    const out = html(renderPassageText(text, [span], new Map([["m1", 40]]), false));
+    expect(out).toContain('data-badge="41"');
+    expect(out).not.toContain("<sup");
+    expect(out.replace(/<[^>]+>/g, "")).toBe(text);
   });
 
   it("renders unchanged when there are no marks", () => {

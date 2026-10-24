@@ -101,6 +101,8 @@ export function changedRatio(before: string, after: string): number {
 export function htmlToText(html: string): string {
   if (typeof DOMParser === "undefined") return html.replace(/<[^>]+>/g, " ");
   const body = new DOMParser().parseFromString(html, "text/html").body;
+  // Older snapshots keep each highlight's source number as a <sup>; it isn't text.
+  body.querySelectorAll("mark > sup").forEach((badge) => badge.remove());
   const blocks = Array.from(body.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
     (el) => !el.parentElement?.closest("[data-block-id]"),
   );

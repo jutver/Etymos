@@ -24,7 +24,7 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSo
 import { BlockItem } from "./BlockItem";
 import { blocksFromRendered, newTableBlock, type DocBlock, type MatchColorIndex, type TableData } from "./blocks";
 import type { RenderedPassage } from "./highlights";
-import { replaceMarkWithText } from "./replaceMatch";
+import { replaceMarkWithText, selectMatchText } from "./replaceMatch";
 import { t } from "../../lib/i18n";
 
 export type { MatchColorIndex } from "./blocks";
@@ -35,10 +35,18 @@ export type { MatchColorIndex } from "./blocks";
  * array, so the toolbar asks the canvas to do it directly. */
 export interface DocumentCanvasHandle {
   insertTable: () => void;
-  /** Swaps the highlighted passage for `matchId` with `newText` ("Accept &
-   * replace"). Returns false — changing nothing — unless the highlight still
-   * reads exactly `expectedSnippet`. */
-  replaceMatchText: (matchId: string, newText: string, expectedSnippet: string) => boolean;
+  /** Puts `newText` in place of `expectedSnippet` in the highlight for
+   * `matchId` ("Accept & replace"); see replaceMarkWithText for "whole" vs
+   * "part". Null — changing nothing — when the snippet isn't in the highlight
+   * word for word. */
+  replaceMatchText: (
+    matchId: string,
+    newText: string,
+    expectedSnippet: string,
+    partKey?: string,
+  ) => "whole" | "part" | null;
+  /** Selects the highlight (or `snippet` in it) for the reader to paste over. */
+  selectMatchText: (matchId: string, snippet: string) => boolean;
 }
 
 interface DocumentEditorProps {
@@ -117,13 +125,17 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
           return next;
         });
       },
-      replaceMatchText: (matchId, newText, expectedSnippet) => {
+      replaceMatchText: (matchId, newText, expectedSnippet, partKey) => {
         const editor = editorRef.current;
-        if (!editor || !replaceMarkWithText(editor, matchId, newText, expectedSnippet)) return false;
+        const replaced = editor ? replaceMarkWithText(editor, matchId, newText, expectedSnippet, partKey) : null;
         // Same signal a keystroke sends, so word count and the "unsaved
         // changes" state pick the replacement up.
-        onInput(editor.innerText);
-        return true;
+        if (editor && replaced) onInput(editor.innerText);
+        return replaced;
+      },
+      selectMatchText: (matchId, snippet) => {
+        const editor = editorRef.current;
+        return editor ? selectMatchText(editor, matchId, snippet) : false;
       },
     }),
     [editorRef, onInput],
@@ -304,8 +316,9 @@ export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasPro
     ref,
     () => ({
       insertTable: () => innerRef.current?.insertTable(),
-      replaceMatchText: (matchId, newText, expectedSnippet) =>
-        innerRef.current?.replaceMatchText(matchId, newText, expectedSnippet) ?? false,
+      replaceMatchText: (matchId, newText, expectedSnippet, partKey) =>
+        innerRef.current?.replaceMatchText(matchId, newText, expectedSnippet, partKey) ?? null,
+      selectMatchText: (matchId, snippet) => innerRef.current?.selectMatchText(matchId, snippet) ?? false,
     }),
     [],
   );
