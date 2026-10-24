@@ -1,3 +1,4 @@
+import re
 import requests
 import time
 
@@ -15,6 +16,36 @@ def reconstruct_openalex_abstract(inverted_index):
 
     words = sorted(words)
     return " ".join([word for pos, word in words])
+
+
+def openalex_doi(item):
+    """OpenAlex gives DOIs as "https://doi.org/10.x/y"; the other sources
+    give the bare "10.x/y". Bare everywhere, so one paper found by two
+    sources is recognised as the same paper."""
+    doi = item.get("doi") or ""
+    return re.sub(r"^https?://(dx\.)?doi\.org/", "", doi, flags=re.I)
+
+
+def openalex_pdf_url(item):
+    """The open-access PDF, so the paper's full text is compared and not
+    only its abstract."""
+    best = item.get("best_oa_location") or {}
+    if best.get("pdf_url"):
+        return best["pdf_url"]
+    for location in item.get("locations") or []:
+        if (location or {}).get("pdf_url"):
+            return location["pdf_url"]
+    # May be a landing page; download_pdf follows its citation_pdf_url.
+    return (item.get("open_access") or {}).get("oa_url") or ""
+
+
+def openalex_arxiv_id(item):
+    for location in item.get("locations") or []:
+        for url in ((location or {}).get("landing_page_url"), (location or {}).get("pdf_url")):
+            match = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})", url or "")
+            if match:
+                return match.group(1)
+    return ""
 
 
 def search_openalex(query: str, max_results: int = 10, delay_seconds: float = 1.0) -> list[dict]:
@@ -48,9 +79,11 @@ def search_openalex(query: str, max_results: int = 10, delay_seconds: float = 1.
             results.append({
                 "title": item.get("title") or "",
                 "year": item.get("publication_year") or "",
-                "doi": item.get("doi") or "",
+                "doi": openalex_doi(item),
                 "abstract": abstract,
                 "url": item.get("id") or "",
+                "pdf_url": openalex_pdf_url(item),
+                "arxiv_id": openalex_arxiv_id(item),
                 "authors": [],
                 "source": "OpenAlex"
             })

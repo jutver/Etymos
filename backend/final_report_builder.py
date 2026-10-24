@@ -43,13 +43,17 @@ def _build_explanation(label, semantic_similarity, source_title, source_sentence
     return sentence
 
 
-def coverage_score(matches, total_chars):
+def coverage_score(matches, total_chars, excluded=None):
     """
     Weighted character coverage (see build_final_report's docstring) of
     final match records, from each record's `input_offset` and label.
     Records without offsets don't count. Shared by build_final_report and
     Save & re-check (recheck.py), so a re-checked document is scored by
     exactly the same formula as a fresh check.
+
+    `excluded` is a [start, end) span (the reference list, see
+    cited_sources.reference_span) left out of the score entirely: out of
+    the total, and out of every match.
     """
     intervals = [
         (m["input_offset"]["start"], m["input_offset"]["end"], LABEL_WEIGHT.get(m.get("label"), 0))
@@ -57,7 +61,37 @@ def coverage_score(matches, total_chars):
         if m.get("input_offset") and m["input_offset"].get("start") is not None
         and m["input_offset"].get("end") is not None
     ]
+    if excluded:
+        cut_start, cut_end = max(0, excluded[0]), min(excluded[1], total_chars)
+        cut = max(0, cut_end - cut_start)
+        kept = []
+        for start, end, weight in intervals:
+            # The part before the span stays; the part after it moves left
+            # by the span's length, so positions stay inside the new total.
+            if start < cut_start:
+                kept.append((start, min(end, cut_start), weight))
+            if end > cut_end:
+                kept.append((max(start, cut_end) - cut, end - cut, weight))
+        intervals = kept
+        total_chars -= cut
     return weighted_coverage(intervals, total_chars)
+
+
+def outside_references(matches, span):
+    """The matches that aren't inside the reference list: an entry there
+    names the paper it matches, so it is a citation, neither highlighted
+    nor scored (like matches against cited sources, see cited_sources.py)."""
+    if not span:
+        return list(matches)
+    start, end = span
+    return [
+        m for m in matches
+        if not (
+            (m.get("input_offset") or {}).get("start") is not None
+            and m["input_offset"]["start"] >= start
+            and m["input_offset"]["end"] <= end
+        )
+    ]
 
 
 def group_by_source(matches):
@@ -293,7 +327,12 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             100.0, legacy_matched_chars / legacy_total_chars * 100
         )
 
-    coverage = coverage_score(final_matches, document_total_chars)
+    # The reference list is left out of the score (see coverage_score).
+    from cited_sources import reference_span
+
+    references = reference_span(document, input_text) if document is not None else None
+    final_matches = outside_references(final_matches, references)
+    coverage = coverage_score(final_matches, document_total_chars, references)
 
     # Use the coverage score whenever we have real offsets to compute it
     # from. Without a document (a caller that hasn't been migrated yet)
@@ -323,6 +362,7 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             "matched_chars": coverage["matched_chars"],
             "covered_chars": coverage["covered_chars"],
             "raw_coverage_percent": coverage["raw_coverage"],
+            "excluded_references": references_summary(references),
             "legacy_overall_score": round(legacy_overall_score, 2),
             "legacy_total_chars": legacy_total_chars,
         },
@@ -340,6 +380,13 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
         }
 
     return report
+
+
+def references_summary(span):
+    """The reference list's span as saved in report["scoring"], or None."""
+    if not span:
+        return None
+    return {"start": span[0], "end": span[1], "chars": span[1] - span[0]}
 
 
 def save_final_report(report, output_path):

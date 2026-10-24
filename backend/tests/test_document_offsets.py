@@ -302,3 +302,76 @@ def test_report_without_offsets_falls_back_to_the_legacy_score():
     assert report["scoring"]["method"] == "legacy_weighted_sentence_sum"
     assert report["overall_score"] > 0
     assert "input_offset" not in report["matches"][0]
+
+
+# =========================
+# The reference list is not scored
+# =========================
+
+WITH_REFERENCES = {
+    **SECTIONS,
+    "references": (
+        "References\n"
+        "A. Author. 2020. Learning representations directly from data. In Proceedings of ACL.\n"
+        "B. Author. 2021. Handcrafted features that generalize poorly. Journal of Things."
+    ),
+}
+
+
+def test_reference_list_is_left_out_of_the_total():
+    from cited_sources import reference_span
+
+    document = build_document(WITH_REFERENCES)
+    text = document["text"]
+    start, end = reference_span(document, text)
+    assert text[start:end].startswith("A. Author. 2020.")
+    assert text[start:end].endswith("Journal of Things.")
+
+    body_start = text.index("We evaluate")
+    body_end = body_start + 60
+    report = build_final_report(
+        verified_matches=[_verified_match(body_start, body_end, text[body_start:body_end])],
+        input_chunks=[{"text": text}],
+        input_text=text,
+        document=document,
+    )
+    assert report["scoring"]["total_chars"] == len(text) - (end - start)
+    assert report["scoring"]["excluded_references"] == {"start": start, "end": end, "chars": end - start}
+    assert report["overall_score"] == round(60 / (len(text) - (end - start)) * 100, 2)
+
+
+def test_a_match_inside_the_reference_list_is_dropped():
+    document = build_document(WITH_REFERENCES)
+    text = document["text"]
+    ref_start = text.index("A. Author. 2020.")
+    ref_end = ref_start + 70
+
+    report = build_final_report(
+        verified_matches=[_verified_match(ref_start, ref_end, text[ref_start:ref_end])],
+        input_chunks=[{"text": text}],
+        input_text=text,
+        document=document,
+    )
+    assert report["matches"] == []
+    assert report["matched_papers"] == []
+    assert report["scoring"]["covered_chars"] == 0
+
+
+def test_coverage_cuts_the_excluded_span_out_of_a_match_that_crosses_it():
+    from final_report_builder import coverage_score
+
+    match = {"label": "likely_plagiarism", "input_offset": {"start": 50, "end": 250}}
+    result = coverage_score([match], total_chars=400, excluded=(100, 200))
+    # 50 chars before the span and 50 after it, out of 300.
+    assert result["total_chars"] == 300
+    assert result["covered_chars"] == 100
+    # Positions after the span move left, so a match at the very end stays inside the total.
+    tail = {"label": "likely_plagiarism", "input_offset": {"start": 350, "end": 400}}
+    assert coverage_score([tail], total_chars=400, excluded=(100, 200))["covered_chars"] == 50
+
+
+def test_document_without_a_reference_list_is_scored_whole():
+    from cited_sources import reference_span
+
+    document = build_document(SECTIONS)
+    assert reference_span(document, document["text"]) is None

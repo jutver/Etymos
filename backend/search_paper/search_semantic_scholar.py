@@ -18,7 +18,7 @@ def search_semantic_scholar(query: str, max_results: int = 10, delay_seconds: fl
     params = {
         "query": query,
         "limit": max_results,
-        "fields": "title,year,abstract,authors,externalIds,url"
+        "fields": "title,year,abstract,authors,externalIds,url,openAccessPdf"
     }
 
     try:
@@ -45,6 +45,9 @@ def search_semantic_scholar(query: str, max_results: int = 10, delay_seconds: fl
                 "doi": external_ids.get("DOI", ""),
                 "abstract": item.get("abstract") or "",
                 "url": item.get("url", ""),
+                "pdf_url": (item.get("openAccessPdf") or {}).get("url") or "",
+                "arxiv_id": external_ids.get("ArXiv", ""),
+                "acl_id": external_ids.get("ACL", ""),
                 "authors": authors,
                 "source": "Semantic Scholar"
             })
