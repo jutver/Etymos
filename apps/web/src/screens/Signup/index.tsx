@@ -173,6 +173,16 @@ export default function SignupPage() {
       >
         {t("Continue with Google")}</Button>
 
+      <p className="mt-4 text-center text-xs text-ink-500">
+        {t("By creating an account, you agree to our")}{" "}
+        <Link to="/terms" className="font-semibold text-brand-600 hover:underline">
+          {t("Terms of Service")}</Link>{" "}
+        {t("and")}{" "}
+        <Link to="/privacy-policy" className="font-semibold text-brand-600 hover:underline">
+          {t("Privacy Policy")}</Link>
+        .
+      </p>
+
       <p className="mt-6 text-center text-sm text-ink-600">
         {t("Already have an account?")}{" "}
         <Link to="/login" className="font-semibold text-brand-600 hover:underline">

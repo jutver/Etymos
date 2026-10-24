@@ -86,7 +86,7 @@ def paper_exists(paper_id):
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT paper_id, pdf_path, downloaded FROM papers WHERE paper_id = ?",
+        "SELECT paper_id, pdf_path, downloaded, pdf_url FROM papers WHERE paper_id = ?",
         (paper_id,)
     )
 
@@ -109,6 +109,12 @@ def guess_pdf_url(paper):
 
     if "arxiv.org/pdf/" in url:
         return url
+
+    if paper.get("arxiv_id"):
+        return f"https://arxiv.org/pdf/{paper['arxiv_id']}"
+
+    if paper.get("acl_id"):
+        return f"https://aclanthology.org/{paper['acl_id']}.pdf"
 
     return ""
 
@@ -282,8 +288,11 @@ def cache_candidate_paper(paper):
 
     paper_id = make_paper_id(paper)
     existing = paper_exists(paper_id)
+    pdf_url = guess_pdf_url(paper)
 
-    if existing:
+    # A paper cached without its PDF is tried again once a search turns up
+    # a link it didn't have; the same failing link isn't retried every check.
+    if existing and (existing[2] or not pdf_url or pdf_url == existing[3]):
         return {
             "paper_id": paper_id,
             "status": "exists",
@@ -291,7 +300,6 @@ def cache_candidate_paper(paper):
             "downloaded": bool(existing[2])
         }
 
-    pdf_url = guess_pdf_url(paper)
     pdf_path = os.path.join(PDF_DIR, paper_id + ".pdf")
 
     downloaded = download_pdf(pdf_url, pdf_path, paper_page_url=paper.get("url", ""))

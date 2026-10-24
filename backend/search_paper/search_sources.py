@@ -4,8 +4,11 @@ from search_paper.search_semantic_scholar import search_semantic_scholar
 from search_paper.search_openalex import search_openalex
 
 
+_LINK_FIELDS = ("pdf_url", "arxiv_id", "acl_id")
+
+
 def deduplicate_papers(papers):
-    seen = set()
+    seen = {}
     unique = []
 
     for paper in papers:
@@ -17,9 +20,15 @@ def deduplicate_papers(papers):
         key = str(key).lower().strip()
 
         if key in seen:
+            # Keep the first copy, but take the links another source
+            # found for it (OpenAlex often has the PDF Semantic Scholar lacks).
+            kept = seen[key]
+            for field in _LINK_FIELDS:
+                if paper.get(field) and not kept.get(field):
+                    kept[field] = paper[field]
             continue
 
-        seen.add(key)
+        seen[key] = paper
         unique.append(paper)
 
     return unique

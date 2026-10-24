@@ -88,29 +88,23 @@ def _is_reference_end_heading(text: str) -> bool:
     return any(normalized.startswith(name) for name in REFERENCE_END_HEADINGS)
 
 
-def extract_reference_text(document: dict | None = None, input_text: str = "") -> str:
-    """
-    Return the text of the document's reference list ("" if it has none).
-
-    Walks `document["blocks"]` in reading order: everything after the
-    "References" heading (a zero-length section-heading block in PDFs, a
-    plain heading/paragraph block in .docx and pasted text) up to an
-    Appendix/Acknowledgments heading. Falls back to the last "References"
-    line in the plain text when the blocks don't show one.
-    """
-    text = input_text or (document or {}).get("text", "") or ""
+def _reference_blocks(document: dict | None, text: str) -> list[tuple[int | None, int | None, str]]:
+    """(start, end, text) of each block of the reference list, in reading
+    order: everything after the "References" heading (a zero-length
+    section-heading block in PDFs, a plain heading/paragraph block in .docx
+    and pasted text) up to an Appendix/Acknowledgments heading."""
     blocks = (document or {}).get("blocks") or []
 
-    collected: list[str] = []
+    collected: list[tuple[int | None, int | None, str]] = []
     in_references = False
 
     for block in blocks:
         if block.get("type") == "image":
             continue
+        start, end = block.get("start"), block.get("end")
         if block.get("section_heading"):
             block_text = block.get("text") or ""
         else:
-            start, end = block.get("start"), block.get("end")
             if start is None or end is None:
                 continue
             block_text = text[start:end]
@@ -126,10 +120,22 @@ def extract_reference_text(document: dict | None = None, input_text: str = "") -
             if block.get("type") == "heading" and _is_reference_end_heading(block_text):
                 in_references = False
                 continue
-            collected.append(block_text)
+            collected.append((start, end, block_text))
 
+    return collected
+
+
+def extract_reference_text(document: dict | None = None, input_text: str = "") -> str:
+    """
+    Return the text of the document's reference list ("" if it has none).
+
+    Walks `document["blocks"]` (see _reference_blocks). Falls back to the
+    last "References" line in the plain text when the blocks don't show one.
+    """
+    text = input_text or (document or {}).get("text", "") or ""
+    collected = _reference_blocks(document, text)
     if collected:
-        return "\n".join(collected)
+        return "\n".join(block_text for _start, _end, block_text in collected)
 
     section_start = find_reference_section(text)
     if section_start is None:
@@ -137,6 +143,23 @@ def extract_reference_text(document: dict | None = None, input_text: str = "") -
     # Skip the heading line itself.
     newline = text.find("\n", section_start)
     return text[newline + 1:] if newline != -1 else ""
+
+
+def reference_span(document: dict | None = None, input_text: str = "") -> tuple[int, int] | None:
+    """
+    [start, end) of the reference list in the document text, or None. The
+    list is left out of the similarity score: a bibliography is meant to
+    repeat other papers' titles, and counting it would dilute the score.
+    """
+    text = input_text or (document or {}).get("text", "") or ""
+    spans = [(start, end) for start, end, _text in _reference_blocks(document, text)
+             if start is not None and end is not None and end > start]
+    if spans:
+        return spans[0][0], spans[-1][1]
+    section_start = find_reference_section(text)
+    if section_start is None:
+        return None
+    return section_start, len(text)
 
 
 class ReferenceIndex:

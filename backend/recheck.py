@@ -399,7 +399,10 @@ def merge_report(
     changed: list[bool],
 ) -> dict[str, Any]:
     from document_model import LABEL_WEIGHT
-    from final_report_builder import SCORING_VERSION, coverage_score, group_by_source, sort_matches
+    from cited_sources import reference_span
+    from final_report_builder import (
+        SCORING_VERSION, references_summary, coverage_score, group_by_source, outside_references, sort_matches,
+    )
 
     merged = list(carried)
     seen = {(m.get("source_paper_id") or m.get("source_title"), m["input_offset"]["start"], m["input_offset"]["end"])
@@ -411,7 +414,9 @@ def merge_report(
             seen.add(key)
             merged.append(m)
 
-    coverage = coverage_score(merged, document["total_chars"])
+    references = reference_span(document, document["text"])
+    merged = outside_references(merged, references)
+    coverage = coverage_score(merged, document["total_chars"], references)
     ai_detection = previous_report.get("ai_detection")
     previous_coverage = previous_report.get("coverage") or {}
 
@@ -433,6 +438,7 @@ def merge_report(
             "matched_chars": coverage["matched_chars"],
             "covered_chars": coverage["covered_chars"],
             "raw_coverage_percent": coverage["raw_coverage"],
+            "excluded_references": references_summary(references),
         },
         "document": {
             "version": document["version"],

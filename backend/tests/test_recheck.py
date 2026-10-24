@@ -183,6 +183,20 @@ def test_new_matches_are_merged_and_scored(monkeypatch):
     assert result["queries"] == ["q"]
 
 
+def test_reference_list_is_not_scored_after_a_recheck_either(no_search):
+    ref = "A. Vaswani. 2017. Attention Is All You Need. In Proceedings of NeurIPS."
+    texts = (P1, P2, "References", ref)
+    stored = {**passages(*texts), "b2": {"id": "b2", "text": "References", "block_type": "heading", "level": 2}}
+    document, _ = recheck.build_edited_document(blocks(*texts), stored, [])
+    start = document["text"].index(ref)
+
+    prev = previous_report(texts, P2)
+    result = recheck.run_recheck(prev, blocks(*texts), stored)
+    assert result["scoring"]["excluded_references"] == {"start": start, "end": start + len(ref), "chars": len(ref)}
+    assert result["scoring"]["total_chars"] == len(document["text"]) - len(ref)
+    assert result["overall_score"] == round(len(P2) / (len(document["text"]) - len(ref)) * 100, 2)
+
+
 def test_empty_document_is_refused(no_search):
     with pytest.raises(ValueError):
         recheck.run_recheck(previous_report((P1,), P1), blocks("   "), passages(P1))

@@ -19,6 +19,7 @@ export const LandingPage = lazy(() => import("../../screens/Landing"));
 export const PricingPage = lazy(() => import("../../screens/Pricing"));
 export const WaitlistPage = lazy(() => import("../../screens/Waitlist"));
 export const ContactPage = lazy(() => import("../../screens/Contact"));
+export const LegalPage = lazy(() => import("../../screens/Legal"));
 export const GuestSupportTicketPage = lazy(() => import("../../screens/GuestSupportTicket"));
 
 // Auth

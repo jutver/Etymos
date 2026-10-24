@@ -68,9 +68,14 @@ def rank_papers(weighted_sections, candidate_papers):
             "source_kind": source_kind,
             "authors": paper.get("authors") or [],
             "url": paper.get("url") or "",
+            # Where the full text can be downloaded (paper_cache.guess_pdf_url).
+            "pdf_url": paper.get("pdf_url") or "",
+            "arxiv_id": paper.get("arxiv_id") or "",
+            "acl_id": paper.get("acl_id") or "",
             "similarity": final_score,
             "section_scores": section_scores,
-            "abstract": abstract[:500]
+            # Whole: it is the text compared when the PDF can't be fetched.
+            "abstract": abstract
         })
 
     return sorted(
