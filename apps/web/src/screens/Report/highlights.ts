@@ -382,7 +382,7 @@ export function buildRenderedPassages(
 ): RenderedPassage[] {
   const byId = new Map(visibleMatches.map((m) => [m.id, m]));
 
-  return passages.map((passage) => {
+  const candidatesByPassage = passages.map((passage) => {
     const primary = passage.matchId ? byId.get(passage.matchId) : undefined;
     const candidates: SpanCandidate[] = [];
 
@@ -398,8 +398,108 @@ export function buildRenderedPassages(
       }
     }
 
-    return { passage, spans: pickNonOverlapping(candidates) };
+    return candidates;
   });
+
+  // A sentence that runs on past a paragraph break (a heading the extractor
+  // joined to the next paragraph) fits in no single passage. Draw it as one
+  // highlight per passage instead of a whole-passage guess or nothing.
+  const located = new Set(
+    candidatesByPassage.flatMap((candidates) =>
+      candidates.filter(({ span }) => !span.approximate).map(({ span }) => span.matchId),
+    ),
+  );
+  for (const match of visibleMatches) {
+    if (located.has(match.id)) continue;
+    const parts = locateAcrossPassages(passages, match);
+    if (!parts) continue;
+    for (const [index, { start, end }] of parts) {
+      const candidates = candidatesByPassage[index];
+      const guess = candidates.findIndex(({ span }) => span.matchId === match.id);
+      if (guess !== -1) candidates.splice(guess, 1);
+      candidates.push({
+        span: { matchId: match.id, tone: matchTone(match), start, end, approximate: false },
+        percent: match.matchPercent,
+        primary: false,
+      });
+    }
+  }
+
+  return passages.map((passage, index) => ({ passage, spans: pickNonOverlapping(candidatesByPassage[index]) }));
+}
+
+/** Where `[start, end)` of the passages' joined text falls in each passage,
+ * trimmed of the whitespace at the breaks. Keyed by passage index. */
+function splitAcross(
+  passages: DocPassage[],
+  bounds: { index: number; start: number }[],
+  start: number,
+  end: number,
+): Map<number, { start: number; end: number }> {
+  const parts = new Map<number, { start: number; end: number }>();
+  for (const { index, start: origin } of bounds) {
+    const text = passages[index].text;
+    let from = Math.max(start, origin) - origin;
+    let to = Math.min(end, origin + text.length) - origin;
+    while (from < to && /\s/.test(text[from])) from += 1;
+    while (to > from && /\s/.test(text[to - 1])) to -= 1;
+    if (to > from) parts.set(index, { start: from, end: to });
+  }
+  return parts;
+}
+
+/**
+ * The pieces of a match whose sentence spans consecutive passages, or null
+ * when it doesn't (a match inside one passage is found by the per-passage
+ * search). Backend offsets are used when they still spell out the snippet;
+ * otherwise the snippet is searched for in the passages' joined text, limited
+ * to the passages its offsets cover so a sentence quoted twice can't light up
+ * in the wrong place.
+ */
+function locateAcrossPassages(
+  passages: DocPassage[],
+  match: MatchedSource,
+): Map<number, { start: number; end: number }> | null {
+  const snippet = match.userSnippet.trim();
+  if (!snippet) return null;
+  const { startOffset: matchStart, endOffset: matchEnd } = match;
+  const hasOffsets = matchStart != null && matchEnd != null && matchEnd > matchStart;
+
+  let indices = passages.map((_, index) => index);
+  if (hasOffsets) {
+    indices = indices.filter((index) => {
+      const { startOffset, endOffset } = passages[index];
+      return startOffset != null && endOffset != null && startOffset < matchEnd && matchStart < endOffset;
+    });
+    if (indices.length < 2) return null;
+
+    const parts = new Map<number, { start: number; end: number }>();
+    for (const index of indices) {
+      const origin = passages[index].startOffset!;
+      const split = splitAcross(passages, [{ index, start: origin }], matchStart, matchEnd).get(index);
+      if (split) parts.set(index, split);
+    }
+    const spelled = [...parts].map(([index, { start, end }]) => passages[index].text.slice(start, end)).join(" ");
+    if (parts.size > 1 && normalize(spelled) === normalize(snippet)) return parts;
+  }
+
+  // Search the passages' text joined with line breaks, as consecutive runs.
+  const bounds: { index: number; start: number }[] = [];
+  let joined = "";
+  for (const index of indices) {
+    if (bounds.length > 0 && bounds[bounds.length - 1].index !== index - 1) break;
+    if (joined) joined += "\n";
+    bounds.push({ index, start: joined.length });
+    joined += passages[index].text;
+  }
+  const hit = whitespaceInsensitivePattern(snippet)?.exec(joined);
+  if (!hit) return null;
+  const parts = splitAcross(passages, bounds, hit.index, hit.index + hit[0].length);
+  return parts.size > 1 ? parts : null;
+}
+
+function normalize(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 /** Splits passage text into alternating plain / highlighted chunks. */

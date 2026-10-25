@@ -10,10 +10,11 @@ import { trackEvent } from "../../lib/analytics";
 import {
   fetchCheckedDocument,
   fetchDocumentVersions,
+  fetchUploadVersion,
   renameDocument,
   saveDocumentVersion,
 } from "../../lib/documentsQueries";
-import { loadLocalDocumentVersions, saveLocalDocumentVersion } from "../../lib/localDocumentVersions";
+import { loadLocalDocumentVersions, saveLocalDocumentVersion, uploadLocalDocumentVersions } from "../../lib/localDocumentVersions";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { useSplashHold } from "../../components/BootSplash";
@@ -241,6 +242,8 @@ export default function ReportPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  // The upload's own result, restorable from Version History (listed last).
+  const [originalVersion, setOriginalVersion] = useState<DocumentVersion | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Default to the Original PDF view with plagiarism highlighted directly on
   // the uploaded file — the Document (extracted-text) view is opt-in via the
@@ -297,24 +300,23 @@ export default function ReportPage() {
   useEffect(() => {
     if (!id) {
       setVersions([]);
+      setOriginalVersion(null);
       return;
     }
     let cancelled = false;
-    fetchDocumentVersions(id).then(
-      (v) => {
-        if (!cancelled) setVersions(v);
-      },
-      () => {
-        if (!cancelled) setVersions([]);
-      },
-    ).then(() => {
-      // Plus the versions handleSave had to keep on this device because
-      // Supabase refused them (see lib/localDocumentVersions.ts).
-      const local = loadLocalDocumentVersions(id);
-      if (!cancelled && local.length > 0) {
-        setVersions((prev) => [...local, ...prev].slice(0, 20));
-      }
-    });
+    void (async () => {
+      // Versions handleSave had to keep on this device because Supabase
+      // refused them (lib/localDocumentVersions.ts) go to the database first.
+      await uploadLocalDocumentVersions(id);
+      const [saved, original] = await Promise.all([
+        fetchDocumentVersions(id).catch(() => [] as DocumentVersion[]),
+        fetchUploadVersion(id),
+      ]);
+      if (cancelled) return;
+      // Any it still refuses stay on this device and are listed too.
+      setVersions([...loadLocalDocumentVersions(id), ...saved]);
+      setOriginalVersion(original);
+    })();
     return () => {
       cancelled = true;
     };
@@ -673,7 +675,7 @@ export default function ReportPage() {
         changedRatio: changed,
       });
       baselineTextRef.current = text;
-      setVersions((prev) => [version, ...prev].slice(0, 20));
+      setVersions((prev) => [version, ...prev]);
       setDirty(false);
       pushToast({ kind: "success", title: tr("Draft saved"), description: tr("A version was added to history.") });
     } catch (err) {
@@ -687,7 +689,7 @@ export default function ReportPage() {
       });
       if (localVersion) {
         baselineTextRef.current = text;
-        setVersions((prev) => [localVersion, ...prev].slice(0, 20));
+        setVersions((prev) => [localVersion, ...prev]);
         setDirty(false);
         pushToast({
           kind: "success",
@@ -723,7 +725,7 @@ export default function ReportPage() {
       setResolvedIds(new Set());
       quickCheck.reset();
       setRefetchNonce((n) => n + 1);
-      pushToast({ kind: "info", title: tl("Restored {{label}} with its check results", { label: version.label }) });
+      pushToast({ kind: "info", title: tl("Restored {{label}} with its check results", { label: tl(version.label) }) });
       return;
     }
     // Block by block first, so the Document tab stays read-only afterwards;
@@ -788,7 +790,7 @@ export default function ReportPage() {
       });
       versionId = version.id;
       baselineTextRef.current = text;
-      setVersions((prev) => [version, ...prev].slice(0, 20));
+      setVersions((prev) => [version, ...prev]);
       setDirty(false);
     } catch (err) {
       console.error("Saving the version before a re-check failed:", err);
@@ -931,6 +933,7 @@ export default function ReportPage() {
         canRecheck={editedSinceCheck && recheckProgress === null && !recheckOpen}
         recheckProgress={recheckProgress}
         versions={versions}
+        originalVersion={originalVersion}
         showAiScores={!isFree}
         onRestoreVersion={handleRestoreVersion}
         exporting={exporting}

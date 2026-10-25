@@ -70,3 +70,20 @@ def test_each_recheck_is_logged_for_the_owner(db):
     ).fetchone()
     assert row[:3] == ("document", "document.rechecked", doc)
     assert row[3]["kind"] == "paid_recheck" and row[3]["balance_source"] == "standard"
+
+
+# --- 20261025000000_document_restore_points.sql --------------------------------
+
+def test_the_upload_result_is_stored_without_logging_a_recheck(db):
+    owner = make_user(db)
+    doc = make_doc(db, owner)
+    upload = as_service(db, INSERT, (doc, "upload", None))[0][0]
+    assert db.execute(
+        "select count(*) from public.user_activity_log where user_id = %s and action = 'document.rechecked'", (owner,)
+    ).fetchone()[0] == 0
+    with pytest.raises(psycopg.errors.CheckViolation):
+        as_service(db, INSERT, (doc, "upload", "plan"))
+
+    as_service(db, "update public.documents set current_check_id = %s where id = %s returning id", (upload, doc))
+    as_service(db, "delete from public.document_checks where id = %s returning id", (upload,))
+    assert db.execute("select current_check_id from public.documents where id = %s", (doc,)).fetchone()[0] is None

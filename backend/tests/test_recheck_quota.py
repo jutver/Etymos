@@ -258,3 +258,14 @@ def test_endpoint_rejects_oversized_text(api_client, monkeypatch):
     blocks = [{"block_id": str(i), "text": "x" * 60_000} for i in range(2)]
     assert client.post("/api/reports/r-3/recheck/quote", json={"blocks": blocks}).status_code == 413
     assert client.post("/api/reports/r-3/recheck/quote", json={"blocks": []}).status_code == 422
+
+
+def test_the_stored_upload_result_is_not_a_recheck(monkeypatch):
+    rows = [  # newest first
+        {"kind": "free_recheck", "baseline_text": "first edit", "previous_text": "the upload"},
+        {"kind": "upload", "baseline_text": "the upload", "previous_text": None},
+    ]
+    monkeypatch.setattr(rq, "get_client", lambda: fake_client({"document_checks": rows}))
+    assert rq.load_check_history("d") == rq.CheckHistory(paid_baseline="the upload", free_used=1)
+    monkeypatch.setattr(rq, "get_client", lambda: fake_client({"document_checks": rows[1:]}))
+    assert rq.load_check_history("d") == rq.CheckHistory(paid_baseline=None, free_used=0)

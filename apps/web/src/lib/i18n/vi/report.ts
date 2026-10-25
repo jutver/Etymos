@@ -239,6 +239,7 @@ export const report: Record<string, string> = {
   "Free re-checks cover edits under {{limit}}% of the text. A paid re-check starts a fresh count.": "Kiểm tra lại miễn phí áp dụng cho chỉnh sửa dưới {{limit}}% văn bản. Một lần kiểm tra lại có trả phí sẽ bắt đầu đếm lại từ đầu.",
   "You've used all {{limit}} free re-checks since your last full check.": "Bạn đã dùng hết {{limit}} lượt kiểm tra lại miễn phí kể từ lần kiểm tra đầy đủ gần nhất.",
   "Checked · {{score}}%": "Đã kiểm tra · {{score}}%",
+  "Original upload": "Bản tải lên gốc",
   "Draft": "Bản nháp",
   "Re-checked with 1 check": "Đã kiểm tra lại bằng 1 lượt kiểm tra",
   "Free re-check": "Kiểm tra lại miễn phí",

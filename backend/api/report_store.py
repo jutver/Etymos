@@ -142,6 +142,10 @@ def _extract_and_upload_images(report_id: str, report: dict[str, Any], user_id: 
                 block.pop("_image_ext", None)
 
 
+class ReportStoreError(RuntimeError):
+    pass
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -169,13 +173,19 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                           user_id: Optional[str], input_type: str,
                           input_name: Optional[str],
                           unlocked_tier: Optional[str] = None,
-                          existing: bool = False) -> None:
+                          existing: bool = False,
+                          check_id: Optional[str] = None,
+                          strict: bool = False) -> None:
     """
     Upsert the completed report into Supabase (`documents` +
     `document_matches`) so it survives a process restart / redeploy, not
     just the lifetime of this container's local disk / in-memory cache.
     Best-effort: any failure is logged, never raised, so a Supabase outage
-    can't break the API response the caller already has.
+    can't break the API response the caller already has. With `strict` (a
+    re-check or restore replacing a report) a failed write of the score,
+    matches or passages raises ReportStoreError instead, so the caller
+    doesn't report success over a half-written document. `check_id` is the
+    document_checks row this report came from (documents.current_check_id).
     """
     client = get_client()
     if client is None or user_id is None:
@@ -192,6 +202,7 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             client.table("documents").update({
                 "status": _status_from_score(overall_score),
                 "similarity_score": overall_score,
+                **({"current_check_id": check_id} if check_id else {}),
             }).eq("id", report_id).execute()
         else:
             document_row = {
@@ -204,8 +215,10 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 "uploaded_at": _now_iso(),
             }
             client.table("documents").upsert(document_row, on_conflict="id").execute()
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to upsert documents row for report_id=%s", report_id)
+        if strict:
+            raise ReportStoreError("Couldn't save the report.") from exc
         return  # No point trying to insert matches for a document row that didn't land.
 
     if unlocked_tier:
@@ -308,8 +321,10 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                         "Inserting document_matches failed for report_id=%s; retrying without %s.",
                         report_id, sorted(attempts[number + 1]), exc_info=True,
                     )
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to persist document_matches for report_id=%s", report_id)
+        if strict:
+            raise ReportStoreError("Couldn't save the report.") from exc
 
     try:
         document = report.get("document") or {}
@@ -409,8 +424,10 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                     }
                     for row in passage_rows
                 ]).execute()
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to persist document_passages for report_id=%s", report_id)
+        if strict:
+            raise ReportStoreError("Couldn't save the report.") from exc
 
 
 def _delete_from_supabase(report_id: str) -> bool:
@@ -526,13 +543,16 @@ def save_report(report: dict[str, Any], *, input_type: str,
 
 
 def replace_report(report_id: str, report: dict[str, Any], previous: dict[str, Any], *,
-                   unlocked_tier: str | None = None) -> dict[str, Any]:
+                   unlocked_tier: str | None = None, check_id: str | None = None) -> dict[str, Any]:
     """
-    Overwrite an existing report with a re-check's result (recheck.py), under
-    the same id: local JSON, in-memory cache, and the Supabase rows (score,
-    matches, passages). Keeps the owner, name, type and upload time of
-    `previous`. `unlocked_tier` is the tier the re-check's credit unlocks, if
-    any; the caller makes sure it never lowers the document's tier.
+    Overwrite an existing report with a re-check's or restored version's
+    result, under the same id: the Supabase rows (score, matches, passages),
+    then the local JSON and in-memory cache. Keeps the owner, name, type and
+    upload time of `previous`. `unlocked_tier` is the tier the re-check's
+    credit unlocks, if any; the caller makes sure it never lowers the
+    document's tier. `check_id` is the document_checks row `report` is stored
+    in. Raises ReportStoreError when Supabase refuses a write; the local copy
+    is then left as it was.
     """
     init_report_store()
     source = previous.get("input") or {}
@@ -547,15 +567,15 @@ def replace_report(report_id: str, report: dict[str, Any], previous: dict[str, A
         "unlocked_tier": tier,
         **report,
     }
+    _persist_to_supabase(report_id, report, user_id=previous.get("user_id"),
+                         input_type=wrapped["input"]["type"], input_name=wrapped["input"]["name"],
+                         unlocked_tier=unlocked_tier, existing=True, check_id=check_id, strict=True)
+
     path = REPORT_DIR / f"{report_id}.json"
     with path.open("w", encoding="utf-8") as f:
         json.dump(wrapped, f, ensure_ascii=False, indent=2)
     with _LOCK:
         _REPORTS[report_id] = wrapped
-
-    _persist_to_supabase(report_id, report, user_id=previous.get("user_id"),
-                         input_type=wrapped["input"]["type"], input_name=wrapped["input"]["name"],
-                         unlocked_tier=unlocked_tier, existing=True)
     return wrapped
 
 

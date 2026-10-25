@@ -128,6 +128,37 @@ describe("buildRenderedPassages", () => {
     expect(rendered.spans).toHaveLength(1);
     expect(rendered.spans[0]).toMatchObject({ matchId: "primary", approximate: true, start: 0, end: TEXT.length });
   });
+
+  describe("a sentence that runs past a paragraph break", () => {
+    const HEADING = "3.2 Pre-trained Word Vectors";
+    const BODY = "Initializing word vectors with those obtained from an unsupervised model is popular.";
+    // input_text joins blocks with "\n\n".
+    const heading = { id: "h", text: HEADING, startOffset: 0, endOffset: HEADING.length } as DocPassage;
+    const body = { id: "b", text: BODY, startOffset: HEADING.length + 2, endOffset: HEADING.length + 2 + BODY.length } as DocPassage;
+    const SENTENCE = `${HEADING} ${BODY.slice(0, 41)}`;
+    const texts = (rendered: ReturnType<typeof buildRenderedPassages>) =>
+      rendered.map(({ passage: p, spans }) => spans.map((s) => [s.matchId, p.text.slice(s.start, s.end), s.approximate]));
+
+    it("is highlighted in each passage by its offsets", () => {
+      const across = match("across", null, { userSnippet: SENTENCE, startOffset: 0, endOffset: HEADING.length + 2 + 41 });
+      expect(texts(buildRenderedPassages([heading, body], [across]))).toEqual([
+        [["across", HEADING, false]],
+        [["across", BODY.slice(0, 41), false]],
+      ]);
+    });
+
+    it("is found by text when it has no offsets, instead of a whole-passage guess", () => {
+      const across = match("across", null, { userSnippet: SENTENCE });
+      const rendered = buildRenderedPassages([{ ...heading, matchId: "across" }, body], [across]);
+      expect(texts(rendered)).toEqual([[["across", HEADING, false]], [["across", BODY.slice(0, 41), false]]]);
+      expect(buildMatchFocusMap(rendered).get("across")).toBe("across");
+    });
+
+    it("is not drawn in passages its offsets don't cover", () => {
+      const elsewhere = match("far", null, { userSnippet: SENTENCE, startOffset: 900, endOffset: 980 });
+      expect(texts(buildRenderedPassages([heading, body], [elsewhere]))).toEqual([[], []]);
+    });
+  });
 });
 
 describe("buildMatchFocusMap", () => {
