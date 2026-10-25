@@ -433,12 +433,44 @@ export async function fetchDocumentVersions(documentId: string): Promise<Documen
     .from("document_versions")
     .select("*")
     .eq("document_id", documentId)
-    .order("created_at", { ascending: false })
-    .limit(20);
+    .order("created_at", { ascending: false });
   if (error) throw error;
   const versions = (data ?? []).map(toDocumentVersion);
   const checks = await fetchVersionChecks(documentId);
   return versions.map((v) => (checks.has(v.id) ? { ...v, check: checks.get(v.id) } : v));
+}
+
+/** The upload's own check result as a Version History entry, restorable like
+ * a re-checked version. The backend stores it (document_checks, kind
+ * "upload") before a document's first re-check replaces it; null for a
+ * document never re-checked (its current result is the upload's) or one
+ * re-checked before uploads were kept. */
+export async function fetchUploadVersion(documentId: string): Promise<DocumentVersion | null> {
+  const { data, error } = await supabase
+    .from("document_checks")
+    .select("id, similarity_score, ai_score, baseline_text")
+    .eq("document_id", documentId)
+    .eq("kind", "upload")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as { id: string; similarity_score: number; ai_score: number | null; baseline_text: string | null };
+  return {
+    id: `upload-${row.id}`,
+    label: tr("Original upload"),
+    savedAt: "",
+    wordCount: (row.baseline_text ?? "").split(/\s+/).filter(Boolean).length,
+    html: "",
+    check: {
+      id: row.id,
+      paid: false,
+      score: Number(row.similarity_score),
+      previousScore: null,
+      aiScore: row.ai_score == null ? null : Number(row.ai_score),
+      previousAiScore: null,
+    },
+  };
 }
 
 /** Save & re-check results by version id (document_checks, written only by
@@ -518,7 +550,7 @@ export async function fetchVersionHistories(documentIds: string[]): Promise<Map<
       .order("created_at", { ascending: false }),
     supabase
       .from("document_checks")
-      .select("document_id, version_id, similarity_score, previous_score, created_at")
+      .select("document_id, version_id, kind, similarity_score, previous_score, created_at")
       .in("document_id", documentIds)
       .order("created_at", { ascending: true }),
   ]);
@@ -528,13 +560,19 @@ export async function fetchVersionHistories(documentIds: string[]): Promise<Map<
   for (const row of (checksResult.error ? [] : (checksResult.data ?? [])) as {
     document_id: string;
     version_id: string | null;
+    kind?: string;
     similarity_score: number;
     previous_score: number | null;
   }[]) {
     const history = historyOf(row.document_id);
+    // The stored upload result (kept for Version History) is not a re-check.
+    if (row.kind === "upload") {
+      history.uploadScore = Number(row.similarity_score);
+      continue;
+    }
     if (!history.rechecked) {
       history.rechecked = true;
-      history.uploadScore = row.previous_score == null ? null : Number(row.previous_score);
+      history.uploadScore ??= row.previous_score == null ? null : Number(row.previous_score);
     }
     if (row.version_id) scoreByVersion.set(row.version_id, Number(row.similarity_score));
   }
@@ -553,13 +591,15 @@ export async function fetchVersionHistories(documentIds: string[]): Promise<Map<
 
 export async function saveDocumentVersion(
   documentId: string,
-  version: { label: string; html: string; wordCount: number; changedRatio?: number },
+  version: { label: string; html: string; wordCount: number; changedRatio?: number; createdAt?: string },
 ): Promise<DocumentVersion> {
-  const row: { document_id: string; label: string; html: string; word_count: number; changed_ratio?: number } = {
+  const row: { document_id: string; label: string; html: string; word_count: number; changed_ratio?: number; created_at?: string } = {
     document_id: documentId,
     label: version.label,
     html: version.html,
     word_count: version.wordCount,
+    // Set only for a version first kept on the device, so it keeps its place.
+    ...(version.createdAt ? { created_at: version.createdAt } : {}),
   };
   const insert = (withRatio: boolean) =>
     supabase

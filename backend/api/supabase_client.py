@@ -15,7 +15,8 @@ import logging
 import os
 from typing import Optional
 
-from supabase import Client, create_client
+import httpx
+from supabase import Client, ClientOptions, create_client
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,15 @@ def get_client() -> Optional[Client]:
             _warned = True
         return None
 
-    _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    # HTTP/1.1 instead of supabase-py's default HTTP/2: the one shared HTTP/2
+    # connection goes stale while the server sits idle, and the next request
+    # on it fails with "Server disconnected" (this lost a finished re-check on
+    # 2026-10-25). HTTP/1.1 connections are checked before reuse. Every
+    # sub-client sends absolute URLs and its own headers, so one client serves
+    # them all; 120 s is postgrest's default timeout.
+    http_client = httpx.Client(http2=False, timeout=120, follow_redirects=True)
+    _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+                            options=ClientOptions(httpx_client=http_client))
     return _client
 
 

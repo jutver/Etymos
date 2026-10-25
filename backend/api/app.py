@@ -53,12 +53,13 @@ from recheck_quota import TIER_RANK, original_text, quote_recheck
 from recheck_store import (
     RecheckStoreError,
     fetch_check_result,
+    current_check_result,
     fetch_passages,
+    has_stored_result,
     insert_check,
-    latest_check_result,
     version_belongs_to,
 )
-from report_store import replace_report
+from report_store import ReportStoreError, replace_report
 from quick_check import forget_report as forget_quick_check_corpus
 import marker_preview
 from marker_preview_store import (
@@ -905,13 +906,40 @@ _RECHECKS_RUNNING: set[str] = set()
 _RECHECKS_LOCK = threading.Lock()
 
 
-def _previous_check(report_id: str, report: dict) -> dict:
-    """The last check's full report: the local JSON (re-checks rewrite it),
-    else the newest re-check's stored result, else the stored report."""
+def _previous_check(report_id: str, report: dict, passages: dict[str, dict]) -> dict:
+    """The current report in full: the local JSON (re-checks and restores
+    rewrite it), else the stored check the document shows now, else the
+    Supabase copy rebuilt from its passages."""
+    from recheck import full_report
+
     local = get_local_report_file(report_id)
     if local is not None and local.get("matches") is not None:
         return local
-    return latest_check_result(report_id) or report
+    return current_check_result(report_id) or full_report(report, passages)
+
+
+def _keep_upload_result(report_id: str, previous: dict, previous_text: str) -> None:
+    """
+    Before a document's first re-check replaces its upload result, store that
+    result as a document_checks row, so Version History can always restore it.
+    Raises RecheckStoreError when it can't be stored: the re-check must not
+    run then, or the upload result would be lost for good.
+    """
+    from recheck import ai_score
+
+    if has_stored_result(report_id):
+        return  # The current result is already a stored check.
+    if not previous.get("input_text"):
+        raise RecheckStoreError("Couldn't save the current version, so nothing was changed.")
+    try:
+        insert_check(
+            document_id=report_id, version_id=None, kind="upload", balance_source=None,
+            changed_ratio=0.0, similarity_score=float(previous.get("overall_score") or 0.0),
+            baseline_text=previous_text or previous["input_text"], result=previous,
+            ai_score=ai_score(previous) if previous.get("ai_detection") else None,
+        )
+    except RecheckStoreError as exc:
+        raise RecheckStoreError("Couldn't save the current version, so nothing was changed.") from exc
 
 
 def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict], text: str,
@@ -922,16 +950,17 @@ def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict
     try:
         from recheck import ai_score, run_recheck
 
-        previous = _previous_check(report_id, report)
         passages = fetch_passages(report_id)
+        previous = _previous_check(report_id, report, passages)
         # The text this re-check replaces, read before the passages change.
         previous_text = original_text(report_id, previous)
+        _keep_upload_result(report_id, previous, previous_text)
         with gpu_slot(on_wait=make_queue_callback(job_id)):
             update_job(job_id, status="processing", progress=1,
                        current_step="starting", message="Starting re-check")
             result = run_recheck(previous, blocks, passages, progress_callback=callback)
 
-        insert_check(
+        check_id = insert_check(
             document_id=report_id, version_id=version_id,
             kind="paid_recheck" if paid else "free_recheck",
             balance_source=balance_source if paid else None,
@@ -948,8 +977,13 @@ def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict
         current_tier = previous.get("unlocked_tier") or report.get("unlocked_tier")
         if new_tier and TIER_RANK.get(current_tier or "free", 0) >= TIER_RANK[new_tier]:
             new_tier = None
-        replace_report(report_id, result, {**report, **{k: previous.get(k) for k in ("input", "created_at") if previous.get(k)}},
-                       unlocked_tier=new_tier)
+        try:
+            replace_report(report_id, result,
+                           {**report, **{k: previous.get(k) for k in ("input", "created_at") if previous.get(k)}},
+                           unlocked_tier=new_tier, check_id=check_id)
+        except ReportStoreError as exc:
+            raise RecheckStoreError("Couldn't apply the re-check. It's saved in Version History: "
+                                    "restore it from there, or try again.") from exc
         forget_quick_check_corpus(report_id)
 
         if paid and balance_source:
@@ -1027,8 +1061,8 @@ def recheck_report(request: Request, report_id: str, body: RecheckRequest,
 def restore_report_check(request: Request, report_id: str, check_id: UUID,
                          user: AuthedUser = Depends(verify_supabase_jwt)):
     """
-    Version History: make an earlier re-check's result the current report
-    again (its text, matches and score). Nothing is re-run and nothing is
+    Version History: make an earlier result (a re-check's, or the upload's)
+    the current report again (its text, matches and score). Nothing is re-run and nothing is
     charged, and the re-check history is unchanged, so the free allowance and
     its baseline stay as they were.
     """
@@ -1046,10 +1080,16 @@ def restore_report_check(request: Request, report_id: str, check_id: UUID,
         raise HTTPException(status_code=503, detail=str(exc))
     if result is None:
         raise HTTPException(status_code=404, detail="Check not found.")
+    if not (result.get("input_text") and (result.get("document") or {}).get("blocks")):
+        # Restoring it would leave the document with no paragraphs.
+        raise HTTPException(status_code=409, detail="This version's text wasn't stored, so it can't be restored.")
     # Only the check's own report fields: never let a stored result change
     # who owns the document or its unlocked tier.
     result = {k: v for k, v in result.items() if k not in ("user_id", "unlocked_tier", "report_id", "input")}
-    replace_report(report_id, result, report)
+    try:
+        replace_report(report_id, result, report, check_id=str(check_id))
+    except ReportStoreError:
+        raise HTTPException(status_code=503, detail="Couldn't restore this version. Please try again.")
     forget_quick_check_corpus(report_id)
     return {"status": "restored", "overall_score": result.get("overall_score")}
 

@@ -108,6 +108,64 @@ def previous_block_texts(report: dict[str, Any]) -> list[str]:
     return out
 
 
+def report_match(match: dict[str, Any]) -> dict[str, Any]:
+    """
+    A match in build_final_report's shape. The full report lives in the
+    server's local JSON, which a redeploy wipes; the fallback is the Supabase
+    copy, whose document_matches rows name the sentence `user_snippet` and
+    keep the label only inside `explanation_facts`. Without converting them a
+    re-check would find none of the previous matches.
+    """
+    if match.get("input_sentence") or not match.get("user_snippet"):
+        return match
+    facts = match.get("explanation_facts") or {}
+    authors = match.get("source_author") or ""
+    return {
+        "source_title": match.get("source_title") or "",
+        "source_url": match.get("source_url") or "",
+        "source_kind": match.get("source_kind") or "academic",
+        "source_authors": [a.strip() for a in authors.split(",") if a.strip()],
+        "source_year": match.get("source_year") or "",
+        "source_doi": match.get("source_doi") or "",
+        "input_sentence": match["user_snippet"],
+        "source_sentence": match.get("source_snippet") or "",
+        "label": facts.get("label") or "",
+        "semantic_similarity": float(match.get("match_percent") or 0.0) / 100,
+        "explanation": match.get("explanation") or "",
+        "explanation_facts": facts or None,
+        "pdf_rects": match.get("pdf_rects"),
+    }
+
+
+def full_report(report: dict[str, Any], passages: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """
+    `report` with its document blocks and input_text, the shape that can be
+    stored in document_checks and restored later. The Supabase copy has
+    neither, so they are rebuilt from the stored passages (`passages`, in
+    document order) and its matches converted. Without passages the copy is
+    returned as it is; it then has no input_text, which callers treat as
+    "can't be stored".
+    """
+    if report.get("input_text") and (report.get("document") or {}).get("blocks"):
+        return report
+    blocks = [{"block_id": passage_id, "text": passage.get("text") or ""} for passage_id, passage in passages.items()]
+    document, _ = build_edited_document(blocks, passages, [])
+    if not document["text"]:
+        return report
+    return {
+        **report,
+        "matches": [report_match(m) for m in report.get("matches") or []],
+        "input_text": document["text"],
+        "document": {
+            "version": document["version"],
+            "total_chars": document["total_chars"],
+            "sections": document["sections"],
+            "blocks": document["blocks"],
+            "text_field": "input_text",
+        },
+    }
+
+
 def build_edited_document(
     blocks: list[dict[str, Any]],
     passages: dict[str, dict[str, Any]],
@@ -222,12 +280,28 @@ def carry_over_matches(
     changed: list[bool],
 ) -> list[dict[str, Any]]:
     """
-    Previous matches whose sentence sits in an unchanged block, moved to that
-    block's new position. Matches in changed or removed blocks are dropped
-    (changed text is matched again from scratch).
+    Previous matches whose sentence sits in unchanged text, moved to its new
+    position. Matches touching a changed or removed block are dropped (changed
+    text is matched again from scratch).
+
+    Sentences are split on sentence boundaries, not paragraph breaks, so one
+    can run across blocks (a heading and the line after it, a line broken by
+    an equation). It is looked for in each run of consecutive unchanged
+    blocks, with any whitespace between its words, so it survives as long as
+    every block it touches is unchanged.
     """
     text = document["text"]
-    unchanged = [b for b, c in zip(_text_blocks(document), changed) if not c]
+    runs: list[tuple[int, int]] = []
+    in_run = False
+    for block, is_changed in zip(_text_blocks(document), changed):
+        if is_changed:
+            in_run = False
+            continue
+        if in_run and text[runs[-1][1]:block["start"]] == SEPARATOR:
+            runs[-1] = (runs[-1][0], block["end"])
+        else:
+            runs.append((block["start"], block["end"]))
+        in_run = True
     carried: list[dict[str, Any]] = []
     seen: set[tuple[Any, int, int]] = set()
 
@@ -237,20 +311,17 @@ def carry_over_matches(
             continue
         old_offset = match.get("input_offset") or {}
         old_start = old_offset.get("start")
+        pattern = re.compile(r"\s+".join(re.escape(word) for word in sentence.split(" ")))
 
-        # Candidates: every occurrence inside an unchanged block. With several,
-        # prefer the one nearest the old position (repeated boilerplate).
-        hits = []
-        for block in unchanged:
-            body = text[block["start"]:block["end"]]
-            at = body.find(sentence)
-            while at != -1:
-                hits.append(block["start"] + at)
-                at = body.find(sentence, at + 1)
+        # Candidates: every occurrence in unchanged text. With several, prefer
+        # the one nearest the old position (repeated boilerplate).
+        hits: list[tuple[int, int]] = []
+        for run_start, run_end in runs:
+            for found in pattern.finditer(text[run_start:run_end]):
+                hits.append((run_start + found.start(), run_start + found.end()))
         if not hits:
             continue
-        start = min(hits, key=lambda h: abs(h - old_start)) if old_start is not None else hits[0]
-        end = start + len(sentence)
+        start, end = min(hits, key=lambda h: abs(h[0] - old_start)) if old_start is not None else hits[0]
 
         key = (match.get("source_paper_id") or match.get("source_title"), start, end)
         if key in seen:
@@ -504,6 +575,8 @@ def run_recheck(
     maps a block id to its stored document_passages row ({} when unknown).
     """
     _emit(progress_callback, 5, "preparing", "Finding the paragraphs you changed")
+    previous_report = {**previous_report,
+                       "matches": [report_match(m) for m in previous_report.get("matches") or []]}
     document, changed = build_edited_document(blocks, passages, previous_block_texts(previous_report))
     if not document["text"]:
         raise ValueError("The document is empty.")

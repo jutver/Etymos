@@ -186,7 +186,8 @@ def load_check_history(document_id: str) -> CheckHistory:
         logger.exception("Failed to load document_checks for document_id=%s", document_id)
         raise HTTPException(status_code=503, detail="Re-check isn't available right now. Please try again shortly.")
 
-    rows = resp.data or []
+    # An "upload" row only keeps the upload's result for Version History.
+    rows = [row for row in (resp.data or []) if row.get("kind") != "upload"]
     free_used = 0
     for row in rows:
         if row.get("kind") == "paid_recheck":

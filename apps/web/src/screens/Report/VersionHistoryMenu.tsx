@@ -74,11 +74,14 @@ function ScoreDelta({ label, change }: { label: string; change: { value: number;
  */
 export function VersionHistoryMenu({
   versions,
+  original = null,
   onRestore,
   showAi = true,
   children,
 }: {
   versions: DocumentVersion[];
+  /** The upload's own check result, listed last (fetchUploadVersion). */
+  original?: DocumentVersion | null;
   /** False on the Free tier, where AI-content detection is locked. */
   showAi?: boolean;
   onRestore: (version: DocumentVersion) => void;
@@ -118,12 +121,12 @@ export function VersionHistoryMenu({
           <p className="px-2.5 py-2 text-micro font-bold uppercase tracking-wide text-ink-500">
             {t("Version history")}</p>
 
-          {versions.length === 0 ? (
+          {versions.length === 0 && !original ? (
             <p className="px-2.5 pb-3 pt-1 text-xs leading-relaxed text-ink-500">
               {t("No saved versions yet. Each time you save, a snapshot lands here.")}</p>
           ) : (
             <ul className="max-h-72 overflow-y-auto scrollbar-thin">
-              {versions.map((v, i) => (
+              {(original ? [...versions, original] : versions).map((v, i) => (
                 <li key={v.id}>
                   <button
                     type="button"
@@ -154,7 +157,8 @@ export function VersionHistoryMenu({
                         </span>
                       </span>
                       <span className="block text-xs text-ink-500">
-                        {v.savedAt} · {v.wordCount.toLocaleString(currentLocale())}{" "}{t("words")}
+                        {v.savedAt && `${v.savedAt} · `}
+                        {v.wordCount.toLocaleString(currentLocale())}{" "}{t("words")}
                         {changes.has(v.id) && (
                           <>
                             {" · "}

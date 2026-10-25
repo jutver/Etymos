@@ -148,6 +148,29 @@ def test_matches_in_changed_blocks_are_dropped():
     assert recheck.carry_over_matches(prev["matches"], doc, changed) == []
 
 
+HEADING = "3.2 Pre-trained Word Vectors"
+
+
+def test_matches_across_unchanged_blocks_carry_over():
+    """A sentence split on sentence boundaries can include a heading: it spans
+    two blocks and must survive a re-check of some other block."""
+    prev = previous_report((P1, HEADING, P2, P3), HEADING + "\n\n" + P2)
+    doc, changed = recheck.build_edited_document(
+        blocks(P1, HEADING, P2, "Rewritten in my own words."), passages(P1, HEADING, P2, P3), [])
+    carried = recheck.carry_over_matches(prev["matches"], doc, changed)
+    assert len(carried) == 1
+    offset = carried[0]["input_offset"]
+    assert doc["text"][offset["start"]:offset["end"]] == HEADING + "\n\n" + P2
+    assert offset["block_id"] == "input_text_1"
+
+
+def test_matches_across_a_changed_block_are_dropped():
+    prev = previous_report((P1, HEADING, P2, P3), HEADING + "\n\n" + P2)
+    doc, changed = recheck.build_edited_document(
+        blocks(P1, HEADING, P2 + " Edited.", P3), passages(P1, HEADING, P2, P3), [])
+    assert recheck.carry_over_matches(prev["matches"], doc, changed) == []
+
+
 def test_old_reports_without_offsets_still_carry_over():
     prev = previous_report((P1, P2), P2)
     for m in prev["matches"]:
@@ -166,6 +189,27 @@ def test_no_change_parity(no_search):
     assert no_search == []  # nothing changed, nothing searched
     assert result["ai_detection"] == {"available": True, "overall_score": 12.0, "stale": True}
     assert result["recheck"] == {"changed_blocks": 0, "total_blocks": 3, "carried_matches": 1, "new_matches": 0}
+
+
+def test_matches_from_the_supabase_copy_carry_over(no_search):
+    """After a redeploy the local report JSON is gone and the previous report
+    is the Supabase copy: document_matches rows, not report matches."""
+    prev = previous_report((P1, P2, P3), P2)
+    full = prev["matches"][0]
+    stored = {
+        "overall_score": prev["overall_score"],
+        "matches": [{
+            "id": "row-1", "document_id": "doc-1", "severity": "High", "detection_type": "semantic",
+            "match_percent": full["semantic_similarity"] * 100, "source_title": full["source_title"],
+            "source_author": None, "source_kind": "academic", "user_snippet": full["input_sentence"],
+            "source_snippet": full["source_sentence"], "explanation": "x",
+            "explanation_facts": {"kind": "whole", "label": full["label"]},
+        }],
+    }
+    result = recheck.run_recheck(stored, blocks(P1, P2, P3), passages(P1, P2, P3))
+    assert result["overall_score"] == prev["overall_score"] > 0
+    assert result["recheck"]["carried_matches"] == 1
+    assert result["matches"][0]["input_offset"]["start"] == full["input_offset"]["start"]
 
 
 def test_only_changed_text_is_searched(no_search):
@@ -229,7 +273,7 @@ def api(monkeypatch):
 
     api_app.app.dependency_overrides[verify_supabase_jwt] = lambda: AuthedUser(user_id="user-1", email=None, role="user", is_admin=False)
     api_app.limiter.enabled = False
-    state = {"cost": "free", "charged": [], "checks": [], "replaced": [], "quota_ok": True}
+    state = {"cost": "free", "charged": [], "checks": [], "replaced": [], "quota_ok": True, "stored": True}
 
     def quote(report_id, report, text):
         return {"tier": "free", "changed_ratio": 0.1, "change_limit": 0.3, "free_used": 0,
@@ -245,10 +289,12 @@ def api(monkeypatch):
     monkeypatch.setattr(api_app, "quote_recheck", quote)
     monkeypatch.setattr(api_app, "ensure_quota_available", ensure)
     monkeypatch.setattr(api_app, "version_belongs_to", lambda v, d: v != "00000000-0000-0000-0000-00000000dead")
-    monkeypatch.setattr(api_app, "_previous_check", lambda rid, rep: previous_report((P1, P2), P2))
+    monkeypatch.setattr(api_app, "_previous_check", lambda rid, rep, ps: previous_report((P1, P2), P2))
     monkeypatch.setattr(api_app, "fetch_passages", lambda rid: passages(P1, P2))
-    monkeypatch.setattr(api_app, "insert_check", lambda **kw: state["checks"].append(kw))
-    monkeypatch.setattr(api_app, "replace_report", lambda rid, rep, prev, unlocked_tier=None: state["replaced"].append((rid, unlocked_tier)))
+    monkeypatch.setattr(api_app, "has_stored_result", lambda rid: state["stored"])
+    monkeypatch.setattr(api_app, "insert_check", lambda **kw: state["checks"].append(kw) or f"check-{len(state['checks'])}")
+    monkeypatch.setattr(api_app, "replace_report", lambda rid, rep, prev, unlocked_tier=None, check_id=None:
+                        state["replaced"].append((rid, unlocked_tier, check_id)))
     monkeypatch.setattr(api_app, "record_check_used", lambda uid, src: state["charged"].append(src))
     monkeypatch.setattr(api_app, "forget_quick_check_corpus", lambda rid: None)
     monkeypatch.setattr(recheck, "match_changed_text", lambda *a, **k: {
@@ -299,7 +345,7 @@ def test_paid_recheck_charges_after_success_and_unlocks_the_credit_tier(api):
     assert res.status_code == 202
     assert state["checks"][0]["kind"] == "paid_recheck"
     assert state["charged"] == ["premium"]
-    assert state["replaced"] == [("r-1", "professional")]
+    assert state["replaced"] == [("r-1", "professional", "check-1")]
 
 
 def test_cost_change_is_refused(api):
@@ -358,6 +404,65 @@ def test_unrecorded_recheck_fails_without_replacing_the_report(api, monkeypatch)
     assert state["replaced"] == []
 
 
+def test_the_first_recheck_stores_the_upload_result_first(api):
+    api_app, client, state = api
+    state["stored"] = False
+    job = api_app.get_job(client.post("/api/reports/r-1/recheck", json=BODY).json()["job_id"])
+    assert job["status"] == "completed"
+    upload, recheck_row = state["checks"]
+    assert (upload["kind"], upload["version_id"], upload["balance_source"]) == ("upload", None, None)
+    assert upload["result"] == previous_report((P1, P2), P2)
+    assert upload["similarity_score"] == previous_report((P1, P2), P2)["overall_score"]
+    assert upload["baseline_text"] == "text before"
+    assert recheck_row["kind"] == "free_recheck"
+
+
+def test_no_recheck_runs_if_the_upload_result_cant_be_stored(api, monkeypatch):
+    api_app, client, state = api
+    state["stored"] = False
+    searched = []
+    monkeypatch.setattr(recheck, "run_recheck", lambda *a, **k: searched.append(1))
+
+    def fail(**kw):
+        raise api_app.RecheckStoreError("Couldn't save the current version, so nothing was changed.")
+
+    monkeypatch.setattr(api_app, "insert_check", fail)
+    job = api_app.get_job(client.post("/api/reports/r-1/recheck", json=BODY).json()["job_id"])
+    assert job["status"] == "failed"
+    assert (searched, state["replaced"], state["charged"]) == ([], [], [])
+
+
+def test_a_recheck_that_cant_be_applied_fails_and_costs_nothing(api, monkeypatch):
+    api_app, client, state = api
+    state["cost"] = "check"
+
+    def refuse(*a, **k):
+        raise api_app.ReportStoreError("Couldn't save the report.")
+
+    monkeypatch.setattr(api_app, "replace_report", refuse)
+    res = client.post("/api/reports/r-1/recheck", json={**BODY, "expected_cost": "check", "balance_source": "plan"})
+    job = api_app.get_job(res.json()["job_id"])
+    assert job["status"] == "failed"
+    assert "Version History" in job["error"]
+    assert state["charged"] == []
+
+
+def test_restore_refuses_a_version_without_its_text(api, monkeypatch):
+    api_app, client, _state = api
+    monkeypatch.setattr(api_app, "fetch_check_result", lambda cid, rid: {"overall_score": 7.5, "matches": []})
+    check_id = "11111111-1111-1111-1111-111111111111"
+    assert client.post(f"/api/reports/r-1/checks/{check_id}/restore").status_code == 409
+
+
+def test_the_supabase_copy_is_rebuilt_from_its_passages():
+    copy = {"overall_score": 40.0, "matches": [{"user_snippet": P2, "match_percent": 90.0}]}
+    full = recheck.full_report(copy, passages(P1, P2))
+    assert full["input_text"] == P1 + recheck.SEPARATOR + P2
+    assert [b["type"] for b in full["document"]["blocks"]] == ["paragraph", "paragraph"]
+    assert full["matches"][0]["input_sentence"] == P2
+    assert recheck.full_report(copy, {}) is copy
+
+
 def test_ownership_and_version_checks(api):
     _api_app, client, _state = api
     assert client.post("/api/reports/r-2/recheck", json=BODY).status_code == 404
@@ -391,16 +496,20 @@ def test_short_edits_skip_the_search(monkeypatch):
 
 def test_restore_puts_an_earlier_check_back(api, monkeypatch):
     api_app, client, state = api
-    stored = {"overall_score": 7.5, "matches": [], "user_id": "attacker", "unlocked_tier": "professional"}
+    stored = {"overall_score": 7.5, "matches": [], "user_id": "attacker", "unlocked_tier": "professional",
+              "input_text": P1, "document": {"blocks": [{"start": 0, "end": len(P1)}]}}
     monkeypatch.setattr(api_app, "fetch_check_result", lambda cid, rid: stored if rid == "r-1" else None)
     restored = []
-    monkeypatch.setattr(api_app, "replace_report", lambda rid, rep, prev, unlocked_tier=None: restored.append(rep))
+    monkeypatch.setattr(api_app, "replace_report", lambda rid, rep, prev, unlocked_tier=None, check_id=None:
+                        restored.append((rep, check_id)))
     check_id = "11111111-1111-1111-1111-111111111111"
 
     res = client.post(f"/api/reports/r-1/checks/{check_id}/restore")
     assert res.status_code == 200
     assert res.json() == {"status": "restored", "overall_score": 7.5}
-    assert "user_id" not in restored[0] and "unlocked_tier" not in restored[0]
+    assert "user_id" not in restored[0][0] and "unlocked_tier" not in restored[0][0]
+    # The restored check is now the current one, for the next re-check's diff.
+    assert restored[0][1] == check_id
     assert state["charged"] == []
 
     assert client.post(f"/api/reports/r-2/checks/{check_id}/restore").status_code == 404
@@ -437,6 +546,36 @@ def test_replace_report_keeps_the_documents_own_fields(monkeypatch, tmp_path):
     assert ("upsert" not in [op for op, _ in document_ops])
     assert ("update", ({"status": report_store._status_from_score(12.0), "similarity_score": 12.0},)) in document_ops
     assert (tmp_path / "r-9.json").exists()
+
+    report_store.replace_report("r-9", {"overall_score": 9.0, "matches": [], "input_text": "x"}, previous, check_id="c-2")
+    assert ("update", ({"status": report_store._status_from_score(9.0), "similarity_score": 9.0,
+                        "current_check_id": "c-2"},)) in [(op, args) for name, op, args in calls if name == "documents"]
+
+
+def test_a_refused_write_fails_the_replace_and_keeps_the_local_copy(monkeypatch, tmp_path):
+    """A re-check or restore must not report success over a half-written
+    document, and the local copy keeps the version that is still stored."""
+    import report_store
+
+    class Table:
+        def __init__(self, name):
+            self.name = name
+
+        def __getattr__(self, op):
+            return lambda *a, **k: self
+
+        def execute(self):
+            if self.name == "document_passages":
+                raise RuntimeError("Server disconnected")
+            return type("R", (), {"data": []})()
+
+    monkeypatch.setattr(report_store, "get_client", lambda: type("C", (), {"table": lambda self, n: Table(n)})())
+    monkeypatch.setattr(report_store, "REPORT_DIR", tmp_path)
+    (tmp_path / "r-9.json").write_text('{"overall_score": 50.0}')
+    previous = {"user_id": "u", "input": {"type": "pdf", "name": "essay.pdf"}}
+    with pytest.raises(report_store.ReportStoreError):
+        report_store.replace_report("r-9", {"overall_score": 9.0, "matches": [], "input_text": "x"}, previous)
+    assert (tmp_path / "r-9.json").read_text() == '{"overall_score": 50.0}'
 
 
 
