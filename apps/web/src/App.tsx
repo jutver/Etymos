@@ -49,6 +49,7 @@ import {
 } from "./components/layout/lazyScreens";
 import { ClosedBetaModal } from "./components/ClosedBetaModal";
 import { TermsGate } from "./components/legal/TermsGate";
+import { ReferralSurvey } from "./components/ReferralSurvey";
 import { POLICIES } from "./components/legal/policies";
 
 /** A fresh Report screen per document: its editor holds the text as live,
@@ -157,6 +158,7 @@ function App() {
       <MaintenanceGate>
         <AnnouncementPopup />
         <TermsGate />
+        <ReferralSurvey />
         <Routes>
           <Route element={<PublicShellWithBanner />}>
             <Route path="/" element={<HomeRoute />} />

@@ -1,4 +1,16 @@
 export const components: Record<string, string> = {
+  // ReferralSurvey
+  "How did you hear about Etymos?": "Bạn biết đến Etymos qua đâu?",
+  "One quick question — it helps us know where to share Etymos next.": "Chỉ một câu hỏi nhanh — giúp chúng tôi biết nên giới thiệu Etymos ở đâu tiếp theo.",
+  "Facebook": "Facebook",
+  "TikTok": "TikTok",
+  "Friends or classmates": "Bạn bè hoặc bạn cùng lớp",
+  "Google or another search engine": "Google hoặc công cụ tìm kiếm khác",
+  "Where did you find us? (optional)": "Bạn tìm thấy chúng tôi ở đâu? (không bắt buộc)",
+  "Skip": "Bỏ qua",
+  "Submit": "Gửi",
+  "Thanks for telling us!": "Cảm ơn bạn đã chia sẻ!",
+  "It helps us reach more students and researchers like you.": "Điều này giúp chúng tôi tiếp cận thêm nhiều sinh viên và nhà nghiên cứu như bạn.",
   "% match": "% trùng khớp",
   "Save {{percent}}% vs. monthly": "Tiết kiệm {{percent}}% so với trả theo tháng",
   "(scanning for overlaps...)": "(đang quét trùng lặp...)",
