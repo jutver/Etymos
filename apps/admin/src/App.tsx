@@ -6,6 +6,7 @@ import LoginPage from "./screens/Login";
 import AuthCallbackPage from "./screens/AuthCallback";
 import DashboardPage from "./screens/Dashboard";
 import ActivityPage from "./screens/Activity";
+import ReferralsPage from "./screens/Referrals";
 import UsersPage from "./screens/Users";
 import UserDetailPage from "./screens/Users/UserDetail";
 import ModerationPage from "./screens/Moderation";
@@ -45,6 +46,7 @@ function App() {
             <Route path="orders" element={<RevenueOrdersPage />} />
           </Route>
           <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/referrals" element={<ReferralsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/users/:id" element={<UserDetailPage />} />
           <Route path="/moderation" element={<ModerationPage />} />

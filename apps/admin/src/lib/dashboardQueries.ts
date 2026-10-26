@@ -48,7 +48,7 @@ export function formatRangeLabel(range: DateRange): string {
   return t("{{start}} to {{end}}", { start: range.start, end: range.end });
 }
 
-function daysInRange(start: string, end: string): string[] {
+export function daysInRange(start: string, end: string): string[] {
   const days: string[] = [];
   const cur = new Date(`${start}T00:00:00.000Z`);
   const last = new Date(`${end}T00:00:00.000Z`);
@@ -59,7 +59,7 @@ function daysInRange(start: string, end: string): string[] {
   return days;
 }
 
-function rangeBounds(range: DateRange): { gte: string; lte: string } {
+export function rangeBounds(range: DateRange): { gte: string; lte: string } {
   return { gte: `${range.start}T00:00:00.000Z`, lte: `${range.end}T23:59:59.999Z` };
 }
 
