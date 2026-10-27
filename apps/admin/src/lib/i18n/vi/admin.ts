@@ -560,4 +560,8 @@ export const admin: Record<string, string> = {
   "Who": "Người trả lời",
   "Deleted account": "Tài khoản đã xóa",
   "No answers in this range yet.": "Chưa có câu trả lời nào trong khoảng thời gian này.",
+  "Responses": "Phản hồi",
+  "Survey response": "Phản hồi khảo sát",
+  "Search by email, source or details…": "Tìm theo email, nguồn hoặc chi tiết…",
+  "No responses match your search.": "Không có phản hồi nào khớp với tìm kiếm.",
 };
