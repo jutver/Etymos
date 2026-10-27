@@ -1,7 +1,8 @@
 """
-Database tests for supabase/migrations/20261026000000_referral_survey.sql:
-anyone can answer "How did you hear about Etymos?" once per browser, as
-themselves or anonymously, and only admins can read the answers. Skipped
+Database tests for supabase/migrations/20261026000000_referral_survey.sql and
+20261027000000_referral_survey_signed_in_only.sql: only signed-in users can
+answer "How did you hear about Etymos?", once each and only as themselves, and
+only admins can read the answers. Skipped
 without pgserver/psycopg, like test_user_activity_log_sql.py (whose database
 fixture this reuses).
 """
@@ -36,43 +37,45 @@ def as_anon(db, sql: str, params=()):
         return cur.fetchall() if cur.description else []
 
 
-def test_visitors_answer_signed_out_or_as_themselves(db):
+def test_signed_in_users_answer_as_themselves(db):
     user = make_user(db)
-    anon_visitor, user_visitor = visitor(), visitor()
-    as_anon(db, INSERT, (anon_visitor, None, "tiktok", None))
-    run_as(db, user, INSERT, (user_visitor, user, "other", "A teacher mentioned it"))
-
+    run_as(db, user, INSERT, (user, user, "other", "A teacher mentioned it"))
     rows = db.execute(
-        "select source, user_id, other_text from public.referral_survey_responses where visitor_id in (%s, %s)"
-        " order by id", (anon_visitor, user_visitor)
+        "select source, user_id, other_text from public.referral_survey_responses where visitor_id = %s", (user,)
     ).fetchall()
-    assert [(r[0], r[1] and str(r[1]), r[2]) for r in rows] == [
-        ("tiktok", None, None), ("other", user, "A teacher mentioned it"),
-    ]
+    assert [(r[0], str(r[1]), r[2]) for r in rows] == [("other", user, "A teacher mentioned it")]
 
 
-def test_nobody_answers_for_someone_else(db):
+def test_signed_out_visitors_cannot_answer(db):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_anon(db, INSERT, (visitor(), None, "tiktok", None))
+
+
+def test_nobody_answers_for_someone_else_or_anonymously(db):
     user, other = make_user(db), make_user(db)
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         as_anon(db, INSERT, (visitor(), user, "facebook", None))
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         as_user(db, other, INSERT, (visitor(), user, "facebook", None))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_user(db, other, INSERT, (visitor(), None, "facebook", None))
 
 
-def test_one_answer_per_browser(db):
-    v = visitor()
-    as_anon(db, INSERT, (v, None, "friend", None))
+def test_one_answer_per_account(db):
+    user = make_user(db)
+    run_as(db, user, INSERT, (user, user, "friend", None))
     with pytest.raises(psycopg.errors.UniqueViolation):
-        as_anon(db, INSERT, (v, None, "facebook", None))
+        run_as(db, user, INSERT, (user, user, "facebook", None))
 
 
 def test_only_known_sources_and_free_text_only_for_other(db):
+    user = make_user(db)
     with pytest.raises(psycopg.errors.CheckViolation):
-        as_anon(db, INSERT, (visitor(), None, "instagram", None))
+        run_as(db, user, INSERT, (visitor(), user, "instagram", None))
     with pytest.raises(psycopg.errors.CheckViolation):
-        as_anon(db, INSERT, (visitor(), None, "facebook", "my friend"))
+        run_as(db, user, INSERT, (visitor(), user, "facebook", "my friend"))
     with pytest.raises(psycopg.errors.CheckViolation):
-        as_anon(db, INSERT, (visitor(), None, "other", "x" * 201))
+        run_as(db, user, INSERT, (visitor(), user, "other", "x" * 201))
 
 
 def test_only_admins_read_answers(db):

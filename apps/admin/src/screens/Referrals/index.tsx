@@ -65,7 +65,7 @@ const COLUMNS: Column<ReferralAnswer>[] = [
   {
     key: "user",
     label: tr("Who"),
-    render: (r) => r.user?.email ?? <span className="text-fg-subtle">{t("Signed-out visitor")}</span>,
+    render: (r) => r.user?.email ?? <span className="text-fg-subtle">{t("Deleted account")}</span>,
   },
 ];
 
@@ -109,7 +109,7 @@ export default function ReferralsPage() {
         <div>
           <h1 className="text-h1 font-semibold text-fg">{t("Referral sources")}</h1>
           <p className="mt-1 text-body text-fg-muted">
-            {t("How visitors say they found Etymos, from the first-visit survey,")}{" "}{formatRangeLabel(range)}.
+            {t("How signed-in users say they found Etymos, from the referral survey,")}{" "}{formatRangeLabel(range)}.
           </p>
         </div>
         <DateRangePicker value={range} onChange={setRange} />

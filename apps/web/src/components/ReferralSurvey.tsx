@@ -12,7 +12,7 @@ import {
 import { cn } from "@etymos/shared";
 import { Modal, ModalCloseButton } from "./ui/Modal";
 import { Button } from "./ui/Button";
-import { POLICIES } from "./legal/policies";
+import { useAuth } from "../lib/auth";
 import { t, tr } from "../lib/i18n";
 import { OTHER_TEXT_MAX, referralSurveyDone, submitReferralSurvey, type ReferralSource } from "../lib/referralSurvey";
 
@@ -24,40 +24,38 @@ const OPTIONS: { source: ReferralSource; label: string; Icon: Icon }[] = [
   { source: "other", label: tr("Other"), Icon: ChatCircleDots },
 ];
 
-/** Pages the survey stays out of: the sign-in flows, which must finish
- * uninterrupted, and the policies. */
-const EXEMPT_PATHS = [
-  ...POLICIES.map((p) => p.path),
-  "/login",
-  "/signup",
-  "/verify-email",
-  "/auth/callback",
-  "/email-verified",
-  "/forgot-password",
-  "/reset-password",
-  "/recover-account",
-];
+/** The signed-in home page (App.tsx's APP_HOME) — the only page that asks. */
+const SURVEY_PATH = "/upload";
 
 /** Give the first page a moment before asking anything. */
 const OPEN_DELAY_MS = 4000;
 
 /**
- * Asks a first-time visitor how they found Etymos, once per browser. Waits
+ * Asks a signed-in user how they found Etymos, once per account, on the home
+ * page only — never on the public landing pages or mid sign-in. Waits
  * while another dialog (the closed-beta notice, the Terms gate, an
  * announcement) is open, so two never stack. Closing it counts as a skip.
  */
 export function ReferralSurvey() {
   const { pathname } = useLocation();
-  const [pending, setPending] = useState(() => !referralSurveyDone());
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [answeredBy, setAnsweredBy] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<ReferralSource | null>(null);
   const [otherText, setOtherText] = useState("");
   const [thanked, setThanked] = useState(false);
   const otherRef = useRef<HTMLInputElement>(null);
-  const exempt = EXEMPT_PATHS.includes(pathname);
+  const pending = userId !== null && answeredBy !== userId && !referralSurveyDone(userId);
+  const eligible = pending && pathname === SURVEY_PATH;
+
+  // Signing out (or leaving the home page before it opens) cancels the ask.
+  useEffect(() => {
+    if (!userId) setOpen(false);
+  }, [userId]);
 
   useEffect(() => {
-    if (!pending || open || exempt) return;
+    if (!eligible || open) return;
     let timer = 0;
     const tryOpen = () => {
       if (document.querySelector('[role="dialog"]') !== null) {
@@ -68,15 +66,16 @@ export function ReferralSurvey() {
     };
     timer = window.setTimeout(tryOpen, OPEN_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [pending, open, exempt]);
+  }, [eligible, open]);
 
   useEffect(() => {
     if (source === "other") otherRef.current?.focus();
   }, [source]);
 
   function finish(answer: ReferralSource | null) {
-    void submitReferralSurvey(answer, otherText);
-    setPending(false);
+    if (!userId) return;
+    void submitReferralSurvey(userId, answer, otherText);
+    setAnsweredBy(userId);
     if (answer) setThanked(true);
     else setOpen(false);
   }
