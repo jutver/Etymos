@@ -1,4 +1,4 @@
-// Referral sources screen: how first-visit survey answers are counted.
+// Referral sources screen: how referral survey answers are counted.
 import { describe, expect, it } from "vitest";
 import { summarizeReferrals, type ReferralResponse } from "./referralQueries";
 import type { DateRange } from "./dashboardQueries";
