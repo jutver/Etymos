@@ -12,7 +12,7 @@ the admin app (**Support**). Requesters reply by email or on the site.
 ```
 /contact form ──┐                                  ┌─► acknowledgement email to the requester
 email to        ├─► backend opens ticket #1042 ────┤   (from support@, subject "[#1042] ...")
-support@ ───────┘   (support_tickets/messages)     └─► alert to SUPPORT_ALERT_EMAILS
+support@ ───────┘   (support_tickets/messages)     └─► (no alert: it shows in the admin Support screen)
                                 ▲
 agent reply in admin app ───────┘──► emailed to the requester, threaded (In-Reply-To/References)
                                 ▲
@@ -101,7 +101,6 @@ SUPPORT_SMTP_PASSWORD='...'
 # SUPPORT_IMAP_USER=support@etymos.site
 # SUPPORT_IMAP_PASSWORD='...'
 SUPPORT_LINK_SECRET='<at least 32 random characters>'   # python3 -c "import secrets; print(secrets.token_hex(32))"
-SUPPORT_ALERT_EMAILS=you@example.com                     # who hears about new tickets; NEVER support@ itself
 WEB_APP_URL=https://www.etymos.site
 ADMIN_APP_URL=https://admin.etymos.site                  # optional, for "Open in admin" links in alerts
 ```
@@ -119,8 +118,9 @@ Optional:
 
 Without `SUPPORT_SMTP_*`, support mail goes out through the `SMTP_USER`
 login (noreply@) with `Reply-To: support@etymos.site`, and the poller is off
-unless `SUPPORT_IMAP_*` is set. `SUPPORT_ALERT_EMAILS` falls back to
-`ADMIN_ALERT_EMAILS`, then to every admin's address.
+unless `SUPPORT_IMAP_*` is set. When a requester replies, only the admin the
+ticket is assigned to gets an alert (an admin is assigned on their first
+reply, or from the ticket's Assignee field); unassigned tickets alert nobody.
 
 Restart the API afterwards. The log shows
 `Support loop started (every 60s, inbox polling on)`.
@@ -128,8 +128,8 @@ Restart the API afterwards. The log shows
 ### 4. Try it
 
 1. Signed out, open `/contact`, send a request with a screenshot. You get
-   "We got your request #1001" from support@; the alert address gets
-   "[Etymos support] New support request #1001".
+   "We got your request #1001" from support@. No alert goes to the team for a
+   new ticket; it shows up in the admin app's **Support** screen.
 2. In the admin app, **Support** → #1001 → reply. The reply arrives in the
    requester's inbox in the same thread.
 3. Reply to that email from the requester's inbox. Within a minute it shows

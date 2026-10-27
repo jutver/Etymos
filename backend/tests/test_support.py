@@ -225,7 +225,6 @@ def env(monkeypatch):
     monkeypatch.setattr(notifications.mailer, "send_email", lambda to, c: alerts.append((to, c)))
     monkeypatch.setenv("SUPPORT_LINK_SECRET", "x" * 40)
     monkeypatch.setenv("SUPPORT_EMAIL", "support@etymos.site")
-    monkeypatch.delenv("SUPPORT_ALERT_EMAILS", raising=False)
     monkeypatch.delenv("ADMIN_ALERT_EMAILS", raising=False)
 
     current = {"user": None}
@@ -317,7 +316,7 @@ def test_guest_opens_a_ticket(env):
     assert "/support/t/" in ack["content"].button_url
     # The ack's Message-ID is kept, so a reply to it threads in.
     assert any(m["email_message_id"] == ack["message_id"] for m in messages(env))
-    assert [to for to, _ in env.alerts] == ["boss@etymos.site"]
+    assert env.alerts == []  # new tickets don't email the team
 
 
 def test_signed_in_ticket_is_verified_and_linked(env):
@@ -345,10 +344,33 @@ def test_tickets_per_address_are_capped(env):
     assert r.status_code == 429 and r.json()["detail"] == "too_many_requests"
 
 
-def test_alerts_never_go_to_the_support_mailbox(env, monkeypatch):
-    monkeypatch.setenv("SUPPORT_ALERT_EMAILS", "support@etymos.site, Team@Example.com")
-    open_form(env)
-    assert [to for to, _ in env.alerts] == ["team@example.com"]
+def reply_as_user(env, *, assigned_to=None):
+    open_form(env, as_user=USER)
+    tickets(env)[0]["assigned_to"] = assigned_to
+    env.current["user"] = USER
+    return env.client.post("/api/support/tickets/1001/messages", data={"body": "Any news?"})
+
+
+def test_reply_alerts_only_the_assigned_admin(env):
+    env.db.tables["profiles"].append({"id": "admin-2", "email": "Second@Etymos.site", "role": "admin"})
+    reply_as_user(env, assigned_to="admin-2")
+    assert [to for to, _ in env.alerts] == ["second@etymos.site"]
+
+
+def test_reply_on_an_unassigned_ticket_alerts_nobody(env):
+    reply_as_user(env)
+    assert env.alerts == []
+
+
+def test_reply_alert_skips_an_assignee_who_is_no_longer_admin(env):
+    reply_as_user(env, assigned_to="user-2")
+    assert env.alerts == []
+
+
+def test_alerts_never_go_to_the_support_mailbox(env):
+    env.db.tables["profiles"].append({"id": "admin-3", "email": "support@etymos.site", "role": "admin"})
+    reply_as_user(env, assigned_to="admin-3")
+    assert env.alerts == []
 
 
 # --- requester views ------------------------------------------------------------------
@@ -376,11 +398,15 @@ def test_reply_on_site_reopens_and_alerts(env):
     open_form(env, as_user=USER)
     t = tickets(env)[0]
     t["status"] = "pending"
+    t["assigned_to"] = ADMIN_ID
     env.current["user"] = USER
     r = env.client.post("/api/support/tickets/1001/messages", data={"body": "Any news?"})
     assert r.status_code == 200
     assert tickets(env)[0]["status"] == "open"
     assert len(r.json()["messages"]) == 2
+    assert [(to, c.subject) for to, c in env.alerts] == [
+        ("boss@etymos.site", "[Etymos support] New reply on a support request #1001: Charged twice")
+    ]
 
 
 def test_closed_ticket_refuses_site_replies(env):

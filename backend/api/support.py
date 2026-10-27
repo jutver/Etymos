@@ -452,26 +452,31 @@ def send_acknowledgement(ticket: dict, body: str) -> None:
         logger.exception("Sent the acknowledgement for #%s but couldn't record it", ticket["number"])
 
 
-def alert_recipients(client) -> List[str]:
-    configured = [e.strip().lower() for e in os.getenv("SUPPORT_ALERT_EMAILS", "").split(",") if e.strip()]
-    recipients = configured or [e.lower() for e in notifications.admin_recipients(client)]
+def alert_recipients(client, ticket: dict) -> List[str]:
+    """Only the admin the ticket is assigned to: an unassigned ticket, or one
+    whose assignee is no longer an admin, alerts nobody."""
+    assignee = _profiles_by_id(client, [ticket.get("assigned_to")]).get(ticket.get("assigned_to"))
+    if not assignee or assignee.get("role") != "admin" or not assignee.get("email"):
+        return []
+    email = assignee["email"].lower()
     # Never the support mailbox itself: the poller would read the alert back
     # in as a new ticket.
-    return [e for e in dict.fromkeys(recipients) if e != support_mail.support_address()]
+    return [] if email == support_mail.support_address() else [email]
 
 
-def alert_agents(ticket: dict, message: dict, *, is_new: bool) -> None:
-    """Background task: tell the team about a new ticket or reply."""
+def alert_agents(ticket: dict, message: dict) -> None:
+    """Background task: tell the ticket's assigned admin about a requester's
+    reply. New tickets send no alert; they show up in the admin app's Support
+    screen."""
     client = get_client()
     if client is None:
         return
     requester = ticket["requester_email"]
     if ticket.get("requester_name"):
         requester = f"{ticket['requester_name']} <{requester}>"
-    kind = "support_new" if is_new else "support_reply"
-    for to in alert_recipients(client):
+    for to in alert_recipients(client, ticket):
         notifications.deliver(
-            kind,
+            "support_reply",
             f"{message['id']}:{to}",
             to,
             lambda: support_agent_alert_email(
@@ -480,7 +485,6 @@ def alert_agents(ticket: dict, message: dict, *, is_new: bool) -> None:
                 body=message["body"],
                 requester=requester,
                 category=ticket["category"],
-                is_new=is_new,
                 admin_url=admin_url(),
             ),
             client=client,
@@ -789,7 +793,6 @@ async def open_ticket(
 
     ticket, message = await run_in_threadpool(work)
     background.add_task(send_acknowledgement, ticket, body)
-    background.add_task(alert_agents, ticket, message, is_new=True)
     return {"number": ticket["number"], "signed_in": user is not None}
 
 
@@ -834,7 +837,7 @@ async def _reply_as_requester(
         return ticket, message, public_conversation(client, ticket)
 
     ticket, message, conversation = await run_in_threadpool(work)
-    background.add_task(alert_agents, ticket, message, is_new=False)
+    background.add_task(alert_agents, ticket, message)
     return conversation
 
 
