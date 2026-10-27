@@ -416,7 +416,7 @@ def process(client, raw: bytes) -> str:
             **fields,
         )
         _attach_raw(client, message, ticket["id"], raw)
-        support.alert_agents(ticket, message, is_new=False)
+        support.alert_agents(ticket, message)
         return _finish(client, parsed, "appended", ticket)
 
     previous = ticket  # closed ticket being written to again, or None
@@ -438,7 +438,6 @@ def process(client, raw: bytes) -> str:
     )
     _attach_raw(client, message, new_ticket["id"], raw)
     support.send_acknowledgement(new_ticket, body)
-    support.alert_agents(new_ticket, message, is_new=True)
     return _finish(client, parsed, "ticket_created", new_ticket, detail=f"after closed #{previous['number']}" if previous else "")
 
 

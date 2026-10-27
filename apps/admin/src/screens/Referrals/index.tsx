@@ -58,27 +58,40 @@ function SourceCell({ response: r }: { response: ReferralResponse }) {
   );
 }
 
-/** Narrow columns shrink to their content (w-px + nowrap); Details takes the
- * rest and cuts long text to one line — the row's dialog shows all of it. */
+/** When and Source shrink to their content (w-px + nowrap) plus extra padding
+ * past the table's 16px; Who takes a share of the width so it sits the same
+ * distance in whatever the email's length or screen size; Details (no width)
+ * gets the rest and cuts long text to one line — the row's dialog shows all
+ * of it. */
 const COLUMNS: Column<ReferralResponse>[] = [
   {
     key: "created_at",
     label: tr("When"),
     render: (r) => new Date(r.created_at).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }),
-    className: "w-px whitespace-nowrap",
+    className: "w-px whitespace-nowrap pr-[46px]",
   },
   {
     key: "source",
     label: tr("Source"),
     render: (r) => <SourceCell response={r} />,
-    className: "w-px whitespace-nowrap",
+    className: "w-px whitespace-nowrap pr-[46px]",
   },
   {
     key: "other_text",
     label: tr("Details"),
-    render: (r) =>
-      r.other_text ? <span className="block truncate">{r.other_text}</span> : <span className="text-fg-subtle">—</span>,
-    className: "w-full max-w-0",
+    render: (r) => (
+      // The text is taken out of flow so a long answer can't widen the column;
+      // the hidden dot keeps the row's height and min-w stops narrow screens
+      // from squeezing it to nothing (the table scrolls sideways instead).
+      <div className="relative min-w-[12rem]">
+        <span aria-hidden="true" className="invisible">.</span>
+        {r.other_text ? (
+          <span className="absolute inset-0 truncate">{r.other_text}</span>
+        ) : (
+          <span className="absolute inset-0 text-fg-subtle">—</span>
+        )}
+      </div>
+    ),
   },
   {
     key: "user",
@@ -88,7 +101,7 @@ const COLUMNS: Column<ReferralResponse>[] = [
         {r.user?.email ?? <span className="text-fg-subtle">{t("Deleted account")}</span>}
       </span>
     ),
-    className: "w-px whitespace-nowrap",
+    className: "w-[35%] whitespace-nowrap",
   },
 ];
 

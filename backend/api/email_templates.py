@@ -546,9 +546,9 @@ def support_agent_reply_email(
 
 
 def support_agent_alert_email(
-    *, number: int, subject: str, body: str, requester: str, category: str, is_new: bool, admin_url: Optional[str]
+    *, number: int, subject: str, body: str, requester: str, category: str, admin_url: Optional[str]
 ) -> EmailContent:
-    what = "New support request" if is_new else "New reply on a support request"
+    what = "New reply on a support request"
     return EmailContent(
         subject=f"[Etymos support] {what} #{number}: {subject}",
         preheader=body.strip()[:140],
