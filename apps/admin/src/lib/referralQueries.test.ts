@@ -48,7 +48,7 @@ describe("summarizeReferrals", () => {
     ]);
   });
 
-  it("lists answers newest first without the skips", () => {
-    expect(summary.answers.map((a) => a.other_text ?? a.source)).toEqual(["Zalo group", "tiktok", "facebook", "tiktok"]);
+  it("lists every response newest first, skips included", () => {
+    expect(summary.responses.map((a) => a.other_text ?? a.source)).toEqual(["skipped", "Zalo group", "tiktok", "facebook", "tiktok"]);
   });
 });

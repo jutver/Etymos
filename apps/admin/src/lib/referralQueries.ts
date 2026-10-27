@@ -1,6 +1,6 @@
-// "How did you hear about Etymos?" answers from the web app's first-visit
-// survey (supabase/migrations/20261026000000_referral_survey.sql). One row per
-// browser, so the table stays small enough to aggregate here, like the main
+// "How did you hear about Etymos?" answers from the web app's referral survey
+// (supabase/migrations/20261026000000_referral_survey.sql). One row per
+// account, so the table stays small enough to aggregate here, like the main
 // Dashboard does.
 import { supabase } from "@etymos/shared";
 import { daysInRange, rangeBounds, type DateRange } from "./dashboardQueries";
@@ -39,8 +39,8 @@ export interface ReferralSummary {
   bySource: { source: ReferralSource; count: number }[];
   /** Per-day answers, one key per source. */
   series: ({ date: string } & Record<ReferralSource, number>)[];
-  /** Answers newest first, skips left out. */
-  answers: ReferralAnswer[];
+  /** Every response newest first, skips included. */
+  responses: ReferralResponse[];
 }
 
 /** Thrown when the table doesn't exist yet, i.e. the migration hasn't been applied. */
@@ -73,7 +73,7 @@ export function summarizeReferrals(rows: ReferralResponse[], range: DateRange): 
     skipped: rows.length - answers.length,
     bySource: REFERRAL_SOURCES.map((source) => ({ source, count: counts.get(source) ?? 0 })),
     series: [...days.values()],
-    answers: [...answers].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    responses: [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)),
   };
 }
 
