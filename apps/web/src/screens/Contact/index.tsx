@@ -6,6 +6,7 @@ import { PageLoader } from "../../components/ui/PageLoader";
 import { SUPPORT_EMAIL } from "../../components/support/labels";
 import { SupportRequestForm, type SupportRequestSent } from "../../components/support/SupportRequestForm";
 import { useAuth } from "../../lib/auth";
+import { fetchFeatureFlag } from "../../lib/featureFlags";
 import { fetchMyProfile } from "../../lib/profileQueries";
 import { t } from "../../lib/i18n";
 
@@ -20,6 +21,18 @@ export default function ContactPage() {
   const { user, loading } = useAuth();
   const [inApp, setInApp] = useState<boolean | null>(null);
   const [sent, setSent] = useState<SupportRequestSent | null>(null);
+  // The admin's "requests by email" switch; the address is only offered while it's on.
+  const [emailWelcome, setEmailWelcome] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFeatureFlag("support_email_requests", true)
+      .then((on) => !cancelled && setEmailWelcome(on))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -74,16 +87,18 @@ export default function ContactPage() {
         <p className="mt-3 text-sm leading-relaxed text-ink-500">
           {t("Tell us what's going on and we'll get back to you by email, usually within one business day.")}
         </p>
-        <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface-tint px-4 py-3.5 text-sm text-ink-600">
-          <EnvelopeSimple size={18} className="mt-0.5 shrink-0 text-brand-600" />
-          <p>
-            {t("Prefer email? Write to")}{" "}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-brand-600 underline underline-offset-2">
-              {SUPPORT_EMAIL}
-            </a>
-            .
-          </p>
-        </div>
+        {emailWelcome && (
+          <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface-tint px-4 py-3.5 text-sm text-ink-600">
+            <EnvelopeSimple size={18} className="mt-0.5 shrink-0 text-brand-600" />
+            <p>
+              {t("Prefer email? Write to")}{" "}
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-brand-600 underline underline-offset-2">
+                {SUPPORT_EMAIL}
+              </a>
+              .
+            </p>
+          </div>
+        )}
       </div>
 
       <SupportRequestForm onSent={setSent} />

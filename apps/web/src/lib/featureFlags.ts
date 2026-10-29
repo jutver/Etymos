@@ -19,14 +19,15 @@ export async function fetchFeatureFlags(): Promise<FeatureFlag[]> {
   return (data ?? []) as FeatureFlag[];
 }
 
-export async function fetchFeatureFlag(key: string): Promise<boolean> {
+/** `fallback` is the value when the flag row doesn't exist. */
+export async function fetchFeatureFlag(key: string, fallback = false): Promise<boolean> {
   const { data, error } = await supabase
     .from("feature_flags")
     .select("enabled")
     .eq("key", key)
     .maybeSingle();
   if (error) throw error;
-  return data?.enabled ?? false;
+  return data?.enabled ?? fallback;
 }
 
 /** Gate UI on a single flag. Defaults to `false` until the fetch resolves, or

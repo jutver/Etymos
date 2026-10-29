@@ -20,6 +20,7 @@ import { friendlyError } from "../../lib/errors";
 import { toastDeleteResult, type DeleteScope } from "../../lib/storageFiles";
 import { t, tr } from "../../lib/i18n";
 import { CATEGORY_LABELS, STATUS_LABELS, ago, statusTone } from "./labels";
+import { IntakeSwitches } from "./IntakeSwitches";
 
 const PAGE_SIZE = 30;
 
@@ -189,6 +190,8 @@ export default function SupportInboxPage() {
       <p className="mt-1 text-body text-fg-muted">
         {t("Requests from the contact form and emails to support@etymos.site. Replies are emailed from the support mailbox.")}
       </p>
+
+      <IntakeSwitches />
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">

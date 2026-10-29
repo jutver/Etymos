@@ -19,6 +19,9 @@ each message in INBOX:
 5. Appends to the ticket, or opens a new one (unmatched email, or a reply to
    a closed ticket), and moves the email to the "Processed" folder.
    Emails that fail go to "Support-Failed" for a person to look at.
+   Mail from a support-banned account is dropped (ignored_banned), and
+   while the admin's "Requests by email" switch is off an email that would
+   open a new ticket is dropped too (ignored_disabled).
 
 OneMail has no plus-addressing (tested 2026-10-08), so reply addresses carry
 no per-ticket token; matching relies on the headers above.
@@ -422,6 +425,10 @@ def process(client, raw: bytes) -> str:
         _attach_raw(client, message, ticket["id"], raw)
         support.alert_agents(ticket, message)
         return _finish(client, parsed, "appended", ticket)
+
+    # Only new requests are turned away; replies on open tickets went through above.
+    if not support.intake_open(client, support.EMAIL_REQUESTS_FLAG):
+        return _finish(client, parsed, "ignored_disabled", ticket)
 
     previous = ticket  # closed ticket being written to again, or None
     subject = support.clean_subject(parsed.subject) or "(no subject)"

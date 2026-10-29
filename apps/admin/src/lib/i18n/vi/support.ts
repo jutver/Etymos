@@ -74,4 +74,11 @@ export const support: Record<string, string> = {
   "waiting {{time}}": "đã chờ {{time}}",
   "Your session has expired. Sign in again.": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
   "{{standard}} standard · {{premium}} premium": "{{standard}} thường · {{premium}} cao cấp",
+  "Requests from signed-out visitors": "Yêu cầu từ khách chưa đăng nhập",
+  "On: anyone can open a request from the Contact page.": "Bật: bất kỳ ai cũng có thể gửi yêu cầu từ trang Liên hệ.",
+  "Off: the Contact page asks people to sign in first.": "Tắt: trang Liên hệ yêu cầu đăng nhập trước.",
+  "Requests by email": "Yêu cầu qua email",
+  "On: a new email to the support address opens a request.": "Bật: email mới gửi tới địa chỉ hỗ trợ sẽ tạo yêu cầu.",
+  "Off: new emails are dropped. Replies to existing requests still arrive.": "Tắt: email mới bị bỏ qua. Phản hồi cho các yêu cầu hiện có vẫn được nhận.",
+  "Not set up yet: apply the support intake migration.": "Chưa được thiết lập: hãy chạy migration support intake.",
 };

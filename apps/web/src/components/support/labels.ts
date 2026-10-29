@@ -41,6 +41,7 @@ const ERRORS: Record<string, string> = {
   closed: tr("This request is closed. Open a new one if you still need help."),
   not_found: tr("We couldn't find this request."),
   support_banned: tr("Your account can't contact support right now."),
+  guest_requests_off: tr("Support requests from signed-out visitors are turned off."),
 };
 
 export function supportErrorText(err: unknown): string {

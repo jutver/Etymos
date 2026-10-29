@@ -340,20 +340,29 @@ def _ban_active(row: dict) -> bool:
     return until > _now()
 
 
+_BAN_COLUMNS = "id,support_banned_permanent,support_banned_until,support_ban_reason"
+
+
 def support_ban(client, *, user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[dict]:
-    """The account's support ban ({permanent, until, reason}) when one is in
-    force, else None. Looked up by account id, or by login address for guest
-    and email requests (so signing out doesn't get round it)."""
-    query = client.table("profiles").select("support_banned_permanent,support_banned_until,support_ban_reason")
+    """The account's support ban ({user_id, permanent, until, reason}) when one
+    is in force, else None. Looked up by account id, or for guest and email
+    requests by address: the login address or a confirmed recovery address
+    (so signing out, or writing from the other inbox, doesn't get round it)."""
     if user_id:
-        query = query.eq("id", user_id)
+        rows = client.table("profiles").select(_BAN_COLUMNS).eq("id", user_id).execute().data or []
     elif email:
-        query = query.eq("email", email.lower())
+        email = email.lower()
+        rows = client.table("profiles").select(_BAN_COLUMNS).eq("email", email).execute().data or []
+        recovery = client.table("recovery_emails").select("user_id,verified_at").eq("email", email).execute().data or []
+        owners = [r["user_id"] for r in recovery if r.get("verified_at")]
+        if owners:
+            rows += client.table("profiles").select(_BAN_COLUMNS).in_("id", owners).execute().data or []
     else:
         return None
-    for row in query.execute().data or []:
+    for row in rows:
         if _ban_active(row):
             return {
+                "user_id": row["id"],
                 "permanent": bool(row.get("support_banned_permanent")),
                 "until": row.get("support_banned_until"),
                 "reason": row.get("support_ban_reason"),
@@ -365,15 +374,58 @@ def ticket_support_ban(client, ticket: dict) -> Optional[dict]:
     return support_ban(client, user_id=ticket.get("user_id")) or support_ban(client, email=ticket.get("requester_email"))
 
 
+# A support-banned account's browser keeps a signed note of who it is (see
+# support_standing), and the signed-out form sends it back, so signing out and
+# typing another address doesn't get round the ban. Signed so it can't be used
+# to ask whether some other account is banned; the ban itself is re-checked
+# every time, so lifting it frees the browser too.
+
+
+def device_ban_token(user_id: str) -> Optional[str]:
+    secret = _link_secret()
+    try:
+        uid = uuid.UUID(user_id).hex
+    except ValueError:
+        return None
+    if secret is None:
+        return None
+    sig = hmac.new(secret, f"support-ban:{uid}".encode(), hashlib.sha256).hexdigest()[:40]
+    return f"{uid}.{sig}"
+
+
+def user_from_device_token(token: Optional[str]) -> Optional[str]:
+    secret = _link_secret()
+    match = re.fullmatch(r"([0-9a-f]{32})\.([0-9a-f]{40})", token or "")
+    if secret is None or not match:
+        return None
+    uid, sig = match.groups()
+    expected = hmac.new(secret, f"support-ban:{uid}".encode(), hashlib.sha256).hexdigest()[:40]
+    return str(uuid.UUID(uid)) if hmac.compare_digest(sig, expected) else None
+
+
 def refuse_banned(ban: Optional[dict], *, show_reason: bool) -> None:
-    """403 support_banned. The admin's message only goes back to the signed-in
-    account itself — guests could be anyone who typed that address."""
+    """403 support_banned. The admin's message (and the browser note) only go
+    back to the signed-in account itself — guests could be anyone who typed
+    that address."""
     if ban is None:
         return
     detail: dict = {"code": "support_banned", "message": "support_banned", "permanent": ban["permanent"], "until": ban["until"]}
     if show_reason:
         detail["reason"] = ban["reason"]
+        detail["device_token"] = device_ban_token(ban["user_id"])
     raise HTTPException(status_code=403, detail=detail)
+
+
+# --- intake switches (feature_flags, set on the admin Support screen) --------------
+
+GUEST_REQUESTS_FLAG = "support_guest_requests"
+EMAIL_REQUESTS_FLAG = "support_email_requests"
+
+
+def intake_open(client, key: str) -> bool:
+    """On unless an admin turned it off; a missing row counts as on."""
+    rows = client.table("feature_flags").select("enabled").eq("key", key).limit(1).execute().data or []
+    return bool(rows[0]["enabled"]) if rows else True
 
 
 # --- writes ---------------------------------------------------------------------
@@ -804,6 +856,8 @@ async def open_ticket(
     name: Optional[str] = Form(None),
     # Hidden field real people never fill in.
     website: Optional[str] = Form(None),
+    # The browser's support-ban note, if it has one (see device_ban_token).
+    device: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     user: Optional[AuthedUser] = Depends(optional_user),
 ):
@@ -826,7 +880,13 @@ async def open_ticket(
         if user is not None:
             refuse_banned(support_ban(client, user_id=user.user_id) or support_ban(client, email=requester), show_reason=True)
         else:
-            refuse_banned(support_ban(client, email=requester), show_reason=False)
+            device_user = user_from_device_token(device)
+            refuse_banned(
+                (support_ban(client, user_id=device_user) if device_user else None) or support_ban(client, email=requester),
+                show_reason=False,
+            )
+            if not intake_open(client, GUEST_REQUESTS_FLAG):
+                raise HTTPException(status_code=403, detail="guest_requests_off")
         if recent_ticket_count(client, requester, _now() - timedelta(hours=1)) >= TICKETS_PER_EMAIL_PER_HOUR:
             raise HTTPException(status_code=429, detail="too_many_requests")
         return create_ticket(
@@ -846,6 +906,31 @@ async def open_ticket(
     ticket, message = await run_in_threadpool(work)
     background.add_task(send_acknowledgement, ticket, body)
     return {"number": ticket["number"], "signed_in": user is not None}
+
+
+@router.get("/api/support/standing")
+def support_standing(user: AuthedUser = Depends(verify_supabase_jwt)):
+    """Whether the signed-in account may contact support. When it may not,
+    also the browser note the web app keeps for the signed-out form."""
+    ban = support_ban(_client(), user_id=user.user_id)
+    if ban is None:
+        return {"banned": False}
+    return {
+        "banned": True,
+        "permanent": ban["permanent"],
+        "until": ban["until"],
+        "reason": ban["reason"],
+        "device_token": device_ban_token(ban["user_id"]),
+    }
+
+
+@router.post("/api/support/standing/device")
+@limiter.limit(RATE_LIMIT_SUPPORT_GUEST, key_func=ip_key)
+def device_standing(request: Request, token: str = Form(...)):
+    """Signed out: is the account behind this browser's note still banned?
+    Lets the Contact page drop the note once the ban is lifted. No details."""
+    user_id = user_from_device_token(token)
+    return {"banned": bool(user_id and support_ban(_client(), user_id=user_id))}
 
 
 @router.get("/api/support/tickets")

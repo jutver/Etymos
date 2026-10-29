@@ -43,14 +43,19 @@ const BACKEND_FLAGS: { key: string; label: string; hint: string }[] = [
 ];
 
 /** English descriptions the backend (backend/ai_rewrite.py, ai_explain.py,
- * report_enrichment.py) and migrations (20261029000000_waitlist_auto_approve)
- * write into `feature_flags.description`, kept verbatim
+ * report_enrichment.py) and migrations (20261029000000_waitlist_auto_approve,
+ * 20261029020000_support_intake, which also brings two labels) write into
+ * `feature_flags`, kept verbatim
  * only so they can be translated where the flag list renders them. */
 export const KNOWN_FLAG_DESCRIPTIONS = [
   tr("When enabled, /api/ai/rewrite calls the Gemini API instead of the local Qwen2.5 model. Defaults off: the VPS has a GPU, so the local model runs at no per-call cost. Mirrors the gemini_metadata_extraction flag."),
   tr("When enabled, the LLM polish step of the 'why is this flagged' explanations uses the Gemini API instead of the local Qwen2.5 model. Defaults off: the local model costs nothing per call. Either way a failure falls back to the other provider and then to the fact-based explanation, which is always present."),
   tr("Score each paragraph of a checked document for signs of machine-written text and show the result on the report. Uses the local language model on the GPU; turn off if checks become too slow."),
   tr("When enabled, new accounts can use the app right away instead of waiting on the Waitlist for an admin to approve them."),
+  tr("Support requests from signed-out visitors"),
+  tr("When enabled, people who are not signed in can open a support request from the Contact page."),
+  tr("Support requests by email"),
+  tr("When enabled, an email to the support address that is not a reply to an existing request opens a new one."),
   tr("Every match always gets a fact-based 'why is this flagged' explanation. When on, an LLM also rewrites the most serious ones more fluently (validated against the facts; a bad answer is discarded). Off by default: with the small local Qwen model the polished text was vaguer than the fact-based one and ~4s slower per match. Worth trying with Gemini."),
 ];
 

@@ -1,12 +1,14 @@
-import { useState, type FormEvent } from "react";
-import { WarningCircle } from "@phosphor-icons/react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Prohibit, SignIn, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { Button } from "../ui/Button";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { CATEGORY_LABELS, supportErrorText } from "./labels";
 import { openSupportTicket, type SupportCategory } from "../../lib/api";
 import { displayNameFor, useAuth } from "../../lib/auth";
-import { t } from "../../lib/i18n";
+import { fetchFeatureFlag } from "../../lib/featureFlags";
+import { checkSupportBlock, rememberSupportBan, supportBanToken, type SupportBlock } from "../../lib/supportBan";
+import { currentLocale, t } from "../../lib/i18n";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as SupportCategory[];
 
@@ -36,6 +38,25 @@ export function SupportRequestForm({ onSent, className }: { onSent: (sent: Suppo
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Support-banned account (or a browser that was signed in to one).
+  const [block, setBlock] = useState<SupportBlock | null>(null);
+  // The admin's "requests from signed-out visitors" switch.
+  const [guestsWelcome, setGuestsWelcome] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkSupportBlock(user?.id ?? null)
+      .then((b) => !cancelled && setBlock(b))
+      .catch(() => {});
+    if (!user) {
+      fetchFeatureFlag("support_guest_requests", true)
+        .then((on) => !cancelled && setGuestsWelcome(on))
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -54,13 +75,53 @@ export function SupportRequestForm({ onSent, className }: { onSent: (sent: Suppo
         email: user ? undefined : email.trim(),
         name: user ? displayNameFor(user) : name.trim() || undefined,
         website: website || undefined,
+        device: user ? undefined : supportBanToken(),
         files,
       });
       onSent({ number: result.number, signedIn: result.signed_in, email: user?.email ?? email.trim() });
     } catch (err) {
-      setError(supportErrorText(err));
+      const banned = rememberSupportBan(err);
+      if (banned) setBlock(banned);
+      else setError(supportErrorText(err));
       setSending(false);
     }
+  }
+
+  const card =
+    "studio-card flex flex-col items-start gap-3 rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-8";
+
+  if (block) {
+    return (
+      <div className={cn(card, className)}>
+        <Prohibit size={28} weight="duotone" className="text-severity-high" />
+        <h2 className="text-lg font-semibold text-navy-900">{t("You can't contact support right now")}</h2>
+        <p className="text-sm text-ink-500">
+          {block.until
+            ? t("This account can't open or reply to support requests until {{date}}.", {
+                date: new Date(block.until).toLocaleString(currentLocale()),
+              })
+            : t("This account can't open or reply to support requests.")}
+        </p>
+        {block.reason && (
+          <p className="rounded-[var(--radius-control)] bg-surface-tint px-3.5 py-2.5 text-sm text-ink-600">“{block.reason}”</p>
+        )}
+      </div>
+    );
+  }
+
+  if (!user && !guestsWelcome) {
+    return (
+      <div className={cn(card, className)}>
+        <SignIn size={28} weight="duotone" className="text-brand-600" />
+        <h2 className="text-lg font-semibold text-navy-900">{t("Sign in to contact support")}</h2>
+        <p className="text-sm text-ink-500">
+          {t("Support requests are taken from signed-in accounts only right now. Sign in and we'll pick it up from there.")}
+        </p>
+        <Button as="link" to="/login" state={{ from: { pathname: "/contact" } }}>
+          {t("Sign in")}
+        </Button>
+      </div>
+    );
   }
 
   return (
