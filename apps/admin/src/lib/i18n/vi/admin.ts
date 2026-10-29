@@ -564,4 +564,13 @@ export const admin: Record<string, string> = {
   "Survey response": "Phản hồi khảo sát",
   "Search by email, source or details…": "Tìm theo email, nguồn hoặc chi tiết…",
   "No responses match your search.": "Không có phản hồi nào khớp với tìm kiếm.",
+  "Auto-approve new sign-ups": "Tự động duyệt người dùng mới đăng ký",
+  "On: new accounts can use the app right away.": "Bật: tài khoản mới có thể dùng ứng dụng ngay.",
+  "Off: new accounts wait here until an admin approves them.": "Tắt: tài khoản mới chờ ở đây cho đến khi quản trị viên duyệt.",
+  "Turn on auto-approve?": "Bật tự động duyệt?",
+  "New sign-ups will be approved automatically, and the {{count}} person waiting now will be approved too.": "Người dùng mới đăng ký sẽ được duyệt tự động, và {{count}} người đang chờ cũng sẽ được duyệt.",
+  "New sign-ups will be approved automatically, and the {{count}} people waiting now will be approved too.": "Người dùng mới đăng ký sẽ được duyệt tự động, và {{count}} người đang chờ cũng sẽ được duyệt.",
+  "Turn on and approve all": "Bật và duyệt tất cả",
+  "Auto-approved": "Tự động duyệt",
+  "When enabled, new accounts can use the app right away instead of waiting on the Waitlist for an admin to approve them.": "Khi bật, tài khoản mới có thể dùng ứng dụng ngay thay vì chờ trong Danh sách chờ để quản trị viên duyệt.",
 };

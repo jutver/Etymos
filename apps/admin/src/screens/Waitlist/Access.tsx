@@ -3,7 +3,8 @@ import { MagnifyingGlass, Check, X } from "@phosphor-icons/react";
 import { DataTable, type Column } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
 import { ReviewNoteDialog } from "./ReviewNoteDialog";
-import { listAccessRequests, approveAccess, rejectAccess } from "../../lib/waitlistQueries";
+import { AutoApprove } from "./AutoApprove";
+import { listAccessRequests, approveAccess, rejectAccess, AUTO_APPROVED_NOTE } from "../../lib/waitlistQueries";
 import type { AccessStatus, Profile } from "../../lib/types";
 import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { useAdminAuth } from "../../lib/auth";
@@ -37,6 +38,7 @@ export default function AccessPage() {
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<Profile | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   function reload() {
     let cancelled = false;
@@ -57,7 +59,7 @@ export default function AccessPage() {
     };
   }
 
-  useEffect(reload, [page, search, statusFilter]);
+  useEffect(reload, [page, search, statusFilter, reloadKey]);
 
   async function handleApprove(row: Profile) {
     if (!user) return;
@@ -107,7 +109,11 @@ export default function AccessPage() {
     {
       key: "access_note",
       label: tr("Note"),
-      render: (r) => <span className="text-fg-muted">{r.access_note ?? "—"}</span>,
+      render: (r) => (
+        <span className="text-fg-muted">
+          {r.access_note === AUTO_APPROVED_NOTE ? t(AUTO_APPROVED_NOTE) : (r.access_note ?? "—")}
+        </span>
+      ),
     },
     {
       key: "actions",
@@ -143,6 +149,8 @@ export default function AccessPage() {
 
   return (
     <div>
+      <AutoApprove onApproved={() => setReloadKey((k) => k + 1)} />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1.5">
           {STATUS_TABS.map((tab) => (
