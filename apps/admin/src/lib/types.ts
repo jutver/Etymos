@@ -30,6 +30,11 @@ export interface Profile {
   banned_until: string | null;
   ban_reason: string | null;
   banned_by: string | null;
+  /** Support ban: blocks opening and replying to support tickets only. */
+  support_banned_permanent: boolean;
+  support_banned_until: string | null;
+  support_ban_reason: string | null;
+  support_banned_by: string | null;
   deletion_requested_at: string | null;
   deletion_requested_by: string | null;
   created_at: string;
@@ -49,6 +54,14 @@ export function isProfileOnline(lastSeenAt: string | null): boolean {
 export function isProfileBanned(p: Pick<Profile, "banned_permanent" | "banned_until">): boolean {
   if (p.banned_permanent) return true;
   if (p.banned_until) return new Date(p.banned_until).getTime() > Date.now();
+  return false;
+}
+
+export function isProfileSupportBanned(
+  p: Pick<Profile, "support_banned_permanent" | "support_banned_until">,
+): boolean {
+  if (p.support_banned_permanent) return true;
+  if (p.support_banned_until) return new Date(p.support_banned_until).getTime() > Date.now();
   return false;
 }
 

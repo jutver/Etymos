@@ -40,10 +40,15 @@ const ERRORS: Record<string, string> = {
   too_many_requests: tr("Too many requests from this address. Please try again in an hour."),
   closed: tr("This request is closed. Open a new one if you still need help."),
   not_found: tr("We couldn't find this request."),
+  support_banned: tr("Your account can't contact support right now."),
 };
 
 export function supportErrorText(err: unknown): string {
   if (err instanceof ApiError) {
+    if (err.message === "support_banned") {
+      const reason = (err.detail as { reason?: unknown } | undefined)?.reason;
+      return typeof reason === "string" && reason ? `${t(ERRORS.support_banned)} “${reason}”` : t(ERRORS.support_banned);
+    }
     if (ERRORS[err.message]) return t(ERRORS[err.message]);
     if (err.status === 429) return t("Too many requests. Please wait a moment and try again.");
   }

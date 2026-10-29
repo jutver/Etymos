@@ -308,6 +308,14 @@ export default function SupportTicketDetailPage() {
                         : t("Banned until {{date}}", { date: when(ticket.account.banned_until) })}
                     </p>
                   )}
+                  {(ticket.account.support_banned_permanent ||
+                    (ticket.account.support_banned_until && new Date(ticket.account.support_banned_until).getTime() > Date.now())) && (
+                    <p className="font-medium text-destructive">
+                      {ticket.account.support_banned_permanent
+                        ? t("Support banned permanently")
+                        : t("Support banned until {{date}}", { date: when(ticket.account.support_banned_until) })}
+                    </p>
+                  )}
                   {ticket.account.deletion_requested_at && <p className="font-medium text-destructive">{t("Deletion requested")}</p>}
                   {!ticket.user_id && (
                     <p className="text-fg-subtle">{t("Matched by email address only; it may not be the same person.")}</p>

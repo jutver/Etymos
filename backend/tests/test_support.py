@@ -426,6 +426,52 @@ def test_guest_link_reads_and_replies(env):
     assert env.client.get("/api/support/guest/" + "0" * 32 + "." + "0" * 40).status_code == 404
 
 
+# --- support ban ----------------------------------------------------------------------
+
+
+def support_ban(env, user_id="user-1", **fields):
+    row = next(p for p in env.db.tables["profiles"] if p["id"] == user_id)
+    row.update({"support_banned_permanent": True, "support_ban_reason": "Abusive messages", **fields})
+
+
+def test_support_banned_user_cannot_open_a_ticket(env):
+    support_ban(env)
+    r = open_form(env, as_user=USER)
+    assert r.status_code == 403
+    detail = r.json()["detail"]
+    assert detail["code"] == "support_banned" and detail["reason"] == "Abusive messages"
+    assert tickets(env) == []
+
+
+def test_support_ban_also_covers_the_signed_out_form_without_the_reason(env):
+    support_ban(env)
+    r = open_form(env, email="Owner@Example.com")
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "support_banned" and "reason" not in r.json()["detail"]
+    assert tickets(env) == []
+    assert open_form(env, email="someone@example.com").status_code == 200
+
+
+def test_support_banned_user_cannot_reply_on_site_or_by_guest_link(env):
+    open_form(env, as_user=USER)
+    token = support.guest_token(tickets(env)[0]["id"])
+    support_ban(env)
+    env.current["user"] = USER
+    assert env.client.post("/api/support/tickets/1001/messages", data={"body": "hi"}).status_code == 403
+    env.current["user"] = None
+    assert env.client.post(f"/api/support/guest/{token}/messages", data={"body": "hi"}).status_code == 403
+    assert len(messages(env)) == 2  # the original message and the ack note
+
+
+def test_expired_support_ban_lets_the_user_back_in(env):
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    support_ban(env, support_banned_permanent=False, support_banned_until=future)
+    assert open_form(env, as_user=USER).status_code == 403
+    support_ban(env, support_banned_permanent=False, support_banned_until=past)
+    assert open_form(env, as_user=USER).status_code == 200
+
+
 # --- admin --------------------------------------------------------------------------
 
 
@@ -678,6 +724,17 @@ def test_robots_and_our_own_mail_are_ignored(env):
     assert support_inbound.process(env.db, make_email(frm="support@etymos.site")) == "ignored_own"
     assert tickets(env) == []
     assert {r["outcome"] for r in env.db.tables["support_inbound_log"]} == {"ignored_auto", "ignored_own"}
+
+
+def test_email_from_a_support_banned_account_is_dropped(env):
+    open_form(env, as_user=USER)
+    support_ban(env)
+    # From the login address, a reply or a new email: neither lands.
+    assert support_inbound.process(env.db, make_email(frm="owner@example.com", in_reply_to=_ack_id(env))) == "ignored_banned"
+    assert support_inbound.process(env.db, make_email(frm="owner@example.com", subject="New")) == "ignored_banned"
+    # From the recovery address on the banned account's ticket.
+    assert support_inbound.process(env.db, make_email(frm="backup@example.com", in_reply_to=_ack_id(env))) == "ignored_banned"
+    assert len(tickets(env)) == 1 and len(messages(env)) == 2
 
 
 def test_disallowed_email_attachments_are_dropped_with_a_note(env):

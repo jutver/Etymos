@@ -398,6 +398,10 @@ def process(client, raw: bytes) -> str:
         body = "(empty message)"
 
     ticket, sender_ok = find_ticket(client, parsed)
+    if support.support_ban(client, email=parsed.from_address) or (
+        ticket is not None and sender_ok and support.ticket_support_ban(client, ticket)
+    ):
+        return _finish(client, parsed, "ignored_banned", ticket)
     fields = {
         "email_message_id": parsed.message_id,
         "sender_auth": parsed.sender_auth,

@@ -80,6 +80,8 @@ export interface SupportAccount {
   created_at: string;
   banned_permanent: boolean | null;
   banned_until: string | null;
+  support_banned_permanent: boolean | null;
+  support_banned_until: string | null;
   deletion_requested_at: string | null;
 }
 
@@ -209,7 +211,8 @@ function toTicketRow({ assignee, ...row }: TicketRowRecord): SupportTicketRow {
 
 const ACCOUNT_COLUMNS =
   "id, email, display_name, role, plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, " +
-  "student_verified, created_at, banned_permanent, banned_until, deletion_requested_at";
+  "student_verified, created_at, banned_permanent, banned_until, support_banned_permanent, support_banned_until, " +
+  "deletion_requested_at";
 
 const MESSAGE_COLUMNS =
   "id, author_type, body, internal, channel, sender_email, sender_auth, sender_mismatch, raw_email_path, created_at, " +

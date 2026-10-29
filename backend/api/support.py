@@ -330,6 +330,52 @@ def owns(ticket: dict, user: AuthedUser) -> bool:
     return bool(user.email) and ticket.get("requester_email") == user.email.lower()
 
 
+def _ban_active(row: dict) -> bool:
+    if row.get("support_banned_permanent"):
+        return True
+    until = row.get("support_banned_until")
+    if not until:
+        return False
+    until = datetime.fromisoformat(until.replace("Z", "+00:00")) if isinstance(until, str) else until
+    return until > _now()
+
+
+def support_ban(client, *, user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[dict]:
+    """The account's support ban ({permanent, until, reason}) when one is in
+    force, else None. Looked up by account id, or by login address for guest
+    and email requests (so signing out doesn't get round it)."""
+    query = client.table("profiles").select("support_banned_permanent,support_banned_until,support_ban_reason")
+    if user_id:
+        query = query.eq("id", user_id)
+    elif email:
+        query = query.eq("email", email.lower())
+    else:
+        return None
+    for row in query.execute().data or []:
+        if _ban_active(row):
+            return {
+                "permanent": bool(row.get("support_banned_permanent")),
+                "until": row.get("support_banned_until"),
+                "reason": row.get("support_ban_reason"),
+            }
+    return None
+
+
+def ticket_support_ban(client, ticket: dict) -> Optional[dict]:
+    return support_ban(client, user_id=ticket.get("user_id")) or support_ban(client, email=ticket.get("requester_email"))
+
+
+def refuse_banned(ban: Optional[dict], *, show_reason: bool) -> None:
+    """403 support_banned. The admin's message only goes back to the signed-in
+    account itself — guests could be anyone who typed that address."""
+    if ban is None:
+        return
+    detail: dict = {"code": "support_banned", "message": "support_banned", "permanent": ban["permanent"], "until": ban["until"]}
+    if show_reason:
+        detail["reason"] = ban["reason"]
+    raise HTTPException(status_code=403, detail=detail)
+
+
 # --- writes ---------------------------------------------------------------------
 
 
@@ -636,6 +682,8 @@ _PROFILE_FIELDS = (
     "created_at",
     "banned_permanent",
     "banned_until",
+    "support_banned_permanent",
+    "support_banned_until",
     "deletion_requested_at",
 )
 
@@ -775,6 +823,10 @@ async def open_ticket(
 
     def work():
         client = _client()
+        if user is not None:
+            refuse_banned(support_ban(client, user_id=user.user_id) or support_ban(client, email=requester), show_reason=True)
+        else:
+            refuse_banned(support_ban(client, email=requester), show_reason=False)
         if recent_ticket_count(client, requester, _now() - timedelta(hours=1)) >= TICKETS_PER_EMAIL_PER_HOUR:
             raise HTTPException(status_code=429, detail="too_many_requests")
         return create_ticket(
@@ -829,6 +881,7 @@ async def _reply_as_requester(
     def work():
         client = _client()
         ticket = ticket_lookup(client)
+        refuse_banned(ticket_support_ban(client, ticket), show_reason=author_id is not None)
         if ticket["status"] == "closed":
             raise HTTPException(status_code=409, detail="closed")
         ticket, message = add_requester_message(
