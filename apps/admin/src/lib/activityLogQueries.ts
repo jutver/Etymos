@@ -289,6 +289,18 @@ export function describeActivity(entry: ActivityLogEntry): ActivityDescription {
       return { title: t("Student verification removed"), detail: null };
 
     // support
+    case "support.banned":
+      return {
+        title: t("Banned from support"),
+        detail: [
+          m.permanent ? t("Permanently") : t("Until {{n}}", { n: date(m.until) }),
+          m.reason ? `“${text(m.reason)}”` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    case "support.unbanned":
+      return { title: t("Support ban lifted"), detail: null };
     case "support.ticket_opened":
       return { title: t("Opened a support ticket"), detail: [m.number ? `#${text(m.number)}` : null, subject].filter(Boolean).join(" · ") };
     case "support.ticket_status_changed":

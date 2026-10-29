@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ChatCircleSlash,
   ClockCounterClockwise,
   Prohibit,
   ShieldWarning,
@@ -21,7 +22,14 @@ import {
 } from "../../lib/supabaseQueries";
 import { forceDeleteUser } from "../../lib/api";
 import { UserActivityLog } from "./UserActivityLog";
-import { isProfileBanned, isProfileOnline, type BillingCycle, type PlanTier, type Profile } from "../../lib/types";
+import {
+  isProfileBanned,
+  isProfileOnline,
+  isProfileSupportBanned,
+  type BillingCycle,
+  type PlanTier,
+  type Profile,
+} from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { useAdminAuth } from "../../lib/auth";
 import { t, tr, currentLocale } from "../../lib/i18n";
@@ -43,6 +51,8 @@ const ACTION_LABELS: Record<string, string> = {
   profile_updated: tr("Profile updated"),
   user_banned: tr("User banned"),
   user_unbanned: tr("User unbanned"),
+  user_support_banned: tr("User banned from support"),
+  user_support_unbanned: tr("Support ban lifted"),
   deletion_requested: tr("Account deletion requested"),
   deletion_request_cancelled: tr("Deletion request cancelled"),
   user_force_deleted: tr("User force-deleted"),
@@ -92,6 +102,21 @@ function toDatetimeLocalValue(d: Date): string {
 
 const DELETE_CONFIRM_PHRASE = "DELETE";
 
+/** The account ban blocks sign-in; the support ban only blocks support tickets.
+ * Same fields under a different prefix, so one modal serves both. */
+type BanTarget = "account" | "support";
+
+function banPatch(target: BanTarget, ban: { permanent: boolean; until: string | null; reason: string | null; by: string | null }): Partial<Profile> {
+  return target === "account"
+    ? { banned_permanent: ban.permanent, banned_until: ban.until, ban_reason: ban.reason, banned_by: ban.by }
+    : {
+        support_banned_permanent: ban.permanent,
+        support_banned_until: ban.until,
+        support_ban_reason: ban.reason,
+        support_banned_by: ban.by,
+      };
+}
+
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -113,13 +138,14 @@ export default function UserDetailPage() {
   const [activityVersion, setActivityVersion] = useState(0);
 
 
-  // Ban modal
+  // Ban modal (account or support ban)
   const [banModalOpen, setBanModalOpen] = useState(false);
+  const [banTarget, setBanTarget] = useState<BanTarget>("account");
   const [banMode, setBanMode] = useState<"permanent" | "until">("permanent");
   const [banUntilInput, setBanUntilInput] = useState(() => toDatetimeLocalValue(new Date(Date.now() + 86_400_000)));
   const [banReasonInput, setBanReasonInput] = useState("");
   const [banSubmitting, setBanSubmitting] = useState(false);
-  const [unbanSubmitting, setUnbanSubmitting] = useState(false);
+  const [unbanSubmitting, setUnbanSubmitting] = useState<BanTarget | null>(null);
 
   // Deletion
   const [requestingDeletion, setRequestingDeletion] = useState(false);
@@ -220,10 +246,11 @@ export default function UserDetailPage() {
     }
   }
 
-  function openBanModal() {
+  function openBanModal(target: BanTarget) {
+    setBanTarget(target);
     setBanMode("permanent");
     setBanUntilInput(toDatetimeLocalValue(new Date(Date.now() + 86_400_000)));
-    setBanReasonInput(profile?.ban_reason ?? "");
+    setBanReasonInput((target === "account" ? profile?.ban_reason : profile?.support_ban_reason) ?? "");
     setError(null);
     setBanModalOpen(true);
   }
@@ -234,17 +261,20 @@ export default function UserDetailPage() {
     setError(null);
     try {
       const untilIso = banMode === "until" ? new Date(banUntilInput).toISOString() : null;
-      await updateProfile(id, {
-        banned_permanent: banMode === "permanent",
-        banned_until: untilIso,
-        ban_reason: banReasonInput.trim() || null,
-        banned_by: adminUser.id,
-      });
+      await updateProfile(
+        id,
+        banPatch(banTarget, {
+          permanent: banMode === "permanent",
+          until: untilIso,
+          reason: banReasonInput.trim() || null,
+          by: adminUser.id,
+        }),
+      );
       try {
         await insertAuditLog({
           actor_id: adminUser.id,
           target_user_id: id,
-          action: "user_banned",
+          action: banTarget === "account" ? "user_banned" : "user_support_banned",
           metadata: { permanent: banMode === "permanent", until: untilIso, reason: banReasonInput.trim() || null },
         });
       } catch (auditErr) {
@@ -261,22 +291,17 @@ export default function UserDetailPage() {
     }
   }
 
-  async function handleUnban() {
+  async function handleUnban(target: BanTarget) {
     if (!id || !adminUser) return;
-    setUnbanSubmitting(true);
+    setUnbanSubmitting(target);
     setError(null);
     try {
-      await updateProfile(id, {
-        banned_permanent: false,
-        banned_until: null,
-        ban_reason: null,
-        banned_by: null,
-      });
+      await updateProfile(id, banPatch(target, { permanent: false, until: null, reason: null, by: null }));
       try {
         await insertAuditLog({
           actor_id: adminUser.id,
           target_user_id: id,
-          action: "user_unbanned",
+          action: target === "account" ? "user_unbanned" : "user_support_unbanned",
           metadata: {},
         });
       } catch (auditErr) {
@@ -288,7 +313,7 @@ export default function UserDetailPage() {
     } catch (err) {
       setError(friendlyError(err));
     } finally {
-      setUnbanSubmitting(false);
+      setUnbanSubmitting(null);
     }
   }
 
@@ -382,7 +407,7 @@ export default function UserDetailPage() {
 
   if (loading) {
     // Plan & credits, then the ban and delete cards.
-    return <DetailPageSkeleton cards={[6, 2, 2]} />;
+    return <DetailPageSkeleton cards={[6, 2, 2, 2]} />;
   }
 
   if (!profile) {
@@ -391,6 +416,7 @@ export default function UserDetailPage() {
 
   const online = isProfileOnline(profile.last_seen_at);
   const banned = isProfileBanned(profile);
+  const supportBanned = isProfileSupportBanned(profile);
   const deletionRequested = !!profile.deletion_requested_at;
 
   return (
@@ -411,6 +437,7 @@ export default function UserDetailPage() {
           <span className="text-caption text-fg-muted">{online ? t("Online now") : t("Offline")}</span>
         </span>
         {banned && <StatusBadge label={t("Banned")} tone="destructive" />}
+        {supportBanned && <StatusBadge label={t("Support banned")} tone="destructive" />}
         {deletionRequested && <StatusBadge label={t("Deletion requested")} tone="warning" />}
       </div>
       <p className="mt-1 text-body text-fg-muted">
@@ -530,11 +557,11 @@ export default function UserDetailPage() {
                 {profile.ban_reason && <p className="mt-1 text-caption text-destructive/90">"{profile.ban_reason}"</p>}
                 <button
                   type="button"
-                  onClick={handleUnban}
-                  disabled={unbanSubmitting}
+                  onClick={() => handleUnban("account")}
+                  disabled={unbanSubmitting !== null}
                   className="mt-3 cursor-pointer rounded-control border border-destructive/40 bg-surface px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:bg-destructive-bg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {unbanSubmitting ? t("Unbanning…") : t("Unban user")}
+                  {unbanSubmitting === "account" ? t("Unbanning…") : t("Unban user")}
                 </button>
               </div>
             ) : (
@@ -543,11 +570,49 @@ export default function UserDetailPage() {
                   {t("Banning signs this user out immediately and blocks sign-in until unbanned. They'll see your message.")}</p>
                 <button
                   type="button"
-                  onClick={openBanModal}
+                  onClick={() => openBanModal("account")}
                   className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
                 >
                   <Prohibit size={14} weight="bold" />
                   {t("Ban user")}</button>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-4 rounded-card border border-border bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <ChatCircleSlash size={18} weight="bold" className="text-fg-muted" />
+              <h2 className="text-h2 font-semibold text-fg">{t("Support ban")}</h2>
+            </div>
+
+            {supportBanned ? (
+              <div className="rounded-control border border-destructive/40 bg-destructive-bg p-3.5">
+                <p className="text-body font-medium text-destructive">
+                  {profile.support_banned_permanent
+                    ? t("Banned from support permanently")
+                    : t("Banned from support until {{n}}", { n: new Date(profile.support_banned_until!).toLocaleString(currentLocale()) })}
+                </p>
+                {profile.support_ban_reason && <p className="mt-1 text-caption text-destructive/90">"{profile.support_ban_reason}"</p>}
+                <button
+                  type="button"
+                  onClick={() => handleUnban("support")}
+                  disabled={unbanSubmitting !== null}
+                  className="mt-3 cursor-pointer rounded-control border border-destructive/40 bg-surface px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:bg-destructive-bg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {unbanSubmitting === "support" ? t("Lifting…") : t("Lift support ban")}
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-body text-fg-muted">
+                  {t("Stops this user from opening or replying to support tickets, on the site or by email. The rest of their account keeps working. They'll see your message.")}</p>
+                <button
+                  type="button"
+                  onClick={() => openBanModal("support")}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive-bg px-3.5 py-1.5 text-caption font-semibold text-destructive transition hover:opacity-90 active:scale-95"
+                >
+                  <Prohibit size={14} weight="bold" />
+                  {t("Ban from support")}</button>
               </>
             )}
           </div>
@@ -675,7 +740,7 @@ export default function UserDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-              <p className="text-body font-medium text-fg">{t("Ban user")}</p>
+              <p className="text-body font-medium text-fg">{banTarget === "account" ? t("Ban user") : t("Ban from support")}</p>
               <button
                 type="button"
                 onClick={() => setBanModalOpen(false)}
@@ -730,7 +795,11 @@ export default function UserDetailPage() {
                   value={banReasonInput}
                   onChange={(e) => setBanReasonInput(e.target.value)}
                   rows={3}
-                  placeholder={t("Explain why this account is banned…")}
+                  placeholder={
+                    banTarget === "account"
+                      ? t("Explain why this account is banned…")
+                      : t("Explain why this account can't contact support…")
+                  }
                   className="w-full resize-none rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 />
               </div>
@@ -741,7 +810,7 @@ export default function UserDetailPage() {
                 disabled={banSubmitting || (banMode === "until" && !banUntilInput)}
                 className="w-full cursor-pointer rounded-control bg-destructive px-4 py-2 text-body font-semibold text-white transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {banSubmitting ? t("Banning…") : t("Ban user")}
+                {banSubmitting ? t("Banning…") : banTarget === "account" ? t("Ban user") : t("Ban from support")}
               </button>
             </div>
           </div>

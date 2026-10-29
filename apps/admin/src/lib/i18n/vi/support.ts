@@ -8,6 +8,8 @@ export const support: Record<string, string> = {
   "Attach": "Đính kèm",
   "Attach up to 5 files.": "Chỉ đính kèm tối đa 5 tệp.",
   "Banned until {{date}}": "Bị khóa đến {{date}}",
+  "Support banned permanently": "Bị cấm liên hệ hỗ trợ vĩnh viễn",
+  "Support banned until {{date}}": "Bị cấm liên hệ hỗ trợ đến {{date}}",
   "Billing": "Thanh toán",
   "Bug": "Lỗi",
   "by email": "qua email",

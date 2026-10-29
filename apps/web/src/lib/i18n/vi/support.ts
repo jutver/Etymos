@@ -13,6 +13,7 @@ export const support: Record<string, string> = {
   "Closed": "Đã đóng",
   "contact us": "liên hệ với chúng tôi",
   "Couldn't load your requests.": "Không thể tải các yêu cầu của bạn.",
+  "Your account can't contact support right now.": "Tài khoản của bạn hiện không thể liên hệ hỗ trợ.",
   "Couldn't reach Etymos. Check your connection and try again.": "Không thể kết nối tới Etymos. Hãy kiểm tra kết nối mạng và thử lại.",
   "Each file must be 5 MB or smaller.": "Mỗi tệp tối đa 5 MB.",
   "Email Etymos support": "Gửi email cho bộ phận hỗ trợ Etymos",

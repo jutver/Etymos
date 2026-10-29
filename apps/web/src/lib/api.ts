@@ -783,7 +783,7 @@ async function optionalAuthHeader(): Promise<Record<string, string>> {
 
 async function sendForm<T>(path: string, form: FormData, headers: Record<string, string>): Promise<T> {
   const response = await fetch(buildUrl(path), { method: "POST", headers, body: form });
-  if (!response.ok) throw new ApiError(await errorMessageFromResponse(response), response.status);
+  if (!response.ok) throw await errorFromResponse(response);
   return response.json() as Promise<T>;
 }
 
@@ -797,7 +797,8 @@ function supportForm(fields: Record<string, string | undefined>, files: File[]):
 /** Opens a ticket. Signed in, it is tied to the account (email/name are
  * ignored); signed out, `email` is required. ApiError detail: invalid_email,
  * invalid_subject, invalid_body, body_too_long, invalid_category,
- * too_many_files, file_too_large, file_type, too_many_requests. */
+ * too_many_files, file_too_large, file_type, too_many_requests, support_banned
+ * (403; `.detail.reason` carries the admin's message when signed in). */
 export async function openSupportTicket(input: {
   category: SupportCategory;
   subject: string;
@@ -819,7 +820,7 @@ export function getMySupportTicket(number: number): Promise<SupportConversation>
   return requestJson(`/api/support/tickets/${number}`);
 }
 
-/** ApiError 409 "closed" when the ticket is closed. */
+/** ApiError 409 "closed" when the ticket is closed, 403 "support_banned". */
 export async function replyToMySupportTicket(number: number, body: string, files: File[]): Promise<SupportConversation> {
   return sendForm(`/api/support/tickets/${number}/messages`, supportForm({ body }, files), await getAuthHeader());
 }
