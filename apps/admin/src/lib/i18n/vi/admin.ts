@@ -585,4 +585,8 @@ export const admin: Record<string, string> = {
   "User banned from support": "Người dùng bị cấm liên hệ hỗ trợ",
   "Stops this user from opening or replying to support tickets, on the site or by email. The rest of their account keeps working. They'll see your message.": "Chặn người dùng này mở hoặc trả lời yêu cầu hỗ trợ, trên trang web hay qua email. Các chức năng khác của tài khoản vẫn hoạt động bình thường. Họ sẽ thấy tin nhắn của bạn.",
   "Explain why this account can't contact support…": "Giải thích vì sao tài khoản này không thể liên hệ hỗ trợ…",
+  "Support requests from signed-out visitors": "Yêu cầu hỗ trợ từ khách chưa đăng nhập",
+  "When enabled, people who are not signed in can open a support request from the Contact page.": "Khi bật, người chưa đăng nhập có thể gửi yêu cầu hỗ trợ từ trang Liên hệ.",
+  "Support requests by email": "Yêu cầu hỗ trợ qua email",
+  "When enabled, an email to the support address that is not a reply to an existing request opens a new one.": "Khi bật, email gửi tới địa chỉ hỗ trợ mà không phải phản hồi cho yêu cầu hiện có sẽ tạo yêu cầu mới.",
 };

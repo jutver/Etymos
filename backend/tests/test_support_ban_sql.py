@@ -1,7 +1,8 @@
 """
-Database tests for supabase/migrations/20261029010000_support_ban.sql: admins
-can set and lift a support ban, users can't lift their own, both show in the
-user activity log, and the inbound log accepts the new outcome. Skipped
+Database tests for supabase/migrations/20261029010000_support_ban.sql and
+20261029020000_support_intake.sql: admins can set and lift a support ban,
+users can't lift their own, both show in the user activity log, the inbound
+log accepts the new outcomes, and the intake switches start on. Skipped
 without pgserver/psycopg, like test_user_activity_log_sql.py (whose database
 fixture this reuses).
 """
@@ -54,8 +55,17 @@ def test_other_profile_changes_do_not_log_a_support_ban(db):
     assert not any(a.startswith("support.") for a in actions(db, uid))
 
 
-def test_inbound_log_accepts_ignored_banned(db):
+@pytest.mark.parametrize("outcome", ["ignored_banned", "ignored_disabled"])
+def test_inbound_log_accepts_the_new_outcomes(db, outcome):
     db.execute(
-        "insert into public.support_inbound_log (message_id, outcome) values (%s, 'ignored_banned')",
-        (f"<{uuid.uuid4().hex}@example.com>",),
+        "insert into public.support_inbound_log (message_id, outcome) values (%s, %s)",
+        (f"<{uuid.uuid4().hex}@example.com>", outcome),
     )
+
+
+def test_intake_switches_exist_and_start_on(db):
+    rows = db.execute(
+        "select key, enabled from public.feature_flags"
+        " where key in ('support_guest_requests', 'support_email_requests') order by key"
+    ).fetchall()
+    assert rows == [("support_email_requests", True), ("support_guest_requests", True)]

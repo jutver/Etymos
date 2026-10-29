@@ -806,10 +806,26 @@ export async function openSupportTicket(input: {
   email?: string;
   name?: string;
   website?: string;
+  /** This browser's support-ban note (lib/supportBan.ts), when signed out. */
+  device?: string;
   files: File[];
 }): Promise<{ number: number; signed_in: boolean }> {
   const { files, ...fields } = input;
   return sendForm("/api/support/tickets", supportForm(fields, files), await optionalAuthHeader());
+}
+
+export type SupportStanding =
+  | { banned: false }
+  | { banned: true; permanent: boolean; until: string | null; reason: string | null; device_token: string | null };
+
+/** Whether the signed-in account may contact support. */
+export function getSupportStanding(): Promise<SupportStanding> {
+  return requestJson("/api/support/standing");
+}
+
+/** Signed out: whether the account behind a browser's ban note is still banned. */
+export function getDeviceSupportStanding(token: string): Promise<{ banned: boolean }> {
+  return sendForm("/api/support/standing/device", supportForm({ token }, []), {});
 }
 
 export function listMySupportTickets(): Promise<{ items: SupportTicketSummary[] }> {

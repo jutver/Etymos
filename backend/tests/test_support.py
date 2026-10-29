@@ -463,6 +463,58 @@ def test_support_banned_user_cannot_reply_on_site_or_by_guest_link(env):
     assert len(messages(env)) == 2  # the original message and the ack note
 
 
+def test_banned_browser_stays_blocked_after_signing_out(env):
+    user_1 = "00000000-0000-4000-8000-0000000000a1"
+    env.db.tables["profiles"].append({"id": user_1, "email": "banned@example.com", "role": "user"})
+    support_ban(env, user_1)
+    env.current["user"] = AuthedUser(user_id=user_1, email="banned@example.com", role="user", is_admin=False)
+    standing = env.client.get("/api/support/standing").json()
+    assert standing["banned"] is True and standing["reason"] == "Abusive messages"
+    token = standing["device_token"]
+    assert support.user_from_device_token(token) == user_1
+
+    env.current["user"] = None
+    assert env.client.post("/api/support/standing/device", data={"token": token}).json() == {"banned": True}
+    # Signed out, with a different address: the browser note still blocks it.
+    r = open_form(env, email="fresh@example.com", device=token)
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "support_banned"
+    assert "reason" not in r.json()["detail"] and "device_token" not in r.json()["detail"]
+    # A forged note is ignored; lifting the ban frees the browser.
+    forged = token[:-1] + ("0" if token[-1] != "0" else "1")
+    assert open_form(env, email="fresh@example.com", device=forged).status_code == 200
+    support_ban(env, user_1, support_banned_permanent=False)
+    assert env.client.post("/api/support/standing/device", data={"token": token}).json() == {"banned": False}
+    assert open_form(env, email="fresh2@example.com", device=token).status_code == 200
+
+
+def test_forged_device_token_is_not_trusted():
+    assert support.user_from_device_token("0" * 32 + "." + "0" * 40) is None
+    assert support.user_from_device_token(None) is None
+
+
+def test_standing_for_an_account_in_good_standing(env):
+    env.current["user"] = USER
+    assert env.client.get("/api/support/standing").json() == {"banned": False}
+
+
+def test_support_ban_matches_a_confirmed_recovery_address(env):
+    support_ban(env)
+    r = open_form(env, email="backup@example.com")
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "support_banned"
+
+
+def set_flag(env, key, enabled):
+    env.db.tables.setdefault("feature_flags", []).append({"key": key, "enabled": enabled})
+
+
+def test_guest_requests_switch(env):
+    set_flag(env, support.GUEST_REQUESTS_FLAG, False)
+    r = open_form(env)
+    assert r.status_code == 403 and r.json()["detail"] == "guest_requests_off"
+    assert open_form(env, as_user=USER).status_code == 200  # signed in still works
+    assert len(tickets(env)) == 1
+
+
 def test_expired_support_ban_lets_the_user_back_in(env):
     past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
@@ -735,6 +787,16 @@ def test_email_from_a_support_banned_account_is_dropped(env):
     # From the recovery address on the banned account's ticket.
     assert support_inbound.process(env.db, make_email(frm="backup@example.com", in_reply_to=_ack_id(env))) == "ignored_banned"
     assert len(tickets(env)) == 1 and len(messages(env)) == 2
+
+
+def test_email_requests_switch_stops_new_tickets_but_not_replies(env):
+    open_form(env)
+    set_flag(env, support.EMAIL_REQUESTS_FLAG, False)
+    assert support_inbound.process(env.db, make_email(frm="new@example.com", subject="Hi")) == "ignored_disabled"
+    assert support_inbound.process(env.db, make_email(in_reply_to=_ack_id(env), body="More")) == "appended"
+    tickets(env)[0]["status"] = "closed"
+    assert support_inbound.process(env.db, make_email(in_reply_to=_ack_id(env), body="Again")) == "ignored_disabled"
+    assert len(tickets(env)) == 1
 
 
 def test_disallowed_email_attachments_are_dropped_with_a_note(env):
