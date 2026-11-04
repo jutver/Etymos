@@ -401,6 +401,12 @@ def process(client, raw: bytes) -> str:
         body = "(empty message)"
 
     ticket, sender_ok = find_ticket(client, parsed)
+    # A From address that failed SPF/DKIM/DMARC may be forged: anyone can put
+    # a user's address there and "#123" in the subject. Such mail still lands
+    # (flagged as a sender mismatch for the agent) but is never treated as
+    # written by the account owner or tied to their account.
+    if parsed.sender_auth == "fail":
+        sender_ok = False
     if support.support_ban(client, email=parsed.from_address) or (
         ticket is not None and sender_ok and support.ticket_support_ban(client, ticket)
     ):

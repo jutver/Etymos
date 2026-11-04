@@ -10,7 +10,9 @@ services:
     container_name: etymos-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Loopback only: public traffic arrives through the Cloudflare Tunnel on
+      # this host. Publishing on all interfaces would let anyone skip Cloudflare.
+      - "127.0.0.1:8000:8000"
     # Backend-only secrets. NOT the repo-root `.env` (that one is written by the
     # Vercel CLI for the frontend and holds VITE_* / VERCEL_OIDC_TOKEN).
     env_file:

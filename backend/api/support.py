@@ -994,10 +994,25 @@ async def reply_to_my_ticket(
     )
 
 
+# Guest links carry no date of their own (old emails must keep working), so
+# they stop working a while after their ticket is closed instead: a link
+# leaked from an old inbox can't reopen or read a long-finished conversation.
+GUEST_LINK_AFTER_CLOSE = timedelta(days=int(os.getenv("SUPPORT_GUEST_LINK_DAYS_AFTER_CLOSE", "30")))
+
+
+def guest_link_expired(ticket: dict, now: Optional[datetime] = None) -> bool:
+    closed_at = ticket.get("closed_at")
+    if ticket.get("status") != "closed" or not closed_at:
+        return False
+    if isinstance(closed_at, str):
+        closed_at = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+    return (now or _now()) - closed_at > GUEST_LINK_AFTER_CLOSE
+
+
 def _guest_ticket(client, token: str) -> dict:
     ticket_id = ticket_id_from_guest_token(token)
     ticket = ticket_by_id(client, ticket_id) if ticket_id else None
-    if ticket is None:
+    if ticket is None or guest_link_expired(ticket):
         raise HTTPException(status_code=404, detail="not_found")
     return ticket
 

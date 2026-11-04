@@ -169,6 +169,20 @@ def test_wrong_signature_returns_401(client):
     assert resp.status_code == 401
 
 
+def test_token_cannot_choose_its_own_algorithm(client, monkeypatch):
+    # Only ES256/RS256 go to the JWKS path; anything else is refused before
+    # a key is even looked up.
+    class _NoJwks:
+        def get_signing_key_from_jwt(self, _token):
+            raise AssertionError("JWKS must not be consulted")
+
+    monkeypatch.setattr(auth, "_get_jwks_client", lambda: _NoJwks())
+    payload = {"sub": "user-1", "aud": "authenticated", "exp": int(time.time()) + 3600}
+    for token in (jwt.encode(payload, JWT_SECRET, algorithm="HS512"), jwt.encode(payload, None, algorithm="none")):
+        resp = client.get("/api/reports/report-1", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 401
+
+
 def test_wrong_audience_returns_401(client):
     token = _make_token(aud="some-other-audience")
     resp = client.get(

@@ -124,7 +124,7 @@ cd "$(dirname "$0")/.."
 set -a
 source .env
 set +a
-exec .venv/bin/uvicorn api.app:app --host 0.0.0.0 --port 8000
+exec .venv/bin/uvicorn api.app:app --host 127.0.0.1 --port 8000
 EOF
 chmod +x scripts/run_api.sh
 ```

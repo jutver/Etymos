@@ -13,6 +13,7 @@ import { cn } from "@etymos/shared";
 import { DetailPageSkeleton, ListItemsSkeleton } from "../../components/Skeleton";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
 import { Switch } from "../../components/Switch";
+import { NumberInput } from "../../components/NumberInput";
 import {
   getProfile,
   insertAuditLog,
@@ -502,22 +503,20 @@ export default function UserDetailPage() {
 
               <div>
                 <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Standard credits")}</label>
-                <input
-                  type="number"
+                <NumberInput
                   min={0}
                   value={standardCredits}
-                  onChange={(e) => setStandardCredits(Number(e.target.value))}
+                  onChange={setStandardCredits}
                   className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 />
               </div>
 
               <div>
                 <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t("Premium credits")}</label>
-                <input
-                  type="number"
+                <NumberInput
                   min={0}
                   value={premiumCredits}
-                  onChange={(e) => setPremiumCredits(Number(e.target.value))}
+                  onChange={setPremiumCredits}
                   className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
                 />
               </div>

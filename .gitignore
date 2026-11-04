@@ -58,3 +58,5 @@ BUG_Pics/*
 OLD_backend/*
 
 *repush - Redeployments
+# Supabase CLI local state (project ref, pooler host): not for a public repo.
+supabase/.temp/

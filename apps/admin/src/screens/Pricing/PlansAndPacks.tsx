@@ -9,6 +9,7 @@ import type { AdminCreditPack, AdminPlanDefinition } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { t } from "../../lib/i18n";
 import { PlansAndPacksSkeleton } from "./Skeletons";
+import { NumberInput } from "../../components/NumberInput";
 
 function NumberField({
   label,
@@ -22,11 +23,10 @@ function NumberField({
   return (
     <div>
       <label className="mb-1.5 block text-caption font-medium text-fg-muted">{t(label)}</label>
-      <input
-        type="number"
+      <NumberInput
         min={0}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={onChange}
         className="w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent"
       />
     </div>

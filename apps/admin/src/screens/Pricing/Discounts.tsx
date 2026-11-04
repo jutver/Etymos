@@ -30,6 +30,7 @@ import { friendlyError } from "../../lib/errors";
 import { t as tl, currentLocale } from "../../lib/i18n";
 import { pushToast } from "../../lib/toast";
 import { DiscountsSkeleton } from "./Skeletons";
+import { NumberInput } from "../../components/NumberInput";
 
 const INPUT =
   "w-full rounded-control border border-border bg-surface-muted px-3 py-2 text-body text-fg outline-none focus-visible:border-accent";
@@ -403,12 +404,11 @@ function DiscountForm({
               <Label>
                 {tl("Amount")} {draft.discountType === "percent" ? "(%)" : tl("(VND)")}
               </Label>
-              <input
-                type="number"
+              <NumberInput
                 min={0}
                 max={draft.discountType === "percent" ? 100 : undefined}
                 value={draft.amount}
-                onChange={(e) => set({ amount: Number(e.target.value) })}
+                onChange={(amount) => set({ amount })}
                 className={INPUT}
               />
             </div>

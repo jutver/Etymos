@@ -97,11 +97,14 @@ def test_audience_check_is_not_callable_by_users(db):
         as_user(db, user, "select public.discount_audience_ok(%s, null, null, null, true)", (user,))
 
 
-def test_redeem_rpc_checks_the_audience(db):
+def test_users_cannot_call_the_redeem_rpc(db):
+    # Revoked in 20261104000000_security_hardening.sql: calling it directly
+    # spent a code's redemptions and told the caller which codes exist.
     user = make_user(db)
     db.execute(
-        "insert into public.discount_codes (code, discount_type, amount, allowed_emails)"
-        " values ('VIP', 'percent', 10, array['vip@example.com'])"
+        "insert into public.discount_codes (code, discount_type, amount, max_redemptions)"
+        " values ('LIMITED', 'percent', 10, 1)"
     )
-    with pytest.raises(psycopg.errors.RaiseException, match="isn't available"):
-        as_user(db, user, "select * from public.redeem_discount_code('vip')")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_user(db, user, "select * from public.redeem_discount_code('limited')")
+    assert db.execute("select redemption_count from public.discount_codes where code = 'LIMITED'").fetchone() == (0,)

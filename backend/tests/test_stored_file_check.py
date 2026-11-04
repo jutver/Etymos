@@ -124,3 +124,20 @@ def test_users_never_see_raw_internal_errors():
     class LibError(ValueError):
         pass
     assert api_app.user_error_message(LibError("/srv/path detail")) == api_app.GENERIC_CHECK_ERROR
+
+
+def test_files_over_the_size_cap_are_refused(api, monkeypatch):
+    api_app, client, bucket, checked = api
+    monkeypatch.setattr(api_app, "MAX_UPLOAD_BYTES", 8)
+    # Stored upload: the job fails with the size message and the file is still removed.
+    res = client.post("/api/check/stored-file", json=body(f"{USER}/uploads/abc.pdf"))
+    job = api_app.get_job(res.json()["job_id"])
+    assert job["status"] == "failed" and "MB" in job["error"]
+    assert checked == [] and bucket.removed == [f"{USER}/uploads/abc.pdf"]
+    # Direct upload: refused with 413 before any check starts.
+    res = client.post(
+        "/api/check/pdf",
+        files={"file": ("big.pdf", b"%PDF-1.4 " + b"x" * 64, "application/pdf")},
+        data={"balance_source": "plan"},
+    )
+    assert res.status_code == 413 and checked == []

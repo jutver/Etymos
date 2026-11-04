@@ -43,6 +43,10 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 # Supabase-issued access tokens carry aud="authenticated" by default.
 JWT_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
 
+# The only asymmetric algorithms Supabase signs with. Never take the list
+# from the token's own header: that lets the token pick how it is checked.
+ASYMMETRIC_ALGORITHMS = ("ES256", "RS256")
+
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 _jwks_client: Optional[PyJWKClient] = None
@@ -146,11 +150,13 @@ async def verify_supabase_jwt(
                     alg,
                 )
                 raise HTTPException(status_code=500, detail="Server auth is not configured.")
+            if alg not in ASYMMETRIC_ALGORITHMS:
+                raise HTTPException(status_code=401, detail="Invalid token.")
             signing_key = jwks_client.get_signing_key_from_jwt(token)
             payload = jwt.decode(
                 token,
                 signing_key.key,
-                algorithms=[alg],
+                algorithms=list(ASYMMETRIC_ALGORITHMS),
                 audience=JWT_AUDIENCE,
                 options={"require": ["exp", "sub"]},
             )

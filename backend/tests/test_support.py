@@ -426,6 +426,18 @@ def test_guest_link_reads_and_replies(env):
     assert env.client.get("/api/support/guest/" + "0" * 32 + "." + "0" * 40).status_code == 404
 
 
+def test_guest_link_stops_working_a_month_after_the_ticket_closes(env):
+    open_form(env)
+    t = tickets(env)[0]
+    token = support.guest_token(t["id"])
+    env.current["user"] = None
+    t.update(status="closed", closed_at="2020-01-01T00:00:00+00:00")
+    assert env.client.get(f"/api/support/guest/{token}").status_code == 404
+    assert env.client.post(f"/api/support/guest/{token}/messages", data={"body": "Hi"}).status_code == 404
+    t["closed_at"] = support._iso()
+    assert env.client.get(f"/api/support/guest/{token}").status_code == 200
+
+
 # --- support ban ----------------------------------------------------------------------
 
 
@@ -735,6 +747,16 @@ def test_reply_from_the_accounts_recovery_address_counts_as_the_requester(env):
     raw = make_email(frm="backup@example.com", body="from my other inbox", in_reply_to=_ack_id(env))
     support_inbound.process(env.db, raw)
     assert messages(env)[-1]["sender_mismatch"] is False
+
+
+def test_forged_reply_from_the_requesters_address_is_not_trusted(env):
+    open_form(env)
+    tickets(env)[0]["status"] = "pending"
+    raw = make_email(in_reply_to=_ack_id(env), headers={"Authentication-Results": "mx1.onemail.vn; dmarc=fail"})
+    assert support_inbound.process(env.db, raw) == "appended"
+    m = messages(env)[-1]
+    assert m["sender_mismatch"] is True and m["author_id"] is None
+    assert tickets(env)[0]["status"] == "pending"
 
 
 def test_reply_from_a_stranger_is_flagged_and_does_not_reopen(env):

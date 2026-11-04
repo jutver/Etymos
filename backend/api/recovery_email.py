@@ -75,6 +75,12 @@ MAX_ATTEMPTS = 5
 # Minimum gap between two emails to the same recovery address, whichever
 # flow triggers them — stops the endpoints being used to flood an inbox.
 RESEND_INTERVAL = timedelta(seconds=60)
+# Each new reset code gets a fresh MAX_ATTEMPTS, so without a daily cap
+# someone rotating IPs could keep asking for codes and guessing. 5 codes a day
+# allows 25 guesses at a 6-digit code: hopeless for an attacker, plenty for a
+# person who mistypes.
+MAX_RESET_CODES_PER_DAY = int(os.getenv("RECOVERY_MAX_RESET_CODES_PER_DAY", "5"))
+RESET_CODE_WINDOW = timedelta(days=1)
 RATE_LIMIT_RECOVERY_REQUEST = os.getenv("RATE_LIMIT_RECOVERY_REQUEST", "10/hour")
 RATE_LIMIT_RECOVERY_VERIFY = os.getenv("RATE_LIMIT_RECOVERY_VERIFY", "30/hour")
 
@@ -161,6 +167,14 @@ def _status(row: Optional[dict]) -> dict:
 def _recently_sent(row: Optional[dict]) -> bool:
     sent = _parse_ts(row.get("last_sent_at")) if row else None
     return sent is not None and _now() - sent < RESEND_INTERVAL
+
+
+def _reset_window(row: dict, now: datetime) -> tuple[int, datetime]:
+    """(reset codes already sent in the current 24-hour window, window start)."""
+    since = _parse_ts(row.get("reset_codes_since"))
+    if since is None or now - since >= RESET_CODE_WINDOW:
+        return 0, now
+    return int(row.get("reset_codes_sent") or 0), since
 
 
 _COLUMNS = {
@@ -322,18 +336,24 @@ def _send_reset_code(email: str) -> None:
         rows = _verified_rows_for_email(client, email)
         if not rows or any(_recently_sent(r) for r in rows):
             return
+        now = _now()
+        windows = [_reset_window(r, now) for r in rows]
+        if any(sent >= MAX_RESET_CODES_PER_DAY for sent, _ in windows):
+            logger.info("Daily reset-code cap reached for a recovery address; not sending another")
+            return
         accounts = _accounts(client, rows)
         if not accounts:
             return
         code = new_code()
-        now = _now()
-        for row in rows:
+        for row, (sent, since) in zip(rows, windows):
             client.table(TABLE).update(
                 {
                     "reset_code_hash": hash_code("reset", row["user_id"], code),
                     "reset_expires_at": (now + CODE_TTL).isoformat(),
                     "reset_attempts": 0,
                     "last_sent_at": now.isoformat(),
+                    "reset_codes_sent": sent + 1,
+                    "reset_codes_since": since.isoformat(),
                 }
             ).eq("user_id", row["user_id"]).execute()
         mailer.send_email(email, recovery_reset_code_email(account_emails=[a["email"] for a in accounts], code=code))

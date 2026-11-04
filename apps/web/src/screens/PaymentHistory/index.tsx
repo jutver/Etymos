@@ -89,7 +89,7 @@ export default function PaymentHistoryPage() {
               <Receipt size={28} className="text-ink-300" />
               <p className="mt-3 text-sm font-semibold text-navy-900">{t("No payments yet")}</p>
               <p className="mt-1 text-sm text-ink-500">{t("Plans and credit packs you buy will show up here.")}</p>
-              <Button as="link" to="/pricing" className="mt-5" size="sm">
+              <Button as="link" to="/account/plan" className="mt-5" size="sm">
                 {t("See plans")}</Button>
             </div>
           ) : (

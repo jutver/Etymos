@@ -253,6 +253,20 @@ def test_request_ignores_unconfirmed_and_unknown_addresses_with_same_answer(env)
     assert env.sent == []
 
 
+def test_reset_codes_stop_after_the_daily_cap(env, monkeypatch):
+    # Every code gets fresh attempts, so re-sending must not be unlimited.
+    monkeypatch.setattr(recovery_email, "RESEND_INTERVAL", timedelta(0))
+    env.db.tables["recovery_emails"] = [_verified()]
+    for _ in range(recovery_email.MAX_RESET_CODES_PER_DAY + 2):
+        env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    assert len(env.sent) == recovery_email.MAX_RESET_CODES_PER_DAY
+    # A day later the count starts again.
+    row = env.db.tables["recovery_emails"][0]
+    row["reset_codes_since"] = (datetime.now(timezone.utc) - timedelta(days=1, minutes=1)).isoformat()
+    env.client.post("/api/auth/recovery/request", json={"email": "backup@example.com"})
+    assert len(env.sent) == recovery_email.MAX_RESET_CODES_PER_DAY + 1 and row["reset_codes_sent"] == 1
+
+
 def _verify(env, code, user_id=None, email="backup@example.com"):
     body = {"email": email, "code": code}
     if user_id:
