@@ -40,7 +40,12 @@ create function auth.uid() returns uuid language sql stable as
   $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 create function auth.role() returns text language sql stable as
   $$ select nullif(current_setting('request.jwt.claim.role', true), '') $$;
-create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
+create function auth.jwt() returns jsonb language sql stable as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'sub', nullif(current_setting('request.jwt.claim.sub', true), ''),
+    'role', nullif(current_setting('request.jwt.claim.role', true), ''),
+    'aal', nullif(current_setting('request.jwt.claim.aal', true), '')))
+$$;
 create table storage.buckets (id text primary key, name text, public boolean,
   file_size_limit bigint, allowed_mime_types text[]);
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid);
@@ -130,12 +135,17 @@ def tx(db, tx_id: str) -> dict:
     return dict(zip(cols, cur.fetchone()))
 
 
-def as_user(db, user_id: str, sql: str, params=()):
-    """Run one statement as an authenticated PostgREST caller."""
+def as_user(db, user_id: str, sql: str, params=(), *, aal: str = "aal2"):
+    """Run one statement as an authenticated PostgREST caller.
+
+    `aal` is the session's assurance level in the JWT; aal2 (passed an
+    authenticator code) is what admin powers need.
+    """
     with db.transaction():
         db.execute("set local role authenticated")
         db.execute("select set_config('request.jwt.claim.sub', %s, true)", (user_id,))
         db.execute("select set_config('request.jwt.claim.role', 'authenticated', true)")
+        db.execute("select set_config('request.jwt.claim.aal', %s, true)", (aal,))
         return db.execute(sql, params).fetchall()
 
 

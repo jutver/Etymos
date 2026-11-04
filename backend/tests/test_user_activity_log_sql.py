@@ -66,6 +66,7 @@ def run_as(db, user_id: str, sql: str, params=()) -> None:
         db.execute("set local role authenticated")
         db.execute("select set_config('request.jwt.claim.sub', %s, true)", (user_id,))
         db.execute("select set_config('request.jwt.claim.role', 'authenticated', true)")
+        db.execute("select set_config('request.jwt.claim.aal', 'aal2', true)")
         db.execute(sql, params)
 
 

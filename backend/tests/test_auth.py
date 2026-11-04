@@ -262,23 +262,37 @@ def test_owner_can_read_own_job(client, monkeypatch):
 
 def test_admin_can_read_any_report(client, monkeypatch):
     mock_profile_role(monkeypatch, "admin")
-    token = _make_token(sub="admin-user")
+    token = _make_token(sub="admin-user", aal="aal2")
     resp = client.get("/api/reports/report-1", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
 
 
 def test_admin_can_delete_any_report(client, monkeypatch):
     mock_profile_role(monkeypatch, "admin")
-    token = _make_token(sub="admin-user")
+    token = _make_token(sub="admin-user", aal="aal2")
     resp = client.delete("/api/reports/report-1", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
 
 
 def test_admin_can_read_any_job(client, monkeypatch):
     mock_profile_role(monkeypatch, "admin")
-    token = _make_token(sub="admin-user")
+    token = _make_token(sub="admin-user", aal="aal2")
     resp = client.get("/api/jobs/job-1", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
+
+
+def test_admin_without_a_code_cannot_read_others_report(client, monkeypatch):
+    mock_profile_role(monkeypatch, "admin")
+    for token in (_make_token(sub="admin-user", aal="aal1"), _make_token(sub="admin-user")):
+        resp = client.get("/api/reports/report-1", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 404
+
+
+def test_admin_without_a_code_cannot_delete_others_report(client, monkeypatch):
+    mock_profile_role(monkeypatch, "admin")
+    token = _make_token(sub="admin-user", aal="aal1")
+    resp = client.delete("/api/reports/report-1", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 404
 
 
 def test_nonexistent_report_returns_404(client, monkeypatch):
