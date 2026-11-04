@@ -175,11 +175,15 @@ async def verify_supabase_jwt(
 
     role = _fetch_profile_role(user_id)
 
+    # Admin powers need a session that passed an authenticator code: Supabase
+    # sets aal2 in the token after an MFA challenge, aal1 after a password or
+    # Google sign-in. An admin at aal1 is treated like a normal user, matching
+    # public.is_admin() in the database (20261105000000_admin_requires_mfa.sql).
     user = AuthedUser(
         user_id=user_id,
         email=payload.get("email"),
         role=role,
-        is_admin=role == "admin",
+        is_admin=role == "admin" and payload.get("aal") == "aal2",
     )
 
     request.state.user = user

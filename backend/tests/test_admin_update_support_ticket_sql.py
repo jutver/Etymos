@@ -30,6 +30,7 @@ def update(db, admin: str, number: int, **fields) -> dict:
         cur.execute("set local role authenticated")
         cur.execute("select set_config('request.jwt.claim.sub', %s, true)", (admin,))
         cur.execute("select set_config('request.jwt.claim.role', 'authenticated', true)")
+        cur.execute("select set_config('request.jwt.claim.aal', 'aal2', true)")
         cur.execute(
             f"select * from public.admin_update_support_ticket(p_number => %s, {args})",
             (number, *fields.values()),
