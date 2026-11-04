@@ -169,7 +169,7 @@ export function AppNav() {
                     onClick={() => setMenuOpen(false)}
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                   >
-                    {t("Help & support")}</MenuLink>
+                    {t("Help & Support")}</MenuLink>
                   <div className="h-px bg-line" />
                   <motion.button
                     variants={MENU_ITEM}

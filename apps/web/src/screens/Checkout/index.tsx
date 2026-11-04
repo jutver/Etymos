@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Bank,
@@ -165,6 +165,41 @@ export default function CheckoutPage() {
     [navigate, syncFromProfile, user],
   );
 
+  // "Change order" goes back to the form at once and cancels in the
+  // background: waiting for the cancel round trip made the button feel stuck.
+  // If the order turns out to be paid already, the payment step comes back
+  // and finishes it. A cancel that fails is harmless: starting a new order
+  // cancels any older unpaid one anyway.
+  const changeOrder = useCallback((current: PaymentOrder) => {
+    setOrder(null);
+    setSubmitError(null);
+    // Keep a price on screen while the form re-quotes. The order's own total
+    // is only reused when it had no discount, since a typed code isn't kept.
+    setQuote((q) =>
+      q ??
+      (current.amount === current.list_amount
+        ? { list_amount: current.list_amount, amount: current.amount, discount: null }
+        : null),
+    );
+    const showIfPaid = (latest: PaymentOrder) => {
+      if (latest.status === "success") setOrder(latest);
+    };
+    cancelPaymentOrder(current.id)
+      .then(showIfPaid)
+      .catch(async (err: unknown) => {
+        if (err instanceof ApiError && err.status === 409) {
+          // Already paid or gone: re-read rather than guess.
+          try {
+            showIfPaid(await getPaymentOrder(current.id));
+          } catch (readErr) {
+            console.warn("Couldn't re-read the order", readErr);
+          }
+          return;
+        }
+        console.warn("Couldn't cancel the order", err);
+      });
+  }, []);
+
   if (!item) return null;
   if (configLoading || resuming) {
     return <CheckoutSkeleton withQuantity={item.kind === "pack"} />;
@@ -180,6 +215,7 @@ export default function CheckoutPage() {
         order={order}
         onUpdate={setOrder}
         onPaid={finish}
+        onChangeOrder={changeOrder}
         onRestart={() => {
           setOrder(null);
           setSubmitError(null);
@@ -237,7 +273,8 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
-      <h1 className="text-h2 font-bold tracking-tight text-navy-900">{t("Checkout")}</h1>
+      <BackToPlan />
+      <h1 className="mt-3 text-h2 font-bold tracking-tight text-navy-900">{t("Checkout")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
         {t("Pay by bank transfer with any banking app. Your plan or credits are added automatically as soon as the transfer arrives.")}</p>
 
@@ -432,7 +469,8 @@ function CheckoutSkeleton({ withQuantity }: { withQuantity: boolean }) {
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8" role="status" aria-busy="true">
       <span className="sr-only">{t("Loading…")}</span>
-      <Skeleton className="h-9 w-40" rounded="md" />
+      <BackToPlan />
+      <Skeleton className="mt-3 h-9 w-40" rounded="md" />
       <Skeleton className="mt-3 h-3.5 w-full" />
       <Skeleton className="mt-2 h-3.5 w-3/4" />
 
@@ -480,22 +518,38 @@ function CheckoutSkeleton({ withQuantity }: { withQuantity: boolean }) {
   );
 }
 
+/** Back to the plan page, styled like the payment step's "Change order". */
+function BackToPlan() {
+  return (
+    <Link
+      to="/account/plan"
+      className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-navy-900"
+    >
+      <ArrowLeft size={15} weight="bold" />
+      {t("Back to plan")}
+    </Link>
+  );
+}
+
 /** Shows the QR and transfer details, and waits for SePay to confirm. */
 function PaymentStep({
   order,
   onUpdate,
   onPaid,
+  onChangeOrder,
   onRestart,
 }: {
   order: PaymentOrder;
   onUpdate: (order: PaymentOrder) => void;
   onPaid: (order: PaymentOrder) => void;
+  onChangeOrder: (order: PaymentOrder) => void;
   onRestart: () => void;
 }) {
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
-  const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const paidReported = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const remaining = timeLeft(order.expires_at, now);
   const expired = order.expires_at !== null && remaining === null;
@@ -536,23 +590,30 @@ function PaymentStep({
     }
   }, [order, onPaid]);
 
-  async function changeOrder() {
+  const changeOrder = () => onChangeOrder(order);
+
+  // Unlike "Change order", this waits for the backend: /account/plan shows
+  // any unpaid order, so leaving before the cancel lands would show it again.
+  // A transfer that already arrived wins, and the payment step finishes it.
+  async function cancelOrder() {
     setCancelling(true);
-    setError(null);
+    setCancelError(null);
     try {
-      const latest = await cancelPaymentOrder(order.id);
+      let latest: PaymentOrder;
+      try {
+        latest = await cancelPaymentOrder(order.id);
+      } catch (err) {
+        // 409: already paid or no longer pending. Re-read rather than guess.
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        latest = await getPaymentOrder(order.id);
+      }
       if (latest.status === "success") {
         onUpdate(latest);
         return;
       }
-      onRestart();
+      navigate("/account/plan");
     } catch (err) {
-      // Already paid or gone: re-read rather than guess.
-      if (err instanceof ApiError && err.status === 409) {
-        onUpdate(await getPaymentOrder(order.id));
-        return;
-      }
-      setError(errorMessage(err));
+      setCancelError(errorMessage(err));
     } finally {
       setCancelling(false);
     }
@@ -587,9 +648,8 @@ function PaymentStep({
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8">
       <button
         type="button"
-        onClick={() => void changeOrder()}
-        disabled={cancelling}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-navy-900 disabled:opacity-50"
+        onClick={changeOrder}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-navy-900"
       >
         <ArrowLeft size={15} weight="bold" />
         {t("Change order")}
@@ -609,7 +669,7 @@ function PaymentStep({
             <p className="text-sm font-semibold text-navy-900">{t("This QR code has expired")}</p>
             <p className="mt-1 text-xs text-ink-500">
               {t("Already transferred? Stay on this page — we'll still confirm it. Otherwise, start a new order.")}</p>
-            <Button className="mt-4" variant="outline" loading={cancelling} onClick={() => void changeOrder()}>
+            <Button className="mt-4" variant="outline" onClick={changeOrder}>
               {t("Start a new order")}</Button>
           </div>
         ) : (
@@ -638,9 +698,26 @@ function PaymentStep({
         </div>
       </div>
 
-      {error && <p className="mt-4 text-sm text-severity-high">{error}</p>}
       <p className="mt-5 text-center text-xs text-ink-400">
         {t("This page updates by itself once the payment arrives, usually within a minute.")}</p>
+
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void cancelOrder()}
+          disabled={cancelling}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-severity-high disabled:opacity-50"
+        >
+          {cancelling ? <CircleNotch size={15} className="animate-spin" /> : <X size={15} weight="bold" />}
+          {t("Cancel order")}
+        </button>
+        {cancelError && (
+          <p role="alert" className="flex items-center gap-1.5 text-xs text-severity-high">
+            <WarningCircle size={14} weight="fill" />
+            {cancelError}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

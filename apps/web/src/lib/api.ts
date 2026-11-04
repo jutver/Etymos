@@ -828,8 +828,17 @@ export function getDeviceSupportStanding(token: string): Promise<{ banned: boole
   return sendForm("/api/support/standing/device", supportForm({ token }, []), {});
 }
 
-export function listMySupportTickets(): Promise<{ items: SupportTicketSummary[] }> {
-  return requestJson("/api/support/tickets");
+/** My requests, newest activity first. Read straight from the database
+ * (my_support_tickets, supabase/migrations/20261104010000_my_support_tickets.sql)
+ * rather than through the API, which made the list slow; it returns the
+ * same tickets and fields as GET /api/support/tickets. Opening one still
+ * goes through the backend (getMySupportTicket). */
+export async function listMySupportTickets(): Promise<{ items: SupportTicketSummary[] }> {
+  const { data, error } = await supabase.rpc("my_support_tickets");
+  if (error) throw new Error(error.message);
+  return {
+    items: ((data ?? []) as SupportTicketSummary[]).map((row) => ({ ...row, number: Number(row.number) })),
+  };
 }
 
 export function getMySupportTicket(number: number): Promise<SupportConversation> {

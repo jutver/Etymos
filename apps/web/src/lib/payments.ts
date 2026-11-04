@@ -19,6 +19,17 @@ export function orderMatches(order: PaymentOrder, item: CheckoutItem): boolean {
   return order.kind === "pack" && order.pack_id === item.packId;
 }
 
+/** The checkout item an order was for, so /checkout can pick the order back
+ * up (its resume check matches on this). Null for a malformed row. */
+export function orderCheckoutItem(order: PaymentOrder): CheckoutItem | null {
+  if (order.kind === "plan") {
+    return order.plan_tier && order.billing_cycle
+      ? { kind: "plan", plan: order.plan_tier, billingCycle: order.billing_cycle }
+      : null;
+  }
+  return order.pack_id ? { kind: "pack", packId: order.pack_id } : null;
+}
+
 export function isDiscountError(err: unknown): boolean {
   return err instanceof ApiError && err.message.startsWith("discount_");
 }

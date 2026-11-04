@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowClockwise,
+  ArrowRight,
   CalendarBlank,
   GraduationCap,
+  QrCode,
   Receipt,
   ShieldCheck,
   WarningCircle,
@@ -16,7 +18,8 @@ import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries"
 import { formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
-import { subscriptionStatus } from "../../lib/payments";
+import { describeOrder, orderCheckoutItem, subscriptionStatus, timeLeft } from "../../lib/payments";
+import { getActivePaymentOrder, type PaymentOrder } from "../../lib/api";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 import { t, tn, currentLocale } from "../../lib/i18n";
 
@@ -76,6 +79,7 @@ export default function AccountPlanPage() {
       <p aria-hidden="true" className="editorial-kicker mb-3">{t("YOUR MEMBERSHIP")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">{t("My Plan")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">{t("Usage, billing, and subscription in one place.")}</p>
 
+      <PendingOrderNotice />
 
       <section className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -212,5 +216,70 @@ export default function AccountPlanPage() {
           {t("Current credit balance: {{standard}} standard, {{premium}} premium", { standard: standardCredits, premium: premiumCredits })}</p>
       </section>
     </div>
+  );
+}
+
+/**
+ * An order the user started on "Scan to pay" but hasn't paid yet (they closed
+ * the tab, say). /api/payments/orders/active only returns unpaid, unexpired
+ * orders; "Continue payment" re-selects the same item, and /checkout's resume
+ * check then reopens that order's QR instead of issuing a new one.
+ */
+function PendingOrderNotice() {
+  const navigate = useNavigate();
+  const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
+  const [order, setOrder] = useState<PaymentOrder | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let cancelled = false;
+    getActivePaymentOrder()
+      .then((active) => {
+        if (!cancelled) setOrder(active);
+      })
+      .catch((err: unknown) => console.warn("Couldn't load the pending order", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const expiresAt = order?.expires_at ?? null;
+  useEffect(() => {
+    if (!expiresAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+
+  const item = order ? orderCheckoutItem(order) : null;
+  const remaining = order ? timeLeft(order.expires_at, now) : null;
+  if (!order || !item || (order.expires_at !== null && remaining === null)) return null;
+
+  function continuePayment() {
+    if (!item) return;
+    selectCheckoutItem(item);
+    navigate("/checkout");
+  }
+
+  return (
+    <section
+      aria-live="polite"
+      className="mt-8 flex flex-col gap-4 rounded-[var(--radius-card-lg)] border border-severity-moderate-line bg-severity-moderate-bg p-5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-start gap-3">
+        <QrCode size={22} weight="bold" className="mt-0.5 shrink-0 text-severity-moderate" />
+        <div>
+          <p className="text-sm font-bold text-ink-900">{t("You have an order awaiting payment")}</p>
+          <p className="mt-0.5 text-sm text-ink-700">
+            {describeOrder(order)} · {formatVND(order.amount)}
+          </p>
+          {remaining && (
+            <p className="mt-0.5 font-mono text-xs text-ink-500">{t("QR valid for {{time}}", { time: remaining })}</p>
+          )}
+        </div>
+      </div>
+      <Button size="sm" onClick={continuePayment} iconRight={<ArrowRight size={15} weight="bold" />} className="shrink-0 self-start sm:self-auto">
+        {t("Continue payment")}
+      </Button>
+    </section>
   );
 }

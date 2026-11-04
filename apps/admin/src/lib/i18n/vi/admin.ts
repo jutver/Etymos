@@ -542,6 +542,7 @@ export const admin: Record<string, string> = {
   "Free re-check change limit (%)": "Giới hạn thay đổi khi kiểm tra lại miễn phí (%)",
   // Referral sources
   "Referral sources": "Nguồn giới thiệu",
+  "Referral": "Giới thiệu",
   "How signed-in users say they found Etymos, from the referral survey,": "Người dùng đã đăng nhập biết đến Etymos qua đâu, theo khảo sát nguồn giới thiệu,",
   "The referral survey isn't set up on this database yet. Run supabase/migrations/20261026000000_referral_survey.sql in the Supabase SQL Editor.": "Khảo sát nguồn giới thiệu chưa được thiết lập trên cơ sở dữ liệu này. Hãy chạy supabase/migrations/20261026000000_referral_survey.sql trong Supabase SQL Editor.",
   "Facebook": "Facebook",
@@ -589,4 +590,15 @@ export const admin: Record<string, string> = {
   "When enabled, people who are not signed in can open a support request from the Contact page.": "Khi bật, người chưa đăng nhập có thể gửi yêu cầu hỗ trợ từ trang Liên hệ.",
   "Support requests by email": "Yêu cầu hỗ trợ qua email",
   "When enabled, an email to the support address that is not a reply to an existing request opens a new one.": "Khi bật, email gửi tới địa chỉ hỗ trợ mà không phải phản hồi cho yêu cầu hiện có sẽ tạo yêu cầu mới.",
+  "No authenticator found for this account.": "Không tìm thấy ứng dụng xác thực cho tài khoản này.",
+  "Couldn't start authenticator setup.": "Không thể bắt đầu thiết lập ứng dụng xác thực.",
+  "That code didn't work. Check the time on your phone and try the newest code.": "Mã không đúng. Hãy kiểm tra giờ trên điện thoại và thử mã mới nhất.",
+  "Set up two-step sign-in": "Thiết lập đăng nhập hai bước",
+  "Enter your code": "Nhập mã của bạn",
+  "Admin access needs an authenticator app. Scan this code with Google Authenticator, 1Password or similar, then enter the 6-digit code it shows.": "Quyền quản trị cần ứng dụng xác thực. Quét mã này bằng Google Authenticator, 1Password hoặc ứng dụng tương tự, rồi nhập mã 6 chữ số hiển thị.",
+  "Open your authenticator app and enter the 6-digit code for Etymos Admin.": "Mở ứng dụng xác thực và nhập mã 6 chữ số của Etymos Admin.",
+  "QR code for your authenticator app": "Mã QR cho ứng dụng xác thực",
+  "Can't scan? Enter this key:": "Không quét được? Nhập khóa này:",
+  "6-digit code": "Mã 6 chữ số",
+  "Verify": "Xác minh",
 };
