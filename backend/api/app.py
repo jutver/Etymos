@@ -93,7 +93,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Academic Plagiarism Checker API", version="0.1.0", lifespan=lifespan)
+# The interactive docs (/docs, /redoc, /openapi.json) list every endpoint and
+# its parameters, so they're off unless ENABLE_API_DOCS=1 (local dev).
+_API_DOCS = os.getenv("ENABLE_API_DOCS", "").strip().lower() in ("1", "true", "yes")
+app = FastAPI(
+    title="Academic Plagiarism Checker API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _API_DOCS else None,
+    redoc_url="/redoc" if _API_DOCS else None,
+    openapi_url="/openapi.json" if _API_DOCS else None,
+)
 
 # Cấu hình CORS
 # No wildcard fallback: ALLOWED_ORIGINS must be set explicitly. Defaults to
@@ -508,6 +518,12 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
                    message="Text analysis failed", error=user_error_message(exc))
 
 
+# Largest PDF/DOCX a check accepts. Cloudflare already caps request bodies,
+# but the port can also be reached directly, and the file is written to disk
+# (and, for stored uploads, held in memory) before parsing starts.
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+
+
 @app.post("/api/check/pdf", status_code=202)
 @limiter.limit(RATE_LIMIT_CHECK_PDF)
 async def create_pdf_check(request: Request, file: UploadFile = File(...),
@@ -541,11 +557,22 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
     temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
     upload_path = temp_dir / f"input{suffix}"
 
+    written = 0
     try:
         with upload_path.open("wb") as output:
-            shutil.copyfileobj(file.file, output)
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    break
+                output.write(chunk)
     finally:
         await file.close()
+
+    if written > MAX_UPLOAD_BYTES:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        update_job(job_id, status="failed", current_step="failed", message="File too large",
+                   error=f"Files can be up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+        raise HTTPException(status_code=413, detail=f"Files can be up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
 
     if upload_path.stat().st_size == 0:
         upload_path.unlink(missing_ok=True)
@@ -602,6 +629,8 @@ def run_stored_file_job(*, job_id: str, storage_path: str, original_name: str, u
         data = client.storage.from_(DOCUMENTS_BUCKET).download(storage_path) if client else None
         if not data:
             raise ValueError("The uploaded file is missing or empty. Please upload it again.")
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise ValueError(f"Files can be up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
         temp_dir = Path(tempfile.mkdtemp(prefix=f"{job_id}_"))
         local_path = temp_dir / f"input.{input_type}"
         local_path.write_bytes(data)

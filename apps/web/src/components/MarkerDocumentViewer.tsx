@@ -4,6 +4,7 @@ import type { MatchedSource, Severity } from "../lib/types";
 import { downloadMarkerPreviewDocx, pollMarkerPreview, type MarkerPreview } from "../lib/api";
 import { locateSnippetRaw, wordOverlapRecall } from "../lib/textMatch";
 import { t, tr } from "../lib/i18n";
+import { sanitizeHtml } from "../lib/sanitizeHtml";
 
 /**
  * Replaces the raw-PDF preview (PlagiarismPdfViewer, still used for the
@@ -204,7 +205,7 @@ export function MarkerDocumentViewer({
     const container = containerRef.current;
     if (!container || preview?.status !== "ready" || !preview.html) return;
 
-    container.innerHTML = preview.html;
+    container.innerHTML = sanitizeHtml(preview.html);
 
     const nodes = collectTextNodes(container);
     const { spans: initialSpans, fullText } = buildNodeSpans(nodes);

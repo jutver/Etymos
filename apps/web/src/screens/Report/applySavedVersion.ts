@@ -1,3 +1,5 @@
+import { sanitizeHtml } from "../../lib/sanitizeHtml";
+
 // Puts a saved Version History snapshot back into the live Document/Edit
 // editor. The editor is rebuilt from the check result (`doc.passages`) every
 // time it mounts — on reload, or after visiting the Original tab — so without
@@ -18,7 +20,7 @@ const EDITABLE_SELECTOR =
  * back as text. */
 export function withoutLegacyBadges(html: string): string {
   const root = document.createElement("div");
-  root.innerHTML = html;
+  root.innerHTML = sanitizeHtml(html);
   root.querySelectorAll("mark > sup").forEach((badge) => badge.remove());
   return root.innerHTML;
 }
