@@ -1,9 +1,10 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAdminAuth } from "../../lib/auth";
 import { t } from "../../lib/i18n";
+import { MfaGate } from "./MfaGate";
 
 export function RequireAdmin() {
-  const { user, loading, isAdmin, roleStatus } = useAdminAuth();
+  const { user, loading, isAdmin, roleStatus, mfaStatus } = useAdminAuth();
   const location = useLocation();
 
   if (loading) {
@@ -24,6 +25,10 @@ export function RequireAdmin() {
         </div>
       </div>
     );
+  }
+
+  if (mfaStatus === "needs-setup" || mfaStatus === "needs-code") {
+    return <MfaGate status={mfaStatus} />;
   }
 
   return <Outlet />;
