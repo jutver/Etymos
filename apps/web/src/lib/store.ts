@@ -633,6 +633,9 @@ export const useAppStore = create<AppState>()(
         planExpiresAt: s.planExpiresAt,
         studentVerified: s.studentVerified,
         knownProjects: s.knownProjects,
+        // Checkout reads this on mount and sends you to /pricing without it,
+        // so it must survive a reload of /checkout.
+        pendingCheckoutItem: s.pendingCheckoutItem,
       }),
     },
   ),
