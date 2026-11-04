@@ -542,6 +542,7 @@ export const admin: Record<string, string> = {
   "Free re-check change limit (%)": "Giới hạn thay đổi khi kiểm tra lại miễn phí (%)",
   // Referral sources
   "Referral sources": "Nguồn giới thiệu",
+  "Referral": "Giới thiệu",
   "How signed-in users say they found Etymos, from the referral survey,": "Người dùng đã đăng nhập biết đến Etymos qua đâu, theo khảo sát nguồn giới thiệu,",
   "The referral survey isn't set up on this database yet. Run supabase/migrations/20261026000000_referral_survey.sql in the Supabase SQL Editor.": "Khảo sát nguồn giới thiệu chưa được thiết lập trên cơ sở dữ liệu này. Hãy chạy supabase/migrations/20261026000000_referral_survey.sql trong Supabase SQL Editor.",
   "Facebook": "Facebook",

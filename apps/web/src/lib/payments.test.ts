@@ -7,6 +7,7 @@ import {
   addTerm,
   describeOrder,
   isDiscountError,
+  orderCheckoutItem,
   orderMatches,
   paymentErrorMessage,
   planPurchaseEffect,
@@ -62,6 +63,21 @@ describe("orderMatches", () => {
     expect(orderMatches(plan, { kind: "plan", plan: "professional", billingCycle: "annual" })).toBe(false);
     expect(orderMatches(plan, { kind: "plan", plan: "student", billingCycle: "monthly" })).toBe(false);
     expect(orderMatches(plan, { kind: "pack", packId: "pack-standard" })).toBe(false);
+  });
+});
+
+describe("orderCheckoutItem", () => {
+  it("rebuilds the item so checkout resumes the same order", () => {
+    const pack = order({ quantity: 3 });
+    expect(orderCheckoutItem(pack)).toEqual({ kind: "pack", packId: "pack-standard" });
+    expect(orderMatches(pack, orderCheckoutItem(pack)!)).toBe(true);
+    const plan = order({ kind: "plan", plan_tier: "student", billing_cycle: "annual", pack_id: null, quantity: 1 });
+    expect(orderCheckoutItem(plan)).toEqual({ kind: "plan", plan: "student", billingCycle: "annual" });
+    expect(orderMatches(plan, orderCheckoutItem(plan)!)).toBe(true);
+  });
+
+  it("returns null when the order is missing its item", () => {
+    expect(orderCheckoutItem(order({ kind: "plan", plan_tier: null, billing_cycle: null, pack_id: null }))).toBeNull();
   });
 });
 

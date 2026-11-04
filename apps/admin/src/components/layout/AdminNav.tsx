@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { to: "/", label: tr("Dashboard"), icon: ChartLineUp, end: true },
   { to: "/revenue", label: tr("Revenue"), icon: Wallet },
   { to: "/activity", label: tr("Activity"), icon: Pulse },
-  { to: "/referrals", label: tr("Referral sources"), icon: Signpost },
+  { to: "/referrals", label: tr("Referral"), icon: Signpost },
   { to: "/users", label: tr("Users"), icon: Users },
   { to: "/moderation", label: tr("Moderation"), icon: ShieldWarning },
   { to: "/verification", label: tr("Verification"), icon: SealCheck },

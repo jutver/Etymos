@@ -26,7 +26,7 @@ export const support: Record<string, string> = {
   "Etymos on Facebook": "Etymos trên Facebook",
   "Etymos on TikTok": "Etymos trên TikTok",
   "Etymos Support": "Hỗ trợ Etymos",
-  "Help & support": "Trợ giúp & hỗ trợ",
+  "Help & Support": "Trợ giúp & Hỗ trợ",
   "How can we help?": "Chúng tôi có thể giúp gì cho bạn?",
   "if you still need help.": "nếu bạn vẫn cần hỗ trợ.",
   "Message": "Nội dung",
