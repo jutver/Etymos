@@ -14,6 +14,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
@@ -166,9 +167,8 @@ export default function CheckoutPage() {
 
   if (!item) return null;
   if (configLoading || resuming) {
-    return <div className="mx-auto max-w-2xl px-5 py-14 text-center text-sm text-ink-500 sm:px-8">{t("Loading…")}</div>;
+    return <CheckoutSkeleton withQuantity={item.kind === "pack"} />;
   }
-
 
   const plan = item.kind === "plan" ? plans.find((p) => p.id === item.plan) : null;
   const pack = item.kind === "pack" ? creditPacks.find((p) => p.id === item.packId) : null;
@@ -254,7 +254,11 @@ export default function CheckoutPage() {
                   : t("One-time purchase, credits never expire")}
             </p>
           </div>
-          <p className="text-sm font-bold text-ink-900">{listAmount === null ? "…" : formatVND(listAmount)}</p>
+          {listAmount === null && !quoteError ? (
+            <Skeleton className="h-4 w-20" />
+          ) : (
+            <p className="text-sm font-bold text-ink-900">{listAmount === null ? "…" : formatVND(listAmount)}</p>
+          )}
         </div>
 
         {item.kind === "pack" && pack && (
@@ -354,9 +358,13 @@ export default function CheckoutPage() {
             {hasDiscount && listAmount !== null && (
               <span className="text-sm font-semibold text-ink-400 line-through">{formatVND(listAmount)}</span>
             )}
-            <p className={cn("text-lg font-extrabold", hasDiscount ? "text-success" : "text-navy-900")}>
-              {amount === null ? "…" : formatVND(amount)}
-            </p>
+            {amount === null && !quoteError ? (
+              <Skeleton className="h-6 w-24" />
+            ) : (
+              <p className={cn("text-lg font-extrabold", hasDiscount ? "text-success" : "text-navy-900")}>
+                {amount === null ? "…" : formatVND(amount)}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -411,6 +419,62 @@ export default function CheckoutPage() {
         </Button>
         <p className="text-center text-xs text-ink-400">
           {t("You'll get a QR code and transfer details on the next step.")}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Stands in for the checkout form while plans, packs and any unpaid order
+ * load. Mirrors the form's boxes so nothing jumps when the real content lands.
+ */
+function CheckoutSkeleton({ withQuantity }: { withQuantity: boolean }) {
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-14 sm:px-8" role="status" aria-busy="true">
+      <span className="sr-only">{t("Loading…")}</span>
+      <Skeleton className="h-9 w-40" rounded="md" />
+      <Skeleton className="mt-3 h-3.5 w-full" />
+      <Skeleton className="mt-2 h-3.5 w-3/4" />
+
+      <div className="mt-7 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+        <Skeleton className="h-3 w-28" />
+        <div className="mt-3 flex items-center justify-between border-b border-line pb-4">
+          <div>
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="mt-2 h-3 w-28" />
+          </div>
+          <Skeleton className="h-4 w-20" />
+        </div>
+        {withQuantity && (
+          <div className="flex items-center justify-between border-b border-line py-4">
+            <div>
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="mt-2 h-3 w-24" />
+            </div>
+            <Skeleton className="h-9 w-[104px]" rounded="full" />
+          </div>
+        )}
+        <div className="flex items-center gap-2 border-b border-line py-4">
+          <Skeleton className="h-[30px] flex-1" rounded="full" />
+          <Skeleton className="h-[30px] w-16" rounded="full" />
+        </div>
+        <div className="flex items-center justify-between pt-4">
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-6 w-24" />
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-slate-50 p-4">
+        <Skeleton className="size-[22px] shrink-0" rounded="md" />
+        <div className="flex-1">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="mt-2 h-3 w-4/5" />
+        </div>
+      </div>
+
+      <div className="mt-7 flex flex-col items-center gap-3">
+        <Skeleton className="h-[3.25rem] w-full" rounded="md" />
+        <Skeleton className="h-3 w-64" />
       </div>
     </div>
   );
