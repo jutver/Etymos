@@ -26,7 +26,8 @@ function when(iso: string) {
 }
 
 /** One line on timing (start, end, countdown) and who it's for: who sees a top
- * bar or pop-up, or who else gets through maintenance. */
+ * bar or pop-up, or who else gets through maintenance. Pop-ups add their page
+ * and button link. */
 function schedule(a: Announcement, emailCount: number): string {
   const bits: string[] = [];
   bits.push(a.starts_at ? t("Starts {{time}}", { time: when(a.starts_at) }) : t("Starts when switched on"));
@@ -37,6 +38,16 @@ function schedule(a: Announcement, emailCount: number): string {
   if (a.audience === "emails") bits.push(t("only {{count}} chosen person(s)", { count: emailCount }));
   else if (a.ends_at) bits.push(t("ends {{time}}", { time: when(a.ends_at) }));
   if (a.kind === "banner" && a.countdown_to) bits.push(t("countdown to {{time}}", { time: when(a.countdown_to) }));
+  if (a.kind === "popup") {
+    bits.push(
+      a.popup_placement === "home"
+        ? t("on the home page")
+        : a.popup_placement === "landing"
+          ? t("on the landing page")
+          : t("on the home and landing pages"),
+    );
+    if (a.button_url) bits.push(t("button opens {{link}}", { link: a.button_url }));
+  }
   return bits.join(" · ");
 }
 

@@ -6,12 +6,14 @@ import {
   announcementState,
   announcementText,
   cn,
+  isAnnouncementLinkValid,
   type Announcement,
   type AnnouncementAudience,
   type AnnouncementLanguage,
   type AnnouncementIcon,
   type AnnouncementKind,
   type AnnouncementSeverity,
+  type PopupPlacement,
 } from "@etymos/shared";
 import { EmailPicker } from "../../components/EmailPicker";
 import { useAdminAuth } from "../../lib/auth";
@@ -50,6 +52,12 @@ const AUDIENCES: [AnnouncementAudience, string][] = [
 
 const PLAN_TIERS: PlanTier[] = ["free", "student", "professional"];
 
+const PLACEMENTS: [PopupPlacement, string][] = [
+  ["home", tr("Home page")],
+  ["landing", tr("Landing page")],
+  ["both", tr("Both")],
+];
+
 /** One column of text boxes per site language. Labels are each language's own name. */
 const TEXT_LANGUAGES: {
   lang: AnnouncementLanguage;
@@ -57,10 +65,14 @@ const TEXT_LANGUAGES: {
   short: string;
   title: "title" | "titleVi";
   message: "message" | "messageVi";
+  button: "buttonLabel" | "buttonLabelVi";
 }[] = [
-  { lang: "en", label: "English", short: "EN", title: "title", message: "message" },
-  { lang: "vi", label: "Tiếng Việt", short: "VI", title: "titleVi", message: "messageVi" },
+  { lang: "en", label: "English", short: "EN", title: "title", message: "message", button: "buttonLabel" },
+  { lang: "vi", label: "Tiếng Việt", short: "VI", title: "titleVi", message: "messageVi", button: "buttonLabelVi" },
 ];
+
+/** The site's own button text when an admin leaves it blank, per site language. */
+const DEFAULT_BUTTON_LABEL: Record<AnnouncementLanguage, string> = { en: "Got it", vi: "Đã hiểu" };
 
 const MESSAGE_PLACEHOLDER: Record<AnnouncementLanguage, string> = {
   en: "Message shown to users…",
@@ -126,6 +138,12 @@ interface Draft {
   audience: AnnouncementAudience;
   audiencePlans: PlanTier[];
   audienceEmails: string[];
+  /** Pop-up only. */
+  placement: PopupPlacement;
+  buttonLabel: string;
+  buttonLabelVi: string;
+  buttonAction: "close" | "link";
+  buttonUrl: string;
 }
 
 /** `emails` is the announcement's saved list: who gets through maintenance,
@@ -152,6 +170,11 @@ function draftFrom(a: Announcement | null, emails: string[]): Draft {
     audience: a?.audience ?? "everyone",
     audiencePlans: (a?.audience_plans ?? []) as PlanTier[],
     audienceEmails: maintenance ? [] : emails,
+    placement: a?.popup_placement ?? "both",
+    buttonLabel: a?.button_label ?? "",
+    buttonLabelVi: a?.button_label_vi ?? "",
+    buttonAction: a?.button_url ? "link" : "close",
+    buttonUrl: a?.button_url ?? "",
   };
 }
 
@@ -168,6 +191,14 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
   if (d.kind !== "maintenance" && d.audience === "plans" && d.audiencePlans.length === 0) return tr("Pick at least one plan.");
   if (d.kind !== "maintenance" && d.audience === "emails" && d.audienceEmails.length === 0) return tr("Add at least one email.");
   if (d.kind === "banner" && !hasMessage) return tr("Write the message for the top bar.");
+  if (d.kind === "popup" && d.placement === "landing" && d.audience !== "everyone") {
+    return tr("Only signed-out visitors see the landing page. Pick Everyone, or show it on the home page.");
+  }
+  if (d.kind === "popup" && d.buttonAction === "link") {
+    const url = d.buttonUrl.trim();
+    if (!url) return tr("Add the link the button opens.");
+    if (!isAnnouncementLinkValid(url)) return tr("Use a page on the site starting with / (like /pricing) or a full address starting with https://.");
+  }
   if (d.kind === "popup" && !hasTitle && !hasMessage && !d.imagePath && !file) {
     return tr("Add a title, text or an image.");
   }
@@ -186,7 +217,12 @@ function problem(d: Draft, file: File | null, editing: boolean): string | null {
 
 /** Text written in one language but not the other: a nudge, not a blocker. */
 function missingLanguage(d: Draft): string | null {
-  const fields: [string, string][] = d.kind === "banner" ? [[d.message, d.messageVi]] : [[d.title, d.titleVi], [d.message, d.messageVi]];
+  const fields: [string, string][] =
+    d.kind === "banner"
+      ? [[d.message, d.messageVi]]
+      : d.kind === "popup"
+        ? [[d.title, d.titleVi], [d.message, d.messageVi], [d.buttonLabel, d.buttonLabelVi]]
+        : [[d.title, d.titleVi], [d.message, d.messageVi]];
   const enOnly = fields.some(([en, vi]) => en.trim() && !vi.trim());
   const viOnly = fields.some(([en, vi]) => vi.trim() && !en.trim());
   if (enOnly && !viOnly) return tr("Some boxes have no Vietnamese: visitors using Vietnamese see the English there.");
@@ -213,7 +249,17 @@ function toInput(d: Draft, imagePath: string | null, isActive: boolean): Announc
     is_active: isActive,
     audience: d.kind === "maintenance" ? "everyone" : d.audience,
     audience_plans: d.kind !== "maintenance" && d.audience === "plans" ? d.audiencePlans : null,
+    popup_placement: popup ? d.placement : "both",
+    button_label: popup ? d.buttonLabel.trim() || null : null,
+    button_label_vi: popup ? d.buttonLabelVi.trim() || null : null,
+    button_url: popup && d.buttonAction === "link" ? d.buttonUrl.trim() : null,
   };
+}
+
+/** The pop-up button text the site would show in `lang`. */
+function popupButtonLabel(d: Draft, lang: AnnouncementLanguage): string {
+  const [first, second] = lang === "vi" ? [d.buttonLabelVi, d.buttonLabel] : [d.buttonLabel, d.buttonLabelVi];
+  return first.trim() || second.trim() || DEFAULT_BUTTON_LABEL[lang];
 }
 
 /** The email list to save with the draft (see draftFrom). */
@@ -359,7 +405,7 @@ export function AnnouncementEditor({
         <div className="mt-5 space-y-4">
           <div>
             <div className="grid gap-4 md:grid-cols-2">
-              {TEXT_LANGUAGES.map(({ lang, label, title, message }) => (
+              {TEXT_LANGUAGES.map(({ lang, label, title, message, button }) => (
                 <fieldset key={lang} className="space-y-3 rounded-control border border-border p-3.5" onFocus={() => setPreviewLang(lang)}>
                   <legend className="px-1 text-caption font-semibold text-fg">{label}</legend>
                   {d.kind !== "banner" && (
@@ -385,6 +431,18 @@ export function AnnouncementEditor({
                       className={inputClass}
                     />
                   </Field>
+                  {d.kind === "popup" && (
+                    <Field label={t("Button text")}>
+                      <input
+                        lang={lang}
+                        value={d[button]}
+                        maxLength={40}
+                        onChange={(e) => set(button, e.target.value)}
+                        placeholder={DEFAULT_BUTTON_LABEL[lang]}
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
                 </fieldset>
               ))}
             </div>
@@ -512,6 +570,54 @@ export function AnnouncementEditor({
                 }}
               />
             </Field>
+          )}
+
+          {d.kind === "popup" && (
+            <>
+              <Field
+                label={t("Where it shows")}
+                hint={
+                  d.placement === "home"
+                    ? t("On the home page, right after signing in.")
+                    : d.placement === "landing"
+                      ? t("On the landing page, to visitors who aren't signed in.")
+                      : t("On the landing page for visitors, and on the home page for signed-in users.")
+                }
+              >
+                <Choice value={d.placement} options={PLACEMENTS.map(([v, label]) => [v, t(label)])} onChange={(v) => set("placement", v)} />
+              </Field>
+
+              <Field
+                label={t("Button")}
+                hint={
+                  d.buttonAction === "link"
+                    ? t("A page on the site (/pricing) opens in place; a full address (https://…) takes the visitor there. The pop-up won't show again either way.")
+                    : t("Closes the pop-up. It won't show again in that browser.")
+                }
+              >
+                <div className="flex flex-col gap-2">
+                  <Choice
+                    value={d.buttonAction}
+                    options={[
+                      ["close", t("Closes the pop-up")],
+                      ["link", t("Opens a link")],
+                    ]}
+                    onChange={(v) => set("buttonAction", v)}
+                  />
+                  {d.buttonAction === "link" && (
+                    <input
+                      type="text"
+                      inputMode="url"
+                      value={d.buttonUrl}
+                      maxLength={2000}
+                      onChange={(e) => set("buttonUrl", e.target.value)}
+                      placeholder="/pricing"
+                      className={inputClass}
+                    />
+                  )}
+                </div>
+              </Field>
+            </>
           )}
 
           {d.kind !== "maintenance" && (
@@ -689,6 +795,7 @@ export function AnnouncementEditor({
           icon={d.icon}
           countdownTo={d.kind === "banner" && d.countdownOn ? fromLocalInput(d.countdownTo) : null}
           imageUrl={d.kind === "popup" ? imageUrl : null}
+          buttonLabel={d.kind === "popup" ? popupButtonLabel(d, previewLang) : undefined}
         />
       </div>
     </div>
