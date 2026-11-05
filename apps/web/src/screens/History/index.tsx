@@ -7,6 +7,8 @@ import { formatDate, formatDateTime } from "../../lib/format";
 import { StatusPill, statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
 import { cn } from "@etymos/shared";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { CheckStatePill } from "../Documents/CheckStatePill";
 import { analyzingStateFor, fetchVersionHistories } from "../../lib/documentsQueries";
 import type { DocumentVersionHistory, HistoryEntryWithCheck } from "../../lib/documentsQueries";
@@ -17,6 +19,37 @@ import { t, tr, tn } from "../../lib/i18n";
 const RETENTION_DAYS = { free: 7, student: 270, professional: 365 };
 const CREDIT_RETENTION_DAYS = 30;
 const TODAY = new Date("2026-07-05T23:59:59");
+
+/** Saved versions from the last visit, so coming back to History shows each
+ * file's version count straight away instead of popping it in after a fetch. */
+let cachedVersionHistories = new Map<string, DocumentVersionHistory>();
+
+/** Title widths for the placeholder rows, so they read as a list of
+ * different documents rather than identical bars. */
+const SKELETON_TITLES = ["w-[46%]", "w-[62%]", "w-[38%]", "w-[54%]", "w-[42%]"];
+
+/** Stand-in rows shaped like the real ones (title, date, score, status,
+ * folder, trash), shown until the first load finishes. */
+function HistorySkeleton() {
+  return (
+    <div role="status" aria-live="polite" className="divide-y divide-line">
+      <span className="sr-only">{t("Loading your history…")}</span>
+      {SKELETON_TITLES.map((width, i) => (
+        <div key={i} aria-hidden="true" className="flex items-center gap-3 px-5 py-4">
+          <span className="inline-block size-[13px] shrink-0" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className={cn("h-4 max-w-full", width)} />
+          </div>
+          <Skeleton className="hidden h-3.5 w-20 shrink-0 sm:block" />
+          <Skeleton className="hidden h-3.5 w-9 shrink-0 sm:block" />
+          <Skeleton rounded="full" className="h-6 w-20 shrink-0" />
+          <Skeleton className="hidden h-3.5 w-14 shrink-0 sm:block" />
+          <Skeleton rounded="full" className="size-8 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 
 export default function HistoryPage() {
@@ -35,11 +68,24 @@ export default function HistoryPage() {
   const pushToast = useAppStore((s) => s.pushToast);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Whether this visit's first load has finished. Until it has, an empty list
+  // means "not loaded yet", not "no documents".
+  const [fetched, setFetched] = useState(false);
+  // Opened with nothing cached: the list fades in over the skeleton's place.
+  // With a cached list from an earlier visit it's shown straight away.
+  const [startedEmpty] = useState(() => useAppStore.getState().history.length === 0);
 
   useEffect(() => {
     if (!user?.id) return;
-    void fetchHistory(user.id);
+    let cancelled = false;
+    void fetchHistory(user.id).finally(() => {
+      if (!cancelled) setFetched(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, fetchHistory]);
+
 
   // While anything is still checking, keep asking the backend how it's going so
   // the row settles without the user having to navigate away and back.
@@ -64,19 +110,37 @@ export default function HistoryPage() {
 
   // Versions saved from each report (with or without a re-check), listed
   // under the file alongside its checks.
-  const [versionHistories, setVersionHistories] = useState<Map<string, DocumentVersionHistory>>(new Map());
+  const [versionHistories, setVersionHistories] = useState(cachedVersionHistories);
+  // The ids whose saved versions have arrived (or failed to). Until the
+  // current list's have, the skeleton stays up, so rows don't appear first and
+  // gain their version counts a moment later.
+  const [versionsKey, setVersionsKey] = useState<string | null>(null);
   const documentIdsKey = history.filter((h) => h.checkState === "completed").map((h) => h.id).join(",");
   useEffect(() => {
     if (!documentIdsKey) return;
     let cancelled = false;
     fetchVersionHistories(documentIdsKey.split(",")).then(
-      (histories) => !cancelled && setVersionHistories(histories),
-      (err) => console.error("Loading saved versions for History failed:", err),
+      (histories) => {
+        cachedVersionHistories = histories;
+        if (cancelled) return;
+        setVersionHistories(histories);
+        setVersionsKey(documentIdsKey);
+      },
+      (err) => {
+        console.error("Loading saved versions for History failed:", err);
+        if (!cancelled) setVersionsKey(documentIdsKey);
+      },
     );
     return () => {
       cancelled = true;
     };
   }, [documentIdsKey]);
+
+  const listPending = history.length === 0 && !historyError && (!fetched || historyLoading);
+  // Only the first load waits for versions; a later refresh (a check
+  // finishing, say) updates the list in place.
+  const versionsPending = startedEmpty && !!documentIdsKey && versionsKey === null;
+  const showSkeleton = listPending || versionsPending;
 
   /** A check that hasn't finished has no report to show — send it back to the
    * progress view instead of an empty report. */
@@ -148,18 +212,16 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {historyLoading && filtered.length === 0 && (
-          <div className="divide-y divide-line">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={`skeleton-${i}`} className="px-5 py-4">
-                <div className="h-4 w-full animate-pulse motion-reduce:animate-none rounded bg-surface-muted" />
-              </div>
-            ))}
-          </div>
-        )}
+        {showSkeleton && <HistorySkeleton />}
 
-        {!historyLoading && (
-          <div className="divide-y divide-line">
+        {!showSkeleton && (
+          <MotionConfig reducedMotion="user">
+          <m.div
+            initial={startedEmpty ? { opacity: 0, y: 6 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="divide-y divide-line"
+          >
             {groups.map((group) => {
               const isOpen = expanded.has(group.key);
               const rows = buildHistoryRows(group.versions, versionHistories);
@@ -212,8 +274,14 @@ export default function HistoryPage() {
                     )}
                   </div>
 
+                  <AnimatePresence initial={false}>
                   {hasVersions && isOpen && (
-                    <div className="border-t border-line bg-surface-tint/50">
+                    <m.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1, transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
+                      exit={{ height: 0, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] } }}
+                      className="overflow-hidden border-t border-line bg-surface-tint/50"
+                    >
                       {rows.map((row) => (
                         <div
                           key={row.key}
@@ -252,8 +320,9 @@ export default function HistoryPage() {
                           )}
                         </div>
                       ))}
-                    </div>
+                    </m.div>
                   )}
+                  </AnimatePresence>
                 </div>
               );
             })}
@@ -267,7 +336,8 @@ export default function HistoryPage() {
             {historyError && (
               <p className="px-5 py-12 text-center text-sm text-severity-high">{t(historyError)}</p>
             )}
-          </div>
+          </m.div>
+          </MotionConfig>
         )}
 
         <p className="border-t border-line px-5 py-3 text-xs text-ink-400 sm:hidden">

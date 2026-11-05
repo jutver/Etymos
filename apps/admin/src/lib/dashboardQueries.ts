@@ -122,6 +122,14 @@ export function paidMrr(
   }, 0);
 }
 
+/** How many of these signups have a successful plan order that cost something. */
+export function countConverted(signups: { id: string }[], orders: PaidPlanOrder[]): number {
+  const paying = new Set(
+    orders.filter((o) => o.plan_tier && Number(o.paid_amount ?? o.amount ?? 0) > 0).map((o) => o.user_id),
+  );
+  return signups.filter((s) => paying.has(s.id)).length;
+}
+
 export interface DailyPoint {
   date: string;
   value: number;
@@ -150,6 +158,13 @@ export interface DashboardMetrics {
   planDistribution: PlanDistributionPoint[];
   /** documents.status breakdown for documents uploaded within the selected range. */
   severityDistribution: SeverityDistributionPoint[];
+  /** Share (0..1) of people who signed up within the selected range and have
+   * since paid for a plan (a successful, non-zero plan order). Admin-granted
+   * plans don't count. */
+  conversionRate: number;
+  /** Of signupsInRange, how many have paid (numerator for conversionRate). */
+  convertedSignups: number;
+  signupsInRange: number;
   /** Share (0..1) of in-range documents with moderation_status = 'flagged'. */
   flaggedDocumentRate: number;
   /** Total documents uploaded within the selected range (denominator for flaggedDocumentRate). */
@@ -184,7 +199,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     paymentAttentionRes,
   ] = await Promise.all([
     supabase.from("profiles").select("id, plan_tier").limit(FETCH_LIMIT),
-    supabase.from("profiles").select("created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
+    supabase.from("profiles").select("id, created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
     supabase
       .from("documents")
       .select("uploaded_at, status, moderation_status")
@@ -225,7 +240,9 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   const signups = signupsRes.data ?? [];
   const documents = documentsRes.data ?? [];
   const checkoutEvents = checkoutRes.data ?? [];
-  const mrr = paidMrr(profiles, planOrdersRes.data ?? []);
+  const planOrders = planOrdersRes.data ?? [];
+  const mrr = paidMrr(profiles, planOrders);
+  const convertedSignups = countConverted(signups, planOrders);
 
   const planCounts = new Map<string, number>();
   for (const p of profiles) {
@@ -264,6 +281,9 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
       status,
       count: severityCounts.get(status) ?? 0,
     })),
+    conversionRate: signups.length ? convertedSignups / signups.length : 0,
+    convertedSignups,
+    signupsInRange: signups.length,
     flaggedDocumentRate: documents.length ? flaggedCount / documents.length : 0,
     documentsInRange: documents.length,
     verificationQueueDepth: verificationQueueRes.count ?? 0,

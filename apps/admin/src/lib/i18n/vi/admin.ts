@@ -538,6 +538,8 @@ export const admin: Record<string, string> = {
   "Re-checked a document (free)": "Đã kiểm tra lại tài liệu (miễn phí)",
   "{{percent}}% changed": "Thay đổi {{percent}}%",
   "Re-checks: {{free}} free · {{paid}} paid": "Kiểm tra lại: {{free}} miễn phí · {{paid}} trả phí",
+  "Conversion rate": "Tỷ lệ chuyển đổi",
+  "{{paid}} of {{signups}} new signups paid": "{{paid}}/{{signups}} người đăng ký mới đã trả phí",
   "Free re-checks": "Lượt kiểm tra lại miễn phí",
   "Free re-check change limit (%)": "Giới hạn thay đổi khi kiểm tra lại miễn phí (%)",
   // Referral sources

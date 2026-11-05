@@ -151,7 +151,7 @@ function FileNameField({
       disabled={disabled}
       onClick={() => setEditing(true)}
       title={t("Rename document")}
-      className="min-w-0 truncate rounded-[var(--radius-input)] px-2 py-1 text-sm font-semibold lg:max-w-[16rem] text-ink-900 transition-colors hover:bg-surface-muted disabled:pointer-events-none"
+      className="min-w-0 flex-1 basis-0 truncate rounded-[var(--radius-input)] px-2 py-1 text-left text-sm font-semibold text-ink-900 transition-colors hover:bg-surface-muted disabled:pointer-events-none lg:max-w-[16rem] lg:flex-none lg:basis-auto"
     >
       {value}
       <span className="sr-only">{" "}{t("— click to rename")}</span>
@@ -290,12 +290,15 @@ export function ReportTopBar({
               onClick={onRecheck}
               disabled={!canRecheck || recheckProgress !== null}
               iconLeft={<ArrowsClockwise size={15} weight="bold" />}
-              className="ml-1"
+              className="ml-1 max-sm:w-11 max-sm:px-0"
               title={canRecheck ? undefined : t("Edit the document to re-check it")}
             >
-              {recheckProgress !== null
-                ? t("Re-checking… {{progress}}%", { progress: Math.round(recheckProgress) })
-                : t("Save & re-check")}
+              {/* Icon only on phones; the label stays for screen readers. */}
+              <span className="max-sm:sr-only">
+                {recheckProgress !== null
+                  ? t("Re-checking… {{progress}}%", { progress: Math.round(recheckProgress) })
+                  : t("Save & re-check")}
+              </span>
             </Button>
           )}
 
@@ -306,9 +309,9 @@ export function ReportTopBar({
             onClick={onSave}
             disabled={!dirty && !saving}
             iconLeft={<FloppyDisk size={15} weight={dirty ? "fill" : "regular"} />}
-            className="ml-1"
+            className="ml-1 max-sm:w-11 max-sm:px-0"
           >
-            {dirty ? t("Save") : t("Saved")}
+            <span className="max-sm:sr-only">{dirty ? t("Save") : t("Saved")}</span>
           </Button>
         </div>
       </div>
