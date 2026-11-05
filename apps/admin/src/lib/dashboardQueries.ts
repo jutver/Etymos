@@ -165,6 +165,9 @@ export interface DashboardMetrics {
   /** Of signupsInRange, how many have paid (numerator for conversionRate). */
   convertedSignups: number;
   signupsInRange: number;
+  /** Successful checkouts within the selected range, and what they averaged. */
+  purchasesInRange: number;
+  averagePurchaseValue: number;
   /** Share (0..1) of in-range documents with moderation_status = 'flagged'. */
   flaggedDocumentRate: number;
   /** Total documents uploaded within the selected range (denominator for flaggedDocumentRate). */
@@ -281,6 +284,10 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
       status,
       count: severityCounts.get(status) ?? 0,
     })),
+    purchasesInRange: checkoutEvents.length,
+    averagePurchaseValue: checkoutEvents.length
+      ? checkoutEvents.reduce((sum, c) => sum + Number(c.amount ?? 0), 0) / checkoutEvents.length
+      : 0,
     conversionRate: signups.length ? convertedSignups / signups.length : 0,
     convertedSignups,
     signupsInRange: signups.length,
