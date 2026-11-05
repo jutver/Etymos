@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { MotionConfig, m } from "motion/react";
+import { DocumentsSkeleton } from "./DocumentsSkeleton";
 import { MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
 import { useAppStore, PROJECTS } from "../../lib/store";
@@ -61,10 +63,25 @@ export default function DocumentsPage() {
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [busy, setBusy] = useState(false);
 
+  // Whether this visit's first load has finished. Until it has, an empty list
+  // means "not loaded yet", not "no documents".
+  const [fetched, setFetched] = useState(false);
+  // Fade the list in when it replaces the skeleton or the view switches; a
+  // list cached from an earlier visit shows straight away.
+  const [fadeIn, setFadeIn] = useState(() => useAppStore.getState().history.length === 0);
+
   useEffect(() => {
     if (!user?.id) return;
-    void fetchHistory(user.id);
+    let cancelled = false;
+    void fetchHistory(user.id).finally(() => {
+      if (!cancelled) setFetched(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, fetchHistory]);
+
+  const showSkeleton = history.length === 0 && !historyError && (!fetched || historyLoading);
 
   // While anything is still checking, keep asking the backend how it's going so
   // the row settles without the user having to navigate away and back.
@@ -319,6 +336,7 @@ export default function DocumentsPage() {
             onChange={(mode) => {
               setViewMode(mode);
               setActiveFolder(null);
+              setFadeIn(true);
             }}
           />
           <Button variant={manageMode ? "secondary" : "outline"} size="sm" onClick={toggleManageMode}>
@@ -328,10 +346,7 @@ export default function DocumentsPage() {
       </div>
 
       <div className="mt-4">
-        {historyLoading && history.length === 0 && (
-          <div className="rounded-[var(--radius-card-lg)] border border-line bg-white px-5 py-12 text-center text-sm text-ink-400">
-            {t("Loading documents…")}</div>
-        )}
+        {showSkeleton && <DocumentsSkeleton viewMode={viewMode} />}
 
         {historyError && (
           <div className="rounded-[var(--radius-card-lg)] border border-severity-high-line bg-severity-high-bg px-5 py-12 text-center text-sm text-severity-high">
@@ -339,8 +354,14 @@ export default function DocumentsPage() {
           </div>
         )}
 
-        {!historyError && (!historyLoading || history.length > 0) && (
-          <>
+        {!historyError && !showSkeleton && (
+          <MotionConfig reducedMotion="user">
+          <m.div
+            key={viewMode}
+            initial={fadeIn ? { opacity: 0, y: 6 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          >
             {viewMode === "list" ? (
               <DocumentsListView
                 groups={groups}
@@ -371,7 +392,8 @@ export default function DocumentsPage() {
                 onCreateProject={() => setPrompt({ kind: "create-project" })}
               />
             )}
-          </>
+          </m.div>
+          </MotionConfig>
         )}
       </div>
 

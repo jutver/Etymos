@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { CaretRight, ClockCounterClockwise, FileText, FolderPlus, FolderSimple } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
 import { cn } from "@etymos/shared";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
 import { formatDate } from "../../lib/format";
 import { StatusPill } from "../../components/Severity";
 import { CheckStatePill } from "./CheckStatePill";
@@ -106,8 +107,15 @@ export function DocumentsListView({
               </button>
             </div>
 
+            <MotionConfig reducedMotion="user">
+            <AnimatePresence initial={false}>
             {isOpen && (
-              <div className="border-t border-line bg-surface-tint/50">
+              <m.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1, transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
+                exit={{ height: 0, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] } }}
+                className="overflow-hidden border-t border-line bg-surface-tint/50"
+              >
                 {group.docs.length === 0 ? (
                   <p className="px-16 py-3 text-xs text-ink-400">{t("No documents in this project yet.")}</p>
                 ) : (
@@ -153,8 +161,10 @@ export function DocumentsListView({
                     );
                   })
                 )}
-              </div>
+              </m.div>
             )}
+            </AnimatePresence>
+            </MotionConfig>
           </div>
         );
       })}

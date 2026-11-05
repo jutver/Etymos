@@ -384,11 +384,6 @@
 
 /* Working screens: give the functional workspace a quieter, structured visual frame. */
 .upload-editorial, .library-shell, .history-shell, .trash-shell { position: relative; isolation: isolate; }
-.upload-editorial::before, .library-shell::before, .history-shell::before, .trash-shell::before { content: ''; position: absolute; z-index: -1; width: 250px; height: 250px; border: 1px solid #bfd3ef; border-radius: 50%; pointer-events: none; }
-.upload-editorial::before { top: 14px; right: -130px; box-shadow: 0 0 0 28px #dbeafe66, 0 0 0 58px #dbeafe40; }
-.library-shell::before { top: 26px; right: -115px; border-radius: 28px; transform: rotate(28deg); box-shadow: 0 0 0 28px #dbeafe66; }
-.history-shell::before { top: 22px; right: -120px; box-shadow: 0 0 0 25px #dbeafe66; }
-.trash-shell::before { top: 32px; right: -120px; border-style: dashed; box-shadow: 0 0 0 27px #dbeafe50; }
 .upload-editorial > div:first-child, .library-shell > div:first-child, .history-shell > div:first-child, .trash-shell > div:first-child { position: relative; padding: 0 0 23px; border-bottom: 1px solid #d6e2f0; }
 .upload-editorial > div:first-child::after, .library-shell > div:first-child::after, .history-shell > div:first-child::after, .trash-shell > div:first-child::after { content: ''; position: absolute; bottom: -1px; left: 0; width: 74px; height: 3px; background: var(--color-brand-500); }
 .upload-editorial > div:first-child h1, .library-shell > div:first-child h1, .history-shell > div:first-child h1, .trash-shell > div:first-child h1 { max-width: 600px; letter-spacing: -.05em; }
@@ -418,7 +413,6 @@
 .trash-shell tbody tr:hover { box-shadow: inset 3px 0 0 #f59e0b; }
 .trash-shell td:first-child button::before { content: '↗'; display: inline-grid; width: 23px; height: 23px; margin-right: 8px; place-items: center; border-radius: 7px; background: #eaf2fd; color: var(--color-brand-600); font-size: 12px; text-decoration: none; }
 @media (max-width: 767px) {
-  .upload-editorial::before, .library-shell::before, .history-shell::before, .trash-shell::before { width: 160px; height: 160px; right: -98px; }
   .upload-editorial > div:first-child, .library-shell > div:first-child, .history-shell > div:first-child, .trash-shell > div:first-child { padding-bottom: 18px; }
   .upload-editorial > div:nth-child(2) { margin-top: 24px; }
   .upload-editorial .studio-dropzone { border-radius: 18px 46px 18px 18px; }

@@ -29,8 +29,8 @@ export function AppShell() {
       </a>
       <AppNav />
       {/* Boundary sits inside the shell so the nav stays mounted while a
-          lazily-loaded route chunk is in flight. Pages hang decorative shapes
-          past their right edge; clip them so a phone can't scroll sideways
+          lazily-loaded route chunk is in flight. Anything a page lets
+          spill past its right edge is clipped so a phone can't scroll sideways
           (clip, unlike hidden, keeps position: sticky working inside). */}
       <main id="main-content" tabIndex={-1} className="overflow-x-clip">
         <Suspense fallback={<PageLoader />}>

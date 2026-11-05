@@ -26,6 +26,7 @@ export const documents: Record<string, string> = {
   "Its documents were moved to Default.": "Các tài liệu của dự án đã được chuyển về Mặc định.",
   "List": "Danh sách",
   "Loading documents…": "Đang tải tài liệu…",
+  "Loading your history…": "Đang tải lịch sử của bạn…",
   "Move to project…": "Chuyển đến dự án…",
   "Moved to \"{{project}}\"": "Đã chuyển đến \"{{project}}\"",
   "Moved to trash": "Đã chuyển vào thùng rác",

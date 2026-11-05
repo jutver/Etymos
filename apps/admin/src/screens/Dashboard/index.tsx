@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Hourglass,
   Receipt,
+  TrendUp,
 } from "@phosphor-icons/react";
 import {
   ResponsiveContainer,
@@ -88,8 +89,21 @@ export default function DashboardPage() {
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
-      <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label={t("Total users")} value={loading ? "…" : String(metrics?.totalUsers ?? 0)} icon={Users} />
+        <StatCard
+          label={t("Conversion rate")}
+          value={loading ? "…" : formatPercent(metrics?.conversionRate ?? 0)}
+          icon={TrendUp}
+          hint={
+            metrics
+              ? t("{{paid}} of {{signups}} new signups paid", {
+                  paid: metrics.convertedSignups,
+                  signups: metrics.signupsInRange,
+                })
+              : undefined
+          }
+        />
         <StatCard label={t("MRR")} value={loading ? "…" : formatVND(metrics?.mrr ?? 0)} icon={CurrencyDollar} />
         <StatCard
           label={t("Documents")}
