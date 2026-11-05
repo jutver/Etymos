@@ -5,11 +5,9 @@ import {
   ClockCounterClockwise,
   FolderOpen,
   Lifebuoy,
-  List,
   SignOut,
   Trash,
   UploadSimple,
-  X,
 } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { UsageMeter } from "../UsageMeter";
@@ -46,6 +44,35 @@ const MENU_ITEM: Variants = {
   closed: { opacity: 0, y: 4 },
   open: { opacity: 1, y: 0, transition: { duration: 0.18, ease: "easeOut" } },
 };
+
+/** Mobile navigation panel: unrolls down from under the top bar, its rows
+ * following one after another. Closing rolls it back up, all at once. */
+const MOBILE_NAV: Variants = {
+  closed: { height: 0, opacity: 0, transition: { duration: 0.22, ease: [0.4, 0, 0.2, 1] } },
+  open: {
+    height: "auto",
+    opacity: 1,
+    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1], staggerChildren: 0.04, delayChildren: 0.06 },
+  },
+};
+
+const MOBILE_NAV_ITEM: Variants = {
+  closed: { opacity: 0, y: -8 },
+  open: { opacity: 1, y: 0, transition: { duration: 0.24, ease: "easeOut" } },
+};
+
+/** Three lines that fold into an X: the outer two swing to the middle and
+ * cross, the middle one fades out. */
+function MenuIcon({ open }: { open: boolean }) {
+  const bar = "absolute left-0 h-[1.5px] w-full rounded-full bg-current transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.65,0,0.35,1)] motion-reduce:transition-none";
+  return (
+    <span aria-hidden="true" className="relative block h-3.5 w-[18px]">
+      <span className={cn(bar, "top-0", open && "translate-y-[6.25px] rotate-45")} />
+      <span className={cn(bar, "top-[6.25px]", open && "scale-x-0 opacity-0")} />
+      <span className={cn(bar, "bottom-0", open && "-translate-y-[6.25px] -rotate-45")} />
+    </span>
+  );
+}
 
 function MenuLink(props: ComponentProps<typeof Link>) {
   return (
@@ -122,7 +149,7 @@ export function AppNav() {
               aria-label={t("Toggle navigation")}
               aria-expanded={mobileNavOpen} aria-controls="workspace-mobile-navigation" className="flex size-11 items-center justify-center rounded-[var(--radius-input)] text-white/80 hover:bg-white/10 lg:hidden"
             >
-              {mobileNavOpen ? <X size={20} /> : <List size={20} />}
+              <MenuIcon open={mobileNavOpen} />
             </button>
 
             <div className="relative" ref={menuRef}>
@@ -191,33 +218,47 @@ export function AppNav() {
         </div>
       </div>
 
+      <MotionConfig reducedMotion="user">
+      <AnimatePresence initial={false}>
       {mobileNavOpen && (
-        <div id="workspace-mobile-navigation" className="max-h-[calc(100dvh-68px-var(--banner-h,0px))] overflow-y-auto border-t border-navy-700/60 bg-navy-900 px-5 py-4 lg:hidden">
-          <div className="mb-3 sm:hidden">
-            <UsageMeter interactive={false} />
+        <m.div
+          id="workspace-mobile-navigation"
+          variants={MOBILE_NAV}
+          initial="closed"
+          animate="open"
+          exit="closed"
+          className="overflow-hidden border-t border-navy-700/60 bg-navy-900 lg:hidden"
+        >
+          <div className="max-h-[calc(100dvh-68px-var(--banner-h,0px))] overflow-y-auto px-5 py-4">
+            <m.div variants={MOBILE_NAV_ITEM} className="mb-3 sm:hidden">
+              <UsageMeter interactive={false} />
+            </m.div>
+            <nav aria-label="Workspace navigation" className="flex flex-col gap-1">
+              {navLinks.map((l) => {
+                const active = location.pathname === l.href || location.pathname.startsWith(`${l.href}/`);
+                return (
+                  <m.div key={l.href} variants={MOBILE_NAV_ITEM}>
+                    <Link
+                      to={l.href}
+                      onClick={() => setMobileNavOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors",
+                        active ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5 hover:text-white",
+                      )}
+                    >
+                      <l.icon size={16} weight={active ? "fill" : "regular"} />
+                      {t(l.label)}
+                    </Link>
+                  </m.div>
+                );
+              })}
+            </nav>
           </div>
-          <nav aria-label="Workspace navigation" className="flex flex-col gap-1">
-            {navLinks.map((l) => {
-              const active = location.pathname === l.href || location.pathname.startsWith(`${l.href}/`);
-              return (
-                <Link
-                  key={l.href}
-                  to={l.href}
-                  onClick={() => setMobileNavOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors",
-                    active ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  <l.icon size={16} weight={active ? "fill" : "regular"} />
-                  {t(l.label)}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        </m.div>
       )}
+      </AnimatePresence>
+      </MotionConfig>
     </header>
   );
 }
