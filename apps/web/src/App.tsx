@@ -47,7 +47,6 @@ import {
   NewSupportRequestPage,
   SupportTicketPage,
 } from "./components/layout/lazyScreens";
-import { ClosedBetaModal } from "./components/ClosedBetaModal";
 import { TermsGate } from "./components/legal/TermsGate";
 import { ReferralSurvey } from "./components/ReferralSurvey";
 import { POLICIES } from "./components/legal/policies";
@@ -102,12 +101,7 @@ function HomeRoute() {
   if (loading) return <PageLoader />;
   if (user) return <Navigate to={APP_HOME} replace />;
 
-  return (
-    <>
-      <ClosedBetaModal />
-      <LandingPage />
-    </>
-  );
+  return <LandingPage />;
 }
 
 /**

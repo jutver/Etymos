@@ -7,7 +7,7 @@ import { fetchMyProfile } from "../../lib/profileQueries";
 import { BannedScreen, DeletionConfirmScreen } from "./AccountStatusScreens";
 import { useSplashHold } from "../BootSplash";
 
-/** Closed-beta gate state. `unknown` means the profile fetch is still in
+/** Waitlist gate state. `unknown` means the profile fetch is still in
  * flight — we must render a loading state rather than guessing, or we'd
  * either flash the app shell at a waitlisted user or bounce an approved one
  * to /waitlist. */
@@ -62,7 +62,7 @@ export function RequireAuth() {
         }
         setGate(profile.deletionRequestedAt ? { kind: "deletion-requested" } : { kind: "none" });
 
-        // Admins bypass the beta gate entirely.
+        // Admins bypass the waitlist gate entirely.
         const allowed = profile.role === "admin" || profile.accessStatus === "approved";
         setAccess(allowed ? "allowed" : "blocked");
       })

@@ -38,7 +38,7 @@ type Status =
  * and again each time the version changes. It can't be dismissed: the only
  * ways out are accepting or signing out.
  *
- * Like the closed-beta gate, this is a UI gate; the consent record itself is
+ * Like the waitlist gate, this is a UI gate; the consent record itself is
  * the terms_acceptances row written by accept_terms().
  */
 export function TermsGate() {

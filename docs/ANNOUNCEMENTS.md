@@ -57,7 +57,7 @@ stays in the list, and you can switch it on again.
 
 - The image is stored in the public `announcement-images` bucket. It must be a
   PNG, JPG, WebP or GIF up to 5 MB, and it shows full width above the text.
-- It waits until any other dialog has closed (the closed-beta notice, for
+- It waits until any other dialog has closed (the Terms gate, for
   example), so two dialogs never stack.
 
 ## Maintenance

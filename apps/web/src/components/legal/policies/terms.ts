@@ -70,7 +70,7 @@ export const TERMS: Policy = {
       title: tr("5. Our responsibilities"),
       blocks: [
         { kind: "h3", text: tr("5.1. Providing the Service") },
-        { kind: "p", text: tr("We provide the Service as described on the site and work to keep it available and accurate. Etymos is in closed beta: new accounts join a waitlist, features may change, and there may be downtime for maintenance or unexpected faults.") },
+        { kind: "p", text: tr("We provide the Service as described on the site and work to keep it available and accurate. New accounts may be reviewed before they're activated, features may change, and there may be downtime for maintenance or unexpected faults.") },
         { kind: "h3", text: tr("5.2. Protecting your information") },
         { kind: "p", text: tr("We protect your personal data and documents as set out in the Privacy Policy, and disclose them only with your consent or when the law requires it.") },
         { kind: "h3", text: tr("5.3. Support") },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Envelope, Eye, EyeSlash, Info, LockKey, WarningCircle } from "@phosphor-icons/react";
+import { Envelope, Eye, EyeSlash, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
@@ -146,12 +146,6 @@ export default function SignupPage() {
             </button>
           </div>
         </label>
-
-        <div className="mt-1 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-line bg-surface-muted px-4 py-3 text-sm text-ink-600">
-          <Info size={18} weight="fill" className="mt-0.5 shrink-0 text-brand-600" />
-          <span>
-            <span className="font-semibold text-ink-900">{t("Etymos is in closed beta.")}</span>{" "}{t("Creating an account adds you to the waitlist — an admin reviews each request, and you'll get access once you're approved.")}</span>
-        </div>
 
         <Button type="submit" size="lg" loading={loading} fullWidth>
           {t("Create account")}</Button>

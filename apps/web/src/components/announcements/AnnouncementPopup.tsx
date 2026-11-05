@@ -8,7 +8,7 @@ import { t, useLanguage } from "../../lib/i18n";
 
 /**
  * The latest live pop-up announcement: title, text, image, or any mix.
- * Shown once per browser. Waits while another dialog (the closed-beta notice,
+ * Shown once per browser. Waits while another dialog (the Terms gate,
  * say) is open, so two never stack.
  */
 export function AnnouncementPopup() {
