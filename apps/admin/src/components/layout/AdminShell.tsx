@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { AdminNav } from "./AdminNav";
 import { ToastViewport } from "../ToastViewport";
@@ -7,7 +8,10 @@ export function AdminShell() {
     <div className="flex min-h-dvh flex-col bg-bg md:flex-row">
       <AdminNav />
       <main className="min-w-0 flex-1 overflow-x-auto px-4 py-5 sm:px-6 md:px-8 md:py-6">
-        <Outlet />
+        {/* Keeps the nav on screen while a screen's chunk loads. */}
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </main>
       <ToastViewport />
     </div>
