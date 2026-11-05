@@ -35,6 +35,7 @@ import { computeWordLimitOffset } from "./wordLimit";
 import { applySavedVersion, withoutLegacyBadges } from "./applySavedVersion";
 import { useQuickCheck } from "./useQuickCheck";
 import { RecheckDialog } from "./RecheckDialog";
+import { DesktopHintDialog } from "./DesktopHintDialog";
 import { collectEditorBlocks } from "./recheck";
 import { changedRatio, htmlToText } from "../../lib/textChange";
 import { estimateScore, type PassageCheck } from "./rewriteScore";
@@ -68,6 +69,11 @@ const SCORE_CHIP: Record<DocStatus, string> = {
 /** Compact similarity readout, sized to live in the top bar. `estimated` once
  * passages were rewritten/edited (rewriteScore.ts); `checking` while a quick
  * check is still running. */
+/** The `lg` breakpoint, where the sources panel sits beside the document. */
+function isWideScreen() {
+  return typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches;
+}
+
 function ScoreChip({ score, estimated = false, checking = false }: { score: number; estimated?: boolean; checking?: boolean }) {
   const status = statusFromScore(score);
   return (
@@ -78,7 +84,7 @@ function ScoreChip({ score, estimated = false, checking = false }: { score: numb
           : tl("Similarity score {{score}}%", { score: score })
       }
       className={cn(
-        "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums sm:inline-flex",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
         SCORE_CHIP[status],
       )}
     >
@@ -86,7 +92,7 @@ function ScoreChip({ score, estimated = false, checking = false }: { score: numb
         <span aria-hidden="true" className="size-2.5 animate-spin motion-reduce:animate-none rounded-full border border-current border-t-transparent" />
       )}
       {estimated && <span aria-label={tl("estimated")}>≈</span>}
-      {score}{tl("% similar")}</span>
+      {score}<span className="sm:hidden">%</span><span className="hidden sm:inline">{tl("% similar")}</span></span>
   );
 }
 
@@ -244,7 +250,9 @@ export default function ReportPage() {
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   // The upload's own result, restorable from Version History (listed last).
   const [originalVersion, setOriginalVersion] = useState<DocumentVersion | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Side by side on wide screens; on phones the panel is a sheet under the
+  // document that starts folded, so the document gets the screen first.
+  const [sidebarOpen, setSidebarOpen] = useState(isWideScreen);
   // Default to the Original PDF view with plagiarism highlighted directly on
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
@@ -511,6 +519,7 @@ export default function ReportPage() {
   // source's highlight. Picking the one already focused lets go again, so the
   // same click that focused it also brings every highlight back.
   const handleSelectMatch = useCallback((matchId: string) => {
+    if (!isWideScreen()) setSidebarOpen(true);
     setActiveMatchId((current) => (current === matchId ? null : matchId));
     setActiveAiSegmentId(null);
     setFocusTick((t) => t + 1);
@@ -520,6 +529,7 @@ export default function ReportPage() {
   // Same toggle-to-let-go behaviour as handleSelectMatch, for a flagged
   // paragraph picked from the AI Detection sidebar card.
   const handleSelectAiSegment = useCallback((segmentId: string) => {
+    if (!isWideScreen()) setSidebarOpen(true);
     setActiveAiSegmentId((current) => (current === segmentId ? null : segmentId));
     setActiveMatchId(null);
     setFocusTick((t) => t + 1);
@@ -982,6 +992,7 @@ export default function ReportPage() {
                 matches={shownMatches}
                 activeMatchId={activeMatchId}
                 onMatchClick={(matchId) => {
+                  if (!isWideScreen()) setSidebarOpen(true);
                   setActiveMatchId(matchId);
                   setActiveAiSegmentId(null);
                 }}
@@ -1076,6 +1087,7 @@ export default function ReportPage() {
         />
       </div>
 
+      <DesktopHintDialog />
       <SourceComparisonModal
         match={comparisonMatch}
         open={comparisonMatch !== null}

@@ -239,7 +239,7 @@ export function FormatToolbar({
     >
       {hasOriginal && (
         <>
-          <div ref={viewPill.ref} className="relative flex items-center rounded-full bg-surface-muted p-0.5">
+          <div ref={viewPill.ref} className="relative flex shrink-0 items-center rounded-full bg-surface-muted p-0.5">
             <PillIndicator box={viewPill.box} className="bg-white shadow-sm" />
             {(["document", "original"] as const).map((v) => (
               <button
@@ -250,7 +250,7 @@ export function FormatToolbar({
                 aria-pressed={tab === v}
                 data-pill-active={tab === v}
                 className={cn(
-                  "relative rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                  "relative whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition-colors",
                   tab === v ? "text-ink-900" : "text-ink-500 hover:text-ink-900",
                 )}
               >
@@ -271,7 +271,7 @@ export function FormatToolbar({
             onClick={onToggleHighlights}
             title={showHighlights ? t("Hide plagiarism highlights") : t("Show plagiarism highlights")}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition-colors",
               showHighlights
                 ? "bg-severity-high-bg text-severity-high hover:brightness-95"
                 : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
@@ -284,7 +284,7 @@ export function FormatToolbar({
               type="button"
               onClick={onClearFocus}
               title={t("Show every highlight again (Esc)")}
-              className="ml-0.5 flex shrink-0 items-center gap-1 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
+              className="ml-0.5 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
             >
               {t("Showing 1 source · Show all")}<X size={12} weight="bold" />
             </button>
@@ -294,16 +294,17 @@ export function FormatToolbar({
       )}
 
       {view === "original" ? (
-        <span className="flex items-center gap-1.5 px-2 text-xs font-medium text-ink-500">
+        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-ink-500">
           <FileText size={14} />{" "}{t("Viewing the uploaded file")}</span>
       ) : locked ? (
         <button
           type="button"
           onClick={onRequestUnlock}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
         >
           <LockSimple size={14} weight="fill" />
-          {t("Reading mode — unlock to edit")}</button>
+          <span className="sm:hidden">{t("Unlock to edit")}</span>
+          <span className="hidden sm:inline">{t("Reading mode — unlock to edit")}</span></button>
       ) : (
         <>
           <ToolButton label={t("Lock editing")} onAction={onRequestLock}>

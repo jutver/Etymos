@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CaretRight, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CaretUp, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
 import type { AiDetection, MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
@@ -112,6 +112,26 @@ export function SourcesSidebar({
 
   if (!open) {
     return (
+      <>
+      {/* Phones: a bar under the document that unfolds the panel. */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={false}
+        aria-controls="report-sources-panel"
+        aria-label={t("Expand sources panel")}
+        className="flex h-12 w-full shrink-0 items-center gap-2 border-t border-line bg-white px-4 text-left text-sm font-bold text-navy-900 lg:hidden"
+      >
+        <ShieldCheck size={16} className="text-ink-500" />
+        <span className="min-w-0 flex-1 truncate">
+          {tn(matches.length, "{{count}} matched source", "{{count}} matched sources")}</span>
+        {aiDetection?.available && (
+          <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-ink-500">
+            <Robot size={14} />
+            {t("AI")}{" "}{Math.round(aiDetection.overallScore)}%</span>
+        )}
+        <CaretUp size={16} className="shrink-0 text-ink-500" />
+      </button>
       <button
         type="button"
         onClick={onToggle}
@@ -124,6 +144,7 @@ export function SourcesSidebar({
         <span className="[writing-mode:vertical-rl] text-xs font-semibold tracking-wide">
           {t("Sources")}</span>
       </button>
+      </>
     );
   }
 
@@ -131,7 +152,7 @@ export function SourcesSidebar({
     <aside
       id="report-sources-panel"
       aria-label={t("Matched sources")}
-      className="flex max-h-[45%] w-full shrink-0 flex-col border-t border-line bg-white lg:max-h-none lg:w-[22rem] lg:border-l lg:border-t-0 xl:w-[24rem]"
+      className="flex max-h-[55%] w-full shrink-0 flex-col border-t border-line bg-white lg:max-h-none lg:w-[22rem] lg:border-l lg:border-t-0 xl:w-[24rem]"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
@@ -148,9 +169,10 @@ export function SourcesSidebar({
           aria-controls="report-sources-panel"
           aria-label={t("Collapse sources panel")}
           title={t("Collapse sources panel")}
-          className="hidden size-8 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 lg:flex"
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900 lg:size-8"
         >
-          <CaretRight size={16} />
+          <CaretDown size={16} className="lg:hidden" />
+          <CaretRight size={16} className="hidden lg:block" />
         </button>
       </div>
 

@@ -23,7 +23,7 @@ export function WordCountPill({
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2.5 rounded-full border border-line/80 bg-white px-3.5 py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-card)]"
+      className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-line/80 bg-white px-3 py-1 sm:bottom-4 sm:left-4 sm:gap-2.5 sm:px-3.5 sm:py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-card)]"
     >
       <span className="tabular-nums text-ink-900">
         <span className="font-semibold">{words.toLocaleString(currentLocale())}</span>{" "}{t("words")}</span>
@@ -33,8 +33,8 @@ export function WordCountPill({
       <span className="tabular-nums">
         {t("Page {{page}} of {{count}}", { page, count: pageCount })}
       </span>
-      <span aria-hidden="true" className="h-3 w-px bg-line" />
-      <span className="flex items-center gap-1.5">
+      <span aria-hidden="true" className="hidden h-3 w-px bg-line sm:block" />
+      <span className="hidden items-center gap-1.5 sm:flex">
         <span
           aria-hidden="true"
           className={cn(
