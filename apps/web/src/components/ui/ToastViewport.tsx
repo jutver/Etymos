@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "motion/react";
+import { m, AnimatePresence } from "motion/react";
 import { CheckCircle, Info, WarningCircle, XCircle, X } from "@phosphor-icons/react";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
@@ -23,7 +23,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [toast.id, dismiss]);
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, y: 16, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -47,7 +47,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       >
         <X size={16} />
       </button>
-    </motion.div>
+    </m.div>
   );
 }
 

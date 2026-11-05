@@ -4,7 +4,7 @@ import { planLabel, useAppStore } from "../lib/store";
 import type { BalanceSource } from "../lib/store";
 import { cn } from "@etymos/shared";
 import { Link } from "react-router-dom";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
 import { t } from "../lib/i18n";
 
 const SOURCE_ICON: Record<BalanceSource, typeof Coins> = {
@@ -152,7 +152,7 @@ function SidebarBalance() {
       <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
         <AnimatePresence initial={false}>
           {collapsed ? (
-            <motion.div key="collapsed" {...SWAP}>
+            <m.div key="collapsed" {...SWAP}>
               <button
                 type="button"
                 onClick={toggle}
@@ -171,9 +171,9 @@ function SidebarBalance() {
                 ))}
                 <CaretDown size={13} className="ml-auto shrink-0 rotate-180 text-white/50" />
               </button>
-            </motion.div>
+            </m.div>
           ) : (
-            <motion.div key="expanded" {...SWAP}>
+            <m.div key="expanded" {...SWAP}>
               <div className="p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <span className={sectionLabel}>{t("Plan")}</span>
@@ -230,7 +230,7 @@ function SidebarBalance() {
                   ))}
                 </ul>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>

@@ -20,7 +20,7 @@ import { UserAvatar } from "../ui/UserAvatar";
 import { supabase } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
 import { LanguageSwitcher } from "../LanguageSwitcher";
-import { AnimatePresence, MotionConfig, motion, type Variants } from "motion/react";
+import { AnimatePresence, MotionConfig, m, type Variants } from "motion/react";
 import { PillIndicator, usePill } from "../ui/PillIndicator";
 
 const navLinks = [
@@ -49,9 +49,9 @@ const MENU_ITEM: Variants = {
 
 function MenuLink(props: ComponentProps<typeof Link>) {
   return (
-    <motion.div variants={MENU_ITEM}>
+    <m.div variants={MENU_ITEM}>
       <Link {...props} />
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -140,17 +140,17 @@ export function AppNav() {
               <AnimatePresence>
               {menuOpen && (
                 // Grows out of the avatar: down-right in the top bar, up-left at the sidebar's foot.
-                <motion.div
+                <m.div
                   variants={MENU}
                   initial="closed"
                   animate="open"
                   exit="closed"
                   className="studio-card absolute right-0 top-[calc(100%+10px)] z-50 w-60 origin-top-right rounded-[var(--radius-card)] border border-line bg-white p-2 text-ink-900 shadow-[var(--shadow-pop)] lg:bottom-[calc(100%+10px)] lg:left-0 lg:right-auto lg:top-auto lg:w-50 lg:origin-bottom-left"
                 >
-                  <motion.div variants={MENU_ITEM} className="px-3 py-2.5">
+                  <m.div variants={MENU_ITEM} className="px-3 py-2.5">
                     <p className="truncate text-sm font-semibold">{displayNameFor(user)}</p>
                     <p className="truncate text-xs text-ink-500">{user?.email ?? t("{{plan}} plan", { plan: planLabel(plan) })}</p>
-                  </motion.div>
+                  </m.div>
                   <div className="h-px bg-line" />
                   <MenuLink
                     to="/account/profile"
@@ -171,7 +171,7 @@ export function AppNav() {
                   >
                     {t("Help & Support")}</MenuLink>
                   <div className="h-px bg-line" />
-                  <motion.button
+                  <m.button
                     variants={MENU_ITEM}
                     onClick={async () => {
                       setMenuOpen(false);
@@ -181,8 +181,8 @@ export function AppNav() {
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
                   >
                     <SignOut size={16} />
-                    {t("Log out")}</motion.button>
-                </motion.div>
+                    {t("Log out")}</m.button>
+                </m.div>
               )}
               </AnimatePresence>
               </MotionConfig>

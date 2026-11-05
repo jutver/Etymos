@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { CheckCircle, ClockCounterClockwise, FileMagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
 import { CHECK_STALE_MS, INTERRUPTED_MESSAGE, useAppStore } from "../../lib/store";
@@ -597,7 +597,7 @@ export default function AnalyzingPage() {
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-68px)] max-w-2xl flex-col items-center justify-center px-5 py-16 text-center">
-      <motion.div
+      <m.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.4 }}
@@ -617,7 +617,7 @@ export default function AnalyzingPage() {
         ) : (
           <FileMagnifyingGlass size={30} weight="bold" />
         )}
-      </motion.div>
+      </m.div>
 
       <h1 className="mt-6 text-h2 font-bold tracking-tight text-navy-900">
         {failed ? tl("Analysis failed") : resultIds ? tl("Analysis complete") : tl("Analyzing your document")}
@@ -641,7 +641,7 @@ export default function AnalyzingPage() {
       {!resultIds && !failed && (
         <div className="mt-8 w-full max-w-sm">
           <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-            <motion.div
+            <m.div
               className="h-full rounded-full brand-gradient"
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.4, ease: "easeOut" }}
