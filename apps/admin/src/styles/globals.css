@@ -68,6 +68,19 @@
   --shadow-pop: 0 12px 40px -8px rgba(15, 27, 61, 0.28);
 
   --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  /* Login card entrance: fades and rises in once, just after the backdrop starts. */
+  --animate-card-in: card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes shimmer {
