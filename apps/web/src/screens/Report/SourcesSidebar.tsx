@@ -42,6 +42,9 @@ export interface SourcesSidebarProps {
   onCite: (match: MatchedSource) => void;
   /** Which locked section the user clicked, so the paywall can say what it unlocks. */
   onUpgrade: (reason: "semantic" | "ai-detection") => void;
+  /** Similarity score pill, shown in the folded bar on phones (the top bar
+   * has no room for it there). */
+  scoreBadge?: React.ReactNode;
   open: boolean;
   onToggle: () => void;
 }
@@ -65,6 +68,7 @@ export function SourcesSidebar({
   onRewrite,
   onCite,
   onUpgrade,
+  scoreBadge,
   open,
   onToggle,
 }: SourcesSidebarProps) {
@@ -125,9 +129,10 @@ export function SourcesSidebar({
         <ShieldCheck size={16} className="text-ink-500" />
         <span className="min-w-0 flex-1 truncate">
           {tn(matches.length, "{{count}} matched source", "{{count}} matched sources")}</span>
+        {scoreBadge}
         {aiDetection?.available && (
-          <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-ink-500">
-            <Robot size={14} />
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-ai-flag-line bg-ai-flag-bg px-2.5 py-1 text-xs font-semibold tabular-nums text-ai-flag">
+            <Robot size={13} />
             {t("AI")}{" "}{Math.round(aiDetection.overallScore)}%</span>
         )}
         <CaretUp size={16} className="shrink-0 text-ink-500" />

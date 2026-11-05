@@ -74,7 +74,18 @@ function isWideScreen() {
   return typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches;
 }
 
-function ScoreChip({ score, estimated = false, checking = false }: { score: number; estimated?: boolean; checking?: boolean }) {
+function ScoreChip({
+  score,
+  estimated = false,
+  checking = false,
+  compact = false,
+}: {
+  score: number;
+  estimated?: boolean;
+  checking?: boolean;
+  /** "5.7%" for the phone sources bar, instead of "5.7% similar" (top bar, sm and up). */
+  compact?: boolean;
+}) {
   const status = statusFromScore(score);
   return (
     <span
@@ -84,7 +95,8 @@ function ScoreChip({ score, estimated = false, checking = false }: { score: numb
           : tl("Similarity score {{score}}%", { score: score })
       }
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
+        "shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
+        compact ? "inline-flex" : "hidden sm:inline-flex",
         SCORE_CHIP[status],
       )}
     >
@@ -92,7 +104,7 @@ function ScoreChip({ score, estimated = false, checking = false }: { score: numb
         <span aria-hidden="true" className="size-2.5 animate-spin motion-reduce:animate-none rounded-full border border-current border-t-transparent" />
       )}
       {estimated && <span aria-label={tl("estimated")}>≈</span>}
-      {score}<span className="sm:hidden">%</span><span className="hidden sm:inline">{tl("% similar")}</span></span>
+      {compact ? `${score}%` : `${score}${tl("% similar")}`}</span>
   );
 }
 
@@ -1082,6 +1094,14 @@ export default function ReportPage() {
           }}
           onCite={handleCite}
           onUpgrade={(reason) => navigate(paywallPath(reason, id))}
+          scoreBadge={
+            <ScoreChip
+              compact
+              score={displayScore}
+              estimated={scoreEstimate.estimated || editedSinceCheck}
+              checking={scoreEstimate.checking}
+            />
+          }
           open={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => !v)}
         />

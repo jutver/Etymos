@@ -148,8 +148,6 @@
   .workspace-navigation::after { display: none; }
 }
 @media (max-width: 639px) {
-  .report-actions { flex-basis: 100%; justify-content: flex-start; padding-top: 6px; border-top: 1px solid var(--color-line); }
-  .studio-report-bar > div > button { max-width: calc(100vw - 90px); }
   .studio-sources > div:first-child { padding: 12px 14px; }
 }
 
