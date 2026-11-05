@@ -59,8 +59,8 @@ export const legal: Record<string, string> = {
     "Một số tính năng gửi một phần văn bản của bạn đến các dịch vụ vận hành tính năng đó. Chính sách bảo mật liệt kê các dịch vụ này và thời gian chúng tôi lưu tài liệu của bạn.",
   "5. Our responsibilities": "5. Trách nhiệm của Etymos",
   "5.1. Providing the Service": "5.1. Cung cấp Dịch vụ",
-  "We provide the Service as described on the site and work to keep it available and accurate. Etymos is in closed beta: new accounts join a waitlist, features may change, and there may be downtime for maintenance or unexpected faults.":
-    "Chúng tôi cung cấp Dịch vụ như mô tả trên trang web và nỗ lực duy trì Dịch vụ ổn định, chính xác. Etymos đang trong giai đoạn thử nghiệm kín: tài khoản mới vào danh sách chờ, tính năng có thể thay đổi, và Dịch vụ có thể tạm ngừng để bảo trì hoặc do sự cố ngoài ý muốn.",
+  "We provide the Service as described on the site and work to keep it available and accurate. New accounts may be reviewed before they're activated, features may change, and there may be downtime for maintenance or unexpected faults.":
+    "Chúng tôi cung cấp Dịch vụ như mô tả trên trang web và nỗ lực duy trì Dịch vụ ổn định, chính xác. Tài khoản mới có thể cần được xem xét trước khi kích hoạt, tính năng có thể thay đổi, và Dịch vụ có thể tạm ngừng để bảo trì hoặc do sự cố ngoài ý muốn.",
   "5.2. Protecting your information": "5.2. Bảo vệ thông tin của bạn",
   "We protect your personal data and documents as set out in the Privacy Policy, and disclose them only with your consent or when the law requires it.":
     "Chúng tôi bảo vệ dữ liệu cá nhân và tài liệu của bạn theo Chính sách bảo mật, và chỉ tiết lộ khi có sự đồng ý của bạn hoặc khi pháp luật yêu cầu.",

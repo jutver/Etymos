@@ -188,3 +188,60 @@ def test_audience_rules(db):
         insert_id(db, kind="banner", message="x", audience="everyone", audience_plans=["free"])
     with pytest.raises(psycopg.errors.CheckViolation):
         insert_id(db, kind="maintenance", audience="signed_in")
+
+
+# 20261106000000_popup_placement_and_button.sql
+
+
+def test_popups_default_to_both_pages_and_a_plain_close_button(db):
+    row_id = insert_id(db, kind="popup", title="Sale")
+    row = db.execute(
+        "select popup_placement, button_label, button_label_vi, button_url from public.announcements where id = %s",
+        (row_id,),
+    ).fetchone()
+    assert row == ("both", None, None, None)
+
+
+def test_popup_placement_values(db):
+    for placement in ("home", "landing", "both"):
+        assert insert_id(db, kind="popup", title="x", popup_placement=placement)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="popup", title="x", popup_placement="pricing")
+
+
+def test_landing_page_popups_are_for_everyone(db):
+    # Signed-out visitors are the only ones who see the landing page.
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="popup", title="x", popup_placement="landing", audience="signed_in")
+    assert insert_id(db, kind="popup", title="x", popup_placement="home", audience="signed_in")
+    assert insert_id(db, kind="popup", title="x", popup_placement="both", audience="signed_in")
+
+
+@pytest.mark.parametrize("url", ["/", "/pricing", "/pricing?plan=student#top", "https://etymos.site/x", "http://example.com"])
+def test_button_links_can_be_site_paths_or_web_addresses(db, url):
+    assert insert_id(db, kind="popup", title="x", button_label="Go", button_url=url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["javascript:alert(1)", "data:text/html,hi", "//evil.example", "pricing", "https://", "/has space", "ftp://x.com"],
+)
+def test_button_links_that_could_run_script_or_leave_oddly_are_refused(db, url):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="popup", title="x", button_url=url)
+
+
+def test_button_settings_are_popup_only_and_short(db):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="banner", message="x", button_url="/pricing")
+    with pytest.raises(psycopg.errors.CheckViolation):
+        insert_id(db, kind="popup", title="x", button_label="x" * 41)
+
+
+def test_my_announcements_returns_the_new_fields(db):
+    user = make_user(db)
+    insert_id(
+        db, kind="popup", title="x", is_active=True, popup_placement="home", button_label="See plans", button_url="/pricing"
+    )
+    rows = as_user(db, user, "select popup_placement, button_label, button_url from public.my_announcements() where kind = 'popup'")
+    assert rows == [("home", "See plans", "/pricing")]

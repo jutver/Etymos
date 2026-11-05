@@ -1,15 +1,38 @@
 import { useEffect, useState } from "react";
-import { announcementImageUrl, announcementText } from "@etymos/shared";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  announcementButtonLabel,
+  announcementImageUrl,
+  announcementText,
+  isAnnouncementLinkValid,
+  type Announcement,
+} from "@etymos/shared";
 import { X } from "@phosphor-icons/react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { dismissAnnouncement, dismissedAnnouncements, useAnnouncements } from "../../lib/announcements";
+import { useAuth } from "../../lib/auth";
 import { t, useLanguage } from "../../lib/i18n";
+
+/** The signed-in home page (APP_HOME in App.tsx) and the signed-out landing page. */
+const HOME_PATH = "/upload";
+const LANDING_PATH = "/";
+
+/** Whether this pop-up belongs on the page the visitor is on now. */
+function onItsPage(popup: Announcement, signedIn: boolean, pathname: string): boolean {
+  const home = signedIn && pathname === HOME_PATH;
+  const landing = !signedIn && pathname === LANDING_PATH;
+  if (popup.popup_placement === "home") return home;
+  if (popup.popup_placement === "landing") return landing;
+  return home || landing;
+}
 
 /**
  * The latest live pop-up announcement: title, text, image, or any mix.
- * Shown once per browser. Waits while another dialog (the closed-beta notice,
- * say) is open, so two never stack.
+ * Opens on the page the admin chose (signed-in home, signed-out landing, or
+ * both), once per browser. Waits while another dialog (the Terms gate, say)
+ * is open, so two never stack. The button closes it, or follows the admin's
+ * link when one is set.
  */
 export function AnnouncementPopup() {
   const { popup } = useAnnouncements();
@@ -17,8 +40,13 @@ export function AnnouncementPopup() {
   const [otherDialogOpen, setOtherDialogOpen] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const lang = useLanguage();
+  const { user, loading } = useAuth();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
-  const pending = popup && popup.id !== closedId && !dismissedAnnouncements().has(popup.id) ? popup : null;
+  const unseen = popup && popup.id !== closedId && !dismissedAnnouncements().has(popup.id) ? popup : null;
+  // Until auth settles, "signed out on /" may really be a signed-in user about to be sent home.
+  const pending = unseen && !loading && onItsPage(unseen, Boolean(user), pathname) ? unseen : null;
 
   useEffect(() => {
     if (!pending) return;
@@ -30,21 +58,34 @@ export function AnnouncementPopup() {
 
   useEffect(() => setImageFailed(false), [popup?.id]);
 
-  // Once this one is open it is itself a dialog: keep it open.
+  // Once this one is open it is itself a dialog: keep it open, even if the
+  // visitor moves to another page behind it.
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => {
     if (pending && !otherDialogOpen) setShown(pending.id);
   }, [pending, otherDialogOpen]);
 
-  if (!pending || shown !== pending.id) return null;
+  const open = unseen && shown === unseen.id ? unseen : null;
+  if (!open) return null;
 
   function close() {
-    dismissAnnouncement(pending!.id);
-    setClosedId(pending!.id);
+    dismissAnnouncement(open!.id);
+    setClosedId(open!.id);
   }
 
-  const image = imageFailed ? null : announcementImageUrl(pending.image_path);
-  const { title, message } = announcementText(pending, lang);
+  // The database only accepts safe links; checked again here all the same.
+  const link = open.button_url && isAnnouncementLinkValid(open.button_url) ? open.button_url : null;
+
+  function pressButton() {
+    close();
+    if (!link) return;
+    if (link.startsWith("/")) navigate(link);
+    else window.location.assign(link);
+  }
+
+  const image = imageFailed ? null : announcementImageUrl(open.image_path);
+  const { title, message } = announcementText(open, lang);
+  const buttonLabel = announcementButtonLabel(open, lang);
   const hasText = Boolean(title || message);
 
   return (
@@ -73,8 +114,8 @@ export function AnnouncementPopup() {
           </h2>
         )}
         {message && <p className="mt-2.5 whitespace-pre-line text-sm leading-relaxed text-ink-600">{t(message)}</p>}
-        <Button fullWidth size="lg" className={hasText ? "mt-6" : ""} onClick={close}>
-          {t("Got it")}
+        <Button fullWidth size="lg" className={hasText ? "mt-6" : ""} onClick={pressButton}>
+          {buttonLabel ?? t("Got it")}
         </Button>
       </div>
     </Modal>

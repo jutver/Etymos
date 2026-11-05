@@ -33,8 +33,8 @@ const OPEN_DELAY_MS = 4000;
 /**
  * Asks a signed-in user how they found Etymos, once per account, on the home
  * page only — never on the public landing pages or mid sign-in. Waits
- * while another dialog (the closed-beta notice, the Terms gate, an
- * announcement) is open, so two never stack. Closing it counts as a skip.
+ * while another dialog (the Terms gate, an announcement) is open, so two
+ * never stack. Closing it counts as a skip.
  */
 export function ReferralSurvey() {
   const { pathname } = useLocation();

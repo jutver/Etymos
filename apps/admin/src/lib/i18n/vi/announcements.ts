@@ -113,4 +113,40 @@ export const announcements: Record<string, string> = {
     "Người xem thấy nội dung theo ngôn ngữ của họ. Để trống cả hai để dùng nội dung mặc định “quay lại sau”.",
   "Visitors see the text in their language. A blank box falls back to the other language.":
     "Người xem thấy nội dung theo ngôn ngữ của họ. Ô nào để trống sẽ dùng ngôn ngữ còn lại.",
+  "Home page":
+    "Trang chủ",
+  "Landing page":
+    "Trang giới thiệu",
+  "Both":
+    "Cả hai",
+  "Only signed-out visitors see the landing page. Pick Everyone, or show it on the home page.":
+    "Chỉ khách chưa đăng nhập mới thấy trang giới thiệu. Hãy chọn Mọi người, hoặc hiển thị ở trang chủ.",
+  "Add the link the button opens.":
+    "Thêm liên kết mà nút sẽ mở.",
+  "Use a page on the site starting with / (like /pricing) or a full address starting with https://.":
+    "Dùng một trang trên web bắt đầu bằng / (như /pricing) hoặc địa chỉ đầy đủ bắt đầu bằng https://.",
+  "Button text":
+    "Chữ trên nút",
+  "Where it shows":
+    "Hiển thị ở đâu",
+  "On the home page, right after signing in.":
+    "Ở trang chủ, ngay sau khi đăng nhập.",
+  "On the landing page, to visitors who aren't signed in.":
+    "Ở trang giới thiệu, cho khách chưa đăng nhập.",
+  "On the landing page for visitors, and on the home page for signed-in users.":
+    "Ở trang giới thiệu cho khách, và ở trang chủ cho người đã đăng nhập.",
+  "Button":
+    "Nút",
+  "A page on the site (/pricing) opens in place; a full address (https://…) takes the visitor there. The pop-up won't show again either way.":
+    "Trang trên web (/pricing) mở ngay tại chỗ; địa chỉ đầy đủ (https://…) đưa người xem đến đó. Dù thế nào cửa sổ cũng sẽ không hiện lại.",
+  "Closes the pop-up. It won't show again in that browser.":
+    "Đóng cửa sổ. Cửa sổ sẽ không hiện lại trên trình duyệt đó.",
+  "Closes the pop-up":
+    "Đóng cửa sổ",
+  "Opens a link":
+    "Mở liên kết",
+  "on the home page": "ở trang chủ",
+  "on the landing page": "ở trang giới thiệu",
+  "on the home and landing pages": "ở trang chủ và trang giới thiệu",
+  "button opens {{link}}": "nút mở {{link}}",
 };

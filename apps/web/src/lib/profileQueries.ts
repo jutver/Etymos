@@ -1,5 +1,5 @@
 // Fetches the signed-in user's own `profiles` row. Surfaces the fields the UI
-// actually reflects (plan/usage/verification) plus the closed-beta access
+// actually reflects (plan/usage/verification) plus the waitlist access
 // fields the client-side route guard needs.
 //
 // `role` and `accessStatus` are read here purely to decide *which screen to

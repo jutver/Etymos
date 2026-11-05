@@ -1,7 +1,8 @@
 /**
  * Announcements, shared by the site (which shows them) and the admin app
  * (which writes them). Schema: supabase/migrations/20261017000000_announcements_overhaul.sql
- * 20261018000000_announcements_bilingual.sql and 20261020000000_announcement_audience.sql.
+ * 20261018000000_announcements_bilingual.sql, 20261020000000_announcement_audience.sql
+ * and 20261106000000_popup_placement_and_button.sql.
  */
 import { supabase } from "./supabase";
 
@@ -9,6 +10,8 @@ export type AnnouncementKind = "banner" | "popup" | "maintenance";
 export type AnnouncementSeverity = "info" | "warning" | "success" | "error";
 /** Who sees a top bar or pop-up. Maintenance is always "everyone". */
 export type AnnouncementAudience = "everyone" | "signed_in" | "plans" | "emails";
+/** Pop-up only: the signed-in home page, the signed-out landing page, or both. */
+export type PopupPlacement = "home" | "landing" | "both";
 
 /** Icons a banner can show. Each app maps these to its icon components. */
 export const ANNOUNCEMENT_ICONS = [
@@ -50,6 +53,13 @@ export interface Announcement {
   audience: AnnouncementAudience;
   /** Plan ids ("free", "student", "professional") when audience is "plans", else null. */
   audience_plans: string[] | null;
+  /** Pop-up only: which page it opens on. Landing needs audience "everyone". */
+  popup_placement: PopupPlacement;
+  /** Pop-up only: button text; null = "Got it" (see announcementButton). */
+  button_label: string | null;
+  button_label_vi: string | null;
+  /** Pop-up only: where the button goes (site path or http(s) address); null = it just closes. */
+  button_url: string | null;
   /** Null = from the moment it's switched on. */
   starts_at: string | null;
   /** Ignored for maintenance, which lasts until switched off. */
@@ -79,6 +89,22 @@ export function announcementText(
     return first?.trim() || second?.trim() || "";
   };
   return { title: pick(a.title, a.title_vi), message: pick(a.message, a.message_vi) };
+}
+
+/** Same rule as the database check on button_url: a path on the site
+ * ("/pricing") or an http(s) address. Nothing that could run script. */
+export function isAnnouncementLinkValid(url: string): boolean {
+  return url.length <= 2000 && /^(https?:\/\/[^\s/]+\S*|\/([^/\s]\S*)?)$/.test(url);
+}
+
+/** The pop-up button's text in `lang`, falling back to the other language;
+ * null when neither is set, so the caller shows its own "Got it". */
+export function announcementButtonLabel(
+  a: Pick<Announcement, "button_label" | "button_label_vi">,
+  lang: AnnouncementLanguage,
+): string | null {
+  const [first, second] = lang === "vi" ? [a.button_label_vi, a.button_label] : [a.button_label, a.button_label_vi];
+  return first?.trim() || second?.trim() || null;
 }
 
 export type AnnouncementState = "off" | "scheduled" | "live" | "ended";

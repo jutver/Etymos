@@ -77,6 +77,10 @@ export type AnnouncementInput = Pick<
   | "is_active"
   | "audience"
   | "audience_plans"
+  | "popup_placement"
+  | "button_label"
+  | "button_label_vi"
+  | "button_url"
 >;
 
 /** Returns the new announcement's id. */

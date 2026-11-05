@@ -19,8 +19,8 @@ function formatRequestedAt(iso: string | null): string | null {
 }
 
 /**
- * Landing spot for a signed-in user who has not been approved for the closed
- * beta. RequireAuth routes them here; this screen is deliberately a dead end
+ * Landing spot for a signed-in user who has not been approved yet.
+ * RequireAuth routes them here; this screen is deliberately a dead end
  * apart from logging out.
  */
 export default function WaitlistPage() {
@@ -75,8 +75,8 @@ export default function WaitlistPage() {
 
           <p className="mt-2.5 text-sm leading-relaxed text-ink-600">
             {rejected
-              ? t("We weren't able to approve your request for the closed beta at this time. If you think this was a mistake, reply to your signup email and we'll take another look.")
-              : t("Etymos is in closed beta and every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved.")}
+              ? t("We weren't able to approve your access request at this time. If you think this was a mistake, reply to your signup email and we'll take another look.")
+              : t("Every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved.")}
           </p>
 
           <dl className="mt-6 flex flex-col gap-3 border-t border-line pt-5 text-sm">

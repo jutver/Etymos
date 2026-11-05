@@ -50,7 +50,6 @@ export const components: Record<string, string> = {
   "Download .docx": "Tải xuống .docx",
   "Download failed.": "Tải xuống thất bại.",
   "Etymos": "Etymos",
-  "Etymos is in closed beta": "Etymos đang trong giai đoạn thử nghiệm kín",
   "Explanation available on paid plans": "Giải thích có sẵn ở các gói trả phí",
   "Failed to load preview.": "Không tải được bản xem trước.",
   "Features": "Tính năng",
@@ -105,8 +104,6 @@ export const components: Record<string, string> = {
   "Text (Word/Docs)": "Văn bản (Word/Docs)",
   "Think this is a mistake?": "Bạn nghĩ đây là nhầm lẫn?",
   "This can't be undone": "Hành động này không thể hoàn tác",
-  "This is an early version of the product, open to a small group of invited users while we refine it. You're welcome to look around — signing up adds you to the waitlist, and we'll let you in as we widen access. Expect rough edges, and thank you for the patience.":
-    "Đây là phiên bản đầu của sản phẩm, hiện chỉ mở cho một nhóm nhỏ người dùng được mời trong lúc chúng tôi hoàn thiện. Bạn cứ thoải mái xem qua — đăng ký sẽ đưa bạn vào danh sách chờ, và chúng tôi sẽ cho bạn vào khi mở rộng quyền truy cập. Sản phẩm còn một số điểm chưa hoàn thiện, cảm ơn bạn đã kiên nhẫn.",
   "Toggle menu": "Bật/tắt menu",
   "Toggle navigation": "Bật/tắt điều hướng",
   "Upgrade or buy credits": "Nâng cấp hoặc mua thêm lượt",

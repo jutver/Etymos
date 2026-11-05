@@ -14,6 +14,8 @@ export interface PreviewProps {
   icon: AnnouncementIcon | null;
   countdownTo: string | null;
   imageUrl: string | null;
+  /** Pop-up only: the button text in `lang`. */
+  buttonLabel?: string;
 }
 
 /** Fake page chrome so the preview reads as "this is the site". */
@@ -52,7 +54,7 @@ function BannerPreview({ message, severity, icon, countdownTo }: PreviewProps) {
   );
 }
 
-function PopupPreview({ lang, title, message, imageUrl }: PreviewProps) {
+function PopupPreview({ lang, title, message, imageUrl, buttonLabel }: PreviewProps) {
   const hasText = Boolean(title.trim() || message.trim());
   return (
     <div className="relative">
@@ -71,7 +73,7 @@ function PopupPreview({ lang, title, message, imageUrl }: PreviewProps) {
             {message.trim() && <p className="mt-1 line-clamp-4 whitespace-pre-line text-caption text-fg-muted">{message}</p>}
             {!hasText && !imageUrl && <p className="text-caption text-fg-subtle">{t("Add a title, text or an image.")}</p>}
             <div className={cn("rounded-control bg-accent py-1.5 text-center text-caption font-semibold text-white", hasText && "mt-3")}>
-              {lang === "vi" ? "Đã hiểu" : "Got it"}
+              {buttonLabel || (lang === "vi" ? "Đã hiểu" : "Got it")}
             </div>
           </div>
         </div>

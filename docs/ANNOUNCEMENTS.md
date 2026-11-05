@@ -57,8 +57,24 @@ stays in the list, and you can switch it on again.
 
 - The image is stored in the public `announcement-images` bucket. It must be a
   PNG, JPG, WebP or GIF up to 5 MB, and it shows full width above the text.
-- It waits until any other dialog has closed (the closed-beta notice, for
+- It waits until any other dialog has closed (the Terms gate, for
   example), so two dialogs never stack.
+- **Where it shows** picks the page it opens on:
+  - **Home page**: the signed-in home page (`/upload`), right after signing in.
+  - **Landing page**: the landing page (`/`), for visitors who aren't signed in.
+    Only works with **Who sees it: Everyone**, since nobody signed in sees
+    that page; the editor and the database both refuse anything else.
+  - **Both**: either page. Pop-ups made before this setting existed are set to
+    Both.
+  Once it's open it stays open if the visitor moves to another page.
+- **Button text**: one box per language, under the title and message. Leave
+  them blank for "Got it" / "Đã hiểu".
+- **Button**: **Closes the pop-up** (the default), or **Opens a link**. A link
+  is a page on the site starting with `/` (like `/pricing`), which opens in
+  place, or a full `https://` (or `http://`) address, which takes the visitor
+  there. Anything else, such as `javascript:` or `//other-site`, is refused, so
+  a link can't run script. Either way the pop-up counts as seen and won't show
+  again in that browser. The × in the corner always just closes it.
 
 ## Maintenance
 
@@ -88,7 +104,9 @@ stays in the list, and you can switch it on again.
 Apply `supabase/migrations/20261017000000_announcements_overhaul.sql` and
 `20261018000000_announcements_bilingual.sql`, then
 `20261019000000_maintenance_bypass.sql` and `20261020000000_announcement_audience.sql`
-for the bypass list and audiences (`supabase db push`). The first adds
+for the bypass list and audiences, and
+`20261106000000_popup_placement_and_button.sql` for the pop-up page and button
+(`supabase db push`). The first adds
 the new columns, turns existing announcements into top bars, and creates the
 image bucket, which only admins can write to. The second adds `title_vi` and
 `message_vi`. Existing text is treated as English and shows to everyone until a

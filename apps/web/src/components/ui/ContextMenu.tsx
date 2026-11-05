@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "motion/react";
+import { m, AnimatePresence } from "motion/react";
 
 interface ContextMenuProps {
   open: boolean;
@@ -34,7 +34,7 @@ export function ContextMenu({ open, onClose, position, children }: ContextMenuPr
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
+        <m.div
           ref={menuRef}
           role="menu"
           initial={{ opacity: 0, scale: 0.96 }}
@@ -45,7 +45,7 @@ export function ContextMenu({ open, onClose, position, children }: ContextMenuPr
           className="studio-card fixed z-50 w-56 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
         >
           {children}
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>,
     document.body,

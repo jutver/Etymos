@@ -24,8 +24,6 @@ export const account: Record<string, string> = {
   "Create account": "Tạo tài khoản",
   "Create an account": "Tạo tài khoản",
   "Create your account": "Tạo tài khoản của bạn",
-  "Creating an account adds you to the waitlist — an admin reviews each request, and you'll get access once you're approved.":
-    "Tạo tài khoản sẽ đưa bạn vào danh sách chờ — quản trị viên xem xét từng yêu cầu và bạn sẽ được cấp quyền truy cập sau khi được duyệt.",
   "Current credit balance: {{standard}} standard, {{premium}} premium": "Số dư lượt hiện tại: {{standard}} lượt Standard, {{premium}} lượt Premium",
   "Current password": "Mật khẩu hiện tại",
   "Current password is incorrect": "Mật khẩu hiện tại không đúng",
@@ -36,9 +34,8 @@ export const account: Record<string, string> = {
   "Display name": "Tên hiển thị",
   "Drag & drop your document here": "Kéo và thả tài liệu của bạn vào đây",
   "Email": "Email",
-  "Etymos is in closed beta and every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved.":
-    "Etymos đang trong giai đoạn thử nghiệm kín và mọi tài khoản đều được quản trị viên xem xét trước khi kích hoạt. Yêu cầu của bạn đang trong hàng chờ — chúng tôi sẽ gửi email ngay khi bạn được duyệt.",
-  "Etymos is in closed beta.": "Etymos đang trong giai đoạn thử nghiệm kín.",
+  "Every account is reviewed by an admin before it's activated. Your request is in the queue — we'll email you the moment you're approved.":
+    "Mọi tài khoản đều được quản trị viên xem xét trước khi kích hoạt. Yêu cầu của bạn đang trong hàng chờ — chúng tôi sẽ gửi email ngay khi bạn được duyệt.",
   "For one-off checks, no subscription required.": "Cho các lần kiểm tra lẻ, không cần đăng ký gói.",
   "Google": "Google",
   "Hide password": "Ẩn mật khẩu",
@@ -93,8 +90,8 @@ export const account: Record<string, string> = {
   "Verify your student status": "Xác minh tình trạng sinh viên của bạn",
   "We already have a verification request from you and it's currently being reviewed by an admin. Your account will be updated automatically once a decision is made.":
     "Chúng tôi đã nhận yêu cầu xác minh từ bạn và quản trị viên đang xem xét. Tài khoản của bạn sẽ được cập nhật tự động khi có quyết định.",
-  "We weren't able to approve your request for the closed beta at this time. If you think this was a mistake, reply to your signup email and we'll take another look.":
-    "Hiện tại chúng tôi chưa thể duyệt yêu cầu tham gia thử nghiệm kín của bạn. Nếu bạn cho rằng đây là nhầm lẫn, hãy trả lời email đăng ký và chúng tôi sẽ xem xét lại.",
+  "We weren't able to approve your access request at this time. If you think this was a mistake, reply to your signup email and we'll take another look.":
+    "Hiện tại chúng tôi chưa thể duyệt yêu cầu truy cập của bạn. Nếu bạn cho rằng đây là nhầm lẫn, hãy trả lời email đăng ký và chúng tôi sẽ xem xét lại.",
   "We'll email you once an admin has reviewed your document.": "Chúng tôi sẽ gửi email cho bạn khi quản trị viên xem xét xong tài liệu.",
   "We'll let you know as soon as a decision is made.": "Chúng tôi sẽ báo cho bạn ngay khi có quyết định.",
   "Welcome back": "Chào mừng trở lại",

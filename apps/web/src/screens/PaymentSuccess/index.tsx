@@ -3,7 +3,7 @@
 // an order id there is nothing to show, so it goes to My Plan.
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { ArrowRight, CheckCircle, HourglassMedium } from "@phosphor-icons/react";
 import { formatVND } from "@etymos/shared";
 import { Button } from "../../components/ui/Button";
@@ -78,14 +78,14 @@ function Shell({
 }) {
   return (
     <div className="studio-page mx-auto flex min-h-[calc(100dvh-68px)] max-w-lg flex-col items-center justify-center px-5 py-16 text-center">
-      <motion.div
+      <m.div
         initial={{ scale: 0.7, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="flex size-20 items-center justify-center rounded-full bg-brand-100 text-brand-600"
       >
         {icon}
-      </motion.div>
+      </m.div>
 
       <h1 className="mt-6 text-h1 font-bold tracking-tight text-navy-900">{title}</h1>
       <p className="mt-2 text-body-lg text-ink-600">{subtitle}</p>
