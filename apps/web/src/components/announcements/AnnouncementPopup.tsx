@@ -10,7 +10,7 @@ import {
 import { X } from "@phosphor-icons/react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
-import { dismissAnnouncement, dismissedAnnouncements, useAnnouncements } from "../../lib/announcements";
+import { dismissAnnouncement, dismissedAnnouncements, recordAnnouncementSeen, useAnnouncements } from "../../lib/announcements";
 import { useAuth } from "../../lib/auth";
 import { t, useLanguage } from "../../lib/i18n";
 
@@ -28,15 +28,16 @@ function onItsPage(popup: Announcement, signedIn: boolean, pathname: string): bo
 }
 
 /**
- * The latest live pop-up announcement: title, text, image, or any mix.
+ * Live pop-up announcements, one at a time: personal messages an admin sent
+ * this account, then the latest global pop-up. Title, text, image, or any mix.
  * Opens on the page the admin chose (signed-in home, signed-out landing, or
  * both), once per browser. Waits while another dialog (the Terms gate, say)
  * is open, so two never stack. The button closes it, or follows the admin's
  * link when one is set.
  */
 export function AnnouncementPopup() {
-  const { popup } = useAnnouncements();
-  const [closedId, setClosedId] = useState<string | null>(null);
+  const { popups } = useAnnouncements();
+  const [closedIds, setClosedIds] = useState<string[]>([]);
   const [otherDialogOpen, setOtherDialogOpen] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const lang = useLanguage();
@@ -44,7 +45,9 @@ export function AnnouncementPopup() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
-  const unseen = popup && popup.id !== closedId && !dismissedAnnouncements().has(popup.id) ? popup : null;
+  // One at a time: the first not yet closed here (personal messages come first).
+  const dismissed = dismissedAnnouncements();
+  const unseen = popups.find((p) => !closedIds.includes(p.id) && !dismissed.has(p.id)) ?? null;
   // Until auth settles, "signed out on /" may really be a signed-in user about to be sent home.
   const pending = unseen && !loading && onItsPage(unseen, Boolean(user), pathname) ? unseen : null;
 
@@ -56,7 +59,7 @@ export function AnnouncementPopup() {
     return () => window.clearInterval(timer);
   }, [pending]);
 
-  useEffect(() => setImageFailed(false), [popup?.id]);
+  useEffect(() => setImageFailed(false), [unseen?.id]);
 
   // Once this one is open it is itself a dialog: keep it open, even if the
   // visitor moves to another page behind it.
@@ -70,7 +73,8 @@ export function AnnouncementPopup() {
 
   function close() {
     dismissAnnouncement(open!.id);
-    setClosedId(open!.id);
+    recordAnnouncementSeen(open!);
+    setClosedIds((ids) => [...ids, open!.id]);
   }
 
   // The database only accepts safe links; checked again here all the same.

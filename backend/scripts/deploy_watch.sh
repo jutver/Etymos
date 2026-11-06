@@ -4,10 +4,10 @@
 #
 # Every DEPLOY_POLL_SECONDS it fetches DEPLOY_BRANCH. When the branch has moved:
 #   1. No backend/ changes (frontend, docs): fast-forward only, no restart.
-#   2. Backend changes: wait for the "backend-tests" GitHub Actions check on
-#      that commit to pass (a failed check skips the commit), wait for running
-#      checks to finish, fast-forward, pip install if requirements.txt changed,
-#      restart etymos-api and wait for /api/health.
+#   2. Backend changes: run the backend tests on the new commit here, in a
+#      throwaway worktree (failing tests skip the commit), wait for running
+#      checks to finish, fast-forward, restart etymos-api and wait for
+#      /api/health. If requirements.txt changed, it's installed before the tests.
 #   3. If the API doesn't come back, go back to the previous commit, restart
 #      again, and skip the bad commit until a newer one is pushed.
 #
@@ -16,9 +16,10 @@
 #   DEPLOY_POLL_SECONDS    60
 #   DEPLOY_DRAIN_SECONDS   1800  longest wait for running checks before restarting anyway
 #   DEPLOY_HEALTH_SECONDS  180   how long the restarted API gets to answer /api/health
-#   DEPLOY_REQUIRE_CI      true  false deploys backend changes without waiting for CI
+#   DEPLOY_RUN_TESTS       true  false deploys backend changes without running the tests
+#                                (DEPLOY_REQUIRE_CI, its old name, still works)
+#   DEPLOY_TEST_SECONDS    1800  longest a test run may take; longer counts as a failure
 #   DEPLOY_HEALTH_URL      http://localhost:8000/api/health
-#   GITHUB_TOKEN                 only to raise GitHub's 60 requests/hour limit
 set -uo pipefail
 
 BACKEND="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,15 +27,15 @@ REPO="$(cd "$BACKEND/.." && pwd)"
 SCRIPT="$BACKEND/scripts/deploy_watch.sh"
 PY="$BACKEND/.venv/bin/python"
 SV=("$BACKEND/.venv/bin/supervisorctl" -c "$BACKEND/supervisord.conf")
-STATE="$BACKEND/logs/deploy_skip"   # last commit that failed CI or the health check
-GITHUB_REPO="jutver/Etymos"
-CHECK_NAME="backend-tests"
+STATE="$BACKEND/logs/deploy_skip"   # last commit that failed the tests or the health check
+TEST_LOG="$BACKEND/logs/deploy_tests.log"   # output of the last test run
 
 BRANCH="${DEPLOY_BRANCH:-main}"
 POLL="${DEPLOY_POLL_SECONDS:-60}"
 DRAIN="${DEPLOY_DRAIN_SECONDS:-1800}"
 HEALTH_WAIT="${DEPLOY_HEALTH_SECONDS:-180}"
-REQUIRE_CI="${DEPLOY_REQUIRE_CI:-true}"
+RUN_TESTS="${DEPLOY_RUN_TESTS:-${DEPLOY_REQUIRE_CI:-true}}"
+TEST_WAIT="${DEPLOY_TEST_SECONDS:-1800}"
 HEALTH_URL="${DEPLOY_HEALTH_URL:-http://localhost:8000/api/health}"
 
 log() { echo "$(date '+%F %T') $*"; }
@@ -53,26 +54,30 @@ health_field() {
     | "$PY" -c "import json,sys; print(json.load(sys.stdin).get('$1', ''))" 2>/dev/null
 }
 
-# success, failure or pending, for the backend-tests check on commit $1.
-ci_state() {
-  local auth=()
-  [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl -fsS --max-time 15 ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/$GITHUB_REPO/commits/$1/check-runs?check_name=$CHECK_NAME" 2>/dev/null \
-    | "$PY" -c '
-import json, sys
-runs = json.load(sys.stdin).get("check_runs", [])
-if not runs:
-    print("pending")  # the workflow hasn'"'"'t started yet
-else:
-    run = max(runs, key=lambda r: r.get("started_at") or "")
-    if run["status"] != "completed":
-        print("pending")
-    elif run["conclusion"] in ("success", "skipped", "neutral"):
-        print("success")
-    else:
-        print("failure")
-' 2>/dev/null || echo "pending"
+# Run the backend tests on commit $1 in a throwaway worktree with the server's
+# venv, so neither the live checkout nor the running API is touched. If
+# requirements.txt changed ($2 = true), install the new one into the venv first.
+# Output goes to TEST_LOG. Returns pytest's exit code (124 on timeout).
+run_tests() {
+  local commit="$1" reqs="$2" dir rc
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/etymos-deploy-test.XXXXXX")"
+  if ! git_ worktree add -q --detach "$dir" "$commit"; then
+    rm -rf "$dir"
+    echo "git worktree add failed" >"$TEST_LOG"
+    return 1
+  fi
+  if [ "$reqs" = "true" ]; then
+    log "requirements.txt changed; installing it before the tests"
+    "$BACKEND/.venv/bin/pip" install -q -r "$dir/backend/requirements.txt"
+  fi
+  log "Running the backend tests on $(short "$commit")"
+  local tmo=()
+  command -v timeout >/dev/null && tmo=(timeout "$TEST_WAIT")
+  ( cd "$dir/backend" && ${tmo[@]+"${tmo[@]}"} nice -n 10 "$PY" -m pytest -q -p no:cacheprovider ) >"$TEST_LOG" 2>&1
+  rc=$?
+  git_ worktree remove --force "$dir" >/dev/null 2>&1 || rm -rf "$dir"
+  git_ worktree prune
+  return $rc
 }
 
 # The server writes into some tracked files (paper cache, .pyc). Put them back
@@ -87,6 +92,11 @@ clean_runtime_files() {
     return 1
   fi
   git_ checkout -- $dirty
+}
+
+# pytest's last "N passed, M failed" line, or the log's last line.
+test_summary() {
+  grep -E '[0-9]+ (passed|failed|errors?)' "$TEST_LOG" | tail -n 1 | grep . || tail -n 1 "$TEST_LOG"
 }
 
 wait_for_idle() {
@@ -105,7 +115,7 @@ wait_for_idle() {
 }
 
 install_requirements() {
-  log "requirements.txt changed; installing"
+  log "Installing requirements.txt"
   "$BACKEND/.venv/bin/pip" install -q -r "$BACKEND/requirements.txt"
 }
 
@@ -130,17 +140,26 @@ deploy() {
     return
   fi
 
-  if [ "$REQUIRE_CI" = "true" ]; then
-    case "$(ci_state "$new")" in
-      pending) note "Waiting for the $CHECK_NAME check on $(short "$new")"; return 0 ;;
-      failure)
-        log "Skipping $(short "$new"): the $CHECK_NAME check failed on GitHub"
-        echo "$new" >"$STATE"
-        return 0 ;;
-    esac
+  local reqs=false
+  grep -qx 'backend/requirements.txt' <<<"$changed" && reqs=true
+  local install=$reqs  # still to install before the restart
+
+  clean_runtime_files || return 1  # before testing: no point if this blocks
+
+  if [ "$RUN_TESTS" = "true" ]; then
+    local rc=0
+    run_tests "$new" "$reqs" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      [ "$rc" -eq 124 ] && log "Tests on $(short "$new") took over ${TEST_WAIT}s"
+      log "Skipping $(short "$new"): tests failed ($(test_summary)); see logs/deploy_tests.log"
+      echo "$new" >"$STATE"
+      $reqs && install_requirements  # put the live version's requirements back
+      return 0
+    fi
+    log "Tests passed on $(short "$new")"
+    install=false  # run_tests installed them
   fi
 
-  clean_runtime_files || return 1  # before waiting: no point draining if this blocks
   wait_for_idle
   clean_runtime_files || return 1  # again: running checks may have written to the cache
   if ! git_ merge -q --ff-only "$new"; then
@@ -150,9 +169,7 @@ deploy() {
   fi
   log "Deploying $(short "$old") -> $(short "$new"): $(git_ log -1 --format=%s "$new")"
 
-  local reqs=false
-  grep -qx 'backend/requirements.txt' <<<"$changed" && reqs=true
-  if { ! $reqs || install_requirements; } && restart_and_check; then
+  if { ! $install || install_requirements; } && restart_and_check; then
     log "Deployed $(short "$new")"
   else
     log "Deploy of $(short "$new") failed; rolling back to $(short "$old")"
@@ -173,7 +190,7 @@ deploy() {
   fi
 }
 
-log "Watching origin/$BRANCH every ${POLL}s (CI required: $REQUIRE_CI)"
+log "Watching origin/$BRANCH every ${POLL}s (tests: $RUN_TESTS)"
 while :; do
   if [ "$(git_ rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
     note "The checkout isn't on $BRANCH; not deploying until it is"

@@ -1,9 +1,10 @@
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Logo } from "./Logo";
 import { ToastViewport } from "../ui/ToastViewport";
 import { PageLoader } from "../ui/PageLoader";
 import { LanguageSwitcher } from "../LanguageSwitcher";
+import { AUTH_FORM_PATHS, AuthFormSwitch } from "./AuthFormSwitch";
 import { useSplashHold, useSplashOnMount } from "../BootSplash";
 import { t } from "../../lib/i18n";
 
@@ -11,6 +12,9 @@ import { t } from "../../lib/i18n";
  * the landing page's Get Started, the nav's Log in. Moving between them
  * inside the shell keeps it mounted, so that doesn't re-trigger it. */
 const SPLASH_PATHS = ["/login", "/signup"];
+
+// WebGL art beside the form. Its own chunk, so the form never waits on it.
+const LineWaves = lazy(() => import("../ui/LineWaves"));
 
 function AuthScreenFallback() {
   // Keeps the splash up until the form's chunk has loaded; never brings it back.
@@ -33,13 +37,33 @@ export function AuthShell() {
           <p className="editorial-kicker">{t("THE ORIGINALITY STUDIO")}</p>
           <h1>{t("Your writing.")}<br /><em>{t("Your own voice.")}</em></h1>
           <p>{t("Vietnamese-first plagiarism detection, with the clarity to understand every match.")}</p>
-          <img src="/assets/design/research-still-life.webp" width="1536" height="1024" alt={t("Open books and layered paper in warm sunlight")} />
+          <div className="auth-editorial-art" aria-hidden="true">
+            <Suspense fallback={null}>
+              {/* Light mode draws the lines as blue ink on the white tile;
+                  brand navy into brand blue, like "Your own voice." above. */}
+              <LineWaves
+                color1="#142b4a"
+                color2="#1d4ed8"
+                color3="#60a5fa"
+                speed={0.3}
+                lineCount={48}
+                lineWidth={2.2}
+                highlight={1}
+                warpIntensity={1}
+                rotation={-33}
+                enableMouseInteraction
+                lightMode
+              />
+            </Suspense>
+          </div>
         </aside>
         <div className="studio-auth-card w-full max-w-lg">
           {/* Narrow column, so the loader fills the card slot rather than the
               viewport — the logo header stays visible above it. */}
           <Suspense fallback={<AuthScreenFallback />}>
-            <Outlet />
+            {/* Log in, Sign up and Forgot password share one card that stays put as they swap;
+                the other auth screens bring their own card. */}
+            {AUTH_FORM_PATHS.includes(pathname) ? <AuthFormSwitch /> : <Outlet />}
           </Suspense>
         </div>
       </main>

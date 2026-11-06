@@ -68,6 +68,7 @@ export default function ForgotPasswordPage() {
       <AuthResultCard
         tone="info"
         title={t("Check your email")}
+        framed={false}
         actions={
           <>
             <Button size="lg" fullWidth loading={sending} disabled={cooldown > 0} onClick={() => void sendLink(sentTo)}>
@@ -94,7 +95,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 shadow-[var(--shadow-card)] sm:p-8">
+    <div className="p-7 sm:p-8">
       <h1 className="text-h3 font-bold tracking-tight text-navy-900">{t("Forgot your password?")}</h1>
       <p className="mt-1.5 text-sm text-ink-500">
         {t("Enter the email you log in with and we'll send you a link to choose a new one.")}

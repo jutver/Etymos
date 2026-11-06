@@ -56,7 +56,7 @@ The API takes ~20–40 s to load its models after a (re)start; `status` shows
 ## Deploying a backend change
 
 Normally nothing to do: `etymos-deploy` pulls, restarts and checks
-`/api/health` by itself after the GitHub tests pass. See
+`/api/health` by itself once the backend tests pass on the server. See
 [AUTO_DEPLOY.md](AUTO_DEPLOY.md), and `tail -f backend/logs/deploy.log` to
 watch.
 

@@ -10,6 +10,7 @@ import {
   Hourglass,
   Receipt,
   TrendUp,
+  Tag,
 } from "@phosphor-icons/react";
 import {
   ResponsiveContainer,
@@ -89,7 +90,7 @@ export default function DashboardPage() {
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
 
-      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">
         <StatCard label={t("Total users")} value={loading ? "…" : String(metrics?.totalUsers ?? 0)} icon={Users} />
         <StatCard
           label={t("Conversion rate")}
@@ -122,6 +123,12 @@ export default function DashboardPage() {
           label={t("Checkout volume")}
           value={loading ? "…" : formatVND(metrics?.checkoutVolumeByDay.reduce((s, p) => s + p.value, 0) ?? 0)}
           icon={ShoppingCart}
+        />
+        <StatCard
+          label={t("Average purchase value")}
+          value={loading ? "…" : formatVND(metrics?.averagePurchaseValue ?? 0)}
+          icon={Tag}
+          hint={metrics ? t("Across {{count}} purchases", { count: metrics.purchasesInRange }) : undefined}
         />
       </div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Image as ImageIcon, PencilSimple, Timer, Trash, WarningOctagon, Wrench } from "@phosphor-icons/react";
 import { announcementState, announcementText, cn, type Announcement, type AnnouncementKind } from "@etymos/shared";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -9,6 +10,7 @@ import { friendlyError } from "../../lib/errors";
 import { currentLocale, getLanguage, t, tr } from "../../lib/i18n";
 import { planLabel } from "../../lib/plans";
 import { AnnouncementEditor } from "./Editor";
+import { PersonalMessages } from "./PersonalMessages";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
 import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
 
@@ -108,7 +110,47 @@ function MaintenanceStatus({
   );
 }
 
+const TABS: ["global" | "personal", string][] = [
+  ["global", tr("Announcements")],
+  ["personal", tr("Personal messages")],
+];
+
+/** Global announcements, or the personal messages sent to single users. The
+ * tab lives in the URL (?tab=personal), so it survives a reload. */
 export default function AnnouncementsPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "personal" ? "personal" : "global";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-h1 font-semibold text-fg">{t("Announcements")}</h1>
+        <p className="mt-1 text-body text-fg-muted">
+          {t("Top bars, pop-ups and maintenance mode for the Etymos site.")}
+        </p>
+        <div className="mt-5 flex gap-1 border-b border-border">
+          {TABS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={tab === value}
+              onClick={() => setParams(value === "global" ? {} : { tab: value }, { replace: true })}
+              className={cn(
+                "border-b-2 px-3 py-2 text-body font-medium transition-colors",
+                tab === value ? "border-accent text-accent" : "border-transparent text-fg-muted hover:text-fg",
+              )}
+            >
+              {t(label)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === "personal" ? <PersonalMessages /> : <GlobalAnnouncements />}
+    </div>
+  );
+}
+
+function GlobalAnnouncements() {
   const [items, setItems] = useState<Announcement[] | null>(null);
   const [emails, setEmails] = useState<Map<string, string[]>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -177,13 +219,6 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-h1 font-semibold text-fg">{t("Announcements")}</h1>
-        <p className="mt-1 text-body text-fg-muted">
-          {t("Top bars, pop-ups and maintenance mode for the Etymos site.")}
-        </p>
-      </div>
-
       {maintenance && (
         <MaintenanceStatus
           item={maintenance}

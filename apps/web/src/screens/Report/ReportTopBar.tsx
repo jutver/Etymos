@@ -177,6 +177,8 @@ export interface ReportTopBarProps {
   recheckProgress?: number | null;
   versions: DocumentVersion[];
   originalVersion?: DocumentVersion | null;
+  /** The document's upload date, for the originality timeline. */
+  uploadedAt?: string | null;
   /** Show AI-writing scores in Version History (false when that feature is locked). */
   showAiScores?: boolean;
   onRestoreVersion: (version: DocumentVersion) => void;
@@ -204,6 +206,7 @@ export function ReportTopBar({
   recheckProgress = null,
   versions,
   originalVersion = null,
+  uploadedAt = null,
   showAiScores = true,
   onRestoreVersion,
   exporting,
@@ -230,7 +233,7 @@ export function ReportTopBar({
 
           <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
-          <VersionHistoryMenu versions={versions} original={originalVersion} onRestore={onRestoreVersion} showAi={showAiScores}>
+          <VersionHistoryMenu versions={versions} original={originalVersion} uploadedAt={uploadedAt} onRestore={onRestoreVersion} showAi={showAiScores}>
             {(toggle, open) => (
               <BarIconButton
                 label={t("Version history")}

@@ -41,6 +41,7 @@ function toVersion(v: StoredVersion): DocumentVersion {
     id: v.id,
     label: v.label,
     savedAt: new Date(v.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    createdAt: v.createdAt,
     wordCount: v.wordCount,
     html: v.html,
     changedRatio: v.changedRatio ?? null,

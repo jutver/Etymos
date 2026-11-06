@@ -309,6 +309,10 @@ export function describeActivity(entry: ActivityLogEntry): ActivityDescription {
       return { title: t("Replied on a support ticket"), detail: `#${text(m.number)} · ${subject ?? ""}` };
     case "support.reply_received":
       return { title: t("Received a support reply"), detail: `#${text(m.number)} · ${subject ?? ""}` };
+    case "support.personal_message_sent":
+      return { title: t("Received a personal message"), detail: subject };
+    case "support.personal_message_seen":
+      return { title: t("Saw a personal message"), detail: subject };
 
     default:
       return { title: entry.action, detail: subject };

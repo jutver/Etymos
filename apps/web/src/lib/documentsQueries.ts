@@ -418,6 +418,7 @@ function toDocumentVersion(row: DocumentVersionRow): DocumentVersion {
     id: row.id,
     label: row.label,
     savedAt: new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    createdAt: row.created_at,
     wordCount: row.word_count,
     html: row.html,
     changedRatio: row.changed_ratio == null ? null : Number(row.changed_ratio),
@@ -448,18 +449,19 @@ export async function fetchDocumentVersions(documentId: string): Promise<Documen
 export async function fetchUploadVersion(documentId: string): Promise<DocumentVersion | null> {
   const { data, error } = await supabase
     .from("document_checks")
-    .select("id, similarity_score, ai_score, baseline_text")
+    .select("id, similarity_score, ai_score, baseline_text, created_at")
     .eq("document_id", documentId)
     .eq("kind", "upload")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
-  const row = data as { id: string; similarity_score: number; ai_score: number | null; baseline_text: string | null };
+  const row = data as { id: string; similarity_score: number; ai_score: number | null; baseline_text: string | null; created_at?: string };
   return {
     id: `upload-${row.id}`,
     label: tr("Original upload"),
     savedAt: "",
+    createdAt: row.created_at,
     wordCount: (row.baseline_text ?? "").split(/\s+/).filter(Boolean).length,
     html: "",
     check: {

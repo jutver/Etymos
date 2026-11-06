@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { MagnifyingGlass, X } from "@phosphor-icons/react";
+import { MagnifyingGlass, Users, X } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { DataTable, type Column } from "../../components/DataTable";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
@@ -233,7 +233,12 @@ export default function UsersPage() {
   const isToday = signupDate === toDateInputValue(new Date());
 
   const columns: Column<Profile>[] = [
-    { key: "email", label: tr("Email"), render: (r) => r.email ?? r.display_name ?? r.id },
+    { key: "email", label: tr("Email"), render: (r) => r.email ?? r.id },
+    {
+      key: "name",
+      label: tr("Name"),
+      render: (r) => r.display_name?.trim() || <span className="text-fg-subtle">—</span>,
+    },
     { key: "role", label: tr("Role"), render: (r) => <StatusBadge label={t(r.role)} tone={roleTone(r.role)} /> },
     { key: "plan", label: tr("Plan"), render: (r) => planLabel(r.plan_tier) },
     { key: "standard_credits", label: tr("Standard"), render: (r) => r.standard_credits },
@@ -372,9 +377,25 @@ export default function UsersPage() {
           </button>
         )}
 
-        <span className="ml-auto text-caption tabular-nums text-fg-muted" aria-live="polite">
-          {!loading && tn(count, "{{count}} user", "{{count}} users", { count: count.toLocaleString(currentLocale()) })}
-        </span>
+        {/* Total for the current filters, in a box so it reads as a figure. */}
+        <div
+          className="ml-auto inline-flex items-center gap-2 rounded-control border border-border bg-surface-raised px-3 py-1.5 shadow-sm"
+          aria-live="polite"
+        >
+          <span className="grid size-6 place-items-center rounded-full bg-accent-bg text-accent" aria-hidden>
+            <Users size={14} weight="bold" />
+          </span>
+          <span className="text-caption text-fg-muted">
+            {loading ? (
+              <span className="inline-block h-4 w-14 animate-pulse rounded bg-border align-middle" />
+            ) : (
+              <>
+                <span className="text-body font-semibold tabular-nums text-fg">{count.toLocaleString(currentLocale())}</span>{" "}
+                {tn(count, "user", "users")}
+              </>
+            )}
+          </span>
+        </div>
       </div>
 
       {error && <p className="mt-4 text-caption text-destructive">{error}</p>}
