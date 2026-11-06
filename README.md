@@ -124,7 +124,7 @@ npm run test:admin     # build + lint + vitest for apps/admin
 npm run test:backend   # pytest in backend/
 ```
 
-GitHub Actions runs the backend tests on every push to `main` or `dev` that touches `backend/`.
+There is no GitHub Actions CI. The GPU server runs the backend tests on each new `main` commit that touches `backend/`, and deploys it only if they pass (see [docs/AUTO_DEPLOY.md](docs/AUTO_DEPLOY.md)). Run them yourself before pushing.
 
 > The test run rewrites the `__pycache__/*.pyc` files that are tracked in git. Revert them before committing.
 

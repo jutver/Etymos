@@ -6,19 +6,17 @@ minutes. No SSH needed.
 ## How it works
 
 The server has no inbound access (only the Cloudflare tunnel), so GitHub
-can't push to it. Instead the server polls GitHub:
+can't push to it. Instead the server polls GitHub, and runs the tests itself
+(there is no GitHub Actions workflow):
 
-1. **GitHub Actions** (`.github/workflows/backend-ci.yml`) runs the backend
-   tests on every push to `main` or `dev` that touches `backend/`. The job is
-   called `backend-tests`.
-2. **`backend/scripts/deploy_watch.sh`** runs on the server under supervisord
-   as `etymos-deploy`. Every 60 s it runs `git fetch`. When `main` has moved:
+**`backend/scripts/deploy_watch.sh`** runs on the server under supervisord
+as `etymos-deploy`. Every 60 s it runs `git fetch`. When `main` has moved:
 
 | The new commits... | What it does |
 |---|---|
 | don't touch `backend/` (frontend, docs) | `git merge --ff-only`. No restart |
-| touch `backend/` | Waits for `backend-tests` to pass on GitHub, then waits for running checks to finish (`active_jobs` in `/api/health`, up to 30 min). Then it fast-forwards, runs `pip install` if `requirements.txt` changed, restarts `etymos-api` and waits for `/api/health` |
-| failed `backend-tests` | Skipped. The server stays on the current version until a newer commit arrives |
+| touch `backend/` | Runs `pytest` on the new commit in a throwaway `git worktree` with the server's venv (installing `requirements.txt` first if it changed), so the live checkout and the running API aren't touched. If the tests pass, it waits for running checks to finish (`active_jobs` in `/api/health`, up to 30 min), fast-forwards, restarts `etymos-api` and waits for `/api/health` |
+| fail the tests | Skipped. The output is in `backend/logs/deploy_tests.log`. The server stays on the current version until a newer commit arrives |
 | deployed, but the API doesn't answer `/api/health` within 3 min | Goes back to the previous commit, restarts, and skips the bad commit until a newer one arrives |
 
 It never runs `git reset --hard` or `git clean`. The server writes runtime data
@@ -64,7 +62,7 @@ $SV status                   # etymos-api, cloudflared, etymos-deploy: RUNNING
 tail -f backend/logs/deploy.log
 ```
 
-The first log line should be `Watching origin/main every 60s (CI required: true)`.
+The first log line should be `Watching origin/main every 60s (tests: true)`.
 
 The checkout must be on `main` with `origin` set to
 `https://github.com/jutver/Etymos.git`. The repo is public, so it needs no
@@ -80,20 +78,21 @@ tail -f /workspace/Etymos/backend/logs/deploy.log
 
 ```
 2026-10-17 17:44:14 Updated to 200ebf4 (no backend changes, no restart)
-2026-10-17 17:52:40 Waiting for the backend-tests check on 31d8a68
-2026-10-17 17:56:02 Deploying 200ebf4 -> 31d8a68: Faster citation matching
-2026-10-17 17:56:31 Deployed 31d8a68
+2026-10-17 17:52:40 Running the backend tests on 31d8a68
+2026-10-17 17:53:02 Tests passed on 31d8a68
+2026-10-17 17:53:02 Deploying 200ebf4 -> 31d8a68: Faster citation matching
+2026-10-17 17:53:31 Deployed 31d8a68
 ```
 
-GitHub's Actions tab shows the test run. A backend change usually lands about
-5 minutes after the push: about 4 minutes of CI, up to 1 minute until the
-next poll, and the restart.
+A backend change usually lands a minute or two after the push: up to 1 minute
+until the next poll, the test run, and the restart.
 
 - **Pause deploys:** `$SV stop etymos-deploy`. Start it again with `$SV start etymos-deploy`.
 - **Deploy by hand:** the steps in `SERVER_OPERATIONS.md` still work. Stop
   `etymos-deploy` first so it doesn't restart the API while you're working.
-- **Retry a skipped commit** (for example after re-running a flaky CI job):
+- **Retry a skipped commit** (for example after a flaky test):
   `rm backend/logs/deploy_skip`.
+- **Run the tests yourself, before pushing:** `cd backend && .venv/bin/python -m pytest -q`.
 
 ## Settings
 
@@ -107,15 +106,14 @@ are not read from `backend/.env`). For example:
 | `DEPLOY_POLL_SECONDS` | `60` | How often to `git fetch` |
 | `DEPLOY_DRAIN_SECONDS` | `1800` | Longest wait for running checks before restarting anyway |
 | `DEPLOY_HEALTH_SECONDS` | `180` | How long the restarted API gets to answer `/api/health` |
-| `DEPLOY_REQUIRE_CI` | `true` | `false` deploys backend changes without waiting for GitHub Actions |
-| `GITHUB_TOKEN` | none | Only needed if GitHub's limit of 60 unauthenticated API calls per hour is ever hit |
+| `DEPLOY_RUN_TESTS` | `true` | `false` deploys backend changes without running the tests. The old name `DEPLOY_REQUIRE_CI` still works |
+| `DEPLOY_TEST_SECONDS` | `1800` | Longest a test run may take; a longer one counts as a failure |
 
 ## Troubleshooting
 
 | Log line | Meaning / fix |
 |---|---|
-| `Waiting for the backend-tests check on …` for a long time | CI is still running, queued, or didn't start. Check the Actions tab on GitHub |
-| `Skipping …: the backend-tests check failed` | Fix the tests and push again. To deploy anyway, re-run the job until it passes, then `rm backend/logs/deploy_skip` |
+| `Skipping …: tests failed (…)` | The full output is in `backend/logs/deploy_tests.log`. Fix the tests and push again. If it was a flaky test, `rm backend/logs/deploy_skip` to retry |
 | `Not deploying: files changed by hand on this server` | Someone edited tracked files on the server. Commit the change from a dev machine, or `git checkout -- <file>` |
 | `HEAD … isn't behind origin/main` | `main` was force-pushed, or there are local commits on the server. Sort it out by hand, then `rm backend/logs/deploy_skip` |
 | `Rolled back to …` | The new code didn't start. The reason is in `logs/api.err.log` |
