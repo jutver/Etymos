@@ -22,14 +22,18 @@ export function AuthResultCard({
   title,
   children,
   actions,
+  framed = true,
 }: {
   tone: Tone;
   title: string;
   children: ReactNode;
   actions?: ReactNode;
+  /** False when it sits inside a card that already draws the frame (the
+   * shared auth form card). */
+  framed?: boolean;
 }) {
   return (
-    <div className="rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center shadow-[var(--shadow-card)] sm:p-8">
+    <div className={framed ? "rounded-[var(--radius-card-lg)] border border-line bg-white p-7 text-center shadow-[var(--shadow-card)] sm:p-8" : "p-7 text-center sm:p-8"}>
       <div className={`mx-auto flex size-14 items-center justify-center rounded-full ${TONE_STYLES[tone]}`}>
         {TONE_ICONS[tone]}
       </div>

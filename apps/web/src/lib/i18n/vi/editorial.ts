@@ -11,7 +11,6 @@ export const editorial: Record<string, string> = {
   "Your writing.": "Bài viết của bạn.",
   "Your own voice.": "Giọng văn của riêng bạn.",
   "Vietnamese-first plagiarism detection, with the clarity to understand every match.": "Kiểm tra đạo văn ưu tiên tiếng Việt, với lời giải thích rõ ràng cho từng điểm trùng khớp.",
-  "Open books and layered paper in warm sunlight": "Sách mở và những trang giấy trong ánh nắng ấm",
   "Understand every match.": "Hiểu rõ từng điểm trùng khớp.",
   "Plain-language explanations show why a passage is flagged, beyond a similarity percentage.": "Giải thích dễ hiểu cho biết vì sao một đoạn được đánh dấu, thay vì chỉ đưa ra tỷ lệ tương đồng.",
   "Go beyond matching words.": "Không chỉ so khớp từ ngữ.",
