@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowCounterClockwise, ArrowDown, ArrowUp } from "@phosphor-icons/react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
+import { ArrowCounterClockwise, ArrowDown, ArrowRight, ArrowUp } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
-import { t, currentLocale } from "../../lib/i18n";
+import { t, tn, currentLocale } from "../../lib/i18n";
 import { scoreChange, versionChanges, versionTag } from "./versionStats";
+import { buildTimeline, type Timeline } from "./versionTimeline";
+import { ScoreChart } from "./ScoreChart";
+
+// Its own chunk: only loaded when someone opens the full timeline.
+const OriginalityTimelineDialog = lazy(() => import("./OriginalityTimelineDialog"));
 
 /** The Save & re-check that ran on a version (document_checks). */
 export interface VersionCheck {
@@ -21,6 +27,8 @@ export interface DocumentVersion {
   id: string;
   label: string;
   savedAt: string;
+  /** When it was saved (ISO); places it on the originality timeline. */
+  createdAt?: string;
   wordCount: number;
   /** Full document text at the time of the save. */
   html: string;
@@ -30,8 +38,17 @@ export interface DocumentVersion {
   changedRatio?: number | null;
 }
 
-/** Lower is better for both similarity and AI-writing scores. */
-function ScoreDelta({ label, change }: { label: string; change: { value: number; delta: number | null } | null }) {
+/** Lower is better for both similarity and AI-writing scores. `hideValue`
+ * shows only the arrow and points. */
+export function ScoreDelta({
+  label,
+  change,
+  hideValue = false,
+}: {
+  label: string;
+  change: { value: number; delta: number | null } | null;
+  hideValue?: boolean;
+}) {
   if (!change) {
     return (
       <span className="text-ink-400">
@@ -42,7 +59,7 @@ function ScoreDelta({ label, change }: { label: string; change: { value: number;
   const { value, delta } = change;
   return (
     <span className="inline-flex items-center gap-1 text-ink-700">
-      {label} {value}%
+      {!hideValue && `${label} ${value}%`}
       {delta !== null && (
         <span
           className={cn(
@@ -65,6 +82,55 @@ function ScoreDelta({ label, change }: { label: string; change: { value: number;
   );
 }
 
+/** Top of Version History: how the scores moved from the upload to the
+ * latest check, as a line and a sparkline, with a way into the full timeline. */
+function ProgressStrip({ timeline, showAi, onOpen }: { timeline: Timeline; showAi: boolean; onOpen: () => void }) {
+  const { summary, points } = timeline;
+  if (!summary) {
+    return (
+      <p className="mx-1 mb-1.5 rounded-[var(--radius-input)] bg-surface-muted px-2.5 py-2 text-xs leading-relaxed text-ink-500">
+        {t("Re-check after editing to start tracking your progress.")}
+      </p>
+    );
+  }
+  return (
+    <div className="mx-1 mb-1.5 rounded-[var(--radius-input)] bg-surface-muted px-2.5 pb-1.5 pt-2">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+        <span className="inline-flex items-center gap-1 text-ink-700">
+          {t("Similarity")}{" "}
+          <span className="tabular-nums">
+            {summary.first}% → {summary.latest}%
+          </span>
+          <ScoreDelta label="" change={{ value: summary.latest, delta: summary.delta }} hideValue />
+        </span>
+        {showAi && summary.aiFirst !== null && summary.aiLatest !== null && summary.aiDelta !== null && (
+          <span className="inline-flex items-center gap-1 text-ink-700">
+            {t("AI")}{" "}
+            <span className="tabular-nums">
+              {summary.aiFirst}% → {summary.aiLatest}%
+            </span>
+            <ScoreDelta label="" change={{ value: summary.aiLatest, delta: summary.aiDelta }} hideValue />
+          </span>
+        )}
+      </p>
+      <ScoreChart points={points} showAi={showAi} compact />
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-ink-500">
+          {tn(summary.checks, "{{count}} check", "{{count}} checks")} · {tn(summary.drafts, "{{count}} draft", "{{count}} drafts")}
+        </span>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center gap-1 rounded font-semibold text-brand-600 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
+        >
+          {t("View timeline")}
+          <ArrowRight size={12} weight="bold" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Small popover listing saved versions.
  *
@@ -75,6 +141,7 @@ function ScoreDelta({ label, change }: { label: string; change: { value: number;
 export function VersionHistoryMenu({
   versions,
   original = null,
+  uploadedAt = null,
   onRestore,
   showAi = true,
   children,
@@ -82,6 +149,8 @@ export function VersionHistoryMenu({
   versions: DocumentVersion[];
   /** The upload's own check result, listed last (fetchUploadVersion). */
   original?: DocumentVersion | null;
+  /** The document's upload date (YYYY-MM-DD), for the timeline. */
+  uploadedAt?: string | null;
   /** False on the Free tier, where AI-content detection is locked. */
   showAi?: boolean;
   onRestore: (version: DocumentVersion) => void;
@@ -91,6 +160,14 @@ export function VersionHistoryMenu({
   const wrapRef = useRef<HTMLDivElement>(null);
   // Only worked out while the menu is open: older versions may need a diff.
   const changes = useMemo(() => (open ? versionChanges(versions) : new Map<string, number>()), [open, versions]);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  // Once opened, the dialog stays mounted so closing can play its exit
+  // animation (Modal fades out only while it is still rendered).
+  const [timelineMounted, setTimelineMounted] = useState(false);
+  const timeline = useMemo(
+    () => (open || timelineMounted ? buildTimeline({ versions, original, uploadedAt }) : null),
+    [open, timelineMounted, versions, original, uploadedAt],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -112,14 +189,33 @@ export function VersionHistoryMenu({
     <div ref={wrapRef} className="relative">
       {children(() => setOpen((v) => !v), open)}
 
+      <MotionConfig reducedMotion="user">
+      <AnimatePresence>
       {open && (
-        <div
+        <m.div
+          // Grows out of the button it hangs from (top right), and shrinks back into it.
+          initial={{ opacity: 0, scale: 0.96, y: -6 }}
+          animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+          exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.14, ease: "easeIn" } }}
+          style={{ transformOrigin: "top right" }}
           role="menu"
           aria-label={t("Version history")}
           className="absolute right-0 top-[calc(100%+8px)] z-30 w-80 max-w-[calc(100vw-1.5rem)] rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]"
         >
           <p className="px-2.5 py-2 text-micro font-bold uppercase tracking-wide text-ink-500">
             {t("Version history")}</p>
+
+          {timeline && timeline.points.length > 0 && (
+            <ProgressStrip
+              timeline={timeline}
+              showAi={showAi}
+              onOpen={() => {
+                setOpen(false);
+                setTimelineMounted(true);
+                setTimelineOpen(true);
+              }}
+            />
+          )}
 
           {versions.length === 0 && !original ? (
             <p className="px-2.5 pb-3 pt-1 text-xs leading-relaxed text-ink-500">
@@ -184,7 +280,21 @@ export function VersionHistoryMenu({
               ))}
             </ul>
           )}
-        </div>
+        </m.div>
+      )}
+      </AnimatePresence>
+      </MotionConfig>
+
+      {timelineMounted && timeline && (
+        <Suspense fallback={null}>
+          <OriginalityTimelineDialog
+            open={timelineOpen}
+            onClose={() => setTimelineOpen(false)}
+            timeline={timeline}
+            showAi={showAi}
+            onRestore={onRestore}
+          />
+        </Suspense>
       )}
     </div>
   );

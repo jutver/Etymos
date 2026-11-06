@@ -956,6 +956,7 @@ export default function ReportPage() {
         recheckProgress={recheckProgress}
         versions={versions}
         originalVersion={originalVersion}
+        uploadedAt={doc?.uploadedAt ?? null}
         showAiScores={!isFree}
         onRestoreVersion={handleRestoreVersion}
         exporting={exporting}

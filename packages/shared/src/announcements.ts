@@ -2,7 +2,7 @@
  * Announcements, shared by the site (which shows them) and the admin app
  * (which writes them). Schema: supabase/migrations/20261017000000_announcements_overhaul.sql
  * 20261018000000_announcements_bilingual.sql, 20261020000000_announcement_audience.sql
- * and 20261106000000_popup_placement_and_button.sql.
+ * 20261106000000_popup_placement_and_button.sql and 20261107000000_personal_messages.sql.
  */
 import { supabase } from "./supabase";
 
@@ -64,6 +64,9 @@ export interface Announcement {
   starts_at: string | null;
   /** Ignored for maintenance, which lasts until switched off. */
   ends_at: string | null;
+  /** A message to one account, sent from that user's admin page: a pop-up
+   * with audience "emails" and a single address (20261107000000_personal_messages.sql). */
+  personal: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

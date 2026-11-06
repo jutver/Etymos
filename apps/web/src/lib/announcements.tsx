@@ -16,8 +16,9 @@ const FIRST_LOAD_TIMEOUT_MS = 8_000;
 interface AnnouncementsValue {
   /** Latest live banner, if any. */
   banner: Announcement | null;
-  /** Latest live pop-up, if any. */
-  popup: Announcement | null;
+  /** Live pop-ups in the order they should open: personal messages from an
+   * admin first (oldest first), then the latest global pop-up. */
+  popups: Announcement[];
   /** Live maintenance: the site is locked for everyone but admins. */
   maintenance: Announcement | null;
   /** Maintenance switched on with a start time still ahead. */
@@ -27,7 +28,7 @@ interface AnnouncementsValue {
   loaded: boolean;
 }
 
-const EMPTY: AnnouncementsValue = { banner: null, popup: null, maintenance: null, upcomingMaintenance: null, loaded: false };
+const EMPTY: AnnouncementsValue = { banner: null, popups: [], maintenance: null, upcomingMaintenance: null, loaded: false };
 const AnnouncementsContext = createContext<AnnouncementsValue>(EMPTY);
 
 /** Loads the switched-on announcements meant for this visitor once for the
@@ -87,7 +88,12 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
     const upcoming = rows
       .filter((a) => a.kind === "maintenance" && announcementState(a, now) === "scheduled")
       .sort((a, b) => Date.parse(a.starts_at!) - Date.parse(b.starts_at!))[0];
-    return { banner: live("banner"), popup: live("popup"), maintenance: live("maintenance"), upcomingMaintenance: upcoming ?? null, loaded };
+    const personal = rows
+      .filter((a) => a.kind === "popup" && a.personal && announcementState(a, now) === "live")
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+    const global = rows.find((a) => a.kind === "popup" && !a.personal && announcementState(a, now) === "live");
+    const popups = global ? [...personal, global] : personal;
+    return { banner: live("banner"), popups, maintenance: live("maintenance"), upcomingMaintenance: upcoming ?? null, loaded };
   }, [rows, now, loaded]);
 
   return <AnnouncementsContext.Provider value={value}>{children}</AnnouncementsContext.Provider>;
@@ -108,6 +114,20 @@ export function dismissedAnnouncements(): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+/** A personal message was closed: tell the admin it was seen, and stop it
+ * showing on the account's other devices. Best effort; the browser's own
+ * memory above still hides it here. */
+export function recordAnnouncementSeen(announcement: Announcement): void {
+  if (!announcement.personal) return;
+  void supabase
+    .from("announcement_views")
+    .insert({ announcement_id: announcement.id })
+    .then(({ error }) => {
+      // 23505: already recorded (closed on another tab).
+      if (error && error.code !== "23505") console.warn("Couldn't record the message as seen", error);
+    });
 }
 
 export function dismissAnnouncement(id: string): void {

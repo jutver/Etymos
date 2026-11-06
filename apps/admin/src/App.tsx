@@ -17,6 +17,10 @@ const ActivityPage = lazy(() => import("./screens/Activity"));
 const ReferralsPage = lazy(() => import("./screens/Referrals"));
 const UsersPage = lazy(() => import("./screens/Users"));
 const UserDetailPage = lazy(() => import("./screens/Users/UserDetail"));
+const UserActionsTab = lazy(() => import("./screens/Users/ActionsTab"));
+const UserMessagesTab = lazy(() => import("./screens/Users/MessagesTab"));
+const UserDocumentsTab = lazy(() => import("./screens/Users/DocumentsTab"));
+const UserActivityTab = lazy(() => import("./screens/Users/ActivityTab"));
 const ModerationPage = lazy(() => import("./screens/Moderation"));
 const DocumentDetailPage = lazy(() => import("./screens/Moderation/DocumentDetail"));
 const VerificationPage = lazy(() => import("./screens/Verification"));
@@ -53,7 +57,13 @@ function App() {
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/referrals" element={<ReferralsPage />} />
             <Route path="/users" element={<UsersPage />} />
-            <Route path="/users/:id" element={<UserDetailPage />} />
+            <Route path="/users/:id" element={<UserDetailPage />}>
+              <Route index element={<Navigate to="actions" replace />} />
+              <Route path="actions" element={<UserActionsTab />} />
+              <Route path="messages" element={<UserMessagesTab />} />
+              <Route path="documents" element={<UserDocumentsTab />} />
+              <Route path="activity" element={<UserActivityTab />} />
+            </Route>
             <Route path="/moderation" element={<ModerationPage />} />
             <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
             <Route path="/verification" element={<VerificationPage />} />

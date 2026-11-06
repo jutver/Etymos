@@ -51,10 +51,12 @@ export async function updateCreditPack(
   if (error) throw error;
 }
 
+/** The global list. Personal messages (sent to one user) have their own tab. */
 export async function listAnnouncements(): Promise<Announcement[]> {
   const { data, error } = await supabase
     .from("announcements")
     .select("*")
+    .eq("personal", false)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Announcement[];
@@ -83,8 +85,8 @@ export type AnnouncementInput = Pick<
   | "button_url"
 >;
 
-/** Returns the new announcement's id. */
-export async function createAnnouncement(input: AnnouncementInput, adminId: string): Promise<string> {
+/** Returns the new announcement's id. `personal` marks a message to one user. */
+export async function createAnnouncement(input: AnnouncementInput & { personal?: boolean }, adminId: string): Promise<string> {
   const { data, error } = await supabase
     .from("announcements")
     .insert({ ...input, created_by: adminId })
