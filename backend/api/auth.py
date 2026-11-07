@@ -204,6 +204,10 @@ def require_owner_or_admin(resource_user_id: Optional[str], user: AuthedUser) ->
     users' resource ids.
     """
     if user.is_admin:
+        if resource_user_id != user.user_id:
+            # Admins reading someone else's documents is itself an admin action.
+            from admin_log import record_admin_view
+            record_admin_view(user.user_id, resource_user_id)
         return
     if resource_user_id is None or resource_user_id != user.user_id:
         raise HTTPException(status_code=404, detail="Not found.")

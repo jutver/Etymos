@@ -7,7 +7,7 @@ import { ConfigLayout } from "./screens/Config/ConfigLayout";
 import { WaitlistLayout } from "./screens/Waitlist/WaitlistLayout";
 import { PricingLayout } from "./screens/Pricing/PricingLayout";
 import { RevenueLayout } from "./screens/Revenue/RevenueLayout";
-import { LogsLayout } from "./screens/Logs/LogsLayout";
+import { LogsLayout, ServerLogsLayout } from "./screens/Logs/LogsLayout";
 
 // Each screen is its own chunk, loaded when first visited, so the first load
 // doesn't download every page (and recharts) at once.
@@ -39,6 +39,7 @@ const RevenueOrdersPage = lazy(() => import("./screens/Revenue/Orders"));
 const LiveLogPage = lazy(() => import("./screens/Logs/LiveLog"));
 const LogFilesPage = lazy(() => import("./screens/Logs/LogFiles"));
 const ServerPage = lazy(() => import("./screens/Logs/Server"));
+const AdminActionsPage = lazy(() => import("./screens/Logs/AdminActions"));
 
 function App() {
   // Re-render every screen when the UI language changes (t() reads it at call time).
@@ -84,10 +85,17 @@ function App() {
             </Route>
             <Route path="/announcements" element={<AnnouncementsPage />} />
             <Route path="/logs" element={<LogsLayout />}>
-              <Route index element={<Navigate to="/logs/live" replace />} />
-              <Route path="live" element={<LiveLogPage />} />
-              <Route path="files" element={<LogFilesPage />} />
-              <Route path="server" element={<ServerPage />} />
+              <Route index element={<Navigate to="/logs/server/live" replace />} />
+              <Route path="server" element={<ServerLogsLayout />}>
+                <Route index element={<Navigate to="/logs/server/live" replace />} />
+                <Route path="live" element={<LiveLogPage />} />
+                <Route path="files" element={<LogFilesPage />} />
+                <Route path="status" element={<ServerPage />} />
+              </Route>
+              <Route path="admin-actions" element={<AdminActionsPage />} />
+              {/* Earlier addresses of the server log tabs. */}
+              <Route path="live" element={<Navigate to="/logs/server/live" replace />} />
+              <Route path="files" element={<Navigate to="/logs/server/files" replace />} />
             </Route>
             <Route path="/config" element={<ConfigLayout />}>
               <Route index element={<Navigate to="/config/feature-flags" replace />} />

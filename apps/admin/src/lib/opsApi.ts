@@ -162,6 +162,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       // not JSON
     }
     if (response.status === 403) message = t("Only admins signed in with an authenticator code can see this.");
+    // FastAPI's own 404 (no such route): the API is older than this screen.
+    if (response.status === 404 && message === "Not Found") {
+      message = t("The backend doesn't have the Logs feature yet. It's probably still deploying; try again in a few minutes.");
+    }
     throw new ApiError(message || t("Request failed with {{status}}", { status: response.status }), response.status);
   }
   return (await response.json()) as T;

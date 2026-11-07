@@ -53,6 +53,7 @@ from recovery_email import router as recovery_email_router
 from payments import router as payments_router
 from support import router as support_router
 from admin_ops import router as admin_ops_router
+from admin_log import record_admin_action
 import support_inbound
 import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
@@ -219,7 +220,7 @@ async def log_requests(request: Request, call_next):
     started = time.perf_counter()
     method, path = request.method, request.url.path
     request_id = uuid4().hex[:8]
-    token = bind_request(request_id)
+    token = bind_request(request_id, method, path)
     client = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
     size = request.headers.get("content-length")
     routine, quiet = _routine(method, path), _quiet(method, path)
@@ -1402,5 +1403,7 @@ def force_delete_user(target_user_id: str, background: BackgroundTasks, user: Au
     except Exception:
         logger.exception("Admin %s failed to force-delete user_id=%s", user.user_id, target_user_id)
         raise HTTPException(status_code=500, detail="Failed to delete account.")
+    record_admin_action(user.user_id, "user.force_deleted", target_table="profiles", target_id=target_user_id,
+                        target_user_id=target_user_id, summary=target_email)
     background.add_task(notifications.notify_account_deleted, target_email)
     return {"deleted": True, "user_id": target_user_id}

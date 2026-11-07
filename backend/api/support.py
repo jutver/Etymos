@@ -55,6 +55,7 @@ from pydantic import BaseModel, Field
 
 import notifications
 import support_mail
+from admin_log import record_admin_action
 from auth import AuthedUser, verify_supabase_jwt
 from email_templates import (
     SUPPORT_CATEGORIES,
@@ -1159,6 +1160,13 @@ async def admin_reply(
             files=incoming,
             set_status=set_status,
         )
+        record_admin_action(
+            admin.user_id, "support.note_added" if internal else "support.replied",
+            target_table="support_tickets", target_id=str(ticket["id"]), target_user_id=ticket.get("user_id"),
+            summary=f"#{ticket['number']} {ticket.get('subject') or ''}".strip(),
+            metadata={"message_id": message["id"], "chars": len(body), "files": len(incoming),
+                      "set_status": set_status, "internal": internal},
+        )
         # The admin app reloads the ticket from the database itself.
         return {"id": message["id"]}
 
@@ -1174,7 +1182,7 @@ class TicketPatch(BaseModel):
 
 
 @router.patch("/api/admin/support/tickets/{number}")
-def admin_update_ticket(number: int, patch: TicketPatch, _: AuthedUser = Depends(require_admin)):
+def admin_update_ticket(number: int, patch: TicketPatch, admin: AuthedUser = Depends(require_admin)):
     client = _client()
     ticket = _admin_ticket(client, number)
     updates: dict = {}
@@ -1197,5 +1205,12 @@ def admin_update_ticket(number: int, patch: TicketPatch, _: AuthedUser = Depends
                 raise HTTPException(status_code=400, detail="invalid_assignee")
             updates["assigned_to"] = agent_id
     if updates:
+        before = ticket
         ticket = _update_ticket(client, ticket, updates)
+        record_admin_action(
+            admin.user_id, "support.ticket_updated",
+            target_table="support_tickets", target_id=str(ticket["id"]), target_user_id=ticket.get("user_id"),
+            summary=f"#{ticket['number']} {ticket.get('subject') or ''}".strip(),
+            changes={k: {"from": before.get(k), "to": v} for k, v in updates.items() if before.get(k) != v},
+        )
     return admin_conversation(client, ticket)
