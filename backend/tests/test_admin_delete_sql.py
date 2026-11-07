@@ -149,3 +149,29 @@ def test_admins_can_delete_support_files(db):
     delete = "delete from storage.objects where bucket_id = 'support-attachments' and name = %s returning name"
     assert as_user(db, user, delete, (name,)) == []
     assert as_user(db, admin, delete, (name,)) == [(name,)]
+
+
+def test_admin_can_mark_a_verification_file_deleted_and_keep_the_request(db):
+    # 20261109000000_verification_file_deleted.sql: the admin app removes the
+    # file from Storage, then stamps the request, which stays.
+    admin, user = make_user(db, admin=True), make_user(db)
+    rid, path = verification(db, user, "approved")
+    as_user(db, admin,
+            "update public.student_verification_requests set file_deleted_at = now(), file_deleted_by = %s"
+            " where id = %s returning id", (admin, rid))
+    row = db.execute("select status, storage_path, file_deleted_at, file_deleted_by::text"
+                     " from public.student_verification_requests where id = %s", (rid,)).fetchone()
+    assert row[0] == "approved" and row[1] == path and row[2] is not None and row[3] == admin
+    # A student can't mark their own request (only admins update requests).
+    other, _ = verification(db, user, "pending")
+    assert as_user(db, user, "update public.student_verification_requests set file_deleted_at = now()"
+                   " where id = %s returning id", (other,)) == []
+
+
+def test_admin_can_approve_a_rejected_verification(db):
+    admin, user = make_user(db, admin=True), make_user(db)
+    rid, _ = verification(db, user, "rejected")
+    assert as_user(db, admin, "update public.student_verification_requests set status = 'approved'"
+                   " where id = %s returning id", (rid,))
+    assert db.execute("select status from public.student_verification_requests where id = %s",
+                      (rid,)).fetchone()[0] == "approved"

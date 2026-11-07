@@ -38,13 +38,13 @@ function Changes({ entry }: { entry: AdminActionEntry }) {
   const changes = Object.entries(entry.changes);
   const extra = Object.entries(entry.metadata).filter(([k]) => k !== "from_audit_log");
   return (
-    <div className="space-y-3 rounded-control bg-surface-raised/60 p-3 text-caption">
+    <div className="space-y-2 text-caption">
       {changes.length > 0 && (
         <table className="w-full">
           <tbody>
             {changes.map(([key, change]) => (
               <tr key={key} className="align-top">
-                <td className="w-48 py-0.5 pr-3 font-mono text-fg-muted">{key}</td>
+                <td className="w-44 py-0.5 pr-3 font-mono text-fg-subtle">{key}</td>
                 <td className="break-all py-0.5 font-mono">
                   {"from" in change && <span className="text-destructive line-through decoration-destructive/40">{formatValue(change.from)}</span>}
                   {"from" in change && "to" in change && <span className="px-1.5 text-fg-subtle">→</span>}
@@ -56,7 +56,7 @@ function Changes({ entry }: { entry: AdminActionEntry }) {
         </table>
       )}
       {extra.length > 0 && (
-        <dl className="grid grid-cols-[12rem_1fr] gap-x-3 gap-y-0.5">
+        <dl className="grid grid-cols-[11rem_1fr] gap-x-3 gap-y-0.5">
           {extra.map(([key, value]) => (
             <Fragment key={key}>
               <dt className="font-mono text-fg-subtle">{key}</dt>
@@ -297,7 +297,7 @@ export default function AdminActionsPage() {
                       aria-expanded={isOpen}
                       className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition hover:bg-surface-raised/50"
                     >
-                      <span className="mt-0.5 w-16 shrink-0 font-mono text-caption tabular-nums text-fg-subtle">
+                      <span className="mt-0.5 w-24 shrink-0 whitespace-nowrap font-mono text-caption tabular-nums text-fg-subtle">
                         {new Date(entry.created_at).toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </span>
                       <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", TONE[actionTone(entry)])} />
@@ -328,7 +328,7 @@ export default function AdminActionsPage() {
                       </span>
                     </button>
                     {isOpen && (
-                      <div className="px-4 pb-3 pl-[7.75rem]">
+                      <div className="pb-3 pl-[9rem] pr-4">
                         <Changes entry={entry} />
                       </div>
                     )}

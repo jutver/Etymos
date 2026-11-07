@@ -15,6 +15,9 @@ export interface VerificationRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
+  /** Set once an admin deleted the evidence file; the request stays. */
+  file_deleted_at: string | null;
+  file_deleted_by: string | null;
   profiles?: Pick<Profile, "id" | "email" | "display_name"> | null;
 }
 
@@ -50,6 +53,7 @@ export async function listVerificationRequests(
   return { rows: (data ?? []) as unknown as VerificationRequest[], count: count ?? 0 };
 }
 
+/** Approves a pending request, or a rejected one on second thought. */
 export async function approveVerificationRequest(
   id: string,
   userId: string,
@@ -97,4 +101,26 @@ export async function getEvidenceSignedUrl(storagePath: string): Promise<string>
  * verified status: it lives on the profile, not on the request. */
 export function deleteVerificationRequests(scope: DeleteScope): Promise<DeleteResult> {
   return deleteRecordsWithFiles("admin_delete_verification_requests", EVIDENCE_BUCKET, scope);
+}
+
+/** Deletes the evidence files of these requests but keeps the requests,
+ * marked with when and by whom. The files go first, so a request is only
+ * marked once its file is really gone; a retry after a failure is safe
+ * (removing a file that's already gone is not an error). */
+export async function deleteVerificationFiles(rows: VerificationRequest[], adminId: string): Promise<number> {
+  const pending = rows.filter((r) => !r.file_deleted_at);
+  if (pending.length === 0) return 0;
+  const { error: storageError } = await supabase.storage
+    .from(EVIDENCE_BUCKET)
+    .remove(pending.map((r) => r.storage_path));
+  if (storageError) throw storageError;
+  const { error } = await supabase
+    .from("student_verification_requests")
+    .update({ file_deleted_at: new Date().toISOString(), file_deleted_by: adminId })
+    .in(
+      "id",
+      pending.map((r) => r.id),
+    );
+  if (error) throw error;
+  return pending.length;
 }

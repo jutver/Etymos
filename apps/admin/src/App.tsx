@@ -22,8 +22,6 @@ const UserActionsTab = lazy(() => import("./screens/Users/ActionsTab"));
 const UserMessagesTab = lazy(() => import("./screens/Users/MessagesTab"));
 const UserDocumentsTab = lazy(() => import("./screens/Users/DocumentsTab"));
 const UserActivityTab = lazy(() => import("./screens/Users/ActivityTab"));
-const ModerationPage = lazy(() => import("./screens/Moderation"));
-const DocumentDetailPage = lazy(() => import("./screens/Moderation/DocumentDetail"));
 const VerificationPage = lazy(() => import("./screens/Verification"));
 const SupportInboxPage = lazy(() => import("./screens/Support"));
 const SupportTicketDetailPage = lazy(() => import("./screens/Support/TicketDetail"));
@@ -69,8 +67,6 @@ function App() {
               <Route path="documents" element={<UserDocumentsTab />} />
               <Route path="activity" element={<UserActivityTab />} />
             </Route>
-            <Route path="/moderation" element={<ModerationPage />} />
-            <Route path="/moderation/:documentId" element={<DocumentDetailPage />} />
             <Route path="/verification" element={<VerificationPage />} />
             <Route path="/support" element={<SupportInboxPage />} />
             <Route path="/support/:number" element={<SupportTicketDetailPage />} />

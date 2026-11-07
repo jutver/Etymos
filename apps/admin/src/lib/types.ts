@@ -65,22 +65,7 @@ export function isProfileSupportBanned(
   return false;
 }
 
-export type ModerationStatus = "none" | "flagged" | "removed";
 export type DocStatus = "clean" | "low" | "moderate" | "high";
-
-export interface AdminDocument {
-  id: string;
-  user_id: string;
-  title: string | null;
-  file_name: string | null;
-  status: DocStatus | null;
-  similarity_score: number | null;
-  moderation_status: ModerationStatus;
-  moderation_notes: string | null;
-  is_trashed: boolean;
-  uploaded_at: string;
-  profiles?: Pick<Profile, "id" | "email" | "display_name"> | null;
-}
 
 export interface FeatureFlag {
   key: string;

@@ -2,7 +2,7 @@
 // its scores and how many times it was re-checked. Admins can read both
 // tables through documents_all_self_or_admin and document_checks_select_self_or_admin.
 import { supabase } from "@etymos/shared";
-import type { DocStatus, ModerationStatus } from "./types";
+import type { DocStatus } from "./types";
 
 export interface UserDocument {
   id: string;
@@ -16,7 +16,6 @@ export interface UserDocument {
   ai_score: number | null;
   /** Re-checks after the upload (document_checks rows other than the upload). */
   rechecks: number;
-  moderation_status: ModerationStatus;
   is_trashed: boolean;
   uploaded_at: string;
 }
@@ -42,7 +41,7 @@ export async function listUserDocuments(userId: string): Promise<UserDocument[]>
     .select(
       // Named foreign key: documents.current_check_id also links the two
       // tables, and PostgREST refuses an ambiguous embed (PGRST201).
-      "id, title, file_name, language, word_count, status, similarity_score, ai_score:ai_detection->overall_score, moderation_status, is_trashed, uploaded_at, document_checks!document_checks_document_id_fkey(kind)",
+      "id, title, file_name, language, word_count, status, similarity_score, ai_score:ai_detection->overall_score, is_trashed, uploaded_at, document_checks!document_checks_document_id_fkey(kind)",
     )
     .eq("user_id", userId)
     .order("uploaded_at", { ascending: false })
@@ -72,7 +71,6 @@ export interface UserDocumentSummary {
   highestSimilarity: number | null;
   /** Upload checks plus re-checks. */
   checks: number;
-  flagged: number;
 }
 
 export function summarizeUserDocuments(docs: UserDocument[]): UserDocumentSummary {
@@ -82,6 +80,5 @@ export function summarizeUserDocuments(docs: UserDocument[]): UserDocumentSummar
     averageSimilarity: scored.length ? scored.reduce((a, b) => a + b, 0) / scored.length : null,
     highestSimilarity: scored.length ? Math.max(...scored) : null,
     checks: scored.length + docs.reduce((n, d) => n + d.rechecks, 0),
-    flagged: docs.filter((d) => d.moderation_status === "flagged").length,
   };
 }

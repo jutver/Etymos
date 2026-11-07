@@ -5,7 +5,6 @@ import {
   CurrencyDollar,
   FileText,
   ShoppingCart,
-  Flag,
   GraduationCap,
   Hourglass,
   Receipt,
@@ -132,12 +131,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label={t("Flagged document rate")}
-          value={loading ? "…" : formatPercent(metrics?.flaggedDocumentRate ?? 0)}
-          icon={Flag}
-        />
+      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Link to="/verification" className="block transition-opacity hover:opacity-80">
           <StatCard
             label={t("Verification queue")}

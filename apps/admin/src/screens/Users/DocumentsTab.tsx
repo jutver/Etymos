@@ -1,10 +1,10 @@
 // Documents tab of a user's page: totals across the account, then every
-// document with its scores. A row opens the document's moderation page.
+// document with its scores. Only scores and file details are shown, never
+// the document's content: admins don't read users' documents.
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { cn } from "@etymos/shared";
 import { DataTable, type Column } from "../../components/DataTable";
-import { StatusBadge, docStatusTone, moderationTone } from "../../components/StatusBadge";
+import { StatusBadge, docStatusTone } from "../../components/StatusBadge";
 import {
   listUserDocuments,
   summarizeUserDocuments,
@@ -56,11 +56,9 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
 
 export default function DocumentsTab() {
   const { profile } = useUserDetail();
-  const navigate = useNavigate();
   const [docs, setDocs] = useState<UserDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hideTrashed, setHideTrashed] = useState(false);
-  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [page, setPage] = useState(0);
 
@@ -78,13 +76,12 @@ export default function DocumentsTab() {
 
   const shown = useMemo(() => {
     const list = (docs ?? []).filter(
-      (d) => (!hideTrashed || !d.is_trashed) && (!flaggedOnly || d.moderation_status === "flagged"),
-    );
+      (d) => !hideTrashed || !d.is_trashed);
     if (sort === "similarity") {
       list.sort((a, b) => (b.similarity_score ?? -1) - (a.similarity_score ?? -1));
     }
     return list;
-  }, [docs, hideTrashed, flaggedOnly, sort]);
+  }, [docs, hideTrashed, sort]);
 
   // A filter change can leave the page past the end.
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
@@ -127,22 +124,16 @@ export default function DocumentsTab() {
       label: tr("Language"),
       render: (d) => (d.language ? t(LANGUAGE_NAMES[d.language] ?? d.language) : "—"),
     },
-    {
-      key: "moderation",
-      label: tr("Moderation"),
-      render: (d) => <StatusBadge label={d.moderation_status} tone={moderationTone(d.moderation_status)} />,
-    },
     { key: "uploaded", label: tr("Uploaded"), render: (d) => new Date(d.uploaded_at).toLocaleDateString(currentLocale()) },
   ];
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         <SummaryBox label={t("Documents")} value={docs ? summary.total.toLocaleString(currentLocale()) : "…"} />
         <SummaryBox label={t("Average similarity")} value={docs ? percent(summary.averageSimilarity) : "…"} />
         <SummaryBox label={t("Highest similarity")} value={docs ? percent(summary.highestSimilarity) : "…"} />
         <SummaryBox label={t("Checks run")} value={docs ? summary.checks.toLocaleString(currentLocale()) : "…"} />
-        <SummaryBox label={t("Flagged")} value={docs ? summary.flagged.toLocaleString(currentLocale()) : "…"} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -154,15 +145,6 @@ export default function DocumentsTab() {
           }}
         >
           {t("Hide trashed")}
-        </Toggle>
-        <Toggle
-          on={flaggedOnly}
-          onClick={() => {
-            setFlaggedOnly((v) => !v);
-            setPage(0);
-          }}
-        >
-          {t("Flagged only")}
         </Toggle>
         <label className="ml-auto flex items-center gap-1.5 text-caption text-fg-muted">
           {t("Sort")}
@@ -188,7 +170,6 @@ export default function DocumentsTab() {
         rowKey={(d) => d.id}
         loading={docs === null && !error}
         emptyMessage={docs?.length ? t("No documents match these filters.") : t("This user has no documents yet.")}
-        onRowClick={(d) => navigate(`/moderation/${d.id}`)}
         page={safePage}
         pageCount={pageCount}
         onPageChange={setPage}
