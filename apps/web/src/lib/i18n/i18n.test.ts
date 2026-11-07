@@ -159,3 +159,14 @@ describe("currentLocale()", () => {
     expect(currentLocale()).toBe("vi-VN");
   });
 });
+
+describe("isCrawler", () => {
+  it("spots search-engine and link-preview crawlers, not phones", async () => {
+    const { isCrawler } = await load();
+    expect(isCrawler("Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")).toBe(true);
+    expect(isCrawler("Mozilla/5.0 (compatible; coccocbot-web/1.0; +http://help.coccoc.com/searchengine)")).toBe(true);
+    expect(isCrawler("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)")).toBe(true);
+    expect(isCrawler("Mozilla/5.0 (Linux; Android 12; Cubot KingKong 7) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")).toBe(false);
+    expect(isCrawler("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Zalo iOS")).toBe(false);
+  });
+});

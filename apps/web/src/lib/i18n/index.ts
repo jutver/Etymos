@@ -49,10 +49,18 @@ function readSaved(): string | null {
   }
 }
 
+/** Search-engine crawlers browse with an English locale, but the site's audience
+ * searches in Vietnamese, so a crawler is shown (and indexes) the Vietnamese page. */
+export function isCrawler(userAgent: string): boolean {
+  return /googlebot|google-inspectiontool|bingbot|coccocbot|duckduckbot|applebot|yandex|baiduspider|facebookexternalhit|crawler|spider/i.test(userAgent);
+}
+
 function initialLanguage(): Language {
   if (typeof window === "undefined") return "en";
+  const saved = readSaved();
+  if (!saved && typeof navigator !== "undefined" && isCrawler(navigator.userAgent ?? "")) return "vi";
   const nav = typeof navigator !== "undefined" ? (navigator.languages?.length ? navigator.languages : [navigator.language]) : [];
-  return detectLanguage(readSaved(), nav);
+  return detectLanguage(saved, nav);
 }
 
 let current: Language = initialLanguage();
