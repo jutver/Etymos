@@ -512,6 +512,8 @@ def poll_once(client=None) -> dict[str, int]:
             _move(imap, uid, FAILED_FOLDER if outcome == "failed" else PROCESSED_FOLDER, can_move)
     if any(k != "skipped" for k in counts):
         logger.info("Support inbox: %s", counts)
+    else:
+        logger.debug("Support inbox: no new email")
     return counts
 
 

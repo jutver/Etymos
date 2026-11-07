@@ -16,12 +16,22 @@ a check's thread), and the logger name. It also:
 - dumps every thread's stack on `kill -USR1 <api pid>`, for a check that
   seems stuck.
 
+Every request also gets a short id (shown as [r:ab12cd34], and returned
+in the X-Request-ID header) and, once its token is checked, the user it came
+from, so one request's lines can be picked out from many.
+
+The last LOG_BUFFER_SIZE records (default 5000) are also kept in memory as
+structured rows for the admin portal's Logs screen (admin_ops.py).
+
 Settings: LOG_LEVEL (default INFO; DEBUG adds every job poll and queue move).
+set_level() changes it while the API runs, until the next restart.
 """
 from __future__ import annotations
 
+import contextvars
 import faulthandler
 import io
+import itertools
 import logging
 import os
 import resource
@@ -29,8 +39,10 @@ import signal
 import sys
 import threading
 import time
+import traceback
+from collections import deque
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Any, Iterator
 
 PROCESS_STARTED = time.time()
 
@@ -54,6 +66,30 @@ def job_context(job_id: str) -> Iterator[None]:
         _job.id = previous
 
 
+# The request being handled: {"id": "ab12cd34", "user": "<uuid>" or None}.
+# A dict so the auth dependency can fill in the user after the middleware set
+# the id (FastAPI runs sync routes in a copy of this context; the dict is shared).
+_request: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("log_request", default=None)
+
+
+def bind_request(request_id: str) -> contextvars.Token:
+    return _request.set({"id": request_id, "user": None})
+
+
+def unbind_request(token: contextvars.Token) -> None:
+    _request.reset(token)
+
+
+def set_request_user(user_id: str | None) -> None:
+    ctx = _request.get()
+    if ctx is not None:
+        ctx["user"] = user_id
+
+
+def current_request() -> dict[str, Any] | None:
+    return _request.get()
+
+
 def short_job(job_id: str | None) -> str:
     """job_<32 hex> -> job_<first 8>: enough to grep, short enough to read."""
     if not job_id:
@@ -62,10 +98,127 @@ def short_job(job_id: str | None) -> str:
 
 
 class _JobFilter(logging.Filter):
+    """Adds the check, request and user a line belongs to (record.job_id,
+    request_id, user_id) and the text prefix for them (record.job)."""
+
     def filter(self, record: logging.LogRecord) -> bool:
+        if hasattr(record, "job"):  # several handlers share one record
+            return True
         job_id = getattr(_job, "id", None)
-        record.job = f"[{short_job(job_id)}] " if job_id else ""
+        ctx = _request.get()
+        record.job_id = job_id
+        record.request_id = ctx["id"] if ctx else None
+        record.user_id = ctx["user"] if ctx else None
+        if job_id:
+            record.job = f"[{short_job(job_id)}] "
+        elif ctx:
+            user = f" u:{ctx['user'][:8]}" if ctx.get("user") else ""
+            record.job = f"[r:{ctx['id']}{user}] "
+        else:
+            record.job = ""
         return True
+
+
+# --- In-memory buffer for the admin Logs screen ----------------------------------
+
+class LogBuffer(logging.Handler):
+    """Keeps the newest `capacity` records as dicts with increasing `seq`, so
+    a viewer can ask for everything after the last one it has."""
+
+    def __init__(self, capacity: int = 5000):
+        super().__init__(level=logging.NOTSET)
+        self.capacity = capacity
+        self._rows: deque[dict[str, Any]] = deque(maxlen=capacity)
+        self._seq = itertools.count(1)
+        self._rows_lock = threading.Lock()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = record.getMessage()
+        except Exception:  # bad %-args: keep the raw text rather than lose the line
+            message = str(record.msg)
+        exc = None
+        if record.exc_info and record.exc_info[0] is not None:
+            exc = "".join(traceback.format_exception(*record.exc_info)).rstrip()
+        elif record.exc_text:
+            exc = record.exc_text
+        if record.stack_info:
+            exc = f"{exc}\n{record.stack_info}" if exc else record.stack_info
+        row = {
+            "ts": record.created,
+            "level": record.levelname,
+            "levelno": record.levelno,
+            "logger": record.name,
+            "message": message,
+            "exc": exc,
+            "job": getattr(record, "job_id", None),
+            "request": getattr(record, "request_id", None),
+            "user": getattr(record, "user_id", None),
+            "thread": record.threadName,
+        }
+        with self._rows_lock:
+            row["seq"] = next(self._seq)
+            self._rows.append(row)
+
+    def last_seq(self) -> int:
+        with self._rows_lock:
+            return self._rows[-1]["seq"] if self._rows else 0
+
+    def query(self, *, after: int = 0, limit: int = 500, min_level: int = logging.NOTSET,
+              text: str | None = None, job: str | None = None, request: str | None = None,
+              user: str | None = None) -> dict[str, Any]:
+        """Rows with seq > after that match every filter given, oldest first.
+        When more than `limit` match, the newest `limit` are returned and
+        `truncated` is true (the viewer fell behind, or a first load)."""
+        with self._rows_lock:
+            rows = list(self._rows)
+        needle = text.lower() if text else None
+        matched = []
+        for row in rows:
+            if row["seq"] <= after or row["levelno"] < min_level:
+                continue
+            if job and not (row["job"] or "").startswith(job):
+                continue
+            if request and row["request"] != request:
+                continue
+            if user and not (row["user"] or "").startswith(user):
+                continue
+            if needle and needle not in row["message"].lower() and needle not in (row["exc"] or "").lower() \
+                    and needle not in row["logger"].lower():
+                continue
+            matched.append(row)
+        truncated = len(matched) > limit
+        return {
+            "rows": matched[-limit:] if limit > 0 else [],
+            "truncated": truncated,
+            "last_seq": rows[-1]["seq"] if rows else after,
+            "oldest_seq": rows[0]["seq"] if rows else 0,
+        }
+
+
+LOG_BUFFER = LogBuffer(max(100, int(os.getenv("LOG_BUFFER_SIZE", "5000") or 5000)))
+LOG_BUFFER.addFilter(_JobFilter())
+
+# Libraries that log one line per HTTP call at INFO; kept at WARNING unless
+# the level is DEBUG on purpose.
+_NOISY = ("httpx", "httpcore", "urllib3", "hpack", "filelock", "PIL", "matplotlib")
+LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+
+
+def set_level(name: str) -> str:
+    """Change the log level of the running process (until restart)."""
+    name = name.strip().upper()
+    if name not in LEVELS:
+        raise ValueError(f"Unknown log level {name!r}")
+    level = getattr(logging, name)
+    logging.getLogger().setLevel(level)
+    for noisy in _NOISY:
+        logging.getLogger(noisy).setLevel(max(level, logging.WARNING))
+    return name
+
+
+def current_level() -> str:
+    return logging.getLevelName(logging.getLogger().level)
 
 
 class _Formatter(logging.Formatter):
@@ -137,6 +290,9 @@ def configure_logging() -> None:
     for old in list(root.handlers):
         root.removeHandler(old)
     root.addHandler(handler)
+    root.addHandler(LOG_BUFFER)
+    # warnings.warn() from libraries (deprecations, torch notices) as log lines.
+    logging.captureWarnings(True)
 
     # uvicorn set up its own handlers before importing the app; send its lines
     # through ours so they get the same timestamp. Its access log is replaced
@@ -149,7 +305,7 @@ def configure_logging() -> None:
     access.handlers.clear()
     access.propagate = False
     # Chatty at INFO: one line per HTTP call to Supabase, Gemini, model hubs.
-    for name in ("httpx", "httpcore", "urllib3", "hpack", "filelock", "PIL", "matplotlib"):
+    for name in _NOISY:
         logging.getLogger(name).setLevel(max(level, logging.WARNING))
 
     if os.getenv("LOG_CAPTURE_PRINTS", "1").strip().lower() not in ("0", "false", "no"):
@@ -228,6 +384,19 @@ def memory_summary() -> str:
         except Exception:
             pass
     return " ".join(parts)
+
+
+def memory_numbers() -> dict[str, Any]:
+    """memory_summary() as numbers (MB), for the admin Server screen."""
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    total = _meminfo_kb("MemTotal")
+    available = _meminfo_kb("MemAvailable")
+    return {
+        "rss_mb": round(r, 1) if (r := _rss_mb()) is not None else None,
+        "peak_mb": round(peak / (1024 * 1024) if sys.platform == "darwin" else peak / 1024, 1),
+        "system_total_mb": round(total / 1024) if total is not None else None,
+        "system_available_mb": round(available / 1024) if available is not None else None,
+    }
 
 
 def uptime_text() -> str:

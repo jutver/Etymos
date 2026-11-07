@@ -155,3 +155,38 @@ def active_count() -> int:
     """Checks queued or running right now. The auto-deploy waits for 0 before restarting."""
     with _LOCK:
         return _active_locked()
+
+
+def job_overview(recent: int = 20) -> dict[str, Any]:
+    """For the admin Server screen: the checks in progress, and the newest
+    ones that ended since the API started (jobs live in memory only)."""
+    now = time.monotonic()
+
+    def row(job_id: str, job: dict[str, Any]) -> dict[str, Any]:
+        created, last = _TIMES.get(job_id, (now, now))
+        return {
+            "job_id": job_id,
+            "input_type": job["input_type"],
+            "input_name": job["input_name"],
+            "user_id": job["user_id"],
+            "status": job["status"],
+            "progress": job["progress"],
+            "current_step": job["current_step"],
+            "message": job["message"],
+            "report_id": job["report_id"],
+            "error": job["error"],
+            "created_at": job["created_at"],
+            "updated_at": job["updated_at"],
+            "age_seconds": round(now - created, 1),
+            "step_seconds": round(now - last, 1),
+        }
+
+    with _LOCK:
+        rows = [row(job_id, job) for job_id, job in _JOBS.items()]
+    active = [r for r in rows if r["status"] in ("queued", "processing")]
+    ended = [r for r in rows if r["status"] not in ("queued", "processing")]
+    ended.sort(key=lambda r: r["updated_at"], reverse=True)
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {"active": active, "recent": ended[:recent], "counts": counts}

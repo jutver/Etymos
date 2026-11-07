@@ -306,3 +306,23 @@ stdout_logfile_maxbytes=10MB
 `SUPPORT_SMTP_PASSWORD`, `SUPPORT_LINK_SECRET`, ...) —
 see `SETUP_SUPPORT.md`. GPU memory (`GPU_JOB_SLOTS`, `GPU_MODEL_BUDGET_GB`, ...) —
 see `GPU_MEMORY.md`.
+
+## Logs screen in the admin portal
+
+Admin portal → **Logs** shows the API's logs without SSH (backend/api/admin_ops.py):
+
+- **Live log**: the last `LOG_BUFFER_SIZE` lines (default 5000) kept in the API's memory, refreshed every
+  2 s. Every request logs a `->` line when it arrives and a `<-` line when it ends (status, time, sizes,
+  user, and the reason on errors), tagged `[r:<id>]`; the same id comes back in the `X-Request-ID`
+  response header. Lines logged while a check runs are tagged `[job_<id>]`. Click a tag to see only that
+  request, check or user.
+- **Log files**: the end of `logs/api.err.log`, `deploy.log`, `deploy_tests.log`, `cloudflared.err.log`
+  and `supervisord.log` (from `LOG_DIR`, default `backend/logs`). It's a fixed list; nothing else on disk
+  can be read.
+- **Server**: uptime, commit, memory, disk, GPU, the check queue, running and recently finished checks,
+  plus a fixed list of actions: change the log level until restart, write thread stacks to the log,
+  unload idle GPU models, send due notifications, poll the support inbox, and restart the API (through
+  `supervisorctl`; refused while checks run unless confirmed). Each action is logged and written to
+  `audit_log`.
+
+There is intentionally no way to run arbitrary commands from the portal.
