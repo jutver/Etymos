@@ -127,6 +127,46 @@ sleep 40; $SV status
 If `/usr/local/bin/cloudflared` is gone (fresh machine image), reinstall it
 first — see "Setting up a new machine" step 2.
 
+## Reading the API log
+
+Everything the API prints goes to `logs/api.err.log`, one line each:
+
+```
+2026-11-07 10:23:53.123 +0700 INFO  [job_1a2b3c4d] jobs: Job job_1a2b3c4d step searching -> matching (40%, prev step 12.3s, total 31.0s): ... | rss=5120MB peak=6200MB sys_free=9000MB gpu_alloc=3.10GB ...
+```
+
+That is: time with UTC offset, level, the check the line belongs to (when it
+ran on that check's thread), the logger, the message. Each check logs when
+it's created, every step change (with how long the last step took and the
+memory in use), and how it ended. A failure includes the full traceback.
+
+```bash
+cd /workspace/Etymos/backend
+grep -n "API started\|API shutting down\|not found for user" logs/api.err.log | tail   # restarts, and checks lost to them
+grep -n "FAILED\|Traceback\|CRITICAL\|Fatal Python error" logs/api.err.log | tail       # failures and crashes
+grep -n "job_1a2b3c4d" logs/api.err.log                                              # one check, start to finish
+grep -n "(slow)\| -> 5[0-9][0-9] " logs/api.err.log | tail                          # slow or failing requests
+```
+
+**"This check was interrupted".** The browser asked about a check the API
+had no record of. Look for `not found for user`. That line says how long
+the API had been up. Then look just before it for `API shutting down`,
+which lists the checks it dropped. If there's a fresh `API started` with
+no shutdown line before it, the process died without warning: look for
+`Fatal Python error` (a native crash), the last memory figures, and run
+`dmesg -T | grep -i killed` (the kernel killing it for memory).
+
+**A check that seems stuck.** `kill -USR1 $(pgrep -f "uvicorn api.app:app")`
+writes every thread's current stack to the log, without stopping anything.
+
+Settings in `.env` (restart to apply):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | `DEBUG` also logs health checks, every job poll and queue moves |
+| `LOG_SLOW_REQUEST_SECONDS` | `5` | Requests slower than this are logged as warnings, marked `(slow)` |
+| `LOG_CAPTURE_PRINTS` | `1` | `0` sends the pipeline's `print` output back to `logs/api.out.log` without timestamps |
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

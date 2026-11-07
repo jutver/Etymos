@@ -8,6 +8,8 @@ import { PAGE_SIZE } from "../../lib/supabaseQueries";
 import { friendlyError } from "../../lib/errors";
 import { cn } from "@etymos/shared";
 import { t, tr, currentLocale } from "../../lib/i18n";
+import { DateFilter } from "./DateFilter";
+import { readDateSelection, withDateSelection, type DateSelection } from "./dateSelection";
 import { ORDER_STATUS_LABELS, describeItem, formatDateTime, formatVND, methodLabel, orderTone } from "./format";
 
 const FILTERS: { key: OrderFilter; label: string }[] = [
@@ -28,6 +30,9 @@ export default function RevenueOrdersPage() {
   const [params, setParams] = useSearchParams();
   const filterParam = params.get("filter");
   const filter: OrderFilter = isFilter(filterParam) ? filterParam : "paid";
+  const selection = readDateSelection(params);
+  const spanStart = selection.span?.start ?? null;
+  const spanEnd = selection.span?.end ?? null;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<RevenueOrder[]>([]);
@@ -39,7 +44,8 @@ export default function RevenueOrdersPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listOrders(page, search, filter)
+    const span = spanStart && spanEnd ? { start: spanStart, end: spanEnd } : null;
+    listOrders(page, search, filter, span)
       .then(({ rows, count }) => {
         if (cancelled) return;
         setRows(rows);
@@ -50,7 +56,12 @@ export default function RevenueOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, filter]);
+  }, [page, search, filter, spanStart, spanEnd]);
+
+  function setSelection(next: DateSelection) {
+    setPage(0);
+    setParams(withDateSelection(params, next), { replace: true });
+  }
 
   const columns: Column<RevenueOrder>[] = [
     {
@@ -104,7 +115,10 @@ export default function RevenueOrdersPage() {
               type="button"
               onClick={() => {
                 setPage(0);
-                setParams(f.key === "paid" ? {} : { filter: f.key }, { replace: true });
+                setParams(
+                  withDateSelection(new URLSearchParams(f.key === "paid" ? {} : { filter: f.key }), selection),
+                  { replace: true },
+                );
               }}
               className={cn(
                 "rounded-control px-3 py-1.5 text-caption font-medium transition-colors",
@@ -128,6 +142,17 @@ export default function RevenueOrdersPage() {
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <DateFilter value={selection} onChange={setSelection} />
+        <p className="text-caption text-fg-muted">
+          {loading
+            ? "…"
+            : selection.span
+              ? t("{{count}} orders created in this period", { count: count.toLocaleString(currentLocale()) })
+              : t("{{count}} orders", { count: count.toLocaleString(currentLocale()) })}
+        </p>
       </div>
 
       {filter === "awaiting" && (

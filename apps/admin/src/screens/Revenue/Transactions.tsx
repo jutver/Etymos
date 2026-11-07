@@ -6,6 +6,8 @@ import { StatusBadge } from "../../components/StatusBadge";
 import {
   listTransactions,
   resolveTransaction,
+  totalTransactions,
+  type TransferTotals,
   ATTENTION_STATUSES,
   type PaymentTransaction,
   type TransactionFilter,
@@ -17,6 +19,8 @@ import { t, tr, currentLocale } from "../../lib/i18n";
 import { TRANSACTION_STATUS_LABELS, describeItem, formatDateTime, formatVND, transactionTone } from "./format";
 import { LinkTransactionDialog } from "./LinkTransactionDialog";
 import { NoteDialog } from "./NoteDialog";
+import { DateFilter } from "./DateFilter";
+import { readDateSelection, withDateSelection, type DateSelection } from "./dateSelection";
 
 const FILTERS: { key: TransactionFilter; label: string }[] = [
   { key: "attention", label: tr("Needs attention") },
@@ -32,9 +36,13 @@ export default function RevenueTransactionsPage() {
   const [params, setParams] = useSearchParams();
   const filterParam = params.get("filter");
   const filter: TransactionFilter = isFilter(filterParam) ? filterParam : "attention";
+  const selection = readDateSelection(params);
+  const spanStart = selection.span?.start ?? null;
+  const spanEnd = selection.span?.end ?? null;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<PaymentTransaction[]>([]);
+  const [totals, setTotals] = useState<TransferTotals | null>(null);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +56,8 @@ export default function RevenueTransactionsPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listTransactions(page, search, filter)
+    const span = spanStart && spanEnd ? { start: spanStart, end: spanEnd } : null;
+    listTransactions(page, search, filter, span)
       .then(({ rows, count }) => {
         if (cancelled) return;
         setRows(rows);
@@ -59,7 +68,25 @@ export default function RevenueTransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, filter, nonce]);
+  }, [page, search, filter, spanStart, spanEnd, nonce]);
+
+  // Money in and out across every page of what's filtered; not page-dependent.
+  useEffect(() => {
+    let cancelled = false;
+    setTotals(null);
+    const span = spanStart && spanEnd ? { start: spanStart, end: spanEnd } : null;
+    totalTransactions(search, filter, span)
+      .then((next) => !cancelled && setTotals(next))
+      .catch(() => !cancelled && setTotals(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [search, filter, spanStart, spanEnd, nonce]);
+
+  function setSelection(next: DateSelection) {
+    setPage(0);
+    setParams(withDateSelection(params, next), { replace: true });
+  }
 
   const reload = () => setNonce((n) => n + 1);
 
@@ -174,7 +201,10 @@ export default function RevenueTransactionsPage() {
               type="button"
               onClick={() => {
                 setPage(0);
-                setParams(f.key === "attention" ? {} : { filter: f.key }, { replace: true });
+                setParams(
+                  withDateSelection(new URLSearchParams(f.key === "attention" ? {} : { filter: f.key }), selection),
+                  { replace: true },
+                );
               }}
               className={cn(
                 "rounded-control px-3 py-1.5 text-caption font-medium transition-colors",
@@ -198,6 +228,27 @@ export default function RevenueTransactionsPage() {
             className="w-full rounded-control border border-border bg-surface-muted py-2 pl-9 pr-3 text-body text-fg outline-none focus-visible:border-accent"
           />
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <DateFilter value={selection} onChange={setSelection} />
+        <p className="text-caption text-fg-muted" aria-live="polite">
+          {totals === null ? (
+            "…"
+          ) : (
+            <>
+              {t("{{count}} transfers", { count: (totals.incomingCount + totals.outgoingCount).toLocaleString(currentLocale()) })}
+              {" · "}
+              <span className="font-mono font-medium text-success">+{formatVND(totals.incoming)}</span>
+              {totals.outgoingCount > 0 && (
+                <>
+                  {" · "}
+                  <span className="font-mono text-fg-subtle">−{formatVND(totals.outgoing)}</span>
+                </>
+              )}
+            </>
+          )}
+        </p>
       </div>
 
       {filter === "attention" && (
