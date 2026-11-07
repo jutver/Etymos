@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import admin_log
 import admin_ops
 import log_setup
 from auth import AuthedUser, verify_supabase_jwt
@@ -120,7 +121,7 @@ def api(tmp_path, monkeypatch):
     current = {"user": ADMIN}
     app.dependency_overrides[verify_supabase_jwt] = lambda: current["user"]
     monkeypatch.setattr(admin_ops, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(admin_ops, "get_client", lambda: None)
+    monkeypatch.setattr(admin_log, "get_client", lambda: None)
     (tmp_path / "deploy.log").write_text("2026-11-07 10:00:00 Deployed abc1234\n")
     return TestClient(app), current
 
@@ -206,3 +207,57 @@ def test_restart_refuses_when_not_supervised_or_checks_are_running(api, monkeypa
     forced = client.post("/api/admin/server/actions/restart-api", json={"force": True}).json()
     assert forced["restarting"] is True and forced["lost_checks"] == 2
     assert started == [True]
+
+
+class _FakeRpcClient:
+    def __init__(self):
+        self.calls = []
+
+    def rpc(self, name, params):
+        self.calls.append((name, params))
+        return self
+
+    def execute(self):
+        return None
+
+
+def test_record_admin_action_names_the_admin_and_request(monkeypatch):
+    fake = _FakeRpcClient()
+    monkeypatch.setattr(admin_log, "get_client", lambda: fake)
+    token = bind_request("req12345", "POST", "/api/admin/server/actions/free-gpu")
+    try:
+        admin_log.record_admin_action(ADMIN.user_id, "server.free_gpu", target_table="server", metadata={"freed": []})
+    finally:
+        unbind_request(token)
+    [(name, params)] = fake.calls
+    assert name == "log_admin_action"
+    assert params["p_actor_id"] == ADMIN.user_id and params["p_source"] == "backend"
+    assert params["p_metadata"] == {"freed": [], "request_id": "req12345"}
+
+
+def test_admin_reading_someone_elses_report_is_logged_once_per_window(monkeypatch):
+    from auth import require_owner_or_admin
+
+    fake = _FakeRpcClient()
+    monkeypatch.setattr(admin_log, "get_client", lambda: fake)
+    monkeypatch.setattr(admin_log, "_recent_views", {})
+    token = bind_request("req00002", "GET", "/api/reports/rep_abc/source-pdf")
+    try:
+        require_owner_or_admin(USER.user_id, ADMIN)
+        require_owner_or_admin(USER.user_id, ADMIN)  # same report again: not logged twice
+        require_owner_or_admin(ADMIN.user_id, ADMIN)  # the admin's own: not an admin action
+    finally:
+        unbind_request(token)
+    [(_, params)] = fake.calls
+    assert params["p_action"] == "user_data.viewed"
+    assert params["p_target_user_id"] == USER.user_id
+    assert params["p_target_id"] == "rep_abc" and params["p_target_table"] == "documents"
+
+
+def test_recording_never_fails_the_action(monkeypatch):
+    class Broken:
+        def rpc(self, *a):
+            raise RuntimeError("database down")
+
+    monkeypatch.setattr(admin_log, "get_client", lambda: Broken())
+    admin_log.record_admin_action(ADMIN.user_id, "support.replied")  # no exception

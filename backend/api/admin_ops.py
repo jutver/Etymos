@@ -10,7 +10,8 @@ the admin portal, without a shell on the server.
 
 Everything needs an admin session that passed an authenticator code. There
 is deliberately no way to run arbitrary commands: each action below is a
-specific function, and each use is logged and written to audit_log.
+specific function, and each use is logged and written to admin_action_log
+(admin_log.py).
 
 Log files are a fixed list read from LOG_DIR (default backend/logs, where
 supervisord writes them, docs/SERVER_OPERATIONS.md); a name outside the list
@@ -42,7 +43,7 @@ from auth import AuthedUser, verify_supabase_jwt
 from job_manager import active_count, job_overview
 from log_setup import (LEVELS, LOG_BUFFER, PROCESS_STARTED, current_level, memory_numbers, set_level,
                        uptime_text)
-from supabase_client import get_client
+from admin_log import record_admin_action
 
 logger = logging.getLogger("api.admin_ops")
 router = APIRouter()
@@ -264,17 +265,6 @@ def _supervised() -> bool:
     return SUPERVISORCTL.exists() and SUPERVISOR_CONF.exists()
 
 
-def _audit(admin: AuthedUser, action: str, metadata: dict[str, Any]) -> None:
-    client = get_client()
-    if client is None:
-        return
-    try:
-        client.table("audit_log").insert(
-            {"actor_id": admin.user_id, "action": f"server.{action}", "metadata": metadata}).execute()
-    except Exception:
-        logger.exception("Couldn't write the audit_log row for server action %s", action)
-
-
 def dump_threads() -> int:
     """Every thread's current stack, as one WARNING line each: what a stuck
     check is waiting on."""
@@ -354,8 +344,10 @@ async def run_action(action: str, body: ActionIn | None = None, admin: AuthedUse
         result = {"restarting": True, "lost_checks": running}
 
     took = round((time.perf_counter() - started) * 1000)
-    await run_in_threadpool(_audit, admin, action, {**{k: v for k, v in result.items() if k != "counts"},
-                                                    "level": body.level, "force": body.force, "ms": took})
+    await run_in_threadpool(
+        lambda: record_admin_action(
+            admin.user_id, f"server.{action.replace('-', '_')}", target_table="server",
+            metadata={**result, "level": body.level, "force": body.force, "ms": took}))
     return {"action": action, "ms": took, **result}
 
 

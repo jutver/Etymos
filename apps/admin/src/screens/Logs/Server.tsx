@@ -95,7 +95,7 @@ function JobsTable({ jobs, empty }: { jobs: JobRow[]; empty: string }) {
             <tr key={job.job_id} className="border-b border-border/60 align-top last:border-0">
               <td className="py-2 pr-3">
                 <Link
-                  to={`/logs/live?job=${encodeURIComponent(job.job_id)}`}
+                  to={`/logs/server/live?job=${encodeURIComponent(job.job_id)}`}
                   className="font-mono text-accent hover:underline"
                   title={t("See this check's log lines")}
                 >
@@ -389,7 +389,7 @@ export default function ServerPage() {
       <section className="rounded-card border border-border bg-surface p-4 shadow-card">
         <h2 className="text-body font-semibold text-fg">{t("Actions")}</h2>
         <p className="mt-0.5 text-caption text-fg-muted">
-          {t("Each action is written to the log and the audit log with your name.")}
+          {t("Each action is written to the server log and to Admin actions with your name.")}
         </p>
 
         <div className="mt-4 divide-y divide-border">

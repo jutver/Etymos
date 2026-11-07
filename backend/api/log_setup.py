@@ -66,14 +66,15 @@ def job_context(job_id: str) -> Iterator[None]:
         _job.id = previous
 
 
-# The request being handled: {"id": "ab12cd34", "user": "<uuid>" or None}.
+# The request being handled: {"id": "ab12cd34", "user": "<uuid>" or None,
+# "method": "GET", "path": "/api/reports/..."}.
 # A dict so the auth dependency can fill in the user after the middleware set
 # the id (FastAPI runs sync routes in a copy of this context; the dict is shared).
 _request: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("log_request", default=None)
 
 
-def bind_request(request_id: str) -> contextvars.Token:
-    return _request.set({"id": request_id, "user": None})
+def bind_request(request_id: str, method: str | None = None, path: str | None = None) -> contextvars.Token:
+    return _request.set({"id": request_id, "user": None, "method": method, "path": path})
 
 
 def unbind_request(token: contextvars.Token) -> None:

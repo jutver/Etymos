@@ -309,7 +309,7 @@ see `GPU_MEMORY.md`.
 
 ## Logs screen in the admin portal
 
-Admin portal → **Logs** shows the API's logs without SSH (backend/api/admin_ops.py):
+Admin portal → **Logs → Server logs** shows the API's logs without SSH (backend/api/admin_ops.py). **Logs → Admin actions** lists everything admins did (`admin_action_log`, written by database triggers and by `backend/api/admin_log.py`).
 
 - **Live log**: the last `LOG_BUFFER_SIZE` lines (default 5000) kept in the API's memory, refreshed every
   2 s. Every request logs a `->` line when it arrives and a `<-` line when it ends (status, time, sizes,
@@ -323,6 +323,6 @@ Admin portal → **Logs** shows the API's logs without SSH (backend/api/admin_op
   plus a fixed list of actions: change the log level until restart, write thread stacks to the log,
   unload idle GPU models, send due notifications, poll the support inbox, and restart the API (through
   `supervisorctl`; refused while checks run unless confirmed). Each action is logged and written to
-  `audit_log`.
+  `admin_action_log` (Logs → Admin actions).
 
 There is intentionally no way to run arbitrary commands from the portal.
