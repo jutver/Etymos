@@ -1,6 +1,38 @@
 {
   "rewrites": [
     {
+      "source": "/pricing",
+      "destination": "/pricing/index.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contact/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/privacy-policy/index.html"
+    },
+    {
+      "source": "/payment-policy",
+      "destination": "/payment-policy/index.html"
+    },
+    {
+      "source": "/refund-policy",
+      "destination": "/refund-policy/index.html"
+    },
+    {
+      "source": "/complaint-policy",
+      "destination": "/complaint-policy/index.html"
+    },
+    {
+      "source": "/plans-and-credits",
+      "destination": "/plans-and-credits/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

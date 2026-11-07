@@ -10,11 +10,14 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 import sys
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -29,7 +32,8 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
 # First, so everything imported below logs with timestamps and job ids.
-from log_setup import bind_job, configure_logging, memory_summary, short_job, uptime_text
+from log_setup import (bind_job, bind_request, configure_logging, memory_summary, short_job, unbind_request,
+                       uptime_text)
 configure_logging()
 from job_manager import active_count, describe_active, create_job, get_job, make_progress_callback, make_queue_callback, update_job
 from gpu_queue import gpu_slot
@@ -48,6 +52,7 @@ from rate_limit import limiter
 from recovery_email import router as recovery_email_router
 from payments import router as payments_router
 from support import router as support_router
+from admin_ops import router as admin_ops_router
 import support_inbound
 import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
@@ -176,40 +181,109 @@ _request_log = logging.getLogger("api.requests")
 SLOW_REQUEST_SECONDS = float(os.getenv("LOG_SLOW_REQUEST_SECONDS", "5"))
 
 
+def _routine(method: str, path: str) -> bool:
+    """Requests made every few seconds by open pages: only logged at DEBUG
+    (or when they fail)."""
+    return (method == "OPTIONS" or path == "/api/health" or path.startswith("/api/jobs/")
+            or (method == "GET" and path == "/api/admin/server"))
+
+
+def _quiet(method: str, path: str) -> bool:
+    """The admin Logs screen's own polling: never logged when it works, or the
+    screen would mostly show itself."""
+    return method == "GET" and path.startswith("/api/admin/logs")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_error_with_reason(request: Request, exc: StarletteHTTPException):
+    # Keep the reason (e.g. "Token has expired.") for the request's log line.
+    request.state.error_detail = exc.detail
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_with_reason(request: Request, exc: RequestValidationError):
+    request.state.error_detail = "; ".join(
+        f"{'.'.join(str(p) for p in e.get('loc', ()))}: {e.get('msg')}" for e in exc.errors()[:5])
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """One line per request: status, time taken, body size and client IP.
-    Health checks and successful job polls (every couple of seconds per open
-    check) only show at LOG_LEVEL=DEBUG."""
+    """Two lines per request, tied together by a short request id (also sent
+    back as X-Request-ID, and on every line logged while handling it):
+        -> POST /api/check/pdf ip=1.2.3.4 body=812KB ua=Chrome/130 origin=https://www.etymos.site
+        <- POST /api/check/pdf 202 in 340ms out=0KB user=1a2b3c4d
+    with the reason when it failed. Health checks and job polls (every couple
+    of seconds per open check) only show at LOG_LEVEL=DEBUG."""
     started = time.perf_counter()
-    path = request.url.path
+    method, path = request.method, request.url.path
+    request_id = uuid4().hex[:8]
+    token = bind_request(request_id)
     client = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
     size = request.headers.get("content-length")
+    routine, quiet = _routine(method, path), _quiet(method, path)
+    if not quiet:
+        query = ",".join(sorted(request.query_params.keys()))  # names only: values can be tokens
+        _request_log.log(
+            logging.DEBUG if routine else logging.INFO,
+            "-> %s %s%s ip=%s%s ua=%s%s", method, path, f" ?{query}" if query else "", client,
+            f" body={int(size) / 1024:.1f}KB" if size and size.isdigit() else "",
+            _short_agent(request.headers.get("user-agent", "")),
+            f" origin={request.headers['origin']}" if "origin" in request.headers else "",
+        )
     try:
-        response = await call_next(request)
-    except Exception:
-        _request_log.exception("%s %s crashed after %.0fms ip=%s", request.method, path,
-                               (time.perf_counter() - started) * 1000, client)
-        raise
-    seconds = time.perf_counter() - started
-    status = response.status_code
-    routine = request.method == "OPTIONS" or path == "/api/health" or (
-        path.startswith("/api/jobs/") and status == 200)
-    if status >= 500:
-        level = logging.ERROR
-    elif seconds > SLOW_REQUEST_SECONDS:
-        level = logging.WARNING
-    elif routine:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-    _request_log.log(level, "%s %s -> %d in %.0fms%s ip=%s%s", request.method, path, status,
-                     seconds * 1000, f" body={int(size) / 1024:.0f}KB" if size and size.isdigit() else "",
-                     client, " (slow)" if seconds > SLOW_REQUEST_SECONDS else "")
-    return response
+        try:
+            response = await call_next(request)
+        except Exception:
+            _request_log.exception("<- %s %s CRASHED after %.0fms ip=%s", method, path,
+                                   (time.perf_counter() - started) * 1000, client)
+            raise
+        seconds = time.perf_counter() - started
+        status = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        if status >= 500:
+            level = logging.ERROR
+        elif status in (403, 429) or seconds > SLOW_REQUEST_SECONDS:
+            level = logging.WARNING
+        elif quiet:
+            return response
+        elif routine and status < 400:
+            level = logging.DEBUG
+        else:
+            level = logging.INFO
+        user = getattr(request.state, "user", None)
+        detail = getattr(request.state, "error_detail", None)
+        out = response.headers.get("content-length")
+        _request_log.log(
+            level, "<- %s %s %d in %.0fms%s%s%s%s", method, path, status, seconds * 1000,
+            f" out={int(out) / 1024:.1f}KB" if out and out.isdigit() else "",
+            f" user={user.user_id[:8]}{' (admin)' if user.is_admin else ''}" if user else "",
+            f" reason={detail!r}" if detail and status >= 400 else "",
+            " (slow)" if seconds > SLOW_REQUEST_SECONDS else "",
+        )
+        return response
+    finally:
+        unbind_request(token)
+
+
+def _short_agent(agent: str) -> str:
+    """The part of a User-Agent that says what it is: browser/version, or the tool."""
+    if not agent:
+        return "-"
+    for marker in ("Edg/", "OPR/", "CocCoc/", "Zalo", "FBAN", "Chrome/", "Firefox/", "Safari/"):
+        i = agent.find(marker)
+        if i >= 0:
+            name = agent[i:].split(" ")[0]
+            mobile = " mobile" if "Mobile" in agent else ""
+            return f"{name}{mobile}"
+    return agent.split(" ")[0][:40]
+
+
 app.include_router(recovery_email_router)
 app.include_router(payments_router)
 app.include_router(support_router)
+app.include_router(admin_ops_router)
 
 RATE_LIMIT_CHECK_PDF = os.getenv("RATE_LIMIT_CHECK_PDF", "10/hour")
 RATE_LIMIT_CHECK_TEXT = os.getenv("RATE_LIMIT_CHECK_TEXT", "20/hour")

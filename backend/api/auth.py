@@ -34,6 +34,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient, PyJWKClientError
 
+from log_setup import set_request_user
 from supabase_client import get_client
 
 logger = logging.getLogger(__name__)
@@ -187,6 +188,10 @@ async def verify_supabase_jwt(
     )
 
     request.state.user = user
+    set_request_user(user_id)
+    if role == "admin" and not user.is_admin:
+        logger.info("Admin %s signed in without an authenticator code (aal=%s); treated as a normal user",
+                    user_id[:8], payload.get("aal"))
     return user
 
 

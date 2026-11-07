@@ -13,6 +13,7 @@ import {
   Tag,
   Megaphone,
   SlidersHorizontal,
+  Scroll,
   SignOut,
   List,
   X,
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { to: "/waitlist", label: tr("Waitlist"), icon: Hourglass },
   { to: "/pricing", label: tr("Pricing"), icon: Tag },
   { to: "/announcements", label: tr("Announcements"), icon: Megaphone },
+  { to: "/logs", label: tr("Logs"), icon: Scroll },
   { to: "/config", label: tr("Config"), icon: SlidersHorizontal },
 ];
 

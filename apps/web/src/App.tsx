@@ -50,6 +50,7 @@ import {
 import { TermsGate } from "./components/legal/TermsGate";
 import { ReferralSurvey } from "./components/ReferralSurvey";
 import { POLICIES } from "./components/legal/policies";
+import { SeoManager } from "./seo/SeoManager";
 
 /** A fresh Report screen per document: its editor holds the text as live,
  * uncontrolled DOM, so moving from one report straight to another must not
@@ -149,6 +150,7 @@ function App() {
     <AnnouncementsProvider>
       <ScrollToTop />
       <PageViewTracker />
+      <SeoManager />
       <MaintenanceGate>
         <AnnouncementPopup />
         <TermsGate />

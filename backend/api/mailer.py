@@ -19,6 +19,7 @@ import logging
 import os
 import smtplib
 import ssl
+import time
 from email.message import EmailMessage
 from email.utils import make_msgid
 
@@ -50,8 +51,18 @@ def send_email(to: str, content: EmailContent) -> None:
     msg["Message-ID"] = make_msgid(domain=user.split("@")[-1])
     msg.set_content(render_text(content))
     msg.add_alternative(render_email(content), subtype="html")
+    started = time.perf_counter()
     send_message(msg, user=user, password=password)
-    logger.info("Sent '%s' email", content.subject)
+    logger.info("Sent '%s' email to %s in %.1fs", content.subject, mask_address(to), time.perf_counter() - started)
+
+
+def mask_address(address: str) -> str:
+    """d***@gmail.com: enough to tell recipients apart in the log without
+    writing out their address."""
+    local, at, domain = address.partition("@")
+    if not at:
+        return "***"
+    return f"{local[:1]}***@{domain}"
 
 
 def send_message(msg: EmailMessage, *, user: str, password: str) -> None:

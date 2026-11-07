@@ -209,12 +209,16 @@ def record_check_used(user_id: str, balance_source: str) -> None:
             client.table("profiles").update(
                 {"standard_credits": usage.standard_credits - 1}
             ).eq("id", user_id).execute()
+            logger.info("Spent a standard credit for user %s: %d -> %d left", user_id[:8],
+                        usage.standard_credits, usage.standard_credits - 1)
             return
 
         if balance_source == "premium":
             client.table("profiles").update(
                 {"premium_credits": usage.premium_credits - 1}
             ).eq("id", user_id).execute()
+            logger.info("Spent a premium credit for user %s: %d -> %d left", user_id[:8],
+                        usage.premium_credits, usage.premium_credits - 1)
             return
 
         # balance_source == "plan"
@@ -225,10 +229,14 @@ def record_check_used(user_id: str, balance_source: str) -> None:
                     "plan_period_start": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", user_id).execute()
+            logger.info("Counted a %s-plan check for user %s: new period started, 1 used",
+                        usage.effective_plan_tier, user_id[:8])
         else:
             client.table("profiles").update(
                 {"checks_used_this_period": usage.checks_used_this_period + 1}
             ).eq("id", user_id).execute()
+            logger.info("Counted a %s-plan check for user %s: %d used this period",
+                        usage.effective_plan_tier, user_id[:8], usage.checks_used_this_period + 1)
     except Exception:
         logger.exception("Failed to record check usage for user_id=%s", user_id)
 

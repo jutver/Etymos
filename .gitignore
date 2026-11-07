@@ -1,5 +1,7 @@
 # Logs
 logs
+# ...but not the admin portal's Logs screen (macOS matches "logs" case-insensitively).
+!apps/admin/src/screens/Logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

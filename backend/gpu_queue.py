@@ -52,3 +52,9 @@ def gpu_slot(on_wait: Callable[[int], None] | None = None) -> Iterator[None]:
             _running -= 1
             _cond.notify_all()
 
+
+
+def state() -> dict[str, int]:
+    """Slots in use and jobs waiting, for the admin Server screen."""
+    with _cond:
+        return {"slots": GPU_JOB_SLOTS, "running": _running, "waiting": len(_waiting)}

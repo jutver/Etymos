@@ -448,6 +448,8 @@ def run_scheduled_pass(client=None, now: Optional[datetime] = None) -> dict[str,
             counts[name] = 0
     if any(counts.values()):
         logger.info("Notifications sent: %s", counts)
+    else:
+        logger.debug("Notification pass: nothing to send")
     return counts
 
 
