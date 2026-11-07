@@ -3,9 +3,10 @@
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
-import traceback
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal, Optional
@@ -27,7 +28,10 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 # Cấu hình hệ thống
 sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(str(Path(__file__).parent))
-from job_manager import active_count, create_job, get_job, make_progress_callback, make_queue_callback, update_job
+# First, so everything imported below logs with timestamps and job ids.
+from log_setup import bind_job, configure_logging, memory_summary, short_job, uptime_text
+configure_logging()
+from job_manager import active_count, describe_active, create_job, get_job, make_progress_callback, make_queue_callback, update_job
 from gpu_queue import gpu_slot
 import gpu_models
 from report_store import delete_report, get_report, list_reports, save_report, set_cached_unlocked_tier
@@ -77,6 +81,7 @@ async def lifespan(_: FastAPI):
     """Register backend-owned feature flags so they appear in the admin
     portal's Config → Feature Flags screen. Idempotent, never overwrites
     an admin's chosen value, and a no-op when Supabase isn't configured."""
+    _log_startup()
     try:
         register_rewrite_flag()
     except Exception:
@@ -91,6 +96,36 @@ async def lifespan(_: FastAPI):
     # Support inbox (email replies -> tickets) and auto-closing tickets.
     support_inbound.start()
     yield
+    # Jobs live in memory: any check still running now is lost, and its user
+    # will see "interrupted". Name them so the log shows which.
+    active = describe_active()
+    if active:
+        logger.warning("API shutting down after %s with %d check(s) still running; they will be lost: %s",
+                       uptime_text(), len(active), "; ".join(active))
+    else:
+        logger.info("API shutting down after %s (no checks running)", uptime_text())
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
+                              capture_output=True, text=True, timeout=5).stdout.strip() or "?"
+    except Exception:
+        return "?"
+
+
+def _log_startup() -> None:
+    gpu = "no torch"
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        try:
+            gpu = (f"{torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB)"
+                   if torch.cuda.is_available() else "CPU only")
+        except Exception as exc:
+            gpu = f"unknown ({exc})"
+    logger.info("API started: pid=%s commit=%s python=%s gpu=%s log_level=%s | %s",
+                os.getpid(), _git_commit(), sys.version.split()[0], gpu,
+                logging.getLevelName(logging.getLogger().level), memory_summary())
 
 
 # The interactive docs (/docs, /redoc, /openapi.json) list every endpoint and
@@ -135,6 +170,43 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+_request_log = logging.getLogger("api.requests")
+# Over this, a request is logged as slow (Cloudflare gives up at ~100 s).
+SLOW_REQUEST_SECONDS = float(os.getenv("LOG_SLOW_REQUEST_SECONDS", "5"))
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """One line per request: status, time taken, body size and client IP.
+    Health checks and successful job polls (every couple of seconds per open
+    check) only show at LOG_LEVEL=DEBUG."""
+    started = time.perf_counter()
+    path = request.url.path
+    client = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+    size = request.headers.get("content-length")
+    try:
+        response = await call_next(request)
+    except Exception:
+        _request_log.exception("%s %s crashed after %.0fms ip=%s", request.method, path,
+                               (time.perf_counter() - started) * 1000, client)
+        raise
+    seconds = time.perf_counter() - started
+    status = response.status_code
+    routine = request.method == "OPTIONS" or path == "/api/health" or (
+        path.startswith("/api/jobs/") and status == 200)
+    if status >= 500:
+        level = logging.ERROR
+    elif seconds > SLOW_REQUEST_SECONDS:
+        level = logging.WARNING
+    elif routine:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    _request_log.log(level, "%s %s -> %d in %.0fms%s ip=%s%s", request.method, path, status,
+                     seconds * 1000, f" body={int(size) / 1024:.0f}KB" if size and size.isdigit() else "",
+                     client, " (slow)" if seconds > SLOW_REQUEST_SECONDS else "")
+    return response
 app.include_router(recovery_email_router)
 app.include_router(payments_router)
 app.include_router(support_router)
@@ -394,7 +466,7 @@ def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
 
 
 # Shown to users when a check fails for a reason they can't act on. The
-# traceback goes to the log (traceback.print_exc / logger.exception), never
+# traceback goes to the log (logger.exception), never
 # to the page: raw errors carry server paths and library internals.
 GENERIC_CHECK_ERROR = "Something went wrong on our side while checking this document. You weren't charged. Please try again."
 
@@ -481,7 +553,7 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("%s check of %r failed", input_type.upper(), original_name)
         update_job(job_id, status="failed", current_step="failed",
                    message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=user_error_message(exc))
     finally:
@@ -513,7 +585,7 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Text check failed (%d chars)", len(user_text))
         update_job(job_id, status="failed", current_step="failed",
                    message="Text analysis failed", error=user_error_message(exc))
 
@@ -574,6 +646,8 @@ async def create_pdf_check(request: Request, file: UploadFile = File(...),
                    error=f"Files can be up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
         raise HTTPException(status_code=413, detail=f"Files can be up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
 
+    logger.info("Job %s received upload %r directly: %.0fKB", short_job(job_id), filename, written / 1024)
+
     if upload_path.stat().st_size == 0:
         upload_path.unlink(missing_ok=True)
         temp_dir.rmdir()
@@ -622,11 +696,15 @@ def run_stored_file_job(*, job_id: str, storage_path: str, original_name: str, u
     """Fetch the browser's upload from Supabase Storage, then check it exactly
     like an uploaded file (run_pdf_job). The upload is removed afterwards,
     whatever the outcome."""
+    bind_job(job_id)
     client = get_client()
     try:
         update_job(job_id, status="processing", progress=1, current_step="receiving_file",
                    message="Receiving your file")
+        started = time.perf_counter()
         data = client.storage.from_(DOCUMENTS_BUCKET).download(storage_path) if client else None
+        logger.info("Downloaded %s from storage: %.0fKB in %.1fs", storage_path,
+                    len(data or b"") / 1024, time.perf_counter() - started)
         if not data:
             raise ValueError("The uploaded file is missing or empty. Please upload it again.")
         if len(data) > MAX_UPLOAD_BYTES:
@@ -703,6 +781,10 @@ def create_text_check(request: Request, body: TextCheckRequest,
 def read_job(job_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
     job = get_job(job_id)
     if job is None:
+        # Jobs live in memory, so for a real job id this means the API
+        # restarted since the check began; the user will see "interrupted".
+        logger.warning("Job %s not found for user %s: the API (pid %s) has only been up %s, so it was "
+                       "probably lost in a restart", short_job(job_id), user.user_id[:8], os.getpid(), uptime_text())
         raise HTTPException(status_code=404, detail="Job not found.")
     require_owner_or_admin(job.get("user_id"), user)
     return job
@@ -1020,10 +1102,11 @@ def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict
         update_job(job_id, status="completed", progress=100, current_step="completed",
                    message="Re-check complete", report_id=report_id)
     except RecheckStoreError as exc:
+        logger.exception("Re-check of report %s couldn't be stored", report_id)
         update_job(job_id, status="failed", current_step="failed",
                    message="Re-check failed", error=str(exc))
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Re-check of report %s failed", report_id)
         update_job(job_id, status="failed", current_step="failed",
                    message="Re-check failed", error=user_error_message(exc))
     finally:

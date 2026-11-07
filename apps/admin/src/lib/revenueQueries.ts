@@ -191,8 +191,11 @@ export function daysBetween(start: string, end: string): string[] {
   return days;
 }
 
+/** Vietnam calendar days, inclusive (yyyy-mm-dd). */
+export type DaySpan = Pick<DateRange, "start" | "end">;
+
 /** UTC bounds of a range of Vietnam calendar days. */
-export function rangeBoundsVN(range: DateRange): { gte: string; lte: string } {
+export function rangeBoundsVN(range: DaySpan): { gte: string; lte: string } {
   return {
     gte: new Date(`${range.start}T00:00:00.000+07:00`).toISOString(),
     lte: new Date(`${range.end}T23:59:59.999+07:00`).toISOString(),
@@ -207,6 +210,88 @@ export function csvRow(values: (string | number | null | undefined)[]): string {
 /** Keeps a free-text search from breaking PostgREST's `or=(...)` syntax. */
 export function cleanSearch(search: string): string {
   return search.replace(/[,()*%\\]/g, " ").trim();
+}
+
+/** Today in Vietnam time (yyyy-mm-dd). */
+export function todayVN(now: Date = new Date()): string {
+  return toLocalDay(now.toISOString());
+}
+
+/** yyyy-mm-dd moved by whole days. */
+export function shiftDay(day: string, delta: number): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** yyyy-mm moved by whole months. */
+export function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.toISOString().slice(0, 7);
+}
+
+/** The calendar days of a month (yyyy-mm). */
+export function monthSpan(month: string): DaySpan {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: `${month}-01`, end: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/* ------------------------------------------------------------------ */
+/* Monthly transfers                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface TransferTotals {
+  /** Money in, VND. */
+  incoming: number;
+  incomingCount: number;
+  /** Money out (refunds, withdrawals), VND. */
+  outgoing: number;
+  outgoingCount: number;
+}
+
+export function sumTransfers(transactions: Pick<PaymentTransaction, "amount" | "transfer_type">[]): TransferTotals {
+  const totals: TransferTotals = { incoming: 0, incomingCount: 0, outgoing: 0, outgoingCount: 0 };
+  for (const tx of transactions) {
+    if (tx.transfer_type === "in") {
+      totals.incoming += Number(tx.amount);
+      totals.incomingCount += 1;
+    } else {
+      totals.outgoing += Number(tx.amount);
+      totals.outgoingCount += 1;
+    }
+  }
+  return totals;
+}
+
+export interface MonthlyTransfers extends TransferTotals {
+  month: string;
+  /** Money in during the month before, for the comparison. */
+  previousIncoming: number;
+}
+
+/** Bank transfers in a month (yyyy-mm, Vietnam time), and the month before's
+ * money in. A transfer counts on its bank date, like the Overview's
+ * "Money received by day". */
+export async function fetchMonthlyTransfers(month: string): Promise<MonthlyTransfers> {
+  const previous = shiftMonth(month, -1);
+  const { gte } = rangeBoundsVN(monthSpan(previous));
+  const { lte } = rangeBoundsVN(monthSpan(month));
+  const { data, error } = await supabase
+    .from("payment_transactions")
+    .select("amount, transfer_type, transaction_date, received_at")
+    .gte("received_at", gte)
+    .lte("received_at", lte)
+    .limit(FETCH_LIMIT);
+  if (error) throw error;
+  const rows = (data ?? []) as Pick<PaymentTransaction, "amount" | "transfer_type" | "transaction_date" | "received_at">[];
+  const monthOf = (tx: (typeof rows)[number]) => toLocalDay(tx.transaction_date ?? tx.received_at).slice(0, 7);
+  return {
+    month,
+    ...sumTransfers(rows.filter((tx) => monthOf(tx) === month)),
+    previousIncoming: sumTransfers(rows.filter((tx) => monthOf(tx) === previous)).incoming,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,20 +388,15 @@ export async function exportTransactionsCsv(range: DateRange): Promise<string> {
 
 export type TransactionFilter = "attention" | "matched" | "resolved" | "ignored" | "all";
 
-export async function listTransactions(
-  page: number,
+/** The transfers a status filter, search and date span pick out. */
+function transactionsQuery(
+  columns: string,
   search: string,
   filter: TransactionFilter,
-): Promise<PagedResult<PaymentTransaction>> {
-  const from = page * PAGE_SIZE;
-  let query = supabase
-    .from("payment_transactions")
-    .select(
-      `*, checkout_events(id, payment_code, kind, plan_tier, billing_cycle, pack_id, quantity, amount, user_id, ${ORDER_PROFILE})`,
-      { count: "exact" },
-    )
-    .order("received_at", { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
+  span: DaySpan | null,
+  count?: "exact",
+) {
+  let query = supabase.from("payment_transactions").select(columns, count ? { count } : undefined);
 
   if (filter === "attention") query = query.in("status", ATTENTION_STATUSES);
   else if (filter !== "all") query = query.eq("status", filter);
@@ -325,10 +405,45 @@ export async function listTransactions(
   if (term) {
     query = query.or(`content.ilike.*${term}*,reference_code.ilike.*${term}*,payment_code.ilike.*${term}*`);
   }
+  if (span) {
+    const { gte, lte } = rangeBoundsVN(span);
+    query = query.gte("received_at", gte).lte("received_at", lte);
+  }
+  return query;
+}
+
+export async function listTransactions(
+  page: number,
+  search: string,
+  filter: TransactionFilter,
+  span: DaySpan | null = null,
+): Promise<PagedResult<PaymentTransaction>> {
+  const from = page * PAGE_SIZE;
+  const query = transactionsQuery(
+    `*, checkout_events(id, payment_code, kind, plan_tier, billing_cycle, pack_id, quantity, amount, user_id, ${ORDER_PROFILE})`,
+    search,
+    filter,
+    span,
+    "exact",
+  )
+    .order("received_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
 
   const { data, error, count } = await query;
   if (error) throw error;
   return { rows: (data ?? []) as unknown as PaymentTransaction[], count: count ?? 0 };
+}
+
+/** Money in and out across every transfer the filters pick out (not just
+ * the page shown). */
+export async function totalTransactions(
+  search: string,
+  filter: TransactionFilter,
+  span: DaySpan | null,
+): Promise<TransferTotals> {
+  const { data, error } = await transactionsQuery("amount, transfer_type", search, filter, span).limit(FETCH_LIMIT);
+  if (error) throw error;
+  return sumTransfers((data ?? []) as unknown as Pick<PaymentTransaction, "amount" | "transfer_type">[]);
 }
 
 /** An order by its payment code, for linking a stray transfer to it. */
@@ -370,7 +485,13 @@ export async function resolveTransaction(transactionId: string, note: string): P
 
 export type OrderFilter = "paid" | "awaiting" | "cancelled" | "declined" | "all";
 
-export async function listOrders(page: number, search: string, filter: OrderFilter): Promise<PagedResult<RevenueOrder>> {
+/** Orders by the day they were created (Vietnam time) when `span` is set. */
+export async function listOrders(
+  page: number,
+  search: string,
+  filter: OrderFilter,
+  span: DaySpan | null = null,
+): Promise<PagedResult<RevenueOrder>> {
   const from = page * PAGE_SIZE;
   let query = supabase
     .from("checkout_events")
@@ -384,6 +505,10 @@ export async function listOrders(page: number, search: string, filter: OrderFilt
 
   const term = cleanSearch(search);
   if (term) query = query.ilike("payment_code", `*${term}*`);
+  if (span) {
+    const { gte, lte } = rangeBoundsVN(span);
+    query = query.gte("created_at", gte).lte("created_at", lte);
+  }
 
   const { data, error, count } = await query;
   if (error) throw error;

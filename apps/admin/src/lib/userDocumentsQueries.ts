@@ -40,7 +40,9 @@ export async function listUserDocuments(userId: string): Promise<UserDocument[]>
   const { data, error } = await supabase
     .from("documents")
     .select(
-      "id, title, file_name, language, word_count, status, similarity_score, ai_score:ai_detection->overall_score, moderation_status, is_trashed, uploaded_at, document_checks(kind)",
+      // Named foreign key: documents.current_check_id also links the two
+      // tables, and PostgREST refuses an ambiguous embed (PGRST201).
+      "id, title, file_name, language, word_count, status, similarity_score, ai_score:ai_detection->overall_score, moderation_status, is_trashed, uploaded_at, document_checks!document_checks_document_id_fkey(kind)",
     )
     .eq("user_id", userId)
     .order("uploaded_at", { ascending: false })

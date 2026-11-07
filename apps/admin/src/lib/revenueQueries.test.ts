@@ -8,6 +8,11 @@ import {
   orderDay,
   productKey,
   rangeBoundsVN,
+  monthSpan,
+  shiftDay,
+  shiftMonth,
+  sumTransfers,
+  todayVN,
   summarizeRevenue,
   toLocalDay,
 } from "./revenueQueries";
@@ -118,10 +123,39 @@ describe("summarizeRevenue", () => {
 
 describe("rangeBoundsVN", () => {
   it("spans whole Vietnam days", () => {
-    expect(rangeBoundsVN({ preset: "custom", start: "2026-10-01", end: "2026-10-03" })).toEqual({
+    expect(rangeBoundsVN({ start: "2026-10-01", end: "2026-10-03" })).toEqual({
       gte: "2026-09-30T17:00:00.000Z",
       lte: "2026-10-03T16:59:59.999Z",
     });
+  });
+});
+
+describe("month and day helpers", () => {
+  it("steps months across a year boundary", () => {
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+  });
+  it("covers every day of a month, leap years included", () => {
+    expect(monthSpan("2028-02")).toEqual({ start: "2028-02-01", end: "2028-02-29" });
+    expect(monthSpan("2026-11")).toEqual({ start: "2026-11-01", end: "2026-11-30" });
+  });
+  it("steps days across a month boundary", () => {
+    expect(shiftDay("2026-03-01", -1)).toBe("2026-02-28");
+  });
+  it("takes today in Vietnam time", () => {
+    expect(todayVN(new Date("2026-11-06T18:30:00Z"))).toBe("2026-11-07");
+  });
+});
+
+describe("sumTransfers", () => {
+  it("adds money in and out separately", () => {
+    expect(
+      sumTransfers([
+        { amount: 100000, transfer_type: "in" },
+        { amount: "250000" as unknown as number, transfer_type: "in" },
+        { amount: 50000, transfer_type: "out" },
+      ]),
+    ).toEqual({ incoming: 350000, incomingCount: 2, outgoing: 50000, outgoingCount: 1 });
   });
 });
 

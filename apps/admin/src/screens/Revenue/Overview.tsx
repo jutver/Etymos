@@ -29,6 +29,7 @@ import {
   formatVND,
   transactionTone,
 } from "./format";
+import { MonthlyTransfers } from "./MonthlyTransfers";
 
 export default function RevenueOverviewPage() {
   const [range, setRange] = useState<DateRange>(DEFAULT_DATE_RANGE);
@@ -74,7 +75,9 @@ export default function RevenueOverviewPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <MonthlyTransfers />
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-body text-fg-muted">{t("Showing {{range}} (Vietnam time).", { range: formatRangeLabel(range) })}</p>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangePicker value={range} onChange={setRange} />
