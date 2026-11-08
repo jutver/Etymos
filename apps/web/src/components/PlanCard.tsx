@@ -1,10 +1,14 @@
-import { Check, GraduationCap, Star } from "@phosphor-icons/react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Check, Gift, GraduationCap, Star } from "@phosphor-icons/react";
+import { Link, useNavigate } from "react-router-dom";
 import type { BillingCycle, PlanDefinition } from "@etymos/shared";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../lib/store";
 import { Button } from "./ui/Button";
 import { RollingNumber } from "./ui/RollingNumber";
+import { TrialDialog, useTrialOffer } from "./TrialOffer";
+import { isOnTrial, TRIAL_DAYS } from "../lib/trial";
+import { useAuth } from "../lib/auth";
 import { cn } from "@etymos/shared";
 import { t } from "../lib/i18n";
 
@@ -33,6 +37,10 @@ export function PlanCard({
   const currentPlan = useAppStore((s) => s.plan);
   const studentVerified = useAppStore((s) => s.studentVerified);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
+  const { user } = useAuth();
+  const trialOffered = useTrialOffer() && plan.id === "student";
+  const onTrial = useAppStore((s) => isOnTrial(s)) && plan.id === "student";
+  const [trialOpen, setTrialOpen] = useState(false);
   const isCurrent = currentPlan === plan.id;
   // The paid plan you're on can be renewed: paying again adds a term to the end.
   const canRenew = isCurrent && plan.id !== "free";
@@ -113,6 +121,27 @@ export function PlanCard({
             <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
             {t("Requires student verification before checkout")}</p>
         )}
+        {/* The trial skips verification, so it's offered beside it. */}
+        {trialOffered && (
+          <button
+            type="button"
+            onClick={() => setTrialOpen(true)}
+            className="mt-1.5 flex w-full items-center gap-1.5 rounded-lg bg-brand-100 px-3 py-2 text-left text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-200"
+          >
+            <Gift size={14} weight="fill" className="shrink-0" />
+            {t("Or try it free for {{days}} days", { days: TRIAL_DAYS })}
+          </button>
+        )}
+        {!user && plan.id === "student" && (
+          <Link
+            to="/signup"
+            className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-brand-100 px-3 py-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-200"
+          >
+            <Gift size={14} weight="fill" className="shrink-0" />
+            {t("Try it free for {{days}} days after you sign up", { days: TRIAL_DAYS })}
+          </Link>
+        )}
+        {trialOffered && <TrialDialog open={trialOpen} onClose={() => setTrialOpen(false)} />}
       </div>
 
       <Button
@@ -122,7 +151,9 @@ export function PlanCard({
         className="mt-6 self-start"
         disabled={isCurrent && !canRenew}
       >
-        {canRenew
+        {onTrial
+          ? t("Keep {{name}}", { name: t(plan.name) })
+          : canRenew
           ? t("Renew {{name}}", { name: t(plan.name) })
           : isCurrent
           ? t("Current plan")

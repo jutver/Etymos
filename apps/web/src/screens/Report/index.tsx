@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { FileMagnifyingGlass } from "@phosphor-icons/react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { FileMagnifyingGlass, Sparkle } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
 import type { PdfRect } from "@etymos/shared";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
@@ -964,19 +964,34 @@ export default function ReportPage() {
         exportLocked={isFree}
         scoreSlot={
           <>
-            <ScoreChip
-              score={displayScore}
-              // Edits since the last check make the score an estimate until re-checked.
-              estimated={scoreEstimate.estimated || editedSinceCheck}
-              checking={scoreEstimate.checking}
-            />
-            <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate(paywallPath("ai-detection", id))} />
+            <span data-tour="report-score" className="inline-flex">
+              <ScoreChip
+                score={displayScore}
+                // Edits since the last check make the score an estimate until re-checked.
+                estimated={scoreEstimate.estimated || editedSinceCheck}
+                checking={scoreEstimate.checking}
+              />
+            </span>
+            <span data-tour="report-ai" className="inline-flex">
+              <AiContentChip detection={doc.aiDetection} locked={isFree} onUpgrade={() => navigate(paywallPath("ai-detection", id))} />
+            </span>
           </>
         }
         toolbarSlot={
           <FormatToolbar
             locked={locked}
-            onRequestUnlock={() => setView("edit")}
+            onRequestUnlock={() => {
+              // The sample is a demo: there's nothing of the user's to edit or re-check.
+              if (doc.isSample) {
+                pushToast({
+                  kind: "info",
+                  title: tr("This is a sample report"),
+                  description: tr("Upload your own document to edit and re-check it."),
+                });
+                return;
+              }
+              setView("edit");
+            }}
             onRequestLock={() => setView("document")}
             hasOriginal={hasOriginal}
             view={view}
@@ -994,6 +1009,18 @@ export default function ReportPage() {
           />
         }
       />
+
+      {doc.isSample && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-brand-200 bg-brand-100 px-4 py-2 text-center text-xs text-brand-700 sm:text-sm">
+          <span className="flex items-center gap-1.5">
+            <Sparkle size={14} weight="fill" className="shrink-0" />
+            {tl("This is a sample report on an example essay. Its sources are illustrative.")}
+          </span>
+          <Link to="/upload" className="font-semibold underline underline-offset-2 hover:text-brand-600">
+            {tl("Check your own document")}
+          </Link>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1018,7 +1045,7 @@ export default function ReportPage() {
               />
             </div>
           ) : (
-            <div className="relative flex min-h-0 flex-1 flex-col">
+            <div data-tour="report-document" className="relative flex min-h-0 flex-1 flex-col">
               <DocumentCanvas
                 ref={canvasRef}
                 rendered={rendered}

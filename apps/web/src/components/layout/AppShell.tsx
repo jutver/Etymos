@@ -4,6 +4,7 @@ import { AppNav } from "./AppNav";
 import { ToastViewport } from "../ui/ToastViewport";
 import { PageLoader } from "../ui/PageLoader";
 import { useShowSplash, useSplashOnEnter } from "../BootSplash";
+import { AppTour } from "../tour/AppTour";
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -38,6 +39,7 @@ export function AppShell() {
         </Suspense>
       </main>
       <ToastViewport />
+      <AppTour />
     </div>
   );
 }

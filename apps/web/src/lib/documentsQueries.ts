@@ -41,6 +41,8 @@ interface DocumentRow {
   ai_detection?: unknown;
   // Added by supabase/migrations/20261018080000_document_unlocked_tier.sql.
   unlocked_tier?: "student" | "professional" | null;
+  // Added by supabase/migrations/20261110000000_onboarding_trial_sample.sql.
+  is_sample?: boolean | null;
 }
 
 /** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
@@ -55,6 +57,8 @@ export interface HistoryEntryWithCheck extends HistoryEntry {
   checkError?: string;
   /** Raw `uploaded_at`, used to age out jobs the backend forgot about. */
   startedAt: string;
+  /** The ready-made sample report every new account gets. */
+  isSample?: boolean;
 }
 
 interface DocumentMatchRow {
@@ -119,6 +123,7 @@ function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
     checkJobId: row.check_job_id ?? undefined,
     checkError: row.check_error ?? undefined,
     startedAt: row.uploaded_at,
+    ...(row.is_sample ? { isSample: true } : {}),
   };
 }
 
@@ -216,6 +221,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     matches,
     aiDetection: parseAiDetection(docRow.ai_detection),
     unlockedTier: docRow.unlocked_tier ?? undefined,
+    ...(docRow.is_sample ? { isSample: true } : {}),
   };
 }
 

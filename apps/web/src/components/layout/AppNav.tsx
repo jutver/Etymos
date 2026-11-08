@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   CaretDown,
+  Compass,
   ClockCounterClockwise,
   FolderOpen,
   Lifebuoy,
@@ -21,6 +22,7 @@ import { LanguageSwitcher } from "../LanguageSwitcher";
 import { AnimatePresence, MotionConfig, m, type Variants } from "motion/react";
 import { PillIndicator, usePill } from "../ui/PillIndicator";
 import { MenuIcon } from "../ui/MenuIcon";
+import { restartTour } from "../../lib/tour";
 
 const navLinks = [
   { label: tr("Upload"), href: "/upload", icon: UploadSimple },
@@ -76,6 +78,7 @@ export function AppNav() {
   const navPill = usePill<HTMLElement>(activeHref);
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
+  const pushToast = useAppStore((s) => s.pushToast);
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -106,6 +109,7 @@ export function AppNav() {
                   to={l.href}
                   aria-current={active ? "page" : undefined}
                   data-pill-active={active}
+                  data-tour={l.href === "/documents" ? "nav-documents" : undefined}
                   className={cn(
                     "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
                     active ? "text-white" : "text-white/65 hover:bg-white/5 hover:text-white",
@@ -123,7 +127,7 @@ export function AppNav() {
           <div className="hidden sm:block lg:hidden">
             <UsageMeter compact interactive={false} />
           </div>
-          <div className="hidden lg:block">
+          <div data-tour="usage-meter" className="hidden lg:block">
             <UsageMeter variant="sidebar" />
           </div>
 
@@ -185,6 +189,18 @@ export function AppNav() {
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                   >
                     {t("Help & Support")}</MenuLink>
+                  <m.button
+                    variants={MENU_ITEM}
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      if (!(await restartTour())) {
+                        pushToast({ kind: "error", title: tr("Couldn't start the tour"), description: tr("Please try again in a moment.") });
+                      }
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                  >
+                    <Compass size={16} />
+                    {t("Take the tour")}</m.button>
                   <div className="h-px bg-line" />
                   <m.button
                     variants={MENU_ITEM}

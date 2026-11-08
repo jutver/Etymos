@@ -14,6 +14,8 @@ import { Button } from "../../components/ui/Button";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { UsageMeter } from "../../components/UsageMeter";
 import { PlanCard, PLAN_GRID_CLASS } from "../../components/PlanCard";
+import { TrialOfferCard } from "../../components/TrialOffer";
+import { isOnTrial } from "../../lib/trial";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
@@ -35,6 +37,7 @@ export default function AccountPlanPage() {
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
   const planExpiresAt = useAppStore((s) => s.planExpiresAt);
   const currentCycle = useAppStore((s) => s.billingCycle);
+  const onTrial = useAppStore((s) => isOnTrial(s));
 
   useEffect(() => {
     rolloverPlanPeriodIfNeeded();
@@ -81,12 +84,17 @@ export default function AccountPlanPage() {
 
       <PendingOrderNotice />
 
+      <TrialOfferCard className="mt-8" />
+
       <section className="studio-card mt-8 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("Current plan")}</p>
             <p className="flex items-center gap-2 text-2xl font-extrabold text-navy-900">
               {t(planLabel(plan))}
+              {onTrial && (
+                <span className="rounded-full bg-brand-100 px-2.5 py-1 text-xs font-bold text-brand-700">{t("Free trial")}</span>
+              )}
               {plan === "student" && studentVerified && (
                 <span className="flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-bold text-success">
                   <GraduationCap size={13} weight="fill" />
@@ -133,19 +141,25 @@ export default function AccountPlanPage() {
                     : t("Active until {{date}}", { date: formatDay(status.endsAt) })}
                 </p>
                 <p className="text-xs text-ink-500">
-                  {currentCycle === "annual" ? t("Yearly plan") : t("Monthly plan")}
+                  {onTrial ? t("Free trial") : currentCycle === "annual" ? t("Yearly plan") : t("Monthly plan")}
                   {status.kind !== "no_end" && (
                     <> · {tn(status.daysLeft, "{{count}} day left", "{{count}} days left")}</>
                   )}
                 </p>
               </div>
-              {status.kind !== "no_end" && (
+              {onTrial ? (
+                <Button
+                  size="sm"
+                  onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
+                  {t("Choose a plan")}</Button>
+              ) : status.kind !== "no_end" && (
                 <Button size="sm" onClick={renew} iconLeft={<ArrowClockwise size={15} weight="bold" />}>
                   {t("Renew")}</Button>
               )}
             </div>
             <p className="mt-3 text-xs text-ink-500">
-              {t("Plans are paid in advance by bank transfer, so nothing is ever charged automatically. Renewing adds another term to the end of your current one; if you don't renew, your account moves to the Free plan when the term ends.")}</p>
+              {onTrial ? t("When your trial ends you go back to the Free plan automatically. Nothing is charged. To keep Standard, choose a plan below.") : t("Plans are paid in advance by bank transfer, so nothing is ever charged automatically. Renewing adds another term to the end of your current one; if you don't renew, your account moves to the Free plan when the term ends.")}</p>
           </>
         )}
 
@@ -155,7 +169,7 @@ export default function AccountPlanPage() {
         </div>
       </section>
 
-      <section className="mt-10">
+      <section id="change-plan" className="mt-10 scroll-mt-24">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-h3 font-bold tracking-tight text-navy-900">{t("Change plan")}</h2>
           <div ref={cyclePill.ref} className="relative grid grid-cols-2 gap-1 self-start rounded-full bg-surface-muted p-1">

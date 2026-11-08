@@ -38,6 +38,10 @@ export interface MyProfile {
    * request is pending. The account still exists and is usable until the
    * user confirms via `DELETE /api/account`. */
   deletionRequestedAt: string | null;
+  /** When the one free Standard trial was started; null = never. */
+  trialStartedAt: string | null;
+  /** When the first-run tour was finished or skipped; null = show it. */
+  tourCompletedAt: string | null;
 }
 
 interface ProfileRow {
@@ -58,16 +62,26 @@ interface ProfileRow {
   banned_until: string | null;
   ban_reason: string | null;
   deletion_requested_at: string | null;
+  // Added by supabase/migrations/20261110000000_onboarding_trial_sample.sql.
+  trial_started_at?: string | null;
+  tour_completed_at?: string | null;
 }
 
+const PROFILE_COLUMNS =
+  "plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified, access_status, access_requested_at, access_reviewed_at, access_note, role, banned_permanent, banned_until, ban_reason, deletion_requested_at";
+const ONBOARDING_COLUMNS = "trial_started_at, tour_completed_at";
+
 export async function fetchMyProfile(userId: string): Promise<MyProfile> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("profiles")
-    .select(
-      "plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified, access_status, access_requested_at, access_reviewed_at, access_note, role, banned_permanent, banned_until, ban_reason, deletion_requested_at",
-    )
+    .select(`${PROFILE_COLUMNS}, ${ONBOARDING_COLUMNS}`)
     .eq("id", userId)
     .single();
+  // 42703: the onboarding columns aren't there yet (web deployed before the
+  // migration). Read the rest rather than locking everyone out.
+  if (error?.code === "42703") {
+    ({ data, error } = await supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", userId).single());
+  }
   if (error) throw error;
 
   const row = data as ProfileRow;
@@ -93,5 +107,9 @@ export async function fetchMyProfile(userId: string): Promise<MyProfile> {
     banReason: row.ban_reason,
     bannedUntil: row.banned_until,
     deletionRequestedAt: row.deletion_requested_at,
+    trialStartedAt: row.trial_started_at ?? null,
+    // Until the migration is applied the column is absent: treat the tour as
+    // done rather than showing it to everyone.
+    tourCompletedAt: row.tour_completed_at === undefined ? "unknown" : row.tour_completed_at,
   };
 }

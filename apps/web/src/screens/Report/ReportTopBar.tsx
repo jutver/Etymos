@@ -224,7 +224,7 @@ export function ReportTopBar({
 
         {toolbarSlot && (
           <div className="order-last flex min-w-0 basis-full justify-center lg:order-none lg:basis-0 lg:flex-1 lg:px-2">
-            {toolbarSlot}
+            <div data-tour="report-toolbar" className="flex min-w-0 max-w-full">{toolbarSlot}</div>
           </div>
         )}
 

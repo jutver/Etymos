@@ -310,7 +310,7 @@ export default function UploadPage() {
 
       <div className="mt-6 grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Main upload card */}
-        <div className="studio-card flex flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-7 lg:min-h-[720px]">
+        <div data-tour="upload-card" className="studio-card flex flex-col rounded-[var(--radius-card-lg)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-7 lg:min-h-[720px]">
           <div ref={tabPill.ref} role="tablist" aria-label="Document input method" className="relative flex shrink-0 gap-1 rounded-full bg-surface-muted p-1">
             <PillIndicator box={tabPill.box} className="bg-white shadow-sm" />
             <button
