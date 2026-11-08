@@ -1,0 +1,279 @@
+/* Public pages (Home, Features, Pricing, About, Contact). Light, in the Etymos
+   blues: soft glows behind the heroes, a faint grid, white cards, and the
+   brand gradient on the one phrase a heading wants you to read. */
+
+/* In Tailwind's components layer, so utility classes on an element win. */
+@layer components {
+:root {
+  /* The two accents the public pages add to the brand blues. */
+  --mk-indigo: #4f46e5;
+  --mk-cyan: #0891b2;
+}
+
+.mk-page { background: #fff; color: var(--color-navy-900); overflow-x: clip; }
+.mk-page section[id] { scroll-margin-top: calc(90px + var(--banner-h, 0px)); }
+.mk-tint { background: var(--color-surface-tint); }
+
+/* Type */
+.mk-h1 {
+  font-size: clamp(2.5rem, 5.4vw, 4.25rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  color: var(--color-navy-900);
+  text-wrap: balance;
+}
+.mk-h2 {
+  font-size: clamp(1.875rem, 3.6vw, 2.875rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: var(--color-navy-900);
+  text-wrap: balance;
+}
+.mk-highlight { color: var(--color-brand-500); }
+
+/* Label chip */
+.mk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-brand-200);
+  background: #eff6ffcc;
+  color: var(--color-brand-600);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.mk-chip-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--color-brand-500); box-shadow: 0 0 0 3px #2563eb26; }
+
+/* Hero background: two blue glows and a grid that fades out downwards. */
+.mk-hero {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(55% 70% at 12% 0%, #dbeafe 0%, transparent 70%),
+    radial-gradient(45% 60% at 92% 12%, #e0e7ff 0%, transparent 70%),
+    radial-gradient(40% 50% at 60% 100%, #cffafe80 0%, transparent 70%),
+    #f8fafc;
+  border-bottom: 1px solid var(--color-line);
+}
+/* Home hero: at least one screen tall, below the sticky 80px nav and any banner. */
+.mk-hero-full {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100svh - 80px - var(--banner-h, 0px));
+  /* Shown only until the Waves shader draws, or if WebGL is unavailable. */
+  background: linear-gradient(to top, #184557, #007fad 30%, #57b2cb 55%, #eaf9ff 80%, #007fad);
+}
+.mk-hero-full::before { display: none; }
+/* Copy over the waves: white type with a soft shadow. The highlighted phrase
+   keeps its brand blue. */
+.mk-hero-full .mk-h1 {
+  color: #fff;
+  text-shadow: 0 2px 30px #0a2c3d40;
+}
+.mk-hero-lead {
+  color: #ffffffeb;
+  text-shadow: 0 1px 12px #0a2c3d59;
+}
+.mk-trust {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 999px;
+  background: #ffffffd9;
+  padding: 0.3rem 0.7rem;
+}
+.mk-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffffffd9;
+  transition: color 0.2s;
+}
+.mk-scroll-cue:hover { color: #fff; }
+@media (prefers-reduced-motion: no-preference) {
+  .mk-scroll-cue svg { animation: mk-nudge 1.8s ease-in-out infinite; }
+}
+@keyframes mk-nudge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
+}
+@media (max-height: 640px) {
+  .mk-scroll-cue { display: none; }
+}
+.mk-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, #142b4a0d 1px, transparent 1px),
+    linear-gradient(to bottom, #142b4a0d 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
+}
+
+/* Cards */
+.mk-card {
+  position: relative;
+  border: 1px solid var(--color-line);
+  background: #fff;
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.mk-card-hover:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: var(--color-brand-200); }
+.mk-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.875rem;
+  background: linear-gradient(135deg, #eff6ff, #e0e7ff);
+  color: var(--color-brand-600);
+  border: 1px solid #dbeafe;
+}
+
+/* A product mock-up in a browser window */
+.mk-window {
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 1px 2px #0f1b3d0a, 0 30px 60px -28px #142b4a40;
+}
+
+/* Stat number */
+.mk-stat {
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+/* Meter bar inside stat cards */
+.mk-meter { height: 6px; border-radius: 999px; background: var(--color-surface-muted); overflow: hidden; }
+.mk-meter > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--color-brand-500), var(--mk-indigo)); }
+
+/* Timeline (How it works) */
+.mk-timeline { position: relative; }
+@media (min-width: 768px) {
+  .mk-timeline::before {
+    content: "";
+    position: absolute;
+    top: 1.375rem;
+    left: 16.6%;
+    right: 16.6%;
+    height: 2px;
+    background: linear-gradient(90deg, #93c5fd, #6366f1, #93c5fd);
+    opacity: 0.6;
+  }
+}
+.mk-step-dot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--color-brand-400);
+  color: var(--color-brand-600);
+  font-weight: 800;
+  box-shadow: 0 0 0 6px #fff, 0 8px 20px -8px #2563eb80;
+}
+
+/* Closing call to action */
+.mk-cta {
+  position: relative;
+  overflow: hidden;
+  border-radius: 2rem;
+  padding: clamp(2.5rem, 6vw, 4rem) clamp(1.25rem, 4vw, 3rem);
+  text-align: center;
+  background:
+    radial-gradient(60% 90% at 0% 0%, #60a5fa80 0%, transparent 60%),
+    radial-gradient(50% 80% at 100% 100%, #4f46e599 0%, transparent 60%),
+    linear-gradient(120deg, #1d4ed8, #1e3a8a);
+  box-shadow: 0 30px 70px -30px #1d4ed8aa;
+}
+.mk-cta-primary, .mk-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  padding: 0 1.75rem;
+  border-radius: var(--radius-control);
+  font-weight: 600;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.mk-cta-primary { background: #fff; color: var(--color-brand-700); }
+.mk-cta-primary:hover { background: var(--color-brand-100); }
+.mk-cta-secondary { color: #fff; border: 1px solid #ffffff55; }
+.mk-cta-secondary:hover { background: #ffffff1f; }
+.mk-cta-primary:active, .mk-cta-secondary:active { transform: scale(0.98); }
+
+/* Product tour tabs */
+.mk-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: #fff;
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-600);
+  transition: all 0.2s ease;
+}
+.mk-tab:hover { color: var(--color-brand-600); border-color: var(--color-brand-300); }
+.mk-tab[aria-selected="true"] {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(115deg, var(--color-brand-500), var(--mk-indigo));
+  box-shadow: 0 8px 20px -10px #2563ebaa;
+}
+
+/* Floating badges around the hero mock-up */
+.mk-float {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--color-line);
+  background: #fffffff5;
+  border-radius: 1rem;
+  padding: 0.65rem 0.9rem;
+  box-shadow: 0 18px 40px -20px #142b4a55;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mk-float { animation: mk-bob 6s ease-in-out infinite; }
+  .mk-float:nth-of-type(2) { animation-delay: -3s; }
+}
+@keyframes mk-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@media (max-width: 639px) {
+  .mk-float { display: none; }
+}
+}

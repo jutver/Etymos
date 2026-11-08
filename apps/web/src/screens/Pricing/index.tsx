@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretDown, Check, Minus } from "@phosphor-icons/react";
-import { PlanCard } from "../../components/PlanCard";
+import { PlanCard, PLAN_GRID_CLASS, PLAN_GRID_ITEM_CLASS } from "../../components/PlanCard";
 import { Button } from "../../components/ui/Button";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { FEATURE_MATRIX } from "../../lib/mockData";
-import { fetchPlanDefinitions, fetchCreditPacks, fetchActivePlanDiscounts } from "../../lib/configQueries";
 import type { ActivePlanDiscount } from "../../lib/configQueries";
+import { cachedPricingData, loadPricingData } from "../../lib/pricingData";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { formatVND } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
 import { cn } from "@etymos/shared";
 import type { BillingCycle, CreditPack, PlanDefinition } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
+import { Highlight, PageHero } from "../../components/marketing/Marketing";
 import { useSmoothPage, useStaggerIn } from "../../lib/useSmoothPage";
 
 function applyDiscount(price: number, discount: ActivePlanDiscount): number {
@@ -57,7 +59,7 @@ const faqs = [
   },
   {
     q: tr("Do you support languages other than Vietnamese?"),
-    a: tr("Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Standard and Premium."),
+    a: tr("Yes. Etymos is Vietnamese-first and also checks English documents on Standard and Premium."),
   },
 ];
 
@@ -67,21 +69,24 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const selectCheckoutItem = useAppStore((s) => s.selectCheckoutItem);
 
-  const [plans, setPlans] = useState<PlanDefinition[]>([]);
-  const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
-  const [discounts, setDiscounts] = useState<ActivePlanDiscount[]>([]);
+  // Usually already loaded by Home or by hovering the Pricing link, so the
+  // cards render with the page instead of popping in after it.
+  const cached = cachedPricingData();
+  const [plans, setPlans] = useState<PlanDefinition[]>(cached?.plans ?? []);
+  const [creditPacks, setCreditPacks] = useState<CreditPack[]>(cached?.packs ?? []);
+  const [discounts, setDiscounts] = useState<ActivePlanDiscount[]>(cached?.discounts ?? []);
 
-  // Same motion as the landing page. Plan cards come from the database, so
-  // they get their own entrance once they've rendered.
+  // Same motion as the landing page. The plan cards rise in with the header
+  // when the data is already here, or as soon as it arrives.
   const root = useRef<HTMLDivElement>(null);
   const cyclePill = usePill<HTMLDivElement>(billingCycle);
-  useSmoothPage(root, { intro: ".pricing-intro" });
+  useSmoothPage(root, { intro: ".mk-hero-intro" });
   useStaggerIn(root, ".pricing-plans > *", plans.length > 0);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPlanDefinitions(), fetchCreditPacks(), fetchActivePlanDiscounts()])
-      .then(([planRows, packRows, discountRows]) => {
+    loadPricingData()
+      .then(({ plans: planRows, packs: packRows, discounts: discountRows }) => {
         if (cancelled) return;
         setPlans(planRows);
         setCreditPacks(packRows);
@@ -99,14 +104,13 @@ export default function PricingPage() {
   }
 
   return (
-    <div ref={root}>
-      <section className="pricing-intro studio-page mx-auto max-w-4xl px-5 pb-4 pt-16 text-center sm:px-8">
-        <p aria-hidden="true" className="editorial-kicker mb-3">{t("A PLAN FOR YOUR NEXT CHAPTER")}</p><h1 className="text-h1 font-bold tracking-tight text-navy-900">
-          {t("Simple, honest pricing")}</h1>
-        <p className="mx-auto mt-3 max-w-lg text-balance text-body-lg text-ink-600">
-          {t("Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.")}</p>
-
-        <div ref={cyclePill.ref} className="relative mx-auto mt-7 inline-grid grid-cols-2 gap-1 rounded-full bg-surface-muted p-1">
+    <div ref={root} className="mk-page">
+      <PageHero
+        chip={t("Pricing")}
+        title={<>{t("Simple, honest pricing")} <Highlight>{t("in VND")}</Highlight></>}
+        lead={t("Start free. Upgrade when you need unlimited checks, semantic detection, and AI Rewrite.")}
+      >
+        <div ref={cyclePill.ref} className="relative mx-auto mt-8 inline-grid grid-cols-2 gap-1 rounded-full border border-line bg-surface-muted p-1">
           <PillIndicator box={cyclePill.box} className="bg-white shadow-sm" />
           {(["monthly", "annual"] as const).map((cycle) => (
             <button
@@ -124,11 +128,16 @@ export default function PricingPage() {
             </button>
           ))}
         </div>
-      </section>
+      </PageHero>
 
 
       <section className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
-        <div className="pricing-plans grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
+        <div className={cn("pricing-plans", PLAN_GRID_CLASS)}>
+          {plans.length === 0 &&
+            [0, 1, 2].map((i) => (
+              // Holds the cards' place so nothing jumps when they arrive.
+              <Skeleton key={i} variant="flat" rounded="lg" className={cn("h-[38rem]", PLAN_GRID_ITEM_CLASS)} />
+            ))}
           {plans.map((plan) => {
             const basePrice = billingCycle === "monthly" ? plan.priceMonthly : plan.priceAnnual;
             const discountedPrice = discountedPriceFor(
@@ -155,6 +164,8 @@ export default function PricingPage() {
           </div>
 
           <div className="mx-auto mt-9 grid max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
+            {creditPacks.length === 0 &&
+              [0, 1].map((i) => <Skeleton key={i} variant="flat" rounded="lg" className="h-[13.5rem]" />)}
             {creditPacks.map((pack) => {
               const discountedPrice = discountedPriceFor(discounts, { target_type: "pack", target_id: pack.id }, pack.price);
               const hasDiscount = discountedPrice !== undefined && discountedPrice < pack.price;

@@ -4,8 +4,20 @@ import type { BillingCycle, PlanDefinition } from "@etymos/shared";
 import { annualSavingsPercent, formatVND } from "@etymos/shared";
 import { useAppStore } from "../lib/store";
 import { Button } from "./ui/Button";
+import { RollingNumber } from "./ui/RollingNumber";
 import { cn } from "@etymos/shared";
 import { t } from "../lib/i18n";
+
+/**
+ * Classes for the grid that holds plan cards. On wide screens each card's
+ * parts (heading, price, notes, button, features) share rows with the cards
+ * beside it, so the buttons sit level whatever the notes above them say.
+ */
+export const PLAN_GRID_CLASS =
+  "grid grid-cols-1 gap-6 lg:grid-cols-3 lg:grid-rows-[repeat(5,auto)] lg:gap-x-5 lg:gap-y-0";
+
+/** Placeholders in a PLAN_GRID_CLASS grid take a card's five rows. */
+export const PLAN_GRID_ITEM_CLASS = "lg:row-span-5";
 
 export function PlanCard({
   plan,
@@ -49,6 +61,8 @@ export function PlanCard({
     <div
       className={cn(
         "studio-plan studio-card relative flex flex-col rounded-[var(--radius-card-lg)] border bg-white p-7",
+        // Five rows shared with the neighbouring cards (see PLAN_GRID_CLASS).
+        "lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0",
         plan.mostPopular
           ? "border-brand-500 shadow-[0_20px_48px_-16px_rgba(30,79,196,0.35)]"
           : "border-line shadow-[var(--shadow-card)]",
@@ -60,16 +74,20 @@ export function PlanCard({
           {t("Most popular")}</span>
       )}
 
-      <h3 className="text-h3 font-bold text-navy-900">{t(plan.name)}</h3>
-      <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{t(plan.tagline)}</p>
+      <div>
+        <h3 className="text-h3 font-bold text-navy-900">{t(plan.name)}</h3>
+        <p className="mt-1.5 min-h-[2.5rem] text-sm text-ink-500">{t(plan.tagline)}</p>
+      </div>
 
       <div className="mt-6 flex items-baseline gap-1.5">
         {hasDiscount && (
           <span className="text-lg font-semibold text-ink-400 line-through">{formatVND(price)}</span>
         )}
-        <span className={cn("text-3xl font-extrabold tracking-tight", hasDiscount ? "text-success" : "text-navy-900")}>
-          {(hasDiscount ? discountedPrice! : price) === 0 ? "0 đ" : formatVND(hasDiscount ? discountedPrice! : price)}
-        </span>
+        {/* Digits roll to the new price when switching monthly / annual. */}
+        <RollingNumber
+          className={cn("text-3xl font-extrabold tracking-tight", hasDiscount ? "text-success" : "text-navy-900")}
+          value={(hasDiscount ? discountedPrice! : price) === 0 ? "0 đ" : formatVND(hasDiscount ? discountedPrice! : price)}
+        />
         {price > 0 && (
           <span className="text-sm font-medium text-ink-500">
             {billingCycle === "monthly" ? t("/mo") : t("/yr")}
@@ -77,18 +95,21 @@ export function PlanCard({
         )}
       </div>
 
-      <div className="mt-1 min-h-[3.25rem]">
-        {plan.id !== "free" && billingCycle === "annual" && (
-          <p className="text-xs font-medium text-success">
-            {t("Save {{percent}}% vs. monthly", { percent: annualSavingsPercent(plan.priceMonthly, plan.priceAnnual) })}</p>
-        )}
+      <div className="mt-1">
+        {/* Always takes its line, so switching to annual doesn't push anything
+            down; it fades and rises in when annual is picked. */}
+        <p
+          className={cn(
+            "h-5 text-xs font-medium leading-5 text-success transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
+            plan.id === "free" || billingCycle !== "annual" ? "translate-y-1.5 opacity-0" : "translate-y-0 opacity-100 delay-150",
+          )}
+          aria-hidden={plan.id === "free" || billingCycle !== "annual"}
+        >
+          {plan.id !== "free" &&
+            t("Save {{percent}}% vs. monthly", { percent: annualSavingsPercent(plan.priceMonthly, plan.priceAnnual) })}
+        </p>
         {needsVerification && !isCurrent && (
-          <p
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-ink-600",
-              plan.id !== "free" && billingCycle === "annual" && "mt-1.5",
-            )}
-          >
+          <p className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-surface-tint px-3 py-2 text-xs font-medium text-ink-600">
             <GraduationCap size={14} weight="fill" className="shrink-0 text-brand-500" />
             {t("Requires student verification before checkout")}</p>
         )}
@@ -98,7 +119,7 @@ export function PlanCard({
         onClick={handleSelect}
         variant={plan.mostPopular ? "primary" : isCurrent ? "outline" : "secondary"}
         fullWidth
-        className="mt-6"
+        className="mt-6 self-start"
         disabled={isCurrent && !canRenew}
       >
         {canRenew
@@ -112,7 +133,7 @@ export function PlanCard({
               : t("Choose {{name}}", { name: plan.name })}
       </Button>
 
-      <ul className="mt-7 flex flex-1 flex-col gap-3">
+      <ul className="mt-7 flex flex-1 flex-col gap-3 lg:self-start">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
             <Check size={16} weight="bold" className="mt-0.5 shrink-0 text-brand-500" />

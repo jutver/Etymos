@@ -17,6 +17,8 @@ import { lazy } from "react";
 // Public
 export const LandingPage = lazy(() => import("../../screens/Landing"));
 export const PricingPage = lazy(() => import("../../screens/Pricing"));
+export const FeaturesPage = lazy(() => import("../../screens/Features"));
+export const AboutPage = lazy(() => import("../../screens/About"));
 export const WaitlistPage = lazy(() => import("../../screens/Waitlist"));
 export const ContactPage = lazy(() => import("../../screens/Contact"));
 export const LegalPage = lazy(() => import("../../screens/Legal"));

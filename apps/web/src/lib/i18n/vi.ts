@@ -13,6 +13,7 @@ import { billing } from "./vi/billing";
 import { editorial } from "./vi/editorial";
 import { support } from "./vi/support";
 import { legal } from "./vi/legal";
+import { marketing } from "./vi/marketing";
 
 export const vi: Record<string, string> = {
   ...common,
@@ -26,4 +27,5 @@ export const vi: Record<string, string> = {
   ...editorial,
   ...support,
   ...legal,
+  ...marketing,
 };

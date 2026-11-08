@@ -5,12 +5,23 @@ import { Logo } from "./Logo";
 import { Button } from "../ui/Button";
 import { MenuIcon } from "../ui/MenuIcon";
 import { t, tr } from "../../lib/i18n";
+import { cn } from "@etymos/shared";
 import { LanguageSwitcher } from "../LanguageSwitcher";
+import { prefetchPricingData } from "../../lib/pricingData";
 
-const links = [
-  { label: tr("Features"), href: "/#features" },
-  { label: tr("How it works"), href: "/#how-it-works" },
-  { label: tr("Pricing"), href: "/pricing" },
+// Pricing's cards come from the database; start fetching them (and the page's
+// code) when the visitor points at the link, so they're there on arrival.
+function warmPricing() {
+  prefetchPricingData();
+  void import("../../screens/Pricing");
+}
+
+const links: { label: string; href: string; warm?: () => void }[] = [
+  { label: tr("Home"), href: "/" },
+  { label: tr("Features"), href: "/features" },
+  { label: tr("Pricing"), href: "/pricing", warm: warmPricing },
+  { label: tr("About"), href: "/about" },
+  { label: tr("Contact"), href: "/contact" },
 ];
 
 /** Mobile menu: unrolls down from under the top bar, its rows following one
@@ -44,8 +55,16 @@ export function PublicNav() {
             <Link
               key={l.label}
               to={l.href}
+              onPointerEnter={l.warm}
+              onFocus={l.warm}
               aria-current={location.pathname === l.href ? "page" : undefined}
-              className="rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-surface-muted hover:text-brand-600"
+              className={cn(
+                "relative rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium transition-colors hover:text-brand-600",
+                "after:absolute after:inset-x-4 after:-bottom-[20px] after:h-0.5 after:rounded-full after:bg-brand-500 after:transition-transform after:duration-300",
+                location.pathname === l.href
+                  ? "text-brand-600 after:scale-x-100"
+                  : "text-ink-700 after:scale-x-0 hover:bg-surface-muted",
+              )}
             >
               {t(l.label)}
             </Link>
@@ -88,9 +107,13 @@ export function PublicNav() {
                 <m.div key={l.label} variants={MOBILE_NAV_ITEM}>
                   <Link
                     to={l.href}
+                    onTouchStart={l.warm}
                     onClick={() => setOpen(false)}
                     aria-current={location.pathname === l.href ? "page" : undefined}
-                    className="block rounded-[var(--radius-input)] px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface-tint"
+                    className={cn(
+                      "block rounded-[var(--radius-input)] px-3 py-2.5 text-sm font-medium hover:bg-surface-tint",
+                      location.pathname === l.href ? "bg-brand-100/60 text-brand-600" : "text-ink-700",
+                    )}
                   >
                     {t(l.label)}
                   </Link>
