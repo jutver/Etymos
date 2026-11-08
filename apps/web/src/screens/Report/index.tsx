@@ -269,6 +269,12 @@ export default function ReportPage() {
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
   const [view, setView] = useState<ReportView>("original");
+  // Pasted text and the sample report have no uploaded file, so the Original
+  // view could only say so: open those on the Document view instead.
+  const noFile = !!doc && !doc.fileName && !cachedDoc?.pdfUrl;
+  useEffect(() => {
+    if (noFile) setView((v) => (v === "original" ? "document" : v));
+  }, [noFile, id]);
   useSplashHold(
     !!id && !notFound && !loadError && (!doc || (view === "original" && pdfComing && !pdfReady)),
     { reshow: false },

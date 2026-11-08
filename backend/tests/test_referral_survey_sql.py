@@ -96,3 +96,20 @@ def test_answers_outlive_a_deleted_account(db):
     run_as(db, user, INSERT, (v, user, "facebook", None))
     db.execute("delete from auth.users where id = %s", (user,))
     assert db.execute("select user_id, source from public.referral_survey_responses where visitor_id = %s", (v,)).fetchone() == (None, "facebook")
+
+
+ANSWERED = "select public.referral_survey_answered()"
+
+
+def test_an_account_can_tell_whether_it_has_answered_from_any_browser(db):
+    user, other = make_user(db), make_user(db)
+    assert as_user(db, user, ANSWERED) == [(False,)]
+    run_as(db, user, INSERT, (user, user, "skipped", None))
+    assert as_user(db, user, ANSWERED) == [(True,)]
+    # Someone else's answer says nothing about this account.
+    assert as_user(db, other, ANSWERED) == [(False,)]
+
+
+def test_signed_out_visitors_cannot_ask(db):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_anon(db, ANSWERED)

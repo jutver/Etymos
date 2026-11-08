@@ -4,7 +4,7 @@
 // other dialog (the Terms gate, an announcement) to close first, and can be
 // restarted from the account menu. A step whose element isn't on screen (a
 // phone, where the sidebar is folded away) is shown as a centred card instead.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, MotionConfig, m } from "motion/react";
@@ -14,7 +14,7 @@ import { Button } from "../ui/Button";
 import { TrialDialog, useTrialOffer } from "../TrialOffer";
 import { useAuth } from "../../lib/auth";
 import { useAppStore } from "../../lib/store";
-import { ensureSampleDocument, markTourDone, useTourStore } from "../../lib/tour";
+import { ensureSampleDocument, tourDoneOnServer, markTourDone, useTourStore } from "../../lib/tour";
 import { TRIAL_DAYS } from "../../lib/trial";
 import { t, tr } from "../../lib/i18n";
 import { placePopover, type Box } from "./placePopover";
@@ -148,6 +148,9 @@ function useAutoStart() {
         timer = window.setTimeout(() => void tryOpen(), 1000);
         return;
       }
+      // The profile loaded at sign-in may be older than a finish elsewhere.
+      if (await tourDoneOnServer(user.id)) return;
+      if (cancelled) return;
       const sampleId = await ensureSampleDocument();
       if (cancelled || !sampleId) return;
       useTourStore.getState().begin(sampleId);
@@ -231,7 +234,6 @@ function TourOverlay({
   const [box, setBox] = useState<Box | null>(null);
   // False while the step's element is still being looked for.
   const [ready, setReady] = useState(false);
-  const popRef = useRef<HTMLDivElement>(null);
   const [popSize, setPopSize] = useState({ width: 360, height: 220 });
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 
@@ -269,15 +271,23 @@ function TourOverlay({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  useLayoutEffect(() => {
-    const el = popRef.current;
+  // Measured and focused as each card mounts. A ref read in an effect would
+  // still hold the previous step's card, which AnimatePresence keeps until
+  // it has faded out, so the new card would be placed with the old height.
+  const popRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
-    const measure = () => setPopSize({ width: el.offsetWidth, height: el.offsetHeight });
+    const measure = () =>
+      setPopSize((prev) =>
+        prev.width === el.offsetWidth && prev.height === el.offsetHeight
+          ? prev
+          : { width: el.offsetWidth, height: el.offsetHeight },
+      );
     measure();
+    el.focus({ preventScroll: true });
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ready, index]);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -288,10 +298,6 @@ function TourOverlay({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onSkip, onNext, onBack, index, step.kind]);
-
-  useEffect(() => {
-    if (ready) popRef.current?.focus({ preventScroll: true });
-  }, [ready, index]);
 
   const pos = placePopover(box, popSize, viewport);
   const number = STEPS.slice(0, index + 1).filter((s) => !s.kind).length;

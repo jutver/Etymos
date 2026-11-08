@@ -1,7 +1,9 @@
 // State for the first-run app tour (components/tour/Tour.tsx). It runs across
 // three screens (Upload, Documents, the sample report), so where it is lives
 // here rather than in any one of them. Whether a user has seen it is
-// profiles.tour_completed_at (20261110000000_onboarding_trial_sample.sql).
+// profiles.tour_completed_at (20261110000000_onboarding_trial_sample.sql),
+// never browser storage: the store's copy isn't persisted, and the database is
+// asked again before the tour opens by itself.
 import { create } from "zustand";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "./store";
@@ -33,12 +35,36 @@ export async function ensureSampleDocument(): Promise<string | null> {
   return String(data);
 }
 
-/** Records that the tour was finished or skipped, so it doesn't open again. */
+/** Whether the account has finished or skipped the tour, asked of the
+ * database right before the tour opens by itself, so a finish in another
+ * browser or tab counts even if this one's profile is older. When it can't
+ * be confirmed (an error, or the column doesn't exist yet) it says yes:
+ * showing the tour twice is worse than not showing it. */
+export async function tourDoneOnServer(userId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("profiles").select("tour_completed_at").eq("id", userId).maybeSingle();
+  if (error || !data) return true;
+  const at = (data as { tour_completed_at: string | null }).tour_completed_at;
+  if (at) useAppStore.getState().markTourCompleted(at);
+  return at !== null;
+}
+
+const SAVE_ATTEMPTS = 4;
+
+/** Records that the tour was finished or skipped, so it doesn't open again
+ * in any browser. Retried, since a lost save would bring it back elsewhere. */
 export async function markTourDone(userId: string): Promise<void> {
   const at = new Date().toISOString();
   useAppStore.getState().markTourCompleted(at);
-  const { error } = await supabase.from("profiles").update({ tour_completed_at: at }).eq("id", userId);
-  if (error) console.error("Failed to save tour progress", error);
+  for (let attempt = 1; attempt <= SAVE_ATTEMPTS; attempt++) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ tour_completed_at: at })
+      .eq("id", userId)
+      .is("tour_completed_at", null);
+    if (!error) return;
+    if (attempt === SAVE_ATTEMPTS) console.error("Failed to save tour progress", error);
+    else await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)));
+  }
 }
 
 /** Starts the tour from the account menu: makes sure the sample exists and

@@ -14,7 +14,13 @@ import { Modal, ModalCloseButton } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { useAuth } from "../lib/auth";
 import { t, tr } from "../lib/i18n";
-import { OTHER_TEXT_MAX, referralSurveyDone, submitReferralSurvey, type ReferralSource } from "../lib/referralSurvey";
+import {
+  OTHER_TEXT_MAX,
+  referralSurveyAnsweredAnywhere,
+  referralSurveyDone,
+  submitReferralSurvey,
+  type ReferralSource,
+} from "../lib/referralSurvey";
 
 const OPTIONS: { source: ReferralSource; label: string; Icon: Icon }[] = [
   { source: "facebook", label: tr("Facebook"), Icon: FacebookLogo },
@@ -31,7 +37,8 @@ const SURVEY_PATH = "/upload";
 const OPEN_DELAY_MS = 4000;
 
 /**
- * Asks a signed-in user how they found Etymos, once per account, on the home
+ * Asks a signed-in user how they found Etymos, once per account (checked
+ * with the database, not just this browser), on the home
  * page only — never on the public landing pages or mid sign-in. Waits
  * while another dialog (the Terms gate, an announcement) is open, so two
  * never stack. Closing it counts as a skip.
@@ -55,18 +62,28 @@ export function ReferralSurvey() {
   }, [userId]);
 
   useEffect(() => {
-    if (!eligible || open) return;
+    if (!eligible || open || !userId) return;
     let timer = 0;
-    const tryOpen = () => {
+    let cancelled = false;
+    // This browser has no record of an answer; the account may still have
+    // given one elsewhere, so ask the database before asking the user.
+    const answered = referralSurveyAnsweredAnywhere(userId);
+    const tryOpen = async () => {
       if (document.querySelector('[role="dialog"]') !== null) {
-        timer = window.setTimeout(tryOpen, 1000);
+        timer = window.setTimeout(() => void tryOpen(), 1000);
         return;
       }
-      setOpen(true);
+      const done = await answered;
+      if (cancelled) return;
+      if (done) setAnsweredBy(userId);
+      else setOpen(true);
     };
-    timer = window.setTimeout(tryOpen, OPEN_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [eligible, open]);
+    timer = window.setTimeout(() => void tryOpen(), OPEN_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [eligible, open, userId]);
 
   useEffect(() => {
     if (source === "other") otherRef.current?.focus();
