@@ -13,6 +13,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { TrialOfferCard } from "../../components/TrialOffer";
 import { PLANS, CREDIT_PACKS } from "../../lib/mockData";
 import { formatVND } from "@etymos/shared";
 import { planDocLimit, planLabel, useAppStore } from "../../lib/store";
@@ -210,6 +211,11 @@ export default function PaywallPage() {
               : t(copy.description)}
         </p>
       </div>
+
+      {/* The trial is Standard, so it can't unlock a Premium-only feature. */}
+      {!alreadyIncluded && requiredPlanFor(reason) !== "professional" && (
+        <TrialOfferCard className="mx-auto mt-10 max-w-2xl" />
+      )}
 
       {!alreadyIncluded && (subscribePlans.length > 0 || showCredits || unlockTier) && (
         <div

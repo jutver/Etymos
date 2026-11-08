@@ -865,12 +865,25 @@ def read_job(job_id: str, user: AuthedUser = Depends(verify_supabase_jwt)):
     return job
 
 
+def _refuse_sample(report: dict) -> None:
+    """The sample report every new account gets is a demo, not a check the
+    user ran: it can't be re-checked or unlocked (20261110000000 migration)."""
+    if report.get("is_sample"):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "sample_document", "message": "This is the sample document. Upload your own to check it."},
+        )
+
+
 @app.post("/api/documents/{document_id}/unlock")
 def unlock_document(document_id: UUID, body: UnlockDocumentRequest,
                     user: AuthedUser = Depends(verify_supabase_jwt)):
     """Spend one credit to give this document a higher tier's features (the
     paywall's "use a credit on this document"). Ownership is checked inside
     the SQL function, which only matches the caller's own documents."""
+    report = get_report(str(document_id))
+    if report is not None:
+        _refuse_sample(report)
     result = unlock_document_with_credit(user.user_id, str(document_id), body.tier)
     set_cached_unlocked_tier(str(document_id), result.get("unlocked_tier"))
     return result
@@ -1083,6 +1096,7 @@ def quote_report_recheck(request: Request, report_id: str, body: RecheckQuoteReq
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found.")
     require_owner_or_admin(report.get("user_id"), user)
+    _refuse_sample(report)
     return quote_recheck(report_id, report, body.joined_text())
 
 
@@ -1204,6 +1218,7 @@ def recheck_report(request: Request, report_id: str, body: RecheckRequest,
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found.")
     require_owner_or_admin(report.get("user_id"), user)
+    _refuse_sample(report)
     text = body.joined_text()
 
     version_id = str(body.version_id) if body.version_id else None

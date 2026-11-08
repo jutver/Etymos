@@ -129,6 +129,7 @@ export function DocumentsListView({
                           onDocContextMenu(e, doc);
                         }}
                         onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : openDoc(doc))}
+                        data-tour={doc.isSample ? "sample-document" : undefined}
                         className="flex cursor-pointer items-center gap-3 border-t border-line/60 py-3 pl-16 pr-4 text-left transition-colors first:border-t-0 hover:bg-white"
                       >
                         {manageMode && (
@@ -143,6 +144,7 @@ export function DocumentsListView({
                         )}
                         <FileText size={16} className="shrink-0 text-ink-400" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{doc.title}</span>
+                        {doc.isSample && <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">{t("Sample")}</span>}
                         {doc.checkCount > 1 && (
                           <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
                             <ClockCounterClockwise size={12} />

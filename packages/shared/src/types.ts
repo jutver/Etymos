@@ -311,6 +311,9 @@ export interface CheckedDocument {
    * plan: set when the check was paid with a credit, or a credit was spent on
    * it later (documents.unlocked_tier). */
   unlockedTier?: Exclude<PlanTier, "free">;
+  /** The ready-made sample report every new account gets
+   * (documents.is_sample): read-only, can't be re-checked. */
+  isSample?: boolean;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

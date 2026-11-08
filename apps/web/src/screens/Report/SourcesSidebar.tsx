@@ -193,6 +193,7 @@ export function SourcesSidebar({
     <m.aside
       key={wide ? "panel-wide" : "panel-narrow"}
       id="report-sources-panel"
+      data-tour="report-sources"
       aria-label={t("Matched sources")}
       initial={panel.folded}
       animate={panel.open}

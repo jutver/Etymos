@@ -118,6 +118,13 @@ interface AppState {
   pendingDocLabel: string | null;
   lastCheckoutStatus: "success" | "declined" | null;
   studentVerified: boolean;
+  /** When the one free Standard trial was started; null = never. */
+  trialStartedAt: string | null;
+  /** When the first-run tour was finished or skipped; null = show it. */
+  tourCompletedAt: string | null;
+  /** True once this session has read the profile from Supabase, so the
+   * onboarding pieces don't act on the defaults above. Not persisted. */
+  profileLoaded: boolean;
   toasts: Toast[];
 
   /** All three balances at once, for UI that lists them (UsageMeter, the
@@ -135,7 +142,11 @@ interface AppState {
     planPeriodStart: string;
     planExpiresAt: string | null;
     studentVerified: boolean;
+    trialStartedAt?: string | null;
+    tourCompletedAt?: string | null;
   }) => void;
+  /** The tour was finished or skipped just now (Supabase is written separately). */
+  markTourCompleted: (at: string | null) => void;
   /** Cosmetic local mirror of the server-side deduction in
    * backend/api/usage.py — decrements the chosen balance optimistically so
    * the UI updates immediately; the backend is the actual gate/spend. */
@@ -243,6 +254,9 @@ export const useAppStore = create<AppState>()(
       pendingDocLabel: null,
       lastCheckoutStatus: null,
       studentVerified: false,
+      trialStartedAt: null,
+      tourCompletedAt: null,
+      profileLoaded: false,
       toasts: [],
 
       balances: () => {
@@ -286,7 +300,12 @@ export const useAppStore = create<AppState>()(
           planPeriodStart: profile.planPeriodStart,
           planExpiresAt: profile.planExpiresAt,
           studentVerified: profile.studentVerified,
+          ...(profile.trialStartedAt !== undefined && profile.tourCompletedAt !== undefined
+            ? { trialStartedAt: profile.trialStartedAt, tourCompletedAt: profile.tourCompletedAt, profileLoaded: true }
+            : {}),
         }),
+
+      markTourCompleted: (at) => set({ tourCompletedAt: at }),
 
       requestCheck: (source, docLabel, count = 1) => {
         const { plan, standardCredits, premiumCredits, checksUsedThisPeriod } = get();

@@ -242,6 +242,7 @@ export default function HistoryPage() {
                       <span className="inline-block size-[13px] shrink-0" />
                     )}
                     <span className="min-w-0 flex-1 truncate font-medium text-ink-900">{group.latest.title}</span>
+                    {group.latest.isSample && <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">{t("Sample")}</span>}
                     {hasVersions && (
                       <span className="hidden shrink-0 items-center gap-1 rounded-full bg-brand-100/60 px-2 py-0.5 text-xs font-medium text-brand-600 sm:flex">
                         <ClockCounterClockwise size={12} />

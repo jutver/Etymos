@@ -102,6 +102,7 @@ export function DocumentsIconView({
                     onDocContextMenu(e, doc);
                   }}
                   onClick={() => (manageMode ? onToggleSelectDoc(doc.id) : openDoc(doc))}
+                  data-tour={doc.isSample ? "sample-document" : undefined}
                   className={cn(
                     "studio-card group relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card-lg)] border bg-white p-4 text-center shadow-[var(--shadow-card)] transition-colors hover:border-brand-300",
                     docSelected ? "border-brand-400 ring-2 ring-brand-200" : "border-line",
@@ -118,6 +119,7 @@ export function DocumentsIconView({
                     <FileText size={22} />
                   </span>
                   <span className="line-clamp-2 w-full text-xs font-semibold text-ink-900">{doc.title}</span>
+                  {doc.isSample && <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">{t("Sample")}</span>}
                   <span className="text-[11px] text-ink-400">
                     {formatDate(doc.date)}
                     {doc.checkCount > 1 && <> &middot; {doc.checkCount}{" "}{t("checks")}</>}

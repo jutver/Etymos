@@ -624,3 +624,14 @@ def test_previous_sources_load_from_the_store_on_a_fresh_server(tmp_path, monkey
     chunks = load_candidate_chunks(papers)
     assert [c["text"] for c in chunks] == [P2]
     assert chunks[0]["source_title"] == "Attention Is All You Need"
+
+
+def test_the_sample_document_cannot_be_rechecked_or_quoted(api, monkeypatch):
+    api_app, client, state = api
+    sample = {"user_id": "user-1", "is_sample": True, "input": {"type": "text", "name": "Sample"}}
+    monkeypatch.setattr(api_app, "get_report", lambda rid: sample)
+    for path in ("/api/reports/r-1/recheck", "/api/reports/r-1/recheck/quote"):
+        res = client.post(path, json=BODY)
+        assert res.status_code == 400
+        assert res.json()["detail"]["code"] == "sample_document"
+    assert state["checks"] == [] and state["charged"] == []

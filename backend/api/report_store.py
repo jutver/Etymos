@@ -470,6 +470,7 @@ def _fetch_from_supabase(report_id: str) -> Optional[dict[str, Any]]:
             "document_status": doc.get("status"),
             "ai_detection": doc.get("ai_detection"),
             "unlocked_tier": doc.get("unlocked_tier"),
+            "is_sample": bool(doc.get("is_sample")),
             "matches": matches,
         }
     except Exception:
