@@ -50,6 +50,21 @@ export const PUBLIC_PAGES: PublicPage[] = [
     priority: 1,
   },
   {
+    path: "/features",
+    vi: {
+      title: "Tính năng — Etymos",
+      description:
+        "Phát hiện đạo văn diễn ý, giải thích bằng AI, phát hiện nội dung do AI viết, nguồn trùng khớp, viết lại học thuật và kiểm tra lại từng bản nháp, tối ưu cho tiếng Việt.",
+    },
+    en: {
+      title: "Features — Etymos",
+      description:
+        "Paraphrase detection, explainable AI, AI-writing detection, matched sources, academic rewriting and draft re-checks, built for Vietnamese.",
+    },
+    changefreq: "monthly",
+    priority: 0.9,
+  },
+  {
     path: "/pricing",
     vi: {
       title: "Bảng giá — Etymos",
@@ -63,6 +78,21 @@ export const PUBLIC_PAGES: PublicPage[] = [
     },
     changefreq: "monthly",
     priority: 0.9,
+  },
+  {
+    path: "/about",
+    vi: {
+      title: "Giới thiệu — Etymos",
+      description:
+        "Tầm nhìn và sứ mệnh của Etymos: kiểm tra đạo văn chính xác cho tiếng Việt, giải thích rõ ràng và có giá phù hợp với sinh viên, nhà nghiên cứu.",
+    },
+    en: {
+      title: "About — Etymos",
+      description:
+        "Why Etymos exists: originality checking that's accurate for Vietnamese, clear enough to act on, and affordable for students and researchers.",
+    },
+    changefreq: "yearly",
+    priority: 0.6,
   },
   {
     path: "/contact",

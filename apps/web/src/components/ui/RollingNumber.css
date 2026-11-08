@@ -1,0 +1,75 @@
+@layer components {
+  .rolling-number {
+    white-space: nowrap;
+  }
+
+  /* One character's slot. Its width is set from the measured character and
+     eased, so the number never jumps: it widens, narrows, opens and closes.
+     Width is animated on purpose: the price's real width has to change so
+     "/mo" beside it moves along. It's a few short inline boxes, for half a
+     second, only when the billing cycle is switched.
+     `clip` rather than `hidden` keeps the baseline, so the digits line up
+     with the text beside them. */
+  .rolling-slot {
+    position: relative;
+    display: inline-block;
+    overflow: clip;
+    white-space: pre;
+    opacity: 1;
+    transition:
+      width 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.4s ease;
+  }
+
+  .rolling-slot[data-present="false"] {
+    opacity: 0;
+  }
+
+  /* Invisible copy of the character, measured for the slot's width. */
+  .rolling-measure {
+    position: absolute;
+    left: 0;
+    top: 0;
+    visibility: hidden;
+    white-space: pre;
+  }
+
+  .rolling-digit {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    overflow: clip;
+    line-height: 1.2;
+  }
+
+  .rolling-char {
+    line-height: 1.2;
+  }
+
+  .rolling-digit__sizer {
+    visibility: hidden;
+  }
+
+  /* The wheel: 0–9 stacked, slid to the digit, centred in the slot while
+     its width eases. */
+  .rolling-digit__strip {
+    position: absolute;
+    inset: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .rolling-digit__strip > span {
+    height: 1.2em;
+    line-height: 1.2;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rolling-slot,
+    .rolling-digit__strip {
+      transition: none;
+    }
+  }
+}

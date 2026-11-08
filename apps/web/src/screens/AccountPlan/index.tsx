@@ -13,7 +13,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { UsageMeter } from "../../components/UsageMeter";
-import { PlanCard } from "../../components/PlanCard";
+import { PlanCard, PLAN_GRID_CLASS } from "../../components/PlanCard";
 import { fetchPlanDefinitions, fetchCreditPacks } from "../../lib/configQueries";
 import { formatVND } from "@etymos/shared";
 import { planLabel, planDocLimit, useAppStore } from "../../lib/store";
@@ -177,7 +177,7 @@ export default function AccountPlanPage() {
             ))}
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-5">
+        <div className={cn("mt-5", PLAN_GRID_CLASS)}>
           {plans.map((p) => (
             <PlanCard key={p.id} plan={p} billingCycle={billingCycle} />
           ))}

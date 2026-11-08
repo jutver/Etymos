@@ -41,7 +41,6 @@ export const support: Record<string, string> = {
   "Open a new request": "Gửi yêu cầu mới",
   "or email": "hoặc gửi email tới",
   "Other": "Khác",
-  "Prefer email? Write to": "Muốn dùng email? Hãy viết cho",
   "Remove {{name}}": "Xóa {{name}}",
   "Request #{{number}}": "Yêu cầu #{{number}}",
   "Request #{{number}} received": "Đã nhận yêu cầu #{{number}}",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MagnifyingGlass, Eye, Check, X, CircleNotch, Trash } from "@phosphor-icons/react";
+import { MagnifyingGlass, Eye, Check, X, CircleNotch, Trash, FileX } from "@phosphor-icons/react";
 import { DataTable, type Column } from "../../components/DataTable";
 import { DeleteRecordsDialog } from "../../components/DeleteRecordsDialog";
 import { selectionColumn } from "../../components/selectionColumn";
@@ -10,6 +10,7 @@ import {
   rejectVerificationRequest,
   getEvidenceSignedUrl,
   deleteVerificationRequests,
+  deleteVerificationFiles,
   type VerificationRequest,
   type VerificationStatus,
 } from "../../lib/verificationQueries";
@@ -19,7 +20,7 @@ import { friendlyError } from "../../lib/errors";
 import { toastDeleteResult, type DeleteScope } from "../../lib/storageFiles";
 import { pushToast } from "../../lib/toast";
 import { cn } from "@etymos/shared";
-import { t, tr, currentLocale } from "../../lib/i18n";
+import { t, tn, tr, currentLocale } from "../../lib/i18n";
 
 type BadgeTone = "neutral" | "accent" | "destructive" | "warning" | "info" | "success";
 
@@ -56,6 +57,10 @@ export default function VerificationPage() {
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Requests whose evidence files the confirm dialog is about to delete.
+  const [fileRows, setFileRows] = useState<VerificationRequest[] | null>(null);
+  const [deletingFiles, setDeletingFiles] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   function reload() {
     let cancelled = false;
@@ -98,6 +103,28 @@ export default function VerificationPage() {
       setDeleteError(friendlyError(err));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function openDeleteFiles(targets: VerificationRequest[]) {
+    setFileError(null);
+    setFileRows(targets.filter((r) => !r.file_deleted_at));
+  }
+
+  async function handleDeleteFiles() {
+    if (!user || !fileRows) return;
+    setDeletingFiles(true);
+    setFileError(null);
+    try {
+      const count = await deleteVerificationFiles(fileRows, user.id);
+      setFileRows(null);
+      setSelected(new Set());
+      pushToast({ kind: "success", title: tn(count, "Deleted {{count}} file", "Deleted {{count}} files") });
+      reload();
+    } catch (err) {
+      setFileError(friendlyError(err));
+    } finally {
+      setDeletingFiles(false);
     }
   }
 
@@ -154,9 +181,18 @@ export default function VerificationPage() {
     {
       key: "storage_path",
       label: tr("Evidence file"),
-      render: (r) => (
-        <span className="truncate">{r.storage_path.split("/").pop() ?? r.storage_path}</span>
-      ),
+      render: (r) =>
+        r.file_deleted_at ? (
+          <span
+            className="flex min-w-0 items-center gap-2"
+            title={t("File deleted on {{date}}", { date: new Date(r.file_deleted_at).toLocaleString(currentLocale()) })}
+          >
+            <span className="truncate text-fg-subtle line-through">{r.storage_path.split("/").pop() ?? r.storage_path}</span>
+            <StatusBadge label={t("File deleted")} tone="neutral" capitalize={false} />
+          </span>
+        ) : (
+          <span className="truncate">{r.storage_path.split("/").pop() ?? r.storage_path}</span>
+        ),
     },
     {
       key: "status",
@@ -177,8 +213,8 @@ export default function VerificationPage() {
           <button
             type="button"
             onClick={() => handlePreview(r)}
-            disabled={previewLoading}
-            title={t("Preview evidence")}
+            disabled={previewLoading || !!r.file_deleted_at}
+            title={r.file_deleted_at ? t("The file was deleted") : t("Preview evidence")}
             className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:bg-surface-raised active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {previewLoading ? (
@@ -187,32 +223,42 @@ export default function VerificationPage() {
               <Eye size={14} weight="bold" />
             )}
           </button>
+          {r.status !== "approved" && (
+            <button
+              type="button"
+              disabled={actingId === r.id}
+              onClick={() => handleApprove(r)}
+              title={r.status === "rejected" ? t("Approve after all") : t("Approve")}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-success/40 bg-success-bg text-success transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check size={14} weight="bold" />
+            </button>
+          )}
           {r.status === "pending" && (
-            <>
-              <button
-                type="button"
-                disabled={actingId === r.id}
-                onClick={() => handleApprove(r)}
-                title={t("Approve")}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-success/40 bg-success-bg text-success transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Check size={14} weight="bold" />
-              </button>
-              <button
-                type="button"
-                disabled={actingId === r.id}
-                onClick={() => handleReject(r)}
-                title={t("Reject")}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-destructive/40 bg-destructive-bg text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <X size={14} weight="bold" />
-              </button>
-            </>
+            <button
+              type="button"
+              disabled={actingId === r.id}
+              onClick={() => handleReject(r)}
+              title={t("Reject")}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-destructive/40 bg-destructive-bg text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X size={14} weight="bold" />
+            </button>
+          )}
+          {!r.file_deleted_at && (
+            <button
+              type="button"
+              onClick={() => openDeleteFiles([r])}
+              title={t("Delete the file, keep the request")}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
+            >
+              <FileX size={14} weight="bold" />
+            </button>
           )}
           <button
             type="button"
             onClick={() => openDelete([r.id])}
-            title={t("Delete")}
+            title={t("Delete the request and its file")}
             className="flex size-7 cursor-pointer items-center justify-center rounded-control border border-border text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
           >
             <Trash size={14} weight="bold" />
@@ -226,7 +272,7 @@ export default function VerificationPage() {
     <div>
       <h1 className="text-h1 font-semibold text-fg">{t("Student Verification")}</h1>
       <p className="mt-1 text-body text-fg-muted">
-        {t("Review submitted student ID evidence, approve or reject verification requests.")}</p>
+        {t("Review submitted student ID evidence, approve or reject verification requests. Once reviewed, you can delete the uploaded file and keep the request.")}</p>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1.5">
@@ -251,6 +297,16 @@ export default function VerificationPage() {
         </div>
 
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+          {selected.size > 0 && (
+            <button
+              type="button"
+              onClick={() => openDeleteFiles(rows.filter((r) => selected.has(r.id)))}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3 py-2 text-caption font-medium text-fg-muted transition hover:border-destructive/40 hover:bg-destructive-bg hover:text-destructive active:scale-95"
+            >
+              <FileX size={14} weight="bold" />
+              {t("Delete files ({{count}})", { count: selected.size })}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => openDelete([...selected])}
@@ -303,6 +359,68 @@ export default function VerificationPage() {
           onCancel={() => setDeleteIds(null)}
           onConfirm={handleDelete}
         />
+      )}
+
+      {fileRows && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setFileRows(null)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md overflow-hidden rounded-card border border-border bg-surface shadow-pop"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+              <p className="text-body font-medium text-fg">{t("Delete evidence files")}</p>
+              <button
+                type="button"
+                onClick={() => setFileRows(null)}
+                title={t("Close")}
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition hover:bg-surface-raised active:scale-95"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 p-5">
+              {fileRows.length === 0 ? (
+                <p className="text-body text-fg">{t("The files of these requests are already deleted.")}</p>
+              ) : (
+                <>
+                  <p className="text-body text-fg">
+                    {fileRows.length === 1
+                      ? t("Delete the file {{name}} from {{who}}?", {
+                          name: fileRows[0].storage_path.split("/").pop() ?? fileRows[0].storage_path,
+                          who: fileRows[0].profiles?.email ?? fileRows[0].user_id,
+                        })
+                      : t("Delete the files of {{count}} requests?", { count: fileRows.length })}
+                  </p>
+                  <p className="text-caption text-fg-muted">
+                    {t("The file can't be recovered. The request stays in the list with its status, dates and reviewer, and the student's verification doesn't change.")}
+                  </p>
+                </>
+              )}
+              {fileError && <p className="text-caption text-destructive">{fileError}</p>}
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFileRows(null)}
+                  className="cursor-pointer rounded-control border border-border px-3 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised active:scale-95"
+                >
+                  {t("Cancel")}
+                </button>
+                {fileRows.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={deletingFiles}
+                    onClick={handleDeleteFiles}
+                    className="cursor-pointer rounded-control border border-destructive/40 bg-destructive-bg px-3 py-1.5 text-caption font-medium text-destructive transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingFiles ? t("Deleting…") : t("Delete files")}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {preview && (

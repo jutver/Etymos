@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/features",
+      "destination": "/features/index.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about/index.html"
+    },
+    {
       "source": "/pricing",
       "destination": "/pricing/index.html"
     },

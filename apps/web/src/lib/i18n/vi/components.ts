@@ -56,7 +56,6 @@ export const components: Record<string, string> = {
   "Fixed": "Cố định",
   "Get more": "Mua thêm",
   "Get Started": "Bắt đầu",
-  "Get started": "Bắt đầu",
   "Got it": "Đã hiểu",
   "Hide balance details": "Ẩn chi tiết số dư",
   "High match": "Trùng khớp cao",

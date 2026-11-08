@@ -18,6 +18,8 @@ import { useLanguage } from "./lib/i18n";
 import {
   LandingPage,
   PricingPage,
+  FeaturesPage,
+  AboutPage,
   LoginPage,
   SignupPage,
   UploadPage,
@@ -158,7 +160,9 @@ function App() {
         <Routes>
           <Route element={<PublicShellWithBanner />}>
             <Route path="/" element={<HomeRoute />} />
+            <Route path="/features" element={<FeaturesPage />} />
             <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
             {POLICIES.map((p) => (
               <Route key={p.slug} path={p.path} element={<LegalPage slug={p.slug} />} />

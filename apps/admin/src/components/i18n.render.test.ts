@@ -16,14 +16,15 @@ describe("admin UI language", () => {
   it("renders the sidebar in English", () => {
     setLanguage("en");
     const html = render(AdminNav);
-    expect(html).toContain("Moderation");
+    expect(html).toContain("Verification");
+    expect(html).not.toContain("Moderation");
     expect(html).toContain("Log out");
   });
 
   it("renders the same sidebar in Vietnamese, including the new Activity screen", () => {
     setLanguage("vi");
     const html = render(AdminNav);
-    expect(html).toContain("Kiểm duyệt");
+    expect(html).not.toContain("Kiểm duyệt");
     expect(html).toContain("Hoạt động");
     expect(html).toContain("Đăng xuất");
     expect(html).not.toContain(">Log out<");

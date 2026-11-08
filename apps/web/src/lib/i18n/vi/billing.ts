@@ -73,8 +73,8 @@ export const billing: Record<string, string> = {
   "What's the difference between subscribing and buying credits?": "Khác biệt giữa đăng ký gói và mua lượt là gì?",
   "Yes. Cancel anytime from your account settings, no questions asked. You'll keep Premium access until the end of your current billing period.":
     "Có. Bạn có thể hủy bất cứ lúc nào trong phần cài đặt tài khoản, không cần giải thích. Bạn vẫn giữ quyền truy cập Premium đến hết chu kỳ thanh toán hiện tại.",
-  "Yes. Etymos is Vietnamese-first but also supports English, French, and Japanese documents on Standard and Premium.":
-    "Có. Etymos ưu tiên tiếng Việt nhưng cũng hỗ trợ tài liệu tiếng Anh, tiếng Pháp và tiếng Nhật ở gói Standard và Premium.",
+  "Yes. Etymos is Vietnamese-first and also checks English documents on Standard and Premium.":
+    "Có. Etymos ưu tiên tiếng Việt và cũng kiểm tra tài liệu tiếng Anh ở gói Standard và Premium.",
   "You're out of checks for this month": "Bạn đã hết lượt kiểm tra trong tháng này",
   "Your existing reports stay accessible for 7 days, matching the Free plan's retention window. Upgrade again anytime to restore extended history retention (9 months on Standard, 12 months on Premium).":
     "Các báo cáo hiện có vẫn truy cập được trong 7 ngày, theo thời hạn lưu của gói Miễn phí. Bạn có thể nâng cấp lại bất cứ lúc nào để khôi phục thời hạn lưu lâu hơn (9 tháng ở Standard, 12 tháng ở Premium).",

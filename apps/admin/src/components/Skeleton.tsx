@@ -43,7 +43,7 @@ export function LoadingRegion({ children, className }: { children: ReactNode; cl
 }
 
 /**
- * A detail page (Users → user, Moderation → document) while it loads: back
+ * A detail page (Users → user) while it loads: back
  * link, title with badges, the line under it, then one card per entry in
  * `cards` with that many form fields.
  */

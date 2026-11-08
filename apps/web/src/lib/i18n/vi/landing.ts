@@ -43,7 +43,6 @@ export const landing: Record<string, string> = {
   "Scan scholarly databases": "Quét các cơ sở dữ liệu học thuật",
   "Scanning web sources": "Đang quét các nguồn web",
   "Search or create projects": "Tìm hoặc tạo dự án",
-  "See a real report": "Xem báo cáo thật",
   "See pricing": "Xem bảng giá",
   "Semantic detection": "Phát hiện ngữ nghĩa",
   "This check keeps running if you leave — it stays in your documents as “Checking”.":
@@ -54,7 +53,6 @@ export const landing: Record<string, string> = {
   "Upload files": "Tải file lên",
   "Upload one or more files or paste your text. We'll scan the web and academic papers.":
     "Tải lên một hoặc nhiều file hoặc dán văn bản của bạn. Chúng tôi sẽ quét web và các bài báo học thuật.",
-  "Vietnamese-first": "Ưu tiên tiếng Việt",
   "View all": "Xem tất cả",
   "View report": "Xem báo cáo",
   "Waiting for backend": "Đang chờ máy chủ",
@@ -74,6 +72,5 @@ export const landing: Record<string, string> = {
   "{{count}} file ready to check": "{{count}} file sẵn sàng để kiểm tra",
   "{{count}} files ready to check": "{{count}} file sẵn sàng để kiểm tra",
   "{{count}} words / {{limit}} limit": "{{count}} từ / giới hạn {{limit}}",
-  "~3 minutes": "~3 phút",
   "The connection to the server dropped before your file finished uploading. You weren't charged. Please try again.": "Kết nối tới máy chủ bị ngắt trước khi tệp của bạn tải lên xong. Bạn không bị trừ lượt. Vui lòng thử lại.",
 };

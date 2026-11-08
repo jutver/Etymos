@@ -1,15 +1,10 @@
 import { Link } from "react-router-dom";
-import { EnvelopeSimple, FacebookLogo, TiktokLogo } from "@phosphor-icons/react";
+import { EnvelopeSimple } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
 import { SUPPORT_EMAIL } from "../support/labels";
 import { POLICIES } from "../legal/policies";
-
-// Labels are functions so they follow the UI language at render time.
-const SOCIAL_LINKS = [
-  { label: () => t("Etymos on Facebook"), href: "https://www.facebook.com/profile.php?id=61595158266498", Icon: FacebookLogo },
-  { label: () => t("Etymos on TikTok"), href: "https://www.tiktok.com/@etymosofficial", Icon: TiktokLogo },
-];
+import { SOCIAL_LINKS } from "../../lib/social";
 
 export function Footer() {
   return (
@@ -44,41 +39,25 @@ export function Footer() {
           </ul>
         </div>
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Product")}</p>
-          <ul className="mt-4 space-y-3 text-sm">
-            <li>
-              <Link to="/#features" className="hover:text-white">
-                {t("Features")}</Link>
-            </li>
-            <li>
-              <Link to="/#how-it-works" className="hover:text-white">
-                {t("How it works")}</Link>
-            </li>
-            <li>
-              <Link to="/pricing" className="hover:text-white">
-                {t("Pricing")}</Link>
-            </li>
-          </ul>
-        </div>
+        <FooterColumn
+          title={t("Product")}
+          links={[
+            { to: "/", label: t("Home") },
+            { to: "/features", label: t("Features") },
+            { to: "/pricing", label: t("Pricing") },
+            { to: "/#how-it-works", label: t("How it works") },
+          ]}
+        />
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Get started")}</p>
-          <ul className="mt-4 space-y-3 text-sm">
-            <li>
-              <Link to="/upload" className="hover:text-white">
-                {t("Check a document")}</Link>
-            </li>
-            <li>
-              <Link to="/history" className="hover:text-white">
-                {t("My history")}</Link>
-            </li>
-            <li>
-              <Link to="/contact" className="hover:text-white">
-                {t("Contact support")}</Link>
-            </li>
-          </ul>
-        </div>
+        <FooterColumn
+          title={t("Company")}
+          links={[
+            { to: "/about", label: t("About") },
+            { to: "/contact", label: t("Contact") },
+            { to: "/upload", label: t("Check a document") },
+            { to: "/history", label: t("My history") },
+          ]}
+        />
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Policies & terms")}</p>
@@ -100,5 +79,22 @@ export function Footer() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterColumn({ title, links }: { title: string; links: { to: string; label: string }[] }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{title}</p>
+      <ul className="mt-4 space-y-3 text-sm">
+        {links.map((link) => (
+          <li key={link.to}>
+            <Link to={link.to} className="hover:text-white">
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

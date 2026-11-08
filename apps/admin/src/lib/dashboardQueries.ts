@@ -168,9 +168,7 @@ export interface DashboardMetrics {
   /** Successful checkouts within the selected range, and what they averaged. */
   purchasesInRange: number;
   averagePurchaseValue: number;
-  /** Share (0..1) of in-range documents with moderation_status = 'flagged'. */
-  flaggedDocumentRate: number;
-  /** Total documents uploaded within the selected range (denominator for flaggedDocumentRate). */
+  /** Total documents uploaded within the selected range. */
   documentsInRange: number;
   /** Count of pending student_verification_requests. Not range-scoped — this is a live queue depth. */
   verificationQueueDepth: number;
@@ -205,7 +203,7 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     supabase.from("profiles").select("id, created_at").gte("created_at", gte).lte("created_at", lte).limit(FETCH_LIMIT),
     supabase
       .from("documents")
-      .select("uploaded_at, status, moderation_status")
+      .select("uploaded_at, status")
       .gte("uploaded_at", gte)
       .lte("uploaded_at", lte)
       .limit(FETCH_LIMIT),
@@ -253,11 +251,9 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
   }
 
   const severityCounts = new Map<string, number>();
-  let flaggedCount = 0;
   for (const d of documents) {
     const status = d.status ?? "unscored";
     severityCounts.set(status, (severityCounts.get(status) ?? 0) + 1);
-    if (d.moderation_status === "flagged") flaggedCount += 1;
   }
 
   return {
@@ -291,7 +287,6 @@ export async function fetchDashboardMetrics(range: DateRange): Promise<Dashboard
     conversionRate: signups.length ? convertedSignups / signups.length : 0,
     convertedSignups,
     signupsInRange: signups.length,
-    flaggedDocumentRate: documents.length ? flaggedCount / documents.length : 0,
     documentsInRange: documents.length,
     verificationQueueDepth: verificationQueueRes.count ?? 0,
     accessQueueDepth: accessQueueRes.count ?? 0,

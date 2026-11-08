@@ -40,12 +40,6 @@ export function roleTone(role: string): BadgeTone {
   return role === "admin" ? "accent" : "neutral";
 }
 
-export function moderationTone(status: string): BadgeTone {
-  if (status === "removed") return "destructive";
-  if (status === "flagged") return "warning";
-  return "neutral";
-}
-
 export function docStatusTone(status: string): BadgeTone {
   if (status === "high") return "destructive";
   if (status === "moderate") return "warning";
