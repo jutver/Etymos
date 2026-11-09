@@ -33,12 +33,10 @@ function isLanguage(value: unknown): value is Language {
   return value === "en" || value === "vi";
 }
 
-/** Saved choice wins; otherwise follow the browser; Vietnamese is the product default. */
-export function detectLanguage(saved: string | null, browserLanguages: readonly string[]): Language {
-  if (isLanguage(saved)) return saved;
-  const first = browserLanguages.find(Boolean)?.toLowerCase();
-  if (first && !first.startsWith("vi")) return "en";
-  return "vi";
+/** The visitor's saved choice wins; everyone else gets Vietnamese, whatever
+ * their browser's language (the site is Vietnamese-first). */
+export function detectLanguage(saved: string | null): Language {
+  return isLanguage(saved) ? saved : "vi";
 }
 
 function readSaved(): string | null {
@@ -49,18 +47,9 @@ function readSaved(): string | null {
   }
 }
 
-/** Search-engine crawlers browse with an English locale, but the site's audience
- * searches in Vietnamese, so a crawler is shown (and indexes) the Vietnamese page. */
-export function isCrawler(userAgent: string): boolean {
-  return /googlebot|google-inspectiontool|bingbot|coccocbot|duckduckbot|applebot|yandex|baiduspider|facebookexternalhit|crawler|spider/i.test(userAgent);
-}
-
 function initialLanguage(): Language {
   if (typeof window === "undefined") return "en";
-  const saved = readSaved();
-  if (!saved && typeof navigator !== "undefined" && isCrawler(navigator.userAgent ?? "")) return "vi";
-  const nav = typeof navigator !== "undefined" ? (navigator.languages?.length ? navigator.languages : [navigator.language]) : [];
-  return detectLanguage(saved, nav);
+  return detectLanguage(readSaved());
 }
 
 let current: Language = initialLanguage();

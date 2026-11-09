@@ -15,6 +15,7 @@ import { support } from "./vi/support";
 import { legal } from "./vi/legal";
 import { marketing } from "./vi/marketing";
 import { onboarding } from "./vi/onboarding";
+import { blog } from "./vi/blog";
 
 export const vi: Record<string, string> = {
   ...common,
@@ -30,4 +31,5 @@ export const vi: Record<string, string> = {
   ...legal,
   ...marketing,
   ...onboarding,
+  ...blog,
 };

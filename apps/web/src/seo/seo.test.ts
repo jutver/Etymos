@@ -17,6 +17,10 @@ describe("public page list", () => {
   it("only lists paths App routes to", () => {
     for (const page of PUBLIC_PAGES) {
       if (POLICIES.some((p) => p.path === page.path)) continue;
+      if (page.path.startsWith("/blog/")) {
+        expect(appSource).toContain('path="/blog/:slug"');
+        continue;
+      }
       expect(appSource, page.path).toContain(`path="${page.path}"`);
     }
   });

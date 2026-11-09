@@ -9,10 +9,11 @@ import { ListItemsSkeleton, Skeleton } from "../../components/Skeleton";
 import { StatusBadge, roleTone } from "../../components/StatusBadge";
 import { getProfile } from "../../lib/supabaseQueries";
 import { countUserDocuments } from "../../lib/userDocumentsQueries";
-import { isProfileBanned, isProfileOnline, isProfileSupportBanned, type Profile } from "../../lib/types";
+import { isProfileBanned, isProfileOnline, isProfileSupportBanned, type PlanTier, type Profile } from "../../lib/types";
 import { friendlyError } from "../../lib/errors";
 import { t, tr, currentLocale } from "../../lib/i18n";
-import { planLabel } from "../../lib/plans";
+import { planChecks, planLabel } from "../../lib/plans";
+import { listPlanDefinitions } from "../../lib/configQueries";
 import type { UserDetailContext } from "./userDetailContext";
 
 const TABS = [
@@ -51,6 +52,8 @@ export default function UserDetailPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [documents, setDocuments] = useState<number | null>(null);
+  // Each plan's monthly check allowance, from Pricing (plan_definitions.doc_limit).
+  const [docLimits, setDocLimits] = useState<Partial<Record<PlanTier, number | null>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +66,9 @@ export default function UserDetailPage() {
       .then((p) => !cancelled && setProfile(p))
       .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false));
+    listPlanDefinitions()
+      .then((plans) => !cancelled && setDocLimits(Object.fromEntries(plans.map((p) => [p.id, p.doc_limit]))))
+      .catch(() => !cancelled && setDocLimits(null));
     countUserDocuments(id)
       .then((n) => !cancelled && setDocuments(n))
       .catch(() => !cancelled && setDocuments(null));
@@ -104,6 +110,7 @@ export default function UserDetailPage() {
   const name = profile.display_name?.trim() || null;
   const paid = profile.plan_tier !== "free";
   const context: UserDetailContext = { profile, setProfile };
+  const checks = docLimits ? planChecks(profile, docLimits) : null;
 
   return (
     <div className="max-w-[1800px]">
@@ -140,7 +147,24 @@ export default function UserDetailPage() {
           hint={t("Standard · Premium")}
         />
         <Stat label={t("Documents")} value={documents === null ? "—" : documents.toLocaleString(currentLocale())} />
-        <Stat label={t("Checks this period")} value={profile.checks_used_this_period.toLocaleString(currentLocale())} />
+        <Stat
+          label={t("Plan checks left")}
+          value={
+            !checks
+              ? "—"
+              : checks.left === null
+                ? t("Unlimited")
+                : t("{{left}} of {{limit}}", { left: checks.left, limit: checks.limit ?? 0 })
+          }
+          hint={
+            checks
+              ? t("{{used}} used · resets {{date}}", {
+                  used: checks.used,
+                  date: checks.resetsAt.toLocaleDateString(currentLocale(), { day: "numeric", month: "short" }),
+                })
+              : null
+          }
+        />
         <Stat label={t("Joined")} value={new Date(profile.created_at).toLocaleDateString(currentLocale())} />
         <Stat
           label={t("Last seen")}

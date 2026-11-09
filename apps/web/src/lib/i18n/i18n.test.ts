@@ -30,27 +30,27 @@ afterEach(() => vitest.unstubAllGlobals());
 describe("detectLanguage", () => {
   it("prefers the saved choice", async () => {
     const { detectLanguage } = await load();
-    expect(detectLanguage("en", ["vi-VN"])).toBe("en");
-    expect(detectLanguage("vi", ["en-US"])).toBe("vi");
+    expect(detectLanguage("en")).toBe("en");
+    expect(detectLanguage("vi")).toBe("vi");
   });
 
-  it("follows the browser when nothing is saved, and defaults to Vietnamese", async () => {
+  it("defaults to Vietnamese when nothing valid is saved", async () => {
     const { detectLanguage } = await load();
-    expect(detectLanguage(null, ["vi-VN", "en"])).toBe("vi");
-    expect(detectLanguage(null, ["en-US"])).toBe("en");
-    expect(detectLanguage(null, ["fr-FR"])).toBe("en");
-    expect(detectLanguage(null, [])).toBe("vi");
+    expect(detectLanguage(null)).toBe("vi");
+    expect(detectLanguage("klingon")).toBe("vi");
   });
 
-  it("ignores a corrupted saved value", async () => {
-    const { detectLanguage } = await load();
-    expect(detectLanguage("klingon", ["en-US"])).toBe("en");
+  it("opens in Vietnamese on a first visit, even from an English browser", async () => {
+    stubBrowser(["en-US"]);
+    const { getLanguage } = await load();
+    expect(getLanguage()).toBe("vi");
+    expect(document.documentElement.lang).toBe("vi");
   });
 });
 
 describe("t()", () => {
   it("returns the English source in English", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     const { t } = await load();
     expect(t("Upload")).toBe("Upload");
   });
@@ -76,13 +76,13 @@ describe("t()", () => {
   });
 
   it("leaves an unknown placeholder visible rather than swallowing it", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     const { t } = await load();
     expect(t("Choose {{name}}", {})).toBe("Choose {{name}}");
   });
 
   it("passes null/undefined through so optional messages can be rendered directly", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     const { t } = await load();
     expect(t(undefined)).toBeUndefined();
     expect(t(null)).toBeNull();
@@ -91,7 +91,7 @@ describe("t()", () => {
 
 describe("tn()", () => {
   it("picks the singular for exactly 1 and the plural otherwise (English)", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     const { tn } = await load();
     expect(tn(1, "{{count}} document", "{{count}} documents")).toBe("1 document");
     expect(tn(3, "{{count}} document", "{{count}} documents")).toBe("3 documents");
@@ -107,7 +107,7 @@ describe("tn()", () => {
 
 describe("setLanguage()", () => {
   it("switches immediately, persists the choice, updates <html lang> and notifies subscribers", async () => {
-    const html = stubBrowser(["en-US"]);
+    const html = stubBrowser(["en-US"], "en");
     const mod = await load();
     expect(html.lang).toBe("en");
 
@@ -133,7 +133,7 @@ describe("setLanguage()", () => {
   });
 
   it("does not crash when storage is blocked", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     vitest.stubGlobal("window", {
       localStorage: {
         getItem: () => {
@@ -152,21 +152,10 @@ describe("setLanguage()", () => {
 
 describe("currentLocale()", () => {
   it("matches the UI language for number and date formatting", async () => {
-    stubBrowser(["en-US"]);
+    stubBrowser(["en-US"], "en");
     const { currentLocale, setLanguage } = await load();
     expect(currentLocale()).toBe("en-US");
     setLanguage("vi");
     expect(currentLocale()).toBe("vi-VN");
-  });
-});
-
-describe("isCrawler", () => {
-  it("spots search-engine and link-preview crawlers, not phones", async () => {
-    const { isCrawler } = await load();
-    expect(isCrawler("Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")).toBe(true);
-    expect(isCrawler("Mozilla/5.0 (compatible; coccocbot-web/1.0; +http://help.coccoc.com/searchengine)")).toBe(true);
-    expect(isCrawler("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)")).toBe(true);
-    expect(isCrawler("Mozilla/5.0 (Linux; Android 12; Cubot KingKong 7) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")).toBe(false);
-    expect(isCrawler("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Zalo iOS")).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ export const FeaturesPage = lazy(() => import("../../screens/Features"));
 export const AboutPage = lazy(() => import("../../screens/About"));
 export const WaitlistPage = lazy(() => import("../../screens/Waitlist"));
 export const ContactPage = lazy(() => import("../../screens/Contact"));
+export const BlogPage = lazy(() => import("../../screens/Blog"));
+export const BlogPostPage = lazy(() => import("../../screens/Blog/Post"));
 export const LegalPage = lazy(() => import("../../screens/Legal"));
 export const GuestSupportTicketPage = lazy(() => import("../../screens/GuestSupportTicket"));
 

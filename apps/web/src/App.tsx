@@ -20,6 +20,8 @@ import {
   PricingPage,
   FeaturesPage,
   AboutPage,
+  BlogPage,
+  BlogPostPage,
   LoginPage,
   SignupPage,
   UploadPage,
@@ -164,6 +166,8 @@ function App() {
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/blog/:slug" element={<BlogPostPage />} />
             {POLICIES.map((p) => (
               <Route key={p.slug} path={p.path} element={<LegalPage slug={p.slug} />} />
             ))}

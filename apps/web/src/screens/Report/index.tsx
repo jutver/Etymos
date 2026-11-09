@@ -40,7 +40,7 @@ import { collectEditorBlocks } from "./recheck";
 import { changedRatio, htmlToText } from "../../lib/textChange";
 import { estimateScore, type PassageCheck } from "./rewriteScore";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
-import { t as tl, tr } from "../../lib/i18n";
+import { t as tl, tr, useLanguage } from "../../lib/i18n";
 import { effectiveTier, paywallPath } from "../../lib/paywall";
 
 // Private Storage bucket the backend uploads original PDFs into (see
@@ -269,6 +269,12 @@ export default function ReportPage() {
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
   const [view, setView] = useState<ReportView>("original");
+  // Pasted text and the sample report have no uploaded file, so the Original
+  // view could only say so: open those on the Document view instead.
+  const noFile = !!doc && !doc.fileName && !cachedDoc?.pdfUrl;
+  useEffect(() => {
+    if (noFile) setView((v) => (v === "original" ? "document" : v));
+  }, [noFile, id]);
   useSplashHold(
     !!id && !notFound && !loadError && (!doc || (view === "original" && pdfComing && !pdfReady)),
     { reshow: false },
@@ -288,6 +294,13 @@ export default function ReportPage() {
   useEffect(() => {
     if (doc) setFileName(historyMeta?.title ?? doc.title ?? doc.fileName ?? tl("Untitled document"));
   }, [doc, historyMeta?.title]);
+
+  // Browser tab: "<document name> - Etymos", following renames. SeoManager
+  // resets the title on a language change, so it's re-applied then too.
+  const language = useLanguage();
+  useEffect(() => {
+    if (fileName) document.title = `${fileName} - Etymos`;
+  }, [fileName, language]);
 
   // Remounting the editor is the only way to discard the browser-owned DOM and
   // re-render from fresh data, so a finished re-check bumps this key (once

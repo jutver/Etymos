@@ -79,6 +79,9 @@ export function AppNav() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
   const pushToast = useAppStore((s) => s.pushToast);
+  // Only for an account that hasn't finished or skipped the tour, once its
+  // profile has said so (not on the defaults before it loads).
+  const tourPending = useAppStore((s) => s.profileLoaded && s.tourCompletedAt === null);
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -189,6 +192,7 @@ export function AppNav() {
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-surface-tint"
                   >
                     {t("Help & Support")}</MenuLink>
+                  {tourPending && (
                   <m.button
                     variants={MENU_ITEM}
                     onClick={async () => {
@@ -201,6 +205,7 @@ export function AppNav() {
                   >
                     <Compass size={16} />
                     {t("Take the tour")}</m.button>
+                  )}
                   <div className="h-px bg-line" />
                   <m.button
                     variants={MENU_ITEM}
