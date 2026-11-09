@@ -3,7 +3,10 @@ import indexHtml from "../../index.html?raw";
 import vercelJson from "../../vercel.json";
 import { POLICIES } from "../components/legal/policies";
 import { PRIVATE_PREFIXES, PUBLIC_PAGES, SITE_URL, canonicalUrl, findPublicPage } from "./pages";
-import { headTags, pageFile, robotsTxt, sitemapXml, withPageHead } from "./build";
+import { APP_SHELL, headTags, pageFile, robotsTxt, sitemapXml, withPageHead } from "./build";
+import { pageBody, withRootContent } from "./prerender";
+import { POSTS } from "../blog/posts";
+import { ARTICLES } from "../blog/articles";
 
 const appSource = Object.values(
   import.meta.glob("../App.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>,
@@ -50,14 +53,62 @@ describe("public page list", () => {
 describe("vercel.json", () => {
   const rewrites = vercelJson.rewrites as { source: string; destination: string }[];
 
-  it("sends each public page to its own HTML file, before the app fallback", () => {
-    const fallback = rewrites.findIndex((r) => r.source === "/(.*)");
-    expect(fallback).toBe(rewrites.length - 1);
+  it("sends each public page to its own HTML file", () => {
     for (const page of PUBLIC_PAGES) {
       if (page.path === "/") continue;
       const rule = rewrites.find((r) => r.source === page.path);
       expect(rule?.destination, page.path).toBe(`/${pageFile(page)}`);
     }
+  });
+
+  it("has no catch-all, so unknown paths get a real 404", () => {
+    expect(rewrites.some((r) => r.source.includes("(.*)") || r.source === "/:path*")).toBe(false);
+  });
+
+  it("sends every other route App knows to the app shell (else a reload there would 404)", () => {
+    const paths = [...appSource.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]);
+    for (const path of paths) {
+      if (path === "*" || path === "/" || path === "/blog/:slug") continue;
+      if (findPublicPage(path)) continue;
+      expect(rewrites.find((r) => r.source === path)?.destination, path).toBe(`/${APP_SHELL}`);
+    }
+  });
+});
+
+describe("page text in the HTML", () => {
+  it("puts a blog post's full text, in Vietnamese, inside #root", () => {
+    const post = POSTS[0];
+    const html = withRootContent(indexHtml, pageBody(findPublicPage(`/blog/${post.slug}`)!));
+    expect(html).toContain(`<h1 class="mt-2 text-3xl font-bold text-navy-900">${post.vi.title}</h1>`);
+    const firstParagraph = ARTICLES[post.slug].vi.find((b) => b.kind === "p")!;
+    expect(html).toContain(firstParagraph.kind === "p" ? firstParagraph.text.slice(0, 40) : "");
+  });
+
+  it("links every page to every public page", () => {
+    const body = pageBody(findPublicPage("/pricing")!);
+    for (const page of PUBLIC_PAGES) if (!page.article) expect(body, page.path).toContain(`href="${page.path}"`);
+  });
+
+  it("lists every post on the blog index", () => {
+    const body = pageBody(findPublicPage("/blog")!);
+    for (const post of POSTS) expect(body).toContain(`href="/blog/${post.slug}"`);
+  });
+
+  it("escapes text", () => {
+    const page = { ...findPublicPage("/pricing")!, vi: { title: "A <b> & c — Etymos", description: "x" } };
+    expect(pageBody(page)).toContain("A &lt;b&gt; &amp; c");
+  });
+});
+
+describe("blog posts", () => {
+  it("are articles with their real date", () => {
+    const post = POSTS[0];
+    const page = findPublicPage(`/blog/${post.slug}`)!;
+    const tags = headTags(page);
+    expect(tags).toContain('<meta property="og:type" content="article" />');
+    expect(tags).toContain('"@type":"BlogPosting"');
+    expect(tags).toContain(`"datePublished":"${post.date}"`);
+    expect(sitemapXml("2030-01-01")).toContain(`<loc>${canonicalUrl(page.path)}</loc>\n    <lastmod>${post.date}</lastmod>`);
   });
 });
 

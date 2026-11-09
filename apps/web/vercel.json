@@ -57,8 +57,108 @@
       "destination": "/plans-and-credits/index.html"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/support/t/:token",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/verify-email",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/email-verified",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/reset-password",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/recover-account",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/waitlist",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/upload",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/analyzing",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/report/:id",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/documents",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/history",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/trash",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/paywall",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/checkout",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/payment-success",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/profile",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/plan",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/payments",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/verify-student",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/support",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/support/new",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/account/support/:number",
+      "destination": "/app.html"
     }
   ]
 }

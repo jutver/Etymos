@@ -54,6 +54,28 @@ function structuredData(page: PublicPage): string {
   return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
 }
 
+/** A blog post's structured data: a BlogPosting by Etymos. */
+function articleData(page: PublicPage, published: string): string {
+  const data = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: page.vi.title.replace(/ — Etymos$/, ""),
+    description: page.vi.description,
+    inLanguage: "vi",
+    datePublished: published,
+    dateModified: page.lastmod ?? published,
+    mainEntityOfPage: canonicalUrl(page.path),
+    image: `${SITE_URL}${OG_IMAGE}`,
+    author: { "@type": "Organization", name: SITE_NAME, url: `${SITE_URL}/` },
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      logo: { "@type": "ImageObject", url: `${SITE_URL}/assets/logo/etymos-mark-email.png` },
+    },
+  };
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
+}
+
 /** The tags between SEO_START and SEO_END for one page. */
 export function headTags(page: PublicPage): string {
   const url = canonicalUrl(page.path);
@@ -63,7 +85,7 @@ export function headTags(page: PublicPage): string {
     `<title>${esc(title)}</title>`,
     `<meta name="description" content="${esc(description)}" />`,
     `<link rel="canonical" href="${url}" />`,
-    `<meta property="og:type" content="website" />`,
+    `<meta property="og:type" content="${page.article ? "article" : "website"}" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
     `<meta property="og:locale" content="vi_VN" />`,
     `<meta property="og:locale:alternate" content="en_US" />`,
@@ -78,7 +100,9 @@ export function headTags(page: PublicPage): string {
     `<meta name="twitter:description" content="${esc(description)}" />`,
     `<meta name="twitter:image" content="${image}" />`,
   ];
+  if (page.article) lines.push(`<meta property="article:published_time" content="${page.article.published}" />`);
   if (page.path === "/") lines.push(structuredData(page));
+  if (page.article) lines.push(articleData(page, page.article.published));
   return lines.map((l) => `    ${l}`).join("\n");
 }
 
@@ -90,6 +114,27 @@ export function withPageHead(html: string, page: PublicPage): string {
   return `${html.slice(0, start + SEO_START.length)}\n${headTags(page)}\n    ${html.slice(end)}`;
 }
 
+function withHeadTags(html: string, tags: string[]): string {
+  const start = html.indexOf(SEO_START);
+  const end = html.indexOf(SEO_END);
+  if (start < 0 || end < start) throw new Error(`index.html is missing the ${SEO_START} … ${SEO_END} block`);
+  return `${html.slice(0, start + SEO_START.length)}\n${tags.map((l) => `    ${l}`).join("\n")}\n    ${html.slice(end)}`;
+}
+
+/** The 404 page's head: no index, no canonical. */
+export function withNotFoundHead(html: string): string {
+  return withHeadTags(html, [`<title>Không tìm thấy trang — ${SITE_NAME}</title>`, `<meta name="robots" content="noindex" />`]);
+}
+
+/** The signed-in app's shell (dist/app.html, see APP_SHELL): kept out of the index. */
+export function withAppHead(html: string): string {
+  return withHeadTags(html, [`<title>${SITE_NAME}</title>`, `<meta name="robots" content="noindex, nofollow" />`]);
+}
+
+/** Where vercel.json sends the app's own routes (sign-in, upload, reports…):
+ * an empty page, so they never flash the home page's text. */
+export const APP_SHELL = "app.html";
+
 /** Where the copy of index.html for `page` goes inside dist/. */
 export function pageFile(page: PublicPage): string {
   return page.path === "/" ? "index.html" : `${page.path.slice(1)}/index.html`;
@@ -98,7 +143,7 @@ export function pageFile(page: PublicPage): string {
 export function sitemapXml(lastmod: string): string {
   const urls = PUBLIC_PAGES.map(
     (p) =>
-      `  <url>\n    <loc>${canonicalUrl(p.path)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority.toFixed(1)}</priority>\n  </url>`,
+      `  <url>\n    <loc>${canonicalUrl(p.path)}</loc>\n    <lastmod>${p.lastmod ?? lastmod}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority.toFixed(1)}</priority>\n  </url>`,
   );
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
 }

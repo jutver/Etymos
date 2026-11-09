@@ -34,6 +34,12 @@ export interface PublicPage {
   changefreq: "weekly" | "monthly" | "yearly";
   /** sitemap.xml <priority>, 0–1. */
   priority: number;
+  /** When the content last changed (YYYY-MM-DD). Without it the sitemap uses
+   * the build date, which Google learns to ignore, so set it where it's known. */
+  lastmod?: string;
+  /** Marks the page as an article (a blog post): og:type article and
+   * BlogPosting structured data. */
+  article?: { published: string };
 }
 
 export const PUBLIC_PAGES: PublicPage[] = [
@@ -124,6 +130,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     },
     changefreq: "weekly",
     priority: 0.7,
+    lastmod: POSTS[0]?.date,
   },
   ...POSTS.map(
     (post): PublicPage => ({
@@ -132,6 +139,8 @@ export const PUBLIC_PAGES: PublicPage[] = [
       en: { title: `${post.en.title} — Etymos`, description: post.en.description },
       changefreq: "yearly",
       priority: 0.6,
+      lastmod: post.date,
+      article: { published: post.date },
     }),
   ),
   {
