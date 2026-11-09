@@ -5,6 +5,9 @@ import { t, tr } from "../../lib/i18n";
  * poller turns mail to it into tickets). */
 export const SUPPORT_EMAIL = "support@etymos.site";
 
+/** The public support phone number, as it should be shown. Empty hides it. */
+export const SUPPORT_PHONE: string = "081 6091028";
+
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing: tr("Billing and payments"),
   account: tr("Account and login"),

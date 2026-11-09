@@ -40,7 +40,7 @@ import { collectEditorBlocks } from "./recheck";
 import { changedRatio, htmlToText } from "../../lib/textChange";
 import { estimateScore, type PassageCheck } from "./rewriteScore";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
-import { t as tl, tr } from "../../lib/i18n";
+import { t as tl, tr, useLanguage } from "../../lib/i18n";
 import { effectiveTier, paywallPath } from "../../lib/paywall";
 
 // Private Storage bucket the backend uploads original PDFs into (see
@@ -294,6 +294,13 @@ export default function ReportPage() {
   useEffect(() => {
     if (doc) setFileName(historyMeta?.title ?? doc.title ?? doc.fileName ?? tl("Untitled document"));
   }, [doc, historyMeta?.title]);
+
+  // Browser tab: "<document name> - Etymos", following renames. SeoManager
+  // resets the title on a language change, so it's re-applied then too.
+  const language = useLanguage();
+  useEffect(() => {
+    if (fileName) document.title = `${fileName} - Etymos`;
+  }, [fileName, language]);
 
   // Remounting the editor is the only way to discard the browser-owned DOM and
   // re-render from fresh data, so a finished re-check bumps this key (once

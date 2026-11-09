@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
-import { EnvelopeSimple } from "@phosphor-icons/react";
+import { EnvelopeSimple, MapPin, Phone } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
-import { SUPPORT_EMAIL } from "../support/labels";
-import { POLICIES } from "../legal/policies";
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from "../support/labels";
+import { OWNER_ADDRESS, POLICIES } from "../legal/policies";
 import { SOCIAL_LINKS } from "../../lib/social";
 
 export function Footer() {
@@ -14,13 +14,32 @@ export function Footer() {
           <Logo variant="light" /><p className="footer-statement">Thoughtful writing.<br /><em>Original by you.</em></p>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
             {t("Vietnamese-first plagiarism detection, built to be affordable for every student and researcher.")}</p>
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            aria-label={t("Email Etymos support")}
-            className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-white/70 hover:text-white"
-          >
-            <EnvelopeSimple size={16} />
-            {SUPPORT_EMAIL}</a>
+          <ul className="mt-5 space-y-2.5 text-sm">
+            <li>
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                aria-label={t("Email Etymos support")}
+                className="inline-flex items-center gap-2 font-medium text-white/70 hover:text-white"
+              >
+                <EnvelopeSimple size={16} className="shrink-0" />
+                {SUPPORT_EMAIL}</a>
+            </li>
+            {SUPPORT_PHONE && (
+              <li>
+                <a
+                  href={`tel:${SUPPORT_PHONE.replace(/[^\d+]/g, "")}`}
+                  aria-label={t("Call Etymos support")}
+                  className="inline-flex items-center gap-2 font-medium text-white/70 hover:text-white"
+                >
+                  <Phone size={16} className="shrink-0" />
+                  {SUPPORT_PHONE}</a>
+              </li>
+            )}
+            <li className="flex max-w-xs items-start gap-2 leading-relaxed text-white/55">
+              <MapPin size={16} className="mt-0.5 shrink-0 text-white/70" aria-hidden />
+              <address className="not-italic">{OWNER_ADDRESS}</address>
+            </li>
+          </ul>
           <ul className="mt-5 flex items-center gap-3">
             {SOCIAL_LINKS.map(({ label, href, Icon }) => (
               <li key={href}>
@@ -53,9 +72,8 @@ export function Footer() {
           title={t("Company")}
           links={[
             { to: "/about", label: t("About") },
+            { to: "/blog", label: t("Blog") },
             { to: "/contact", label: t("Contact") },
-            { to: "/upload", label: t("Check a document") },
-            { to: "/history", label: t("My history") },
           ]}
         />
 

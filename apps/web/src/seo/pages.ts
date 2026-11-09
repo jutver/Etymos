@@ -8,9 +8,12 @@
 //     and the language changes;
 //   - vercel.json must route each path to its file (checked by seo.test.ts).
 //
-// No imports: vite.config.ts loads this file in Node before the app exists.
+// No app imports: vite.config.ts loads this file in Node before the app exists.
+// (blog/posts.ts is plain data with no imports of its own, so it is safe.)
 // Vietnamese is what the built HTML carries, because the audience searches in
 // Vietnamese; English is used in the running app when the visitor picks it.
+
+import { POSTS } from "../blog/posts.ts";
 
 export const SITE_URL = "https://www.etymos.site";
 export const SITE_NAME = "Etymos";
@@ -37,12 +40,12 @@ export const PUBLIC_PAGES: PublicPage[] = [
   {
     path: "/",
     vi: {
-      title: "Etymos — Kiểm tra đạo văn và nội dung AI cho tiếng Việt",
+      title: "Etymos - Kiểm tra đạo văn và nội dung AI cho Sinh viên Việt Nam",
       description:
         "Kiểm tra đạo văn và phát hiện nội dung do AI viết, tối ưu cho tiếng Việt. Giải thích rõ từng đoạn trùng lặp, chỉ ra nguồn và gợi ý viết lại theo văn phong học thuật. Giá phải chăng cho sinh viên.",
     },
     en: {
-      title: "Etymos — Plagiarism and AI-content checker for Vietnamese",
+      title: "Etymos - Plagiarism and AI-content checker for Vietnamese Student",
       description:
         "Affordable, Vietnamese-optimized plagiarism and AI-content detection with explainable AI, matched sources and one-click academic rewriting.",
     },
@@ -107,6 +110,30 @@ export const PUBLIC_PAGES: PublicPage[] = [
     changefreq: "yearly",
     priority: 0.5,
   },
+  {
+    path: "/blog",
+    vi: {
+      title: "Blog — Etymos",
+      description:
+        "Hướng dẫn thực tế về đạo văn, cách diễn đạt lại và trích dẫn nguồn cho sinh viên, nhà nghiên cứu viết bằng tiếng Việt.",
+    },
+    en: {
+      title: "Blog — Etymos",
+      description:
+        "Practical guides on plagiarism, paraphrasing and citing sources, for students and researchers writing in Vietnamese.",
+    },
+    changefreq: "weekly",
+    priority: 0.7,
+  },
+  ...POSTS.map(
+    (post): PublicPage => ({
+      path: `/blog/${post.slug}`,
+      vi: { title: `${post.vi.title} — Etymos`, description: post.vi.description },
+      en: { title: `${post.en.title} — Etymos`, description: post.en.description },
+      changefreq: "yearly",
+      priority: 0.6,
+    }),
+  ),
   {
     path: "/terms",
     vi: { title: "Điều khoản sử dụng — Etymos", description: "Điều khoản sử dụng dịch vụ kiểm tra đạo văn và nội dung AI Etymos." },

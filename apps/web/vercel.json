@@ -17,6 +17,22 @@
       "destination": "/contact/index.html"
     },
     {
+      "source": "/blog",
+      "destination": "/blog/index.html"
+    },
+    {
+      "source": "/blog/doc-hieu-bao-cao-dao-van",
+      "destination": "/blog/doc-hieu-bao-cao-dao-van/index.html"
+    },
+    {
+      "source": "/blog/dien-dat-lai-dung-cach",
+      "destination": "/blog/dien-dat-lai-dung-cach/index.html"
+    },
+    {
+      "source": "/blog/dao-van-la-gi",
+      "destination": "/blog/dao-van-la-gi/index.html"
+    },
+    {
       "source": "/terms",
       "destination": "/terms/index.html"
     },
