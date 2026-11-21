@@ -1,8 +1,10 @@
 // Build-time page text for search engines and link previews that don't run
 // JavaScript (Cốc Cốc, Bing's first pass, Zalo/Facebook): each public page's
-// HTML file gets real content inside <div id="root">, in Vietnamese. React
-// replaces it as soon as the app starts (createRoot clears the element), so
-// visitors see it only while the app downloads.
+// HTML file gets real content inside <div id="root">, in Vietnamese.
+// index.html marks `html[data-boot]` and hides `[data-prerender]` until
+// `SplashProvider` mounts, preventing a flash of fallback text in JS-capable
+// browsers while keeping full HTML visible to non-JS crawlers and as a
+// fallback if the module bundle fails to load.
 //
 // Blog posts carry their full text; other pages carry their heading and
 // summary. Every page links to every public page so crawlers can find them all.
@@ -90,7 +92,7 @@ export function pageBody(page: PublicPage): string {
   const slug = page.path.startsWith("/blog/") ? page.path.slice("/blog/".length) : null;
   const main = (slug && postBody(slug)) || (page.path === "/blog" ? blogIndexBody(page) : summaryBody(page));
   return [
-    `<div class="mx-auto max-w-3xl px-5 py-12">`,
+    `<div data-prerender class="mx-auto max-w-3xl px-5 py-12">`,
     `<p><a href="/" class="text-xl font-bold text-navy-900">Etymos</a></p>`,
     `<main class="mt-10">${main}</main>`,
     siteLinks(),
@@ -101,7 +103,7 @@ export function pageBody(page: PublicPage): string {
 /** The body of the 404 page. */
 export function notFoundBody(): string {
   return [
-    `<div class="mx-auto max-w-3xl px-5 py-12">`,
+    `<div data-prerender class="mx-auto max-w-3xl px-5 py-12">`,
     `<p><a href="/" class="text-xl font-bold text-navy-900">Etymos</a></p>`,
     `<main class="mt-10"><h1 class="text-3xl font-bold text-navy-900">Không tìm thấy trang</h1>`,
     `<p class="mt-4 text-ink-600">Trang bạn tìm không tồn tại hoặc đã được chuyển đi.</p></main>`,

@@ -71,6 +71,12 @@ export function SplashProvider({ children }: { children: ReactNode }) {
     phaseRef.current = phase;
   }, [phase]);
 
+  // React has cleared #root's prerendered fallback and committed SplashScreen
+  // above; drop the pre-paint boot attribute before the browser paints.
+  useLayoutEffect(() => {
+    delete document.documentElement.dataset.boot;
+  }, []);
+
   const hold = useCallback((id: string, reshow: boolean) => {
     // Boot-only holds never bring the splash back once it has gone.
     if (phaseRef.current === "hidden" && !reshow) return;

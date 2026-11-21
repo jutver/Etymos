@@ -8,6 +8,30 @@
     <!-- seo:start -->
     <!-- Filled from src/seo/pages.ts by the seo plugin in vite.config.ts. -->
     <!-- seo:end -->
+    <style>
+      html[data-boot],
+      html[data-boot] body {
+        background: #f8fafc;
+      }
+      html[data-boot] [data-prerender] {
+        display: none;
+      }
+    </style>
+    <script>
+      if ("noModule" in HTMLScriptElement.prototype) {
+        var d = document.documentElement.dataset;
+        d.boot = "";
+        addEventListener(
+          "error",
+          function (e) {
+            if (!("boot" in d)) return;
+            var t = e.target;
+            if (t && t.tagName === "SCRIPT" && t.type === "module") delete d.boot;
+          },
+          true,
+        );
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

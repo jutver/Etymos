@@ -4,7 +4,7 @@ import vercelJson from "../../vercel.json";
 import { POLICIES } from "../components/legal/policies";
 import { PRIVATE_PREFIXES, PUBLIC_PAGES, SITE_URL, canonicalUrl, findPublicPage } from "./pages";
 import { APP_SHELL, headTags, pageFile, robotsTxt, sitemapXml, withPageHead } from "./build";
-import { pageBody, withRootContent } from "./prerender";
+import { notFoundBody, pageBody, withRootContent } from "./prerender";
 import { POSTS } from "../blog/posts";
 import { ARTICLES } from "../blog/articles";
 
@@ -97,6 +97,31 @@ describe("page text in the HTML", () => {
   it("escapes text", () => {
     const page = { ...findPublicPage("/pricing")!, vi: { title: "A <b> & c — Etymos", description: "x" } };
     expect(pageBody(page)).toContain("A &lt;b&gt; &amp; c");
+  });
+
+  it("marks prerendered wrappers with data-prerender", () => {
+    expect(pageBody(findPublicPage("/")!)).toContain('<div data-prerender class="mx-auto max-w-3xl px-5 py-12">');
+    expect(notFoundBody()).toContain('<div data-prerender class="mx-auto max-w-3xl px-5 py-12">');
+  });
+
+  it("hides prerendered text during boot without hiding #root and recovers if module loading fails", () => {
+    expect(indexHtml).toContain("html[data-boot],");
+    expect(indexHtml).toContain("html[data-boot] body");
+    expect(indexHtml).toContain("background: #f8fafc;");
+    expect(indexHtml).toContain("html[data-boot] [data-prerender]");
+    expect(indexHtml).not.toMatch(/html\[data-boot\]\s+#root\b/);
+    expect(indexHtml).toContain('"noModule" in HTMLScriptElement.prototype');
+    expect(indexHtml).toContain('d.boot = ""');
+    expect(indexHtml).toContain('t.tagName === "SCRIPT" && t.type === "module"');
+    expect(indexHtml).toContain("delete d.boot");
+  });
+
+  it("preserves both boot hiding in <head> and prerendered content in #root when built", () => {
+    const home = findPublicPage("/")!;
+    const html = withRootContent(withPageHead(indexHtml, home), pageBody(home));
+    expect(html).toContain("html[data-boot] [data-prerender]");
+    expect(html).toContain('"noModule" in HTMLScriptElement.prototype');
+    expect(html).toContain('<div data-prerender class="mx-auto max-w-3xl px-5 py-12">');
   });
 });
 
