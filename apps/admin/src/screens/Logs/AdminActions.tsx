@@ -1,7 +1,7 @@
 // Logs > Admin actions: every change an admin made, who made it, when, and
 // what it changed (from → to). Filter by admin, area, dates or text; ?user=
 // narrows it to actions about one account.
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowClockwise, CaretDown, CaretRight, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
@@ -19,6 +19,7 @@ import {
 } from "../../lib/adminActionLogQueries";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, t } from "../../lib/i18n";
+import { AdminActionsMoreSkeleton, AdminActionsSkeleton } from "./Skeletons";
 
 const TONE: Record<ActionTone, string> = {
   create: "bg-success",
@@ -97,10 +98,12 @@ export default function AdminActionsPage() {
   }));
   const [rows, setRows] = useState<AdminActionEntry[]>([]);
   const [more, setMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [reload, setReload] = useState(0);
+  const reqGenRef = useRef(0);
 
   useEffect(() => {
     listAdmins().then(setAdmins).catch(() => undefined);
@@ -125,17 +128,25 @@ export default function AdminActionsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const gen = ++reqGenRef.current;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     listAdminActions(filters)
       .then((page) => {
-        if (cancelled) return;
+        if (cancelled || reqGenRef.current !== gen) return;
         setRows(page.rows);
         setMore(page.more);
         setOpen(new Set());
       })
-      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
-      .finally(() => !cancelled && setLoading(false));
+      .catch((err: unknown) => {
+        if (cancelled || reqGenRef.current !== gen) return;
+        setError(friendlyError(err));
+      })
+      .finally(() => {
+        if (cancelled || reqGenRef.current !== gen) return;
+        setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -143,15 +154,23 @@ export default function AdminActionsPage() {
 
   function loadMore() {
     const last = rows[rows.length - 1];
-    if (!last) return;
-    setLoading(true);
+    if (!last || loading || loadingMore) return;
+    const gen = reqGenRef.current;
+    setLoadingMore(true);
     listAdminActions(filters, last.id)
       .then((page) => {
+        if (reqGenRef.current !== gen) return;
         setRows((prev) => [...prev, ...page.rows]);
         setMore(page.more);
       })
-      .catch((err: unknown) => setError(friendlyError(err)))
-      .finally(() => setLoading(false));
+      .catch((err: unknown) => {
+        if (reqGenRef.current !== gen) return;
+        setError(friendlyError(err));
+      })
+      .finally(() => {
+        if (reqGenRef.current !== gen) return;
+        setLoadingMore(false);
+      });
   }
 
   function toggle(id: number) {
@@ -256,7 +275,7 @@ export default function AdminActionsPage() {
         <button
           type="button"
           onClick={() => setReload((n) => n + 1)}
-          disabled={loading}
+          disabled={loading || loadingMore}
           className="ml-auto flex h-8 cursor-pointer items-center gap-1.5 rounded-control border border-border bg-surface px-2.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised hover:text-fg disabled:opacity-60"
         >
           <ArrowClockwise size={14} weight="bold" className={cn(loading && "animate-spin")} />
@@ -271,82 +290,87 @@ export default function AdminActionsPage() {
       )}
 
       <section className="rounded-card border border-border bg-surface shadow-card">
-        {rows.length === 0 && !loading ? (
+        {loading ? (
+          <AdminActionsSkeleton />
+        ) : rows.length === 0 ? (
           <p className="px-4 py-8 text-center text-body text-fg-muted">
             {hasFilters ? t("No admin actions match these filters.") : t("No admin actions recorded yet.")}
           </p>
         ) : (
-          <ul>
-            {rows.map((entry) => {
-              const day = dayLabel(entry.created_at);
-              const showDay = day !== lastDay;
-              lastDay = day;
-              const isOpen = open.has(entry.id);
-              const changeCount = Object.keys(entry.changes).length;
-              return (
-                <Fragment key={entry.id}>
-                  {showDay && (
-                    <li className="sticky top-0 z-10 border-b border-border bg-surface/95 px-4 py-2 text-caption font-semibold text-fg-muted backdrop-blur first:rounded-t-card">
-                      {day}
-                    </li>
-                  )}
-                  <li className="border-b border-border/60 last:border-0">
-                    <button
-                      type="button"
-                      onClick={() => toggle(entry.id)}
-                      aria-expanded={isOpen}
-                      className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition hover:bg-surface-raised/50"
-                    >
-                      <span className="mt-0.5 w-24 shrink-0 whitespace-nowrap font-mono text-caption tabular-nums text-fg-subtle">
-                        {new Date(entry.created_at).toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                      </span>
-                      <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", TONE[actionTone(entry)])} />
-                      <span className="min-w-0 flex-1">
-                        <span className="text-body text-fg">
-                          <span className="font-medium">{entry.actor_email ?? entry.actor_id?.slice(0, 8) ?? t("Unknown admin")}</span>{" "}
-                          <span className="text-fg-muted">{describeAction(entry).toLowerCase()}</span>
-                          {entry.summary && <span className="font-medium"> {entry.summary}</span>}
-                        </span>
-                        {!isOpen && changeCount > 0 && (
-                          <span className="mt-0.5 block truncate font-mono text-caption text-fg-subtle">
-                            {Object.keys(entry.changes).slice(0, 6).join(", ")}
-                            {changeCount > 6 && ` +${changeCount - 6}`}
-                          </span>
-                        )}
-                      </span>
-                      {entry.target_user_id && (
-                        <Link
-                          to={`/users/${entry.target_user_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-0.5 shrink-0 text-caption font-medium text-accent hover:underline"
-                        >
-                          {t("Open user")}
-                        </Link>
-                      )}
-                      <span className="mt-1 shrink-0 text-fg-subtle">
-                        {isOpen ? <CaretDown size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
-                      </span>
-                    </button>
-                    {isOpen && (
-                      <div className="pb-3 pl-[9rem] pr-4">
-                        <Changes entry={entry} />
-                      </div>
+          <>
+            <ul>
+              {rows.map((entry) => {
+                const day = dayLabel(entry.created_at);
+                const showDay = day !== lastDay;
+                lastDay = day;
+                const isOpen = open.has(entry.id);
+                const changeCount = Object.keys(entry.changes).length;
+                return (
+                  <Fragment key={entry.id}>
+                    {showDay && (
+                      <li className="sticky top-0 z-10 border-b border-border bg-surface/95 px-4 py-2 text-caption font-semibold text-fg-muted backdrop-blur first:rounded-t-card">
+                        {day}
+                      </li>
                     )}
-                  </li>
-                </Fragment>
-              );
-            })}
-          </ul>
+                    <li className="border-b border-border/60 last:border-0">
+                      <button
+                        type="button"
+                        onClick={() => toggle(entry.id)}
+                        aria-expanded={isOpen}
+                        className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition hover:bg-surface-raised/50"
+                      >
+                        <span className="mt-0.5 w-24 shrink-0 whitespace-nowrap font-mono text-caption tabular-nums text-fg-subtle">
+                          {new Date(entry.created_at).toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </span>
+                        <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", TONE[actionTone(entry)])} />
+                        <span className="min-w-0 flex-1">
+                          <span className="text-body text-fg">
+                            <span className="font-medium">{entry.actor_email ?? entry.actor_id?.slice(0, 8) ?? t("Unknown admin")}</span>{" "}
+                            <span className="text-fg-muted">{describeAction(entry).toLowerCase()}</span>
+                            {entry.summary && <span className="font-medium"> {entry.summary}</span>}
+                          </span>
+                          {!isOpen && changeCount > 0 && (
+                            <span className="mt-0.5 block truncate font-mono text-caption text-fg-subtle">
+                              {Object.keys(entry.changes).slice(0, 6).join(", ")}
+                              {changeCount > 6 && ` +${changeCount - 6}`}
+                            </span>
+                          )}
+                        </span>
+                        {entry.target_user_id && (
+                          <Link
+                            to={`/users/${entry.target_user_id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-0.5 shrink-0 text-caption font-medium text-accent hover:underline"
+                          >
+                            {t("Open user")}
+                          </Link>
+                        )}
+                        <span className="mt-1 shrink-0 text-fg-subtle">
+                          {isOpen ? <CaretDown size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="pb-3 pl-[9rem] pr-4">
+                          <Changes entry={entry} />
+                        </div>
+                      )}
+                    </li>
+                  </Fragment>
+                );
+              })}
+            </ul>
+            {loadingMore && <AdminActionsMoreSkeleton count={3} />}
+          </>
         )}
-        {(more || loading) && (
+        {!loading && (more || loadingMore) && (
           <div className="border-t border-border p-3 text-center">
             <button
               type="button"
               onClick={loadMore}
-              disabled={loading}
+              disabled={loadingMore}
               className="cursor-pointer rounded-control border border-border px-3 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised disabled:opacity-60"
             >
-              {loading ? t("Loading…") : t("Load older actions")}
+              {loadingMore ? t("Loading…") : t("Load older actions")}
             </button>
           </div>
         )}

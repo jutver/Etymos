@@ -7,12 +7,20 @@ import { t } from "../lib/i18n";
  * stands in for, so nothing shifts when the data lands. The shimmer stops
  * under prefers-reduced-motion (globals.css).
  */
-export function Skeleton({ className, rounded = "sm" }: { className?: string; rounded?: "sm" | "control" | "full" }) {
+export function Skeleton({
+  className,
+  rounded = "sm",
+  surface = "light",
+}: {
+  className?: string;
+  rounded?: "sm" | "control" | "full";
+  surface?: "light" | "dark";
+}) {
   return (
     <div
       aria-hidden="true"
       className={cn(
-        "shimmer-bg animate-shimmer",
+        surface === "dark" ? "shimmer-bg-dark animate-shimmer" : "shimmer-bg animate-shimmer",
         rounded === "full" ? "rounded-full" : rounded === "control" ? "rounded-control" : "rounded",
         className,
       )}

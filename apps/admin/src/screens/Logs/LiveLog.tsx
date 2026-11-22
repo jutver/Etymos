@@ -9,6 +9,7 @@ import { fetchLiveLog, LOG_LEVELS, type LiveLogFilters, type LogLevel, type LogR
 import { friendlyError } from "../../lib/errors";
 import { t, tn, tr } from "../../lib/i18n";
 import { download, levelTone, logTime, rowAsText, shortJob, TONE_CLASS } from "./format";
+import { LiveLogMetaSkeleton, LiveLogRowsSkeleton } from "./Skeletons";
 
 const POLL_MS = 2000;
 /** Rows kept on screen; older ones scroll away. */
@@ -143,6 +144,7 @@ export default function LiveLogPage() {
   const filterKey = JSON.stringify(active);
 
   const [rows, setRows] = useState<LogRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [paused, setPaused] = useState(false);
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +181,8 @@ export default function LiveLogPage() {
         if (page.rows.length) setRows((prev) => [...prev, ...page.rows].slice(-MAX_ROWS));
       } catch (err) {
         if (!signal.cancelled) setError(friendlyError(err));
+      } finally {
+        if (!signal.cancelled) setLoading(false);
       }
     },
     [filterKey],
@@ -193,7 +197,11 @@ export default function LiveLogPage() {
   }, [filterKey]);
 
   useEffect(() => {
-    if (paused) return;
+    if (paused) {
+      setLoading(false);
+      return;
+    }
+    if (afterRef.current === 0) setLoading(true);
     const signal = { cancelled: false };
     let timer = 0;
     const loop = async () => {
@@ -302,20 +310,30 @@ export default function LiveLogPage() {
           <span
             className={cn(
               "size-2 rounded-full",
-              error ? "bg-destructive" : paused ? "bg-fg-subtle" : "animate-pulse bg-success",
+              error
+                ? "bg-destructive"
+                : paused
+                  ? "bg-fg-subtle"
+                  : loading && !meta
+                    ? "animate-pulse bg-accent"
+                    : "animate-pulse bg-success",
             )}
           />
-          {error ? t("Not connected") : paused ? t("Paused") : t("Streaming")}
+          {error ? t("Not connected") : paused ? t("Paused") : loading && !meta ? t("Loading…") : t("Streaming")}
         </span>
         <span>{tn(rows.length, "{{count}} line", "{{count}} lines")}</span>
-        {meta && (
-          <>
-            <span>{t("API process {{pid}}", { pid: meta.pid })}</span>
-            <span>{t("Server log level: {{level}}", { level: meta.level })}</span>
-            <span className="text-fg-subtle">
-              {t("Keeps the last {{count}} lines in memory", { count: meta.capacity.toLocaleString() })}
-            </span>
-          </>
+        {!meta && loading && !error ? (
+          <LiveLogMetaSkeleton />
+        ) : (
+          meta && (
+            <>
+              <span>{t("API process {{pid}}", { pid: meta.pid })}</span>
+              <span>{t("Server log level: {{level}}", { level: meta.level })}</span>
+              <span className="text-fg-subtle">
+                {t("Keeps the last {{count}} lines in memory", { count: meta.capacity.toLocaleString() })}
+              </span>
+            </>
+          )
         )}
       </div>
 
@@ -339,7 +357,9 @@ export default function LiveLogPage() {
           onScroll={onScroll}
           className="h-[calc(100dvh-21rem)] min-h-[22rem] overflow-y-auto rounded-card bg-navy-900 py-1 font-mono text-[12px] leading-5 shadow-card"
         >
-          {rows.length === 0 ? (
+          {loading && rows.length === 0 ? (
+            <LiveLogRowsSkeleton />
+          ) : rows.length === 0 ? (
             <p className="px-3 py-2 text-white/40">
               {error ? "" : hasFilters ? t("No lines match these filters yet.") : t("Waiting for the API to log something…")}
             </p>

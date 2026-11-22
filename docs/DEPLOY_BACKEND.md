@@ -195,40 +195,50 @@ your shell's — that's a property of the config file, not an instruction to
 run these commands from elsewhere.
 
 ```ini
+; Etymos backend process manager. Start:  supervisord -c /workspace/Etymos/backend/supervisord.conf
+; Control: supervisorctl -c /workspace/Etymos/backend/supervisord.conf status|restart <name>|tail -f <name> stderr
+; All paths are absolute: supervisord does not resolve them relative to this file.
+
 [supervisord]
-logfile=/path/to/etymos/backend/logs/supervisord.log
-pidfile=/path/to/etymos/backend/logs/supervisord.pid
+logfile=/workspace/Etymos/backend/logs/supervisord.log
+pidfile=/workspace/Etymos/backend/logs/supervisord.pid
+childlogdir=/workspace/Etymos/backend/logs
 nodaemon=false
 
-# Without this block `supervisorctl` has nothing to connect to — it talks to
-# supervisord over this socket, not by inspecting the process directly.
 [unix_http_server]
-file=/path/to/etymos/backend/logs/supervisor.sock
+file=/workspace/Etymos/backend/logs/supervisor.sock
+chmod=0700
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl=unix:///path/to/etymos/backend/logs/supervisor.sock
+serverurl=unix:///workspace/Etymos/backend/logs/supervisor.sock
 
 [program:etymos-api]
-command=/path/to/etymos/backend/scripts/run_api.sh
-directory=/path/to/etymos/backend
+command=/workspace/Etymos/backend/scripts/run_api.sh
+directory=/workspace/Etymos/backend
 autostart=true
 autorestart=true
+startsecs=10
 stopsignal=TERM
-stderr_logfile=/path/to/etymos/backend/logs/api.err.log
-stdout_logfile=/path/to/etymos/backend/logs/api.out.log
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/workspace/Etymos/backend/logs/api.out.log
+stderr_logfile=/workspace/Etymos/backend/logs/api.err.log
+stdout_logfile_maxbytes=20MB
+stderr_logfile_maxbytes=20MB
 
-# `command=` here depends on which path you took in step 4 below — see that
-# section for the two alternatives (quick tunnel vs. named tunnel + domain).
+; Named tunnel: api.etymos.site -> localhost:8000 (see /workspace/.cloudflared/config.yml)
 [program:cloudflared]
-command=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
+command=/usr/local/bin/cloudflared --no-autoupdate tunnel --config /workspace/.cloudflared/config.yml run etymos-api
 autostart=true
 autorestart=true
 stopsignal=TERM
-stderr_logfile=/path/to/etymos/backend/logs/cloudflared.err.log
-stdout_logfile=/path/to/etymos/backend/logs/cloudflared.out.log
+stdout_logfile=/workspace/Etymos/backend/logs/cloudflared.out.log
+stderr_logfile=/workspace/Etymos/backend/logs/cloudflared.err.log
+stdout_logfile_maxbytes=10MB
+stderr_logfile_maxbytes=10MB
 ```
 
 ```bash

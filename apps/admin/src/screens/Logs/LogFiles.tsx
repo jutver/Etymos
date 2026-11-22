@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowClockwise, DownloadSimple, MagnifyingGlass } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { Skeleton } from "../../components/Skeleton";
 import { fetchLogFile, fetchLogFiles, type LogFileInfo, type LogFileTail } from "../../lib/opsApi";
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, t, tr } from "../../lib/i18n";
 import { download, formatBytes, lineTone, TONE_CLASS } from "./format";
+import { LogFileLinesSkeleton, LogFileListSkeleton } from "./Skeletons";
 
 const FILE_LABELS: Record<string, string> = {
   api: tr("API"),
@@ -33,28 +35,42 @@ const control =
 
 export default function LogFilesPage() {
   const [files, setFiles] = useState<LogFileInfo[] | null>(null);
+  const [filesLoading, setFilesLoading] = useState(true);
   const [dir, setDir] = useState("");
   const [selected, setSelected] = useState("api");
   const [lines, setLines] = useState(500);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [tail, setTail] = useState<LogFileTail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastRequestRef = useRef("");
 
   useEffect(() => {
+    let cancelled = false;
+    setFilesLoading(true);
     fetchLogFiles()
       .then((r) => {
+        if (cancelled) return;
         setFiles(r.files);
         setDir(r.dir);
       })
-      .catch((err: unknown) => setError(friendlyError(err)));
+      .catch((err: unknown) => !cancelled && setError(friendlyError(err)))
+      .finally(() => !cancelled && setFilesLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, [reload]);
 
   useEffect(() => {
     let cancelled = false;
+    const requestKey = `${selected}\0${lines}\0${query}`;
+    if (lastRequestRef.current !== requestKey) {
+      lastRequestRef.current = requestKey;
+      setTail(null);
+    }
     setLoading(true);
     setError(null);
     fetchLogFile(selected, lines, query)
@@ -77,32 +93,38 @@ export default function LogFilesPage() {
   return (
     <div className="grid gap-4 lg:grid-cols-[15rem_1fr]">
       <aside className="space-y-1">
-        {(files ?? []).map((file) => (
-          <button
-            key={file.name}
-            type="button"
-            onClick={() => setSelected(file.name)}
-            className={cn(
-              "w-full cursor-pointer rounded-control border px-3 py-2 text-left transition",
-              selected === file.name
-                ? "border-accent/40 bg-accent-bg"
-                : "border-transparent hover:border-border hover:bg-surface",
-            )}
-          >
-            <p className={cn("text-body font-medium", selected === file.name ? "text-accent" : "text-fg")}>
-              {t(FILE_LABELS[file.name] ?? file.name)}
-            </p>
-            <p className="text-caption text-fg-subtle">
-              {file.exists
-                ? `${formatBytes(file.size_bytes)} · ${new Date(file.modified_at!).toLocaleString(currentLocale(), {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  })}`
-                : t("Not on this server")}
-            </p>
-          </button>
-        ))}
-        {dir && <p className="px-3 pt-2 font-mono text-micro break-all text-fg-subtle">{dir}</p>}
+        {files === null && filesLoading ? (
+          <LogFileListSkeleton />
+        ) : (
+          <>
+            {(files ?? []).map((file) => (
+              <button
+                key={file.name}
+                type="button"
+                onClick={() => setSelected(file.name)}
+                className={cn(
+                  "w-full cursor-pointer rounded-control border px-3 py-2 text-left transition",
+                  selected === file.name
+                    ? "border-accent/40 bg-accent-bg"
+                    : "border-transparent hover:border-border hover:bg-surface",
+                )}
+              >
+                <p className={cn("text-body font-medium", selected === file.name ? "text-accent" : "text-fg")}>
+                  {t(FILE_LABELS[file.name] ?? file.name)}
+                </p>
+                <p className="text-caption text-fg-subtle">
+                  {file.exists
+                    ? `${formatBytes(file.size_bytes)} · ${new Date(file.modified_at!).toLocaleString(currentLocale(), {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}`
+                    : t("Not on this server")}
+                </p>
+              </button>
+            ))}
+            {dir && <p className="px-3 pt-2 font-mono text-micro break-all text-fg-subtle">{dir}</p>}
+          </>
+        )}
       </aside>
 
       <section className="min-w-0 space-y-3">
@@ -156,15 +178,19 @@ export default function LogFilesPage() {
           </div>
         </div>
 
-        <p className="text-caption text-fg-muted">
-          {FILE_DESCRIPTIONS[selected] ? t(FILE_DESCRIPTIONS[selected]) : null}
-          {tail?.exists && (
-            <span className="ml-2 font-mono text-fg-subtle">
-              {tail.file}
-              {tail.more && ` · ${t("older lines not shown")}`}
-            </span>
+        <div className="flex flex-wrap items-center gap-x-2 text-caption text-fg-muted">
+          {FILE_DESCRIPTIONS[selected] && <span>{t(FILE_DESCRIPTIONS[selected])}</span>}
+          {loading && !tail ? (
+            <Skeleton className="h-3 w-28" />
+          ) : (
+            tail?.exists && (
+              <span className="font-mono text-fg-subtle">
+                {tail.file}
+                {tail.more && ` · ${t("older lines not shown")}`}
+              </span>
+            )
           )}
-        </p>
+        </div>
 
         {error && (
           <p className="rounded-card border border-destructive/40 bg-destructive-bg px-3 py-2 text-caption text-destructive">
@@ -176,7 +202,9 @@ export default function LogFilesPage() {
           ref={scrollRef}
           className="h-[calc(100dvh-22rem)] min-h-[22rem] overflow-auto rounded-card bg-navy-900 px-3 py-2 font-mono text-[12px] leading-5 shadow-card"
         >
-          {tail && !tail.exists ? (
+          {loading && !tail ? (
+            <LogFileLinesSkeleton />
+          ) : tail && !tail.exists ? (
             <p className="text-white/40">
               {t("This file doesn't exist on the server yet. It appears once that process writes to it.")}
             </p>
