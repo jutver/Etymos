@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import fitz
 import pytest
 
@@ -130,3 +133,34 @@ def test_detect_inline_formulas_skips_plain_prose_and_hyphenation():
         snippet = with_math[item["start"]:item["end"]]
         assert snippet
         assert pdf_formula.validate_latex(item["latex"])
+
+
+def test_get_latex_ocr_engine_supports_both_class_names(tmp_path, monkeypatch):
+    model_dir = tmp_path / "latex_ocr"
+    model_dir.mkdir(parents=True)
+    for fname in ("image_resizer.onnx", "encoder.onnx", "decoder.onnx", "tokenizer.json"):
+        (model_dir / fname).write_bytes(b"stub")
+
+    monkeypatch.setenv("LATEX_OCR_MODEL_DIR", str(model_dir))
+    expected_keys = ("image_resizer_path", "encoder_path", "decoder_path", "tokenizer_json")
+
+    for attr_name in ("LaTeXOCR", "LatexOCR"):
+        captured = {}
+
+        class _FakeEngine:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        pdf_formula.reset_formula_engine_cache()
+        monkeypatch.setitem(sys.modules, "rapid_latex_ocr", SimpleNamespace(**{attr_name: _FakeEngine}))
+        try:
+            engine = pdf_formula.get_latex_ocr_engine()
+            assert isinstance(engine, _FakeEngine)
+            assert set(captured.keys()) == set(expected_keys)
+            for key in expected_keys:
+                assert isinstance(captured[key], str)
+                assert captured[key].endswith(model_dir.name + "/" + key.replace("_path", ".onnx").replace("_json", ".json")) or (
+                    model_dir / captured[key]
+                ).is_file()
+        finally:
+            pdf_formula.reset_formula_engine_cache()
