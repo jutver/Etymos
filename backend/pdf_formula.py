@@ -278,12 +278,15 @@ def get_latex_ocr_engine():
             _LATEX_OCR_ENGINE = False
             return None
         try:
-            from rapid_latex_ocr import LatexOCR
+            import rapid_latex_ocr
 
+            ocr_cls = getattr(rapid_latex_ocr, "LaTeXOCR", None) or getattr(rapid_latex_ocr, "LatexOCR", None)
+            if ocr_cls is None:
+                raise ImportError("rapid_latex_ocr exports neither LaTeXOCR nor LatexOCR")
             if local_files is not None:
-                _LATEX_OCR_ENGINE = LatexOCR(**local_files)
+                _LATEX_OCR_ENGINE = ocr_cls(**{k: str(v) for k, v in local_files.items()})
             else:
-                _LATEX_OCR_ENGINE = LatexOCR()
+                _LATEX_OCR_ENGINE = ocr_cls()
         except Exception:
             logger.warning("Could not initialize RapidLaTeXOCR engine; using PNG fallback.", exc_info=True)
             _LATEX_OCR_ENGINE = False

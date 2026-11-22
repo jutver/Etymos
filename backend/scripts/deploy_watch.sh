@@ -68,7 +68,11 @@ run_tests() {
   fi
   if [ "$reqs" = "true" ]; then
     log "requirements.txt changed; installing it before the tests"
-    "$BACKEND/.venv/bin/pip" install -q -r "$dir/backend/requirements.txt"
+    if ! "$BACKEND/.venv/bin/pip" install -q -r "$dir/backend/requirements.txt" 2>&1 | tee "$TEST_LOG"; then
+      git_ worktree remove --force "$dir" >/dev/null 2>&1 || rm -rf "$dir"
+      git_ worktree prune
+      return 1
+    fi
   fi
   log "Running the backend tests on $(short "$commit")"
   local tmo=()
