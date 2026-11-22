@@ -25,6 +25,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
+import { AnimatePresence, MotionConfig, m, type Variants } from "motion/react";
 import { t, tr } from "../../lib/i18n";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 
@@ -185,6 +186,29 @@ function Divider() {
  * formatting tools. Only "document" and "original" are tabs. */
 export type ReportView = "document" | "original" | "edit";
 
+const MODE_ORDER = ["document", "edit", "original"] as const;
+type ToolbarMode = (typeof MODE_ORDER)[number];
+
+// Matches PillIndicator's curve so the toolbar width morph and the sliding
+// inner pill move in lockstep rather than jumping independently.
+const TOOLBAR_EASE = [0.32, 0.72, 0, 1] as const;
+
+const MODE_PANEL: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: 10 * dir }),
+  shown: {
+    opacity: 1,
+    x: 0,
+    pointerEvents: "auto",
+    transition: { duration: 0.24, delay: 0.04, ease: TOOLBAR_EASE },
+  },
+  leave: (dir: number) => ({
+    opacity: 0,
+    x: -8 * dir,
+    pointerEvents: "none",
+    transition: { duration: 0.14, ease: "easeOut" },
+  }),
+};
+
 export interface FormatToolbarProps {
   locked: boolean;
   onRequestUnlock: () => void;
@@ -228,6 +252,37 @@ export function FormatToolbar({
   const viewPill = usePill<HTMLDivElement>(tab);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
 
+  const mode: ToolbarMode = view === "original" ? "original" : locked ? "document" : "edit";
+  const modeIndex = MODE_ORDER.indexOf(mode);
+  const prevModeIndex = useRef(modeIndex);
+  const dir = modeIndex >= prevModeIndex.current ? 1 : -1;
+  useEffect(() => {
+    prevModeIndex.current = modeIndex;
+  }, [modeIndex]);
+
+  useEffect(() => {
+    if (mode !== "edit") setColorOpen(false);
+  }, [mode]);
+
+  const modeContentRef = useRef<HTMLDivElement>(null);
+  const [modeWidth, setModeWidth] = useState<number | null>(null);
+  const animateWidthRef = useRef(false);
+  useLayoutEffect(() => {
+    const el = modeContentRef.current;
+    if (!el) return;
+    const measure = () => {
+      const next = Math.ceil(el.getBoundingClientRect().width);
+      setModeWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    animateWidthRef.current = true;
+  }, []);
+
   return (
     // Rendered inline inside ReportTopBar's toolbar slot rather than floating
     // over the document, so the viewer gets the full height below the bar.
@@ -262,165 +317,188 @@ export function FormatToolbar({
         </>
       )}
 
-      {view !== "original" && onToggleHighlights && (
-        <>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={showHighlights}
-            onClick={onToggleHighlights}
-            title={showHighlights ? t("Hide plagiarism highlights") : t("Show plagiarism highlights")}
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-              showHighlights
-                ? "bg-severity-high-bg text-severity-high hover:brightness-95"
-                : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
-            )}
-          >
-            {showHighlights ? <Eye size={14} weight="bold" /> : <EyeSlash size={14} weight="bold" />}
-            {t("Plagiarism")}</button>
-          {focusActive && onClearFocus && (
-            <button
-              type="button"
-              onClick={onClearFocus}
-              title={t("Show every highlight again (Esc)")}
-              className="ml-0.5 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
-            >
-              {t("Showing 1 source · Show all")}<X size={12} weight="bold" />
-            </button>
-          )}
-          <Divider />
-        </>
-      )}
-
-      {view === "original" ? (
-        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-ink-500">
-          <FileText size={14} />{" "}{t("Viewing the uploaded file")}</span>
-      ) : locked ? (
-        <button
-          type="button"
-          onClick={onRequestUnlock}
-          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+      <MotionConfig reducedMotion="user">
+        <m.div
+          initial={false}
+          animate={{ width: modeWidth ?? "auto" }}
+          transition={{ duration: animateWidthRef.current ? 0.3 : 0, ease: TOOLBAR_EASE }}
+          className="relative flex shrink-0 items-center overflow-hidden"
         >
-          <LockSimple size={14} weight="fill" />
-          <span className="sm:hidden">{t("Unlock to edit")}</span>
-          <span className="hidden sm:inline">{t("Reading mode — unlock to edit")}</span></button>
-      ) : (
-        <>
-          <ToolButton label={t("Lock editing")} onAction={onRequestLock}>
-            <LockSimpleOpen size={16} />
-          </ToolButton>
+          <div ref={modeContentRef} className="relative flex min-h-8 w-max items-center gap-0.5 py-1 pl-0.5 pr-1">
+            <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+              <m.div
+                key={mode}
+                custom={dir}
+                variants={MODE_PANEL}
+                initial="enter"
+                animate="shown"
+                exit="leave"
+                className="flex min-h-8 items-center gap-0.5 whitespace-nowrap"
+              >
+                {view !== "original" && onToggleHighlights && (
+                  <>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showHighlights}
+                      onClick={onToggleHighlights}
+                      title={showHighlights ? t("Hide plagiarism highlights") : t("Show plagiarism highlights")}
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                        showHighlights
+                          ? "bg-severity-high-bg text-severity-high hover:brightness-95"
+                          : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
+                      )}
+                    >
+                      {showHighlights ? <Eye size={14} weight="bold" /> : <EyeSlash size={14} weight="bold" />}
+                      {t("Plagiarism")}</button>
+                    {focusActive && onClearFocus && (
+                      <button
+                        type="button"
+                        onClick={onClearFocus}
+                        title={t("Show every highlight again (Esc)")}
+                        className="ml-0.5 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-line hover:text-ink-900"
+                      >
+                        {t("Showing 1 source · Show all")}<X size={12} weight="bold" />
+                      </button>
+                    )}
+                    <Divider />
+                  </>
+                )}
 
-          <Divider />
+                {view === "original" ? (
+                  <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-ink-500">
+                    <FileText size={14} />{" "}{t("Viewing the uploaded file")}</span>
+                ) : locked ? (
+                  <button
+                    type="button"
+                    onClick={onRequestUnlock}
+                    className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+                  >
+                    <LockSimple size={14} weight="fill" />
+                    <span className="sm:hidden">{t("Unlock to edit")}</span>
+                    <span className="hidden sm:inline">{t("Reading mode — unlock to edit")}</span></button>
+                ) : (
+                  <>
+                    <ToolButton label={t("Lock editing")} onAction={onRequestLock}>
+                      <LockSimpleOpen size={16} />
+                    </ToolButton>
 
-          <ToolButton label={t("Undo")} onAction={() => exec("undo")}>
-            <ArrowUUpLeft size={16} />
-          </ToolButton>
-          <ToolButton label={t("Redo")} onAction={() => exec("redo")}>
-            <ArrowUUpRight size={16} />
-          </ToolButton>
+                    <Divider />
 
-          <Divider />
+                    <ToolButton label={t("Undo")} onAction={() => exec("undo")}>
+                      <ArrowUUpLeft size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Redo")} onAction={() => exec("redo")}>
+                      <ArrowUUpRight size={16} />
+                    </ToolButton>
 
-          <select
-            aria-label={t("Paragraph style")}
-            defaultValue="p"
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              exec("formatBlock", e.target.value);
-              e.target.blur();
-            }}
-            className="h-8 rounded-lg bg-transparent px-1.5 text-xs font-medium text-ink-700 outline-none hover:bg-surface-muted"
-          >
-            <option value="p">{t("Body")}</option>
-            <option value="h1">{t("Heading 1")}</option>
-            <option value="h2">{t("Heading 2")}</option>
-            <option value="h3">{t("Heading 3")}</option>
-            <option value="blockquote">{t("Quote")}</option>
-          </select>
+                    <Divider />
 
-          <Divider />
+                    <select
+                      aria-label={t("Paragraph style")}
+                      defaultValue="p"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        exec("formatBlock", e.target.value);
+                        e.target.blur();
+                      }}
+                      className="h-8 rounded-lg bg-transparent px-1.5 text-xs font-medium text-ink-700 outline-none hover:bg-surface-muted"
+                    >
+                      <option value="p">{t("Body")}</option>
+                      <option value="h1">{t("Heading 1")}</option>
+                      <option value="h2">{t("Heading 2")}</option>
+                      <option value="h3">{t("Heading 3")}</option>
+                      <option value="blockquote">{t("Quote")}</option>
+                    </select>
 
-          <ToolButton label={t("Bold")} onAction={() => exec("bold")}>
-            <TextB size={16} weight="bold" />
-          </ToolButton>
-          <ToolButton label={t("Italic")} onAction={() => exec("italic")}>
-            <TextItalic size={16} />
-          </ToolButton>
-          <ToolButton label={t("Underline")} onAction={() => exec("underline")}>
-            <TextUnderline size={16} />
-          </ToolButton>
-          <ToolButton label={t("Strikethrough")} onAction={() => exec("strikeThrough")}>
-            <TextStrikethrough size={16} />
-          </ToolButton>
+                    <Divider />
 
-          <ToolButton
-            ref={colorButtonRef}
-            label={t("Text colour")}
-            active={colorOpen}
-            onAction={() => setColorOpen((v) => !v)}
-          >
-            <PaintBucket size={16} />
-          </ToolButton>
-          <ToolbarDropdown open={colorOpen} onClose={() => setColorOpen(false)} anchorRef={colorButtonRef}>
-            <div className="flex gap-1 rounded-[var(--radius-input)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
-              {TEXT_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  title={t(c.label)}
-                  aria-label={t("Text colour {{label}}", { label: c.label })}
-                  onClick={() => {
-                    exec("foreColor", c.value);
-                    setColorOpen(false);
-                  }}
-                  className="size-6 rounded-full border border-line/70 transition-transform hover:scale-110"
-                  style={{ backgroundColor: c.value }}
-                />
-              ))}
-            </div>
-          </ToolbarDropdown>
+                    <ToolButton label={t("Bold")} onAction={() => exec("bold")}>
+                      <TextB size={16} weight="bold" />
+                    </ToolButton>
+                    <ToolButton label={t("Italic")} onAction={() => exec("italic")}>
+                      <TextItalic size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Underline")} onAction={() => exec("underline")}>
+                      <TextUnderline size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Strikethrough")} onAction={() => exec("strikeThrough")}>
+                      <TextStrikethrough size={16} />
+                    </ToolButton>
 
-          <Divider />
+                    <ToolButton
+                      ref={colorButtonRef}
+                      label={t("Text colour")}
+                      active={colorOpen}
+                      onAction={() => setColorOpen((v) => !v)}
+                    >
+                      <PaintBucket size={16} />
+                    </ToolButton>
+                    <ToolbarDropdown open={colorOpen} onClose={() => setColorOpen(false)} anchorRef={colorButtonRef}>
+                      <div className="flex gap-1 rounded-[var(--radius-input)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
+                        {TEXT_COLORS.map((c) => (
+                          <button
+                            key={c.value}
+                            type="button"
+                            title={t(c.label)}
+                            aria-label={t("Text colour {{label}}", { label: c.label })}
+                            onClick={() => {
+                              exec("foreColor", c.value);
+                              setColorOpen(false);
+                            }}
+                            className="size-6 rounded-full border border-line/70 transition-transform hover:scale-110"
+                            style={{ backgroundColor: c.value }}
+                          />
+                        ))}
+                      </div>
+                    </ToolbarDropdown>
 
-          <ToolButton label={t("Align left")} onAction={() => exec("justifyLeft")}>
-            <TextAlignLeft size={16} />
-          </ToolButton>
-          <ToolButton label={t("Align centre")} onAction={() => exec("justifyCenter")}>
-            <TextAlignCenter size={16} />
-          </ToolButton>
-          <ToolButton label={t("Align right")} onAction={() => exec("justifyRight")}>
-            <TextAlignRight size={16} />
-          </ToolButton>
-          <ToolButton label={t("Justify")} onAction={() => exec("justifyFull")}>
-            <TextAlignJustify size={16} />
-          </ToolButton>
+                    <Divider />
 
-          <Divider />
+                    <ToolButton label={t("Align left")} onAction={() => exec("justifyLeft")}>
+                      <TextAlignLeft size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Align centre")} onAction={() => exec("justifyCenter")}>
+                      <TextAlignCenter size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Align right")} onAction={() => exec("justifyRight")}>
+                      <TextAlignRight size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Justify")} onAction={() => exec("justifyFull")}>
+                      <TextAlignJustify size={16} />
+                    </ToolButton>
 
-          <ToolButton label={t("Bulleted list")} onAction={() => exec("insertUnorderedList")}>
-            <ListBullets size={16} />
-          </ToolButton>
-          <ToolButton label={t("Numbered list")} onAction={() => exec("insertOrderedList")}>
-            <ListNumbers size={16} />
-          </ToolButton>
+                    <Divider />
 
-          <Divider />
+                    <ToolButton label={t("Bulleted list")} onAction={() => exec("insertUnorderedList")}>
+                      <ListBullets size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Numbered list")} onAction={() => exec("insertOrderedList")}>
+                      <ListNumbers size={16} />
+                    </ToolButton>
 
-          <ToolButton label={t("Insert link")} onAction={toggleLink}>
-            <LinkSimple size={16} />
-          </ToolButton>
-          <ToolButton label={t("Clear formatting")} onAction={() => exec("removeFormat")}>
-            <Eraser size={16} />
-          </ToolButton>
+                    <Divider />
 
-          <Divider />
+                    <ToolButton label={t("Insert link")} onAction={toggleLink}>
+                      <LinkSimple size={16} />
+                    </ToolButton>
+                    <ToolButton label={t("Clear formatting")} onAction={() => exec("removeFormat")}>
+                      <Eraser size={16} />
+                    </ToolButton>
 
-          <ToolButton label={t("Insert table")} onAction={onInsertTable}>
-            <Table size={16} />
-          </ToolButton>
-        </>
-      )}
+                    <Divider />
+
+                    <ToolButton label={t("Insert table")} onAction={onInsertTable}>
+                      <Table size={16} />
+                    </ToolButton>
+                  </>
+                )}
+              </m.div>
+            </AnimatePresence>
+          </div>
+        </m.div>
+      </MotionConfig>
     </div>
   );
 }

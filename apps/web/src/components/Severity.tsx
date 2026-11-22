@@ -54,41 +54,52 @@ export function statusFromScore(score: number): DocStatus {
   return "high";
 }
 
-const statusConfig: Record<DocStatus, { label: string; text: string; bg: string; line: string }> = {
-  clean: { label: tr("Clean"), text: "text-success", bg: "bg-success-bg", line: "border-success/20" },
+const statusConfig: Record<DocStatus, { label: string; shortLabel: string; text: string; bg: string; line: string }> = {
+  clean: { label: tr("Clean"), shortLabel: tr("Clean"), text: "text-success", bg: "bg-success-bg", line: "border-success/20" },
   low: {
     label: tr("Low similarity"),
+    shortLabel: tr("Low"),
     text: "text-severity-low",
     bg: "bg-severity-low-bg",
     line: "border-severity-low-line",
   },
   moderate: {
     label: tr("Moderate similarity"),
+    shortLabel: tr("Medium"),
     text: "text-severity-moderate",
     bg: "bg-severity-moderate-bg",
     line: "border-severity-moderate-line",
   },
   high: {
     label: tr("High similarity"),
+    shortLabel: tr("High"),
     text: "text-severity-high",
     bg: "bg-severity-high-bg",
     line: "border-severity-high-line",
   },
 };
 
-export function StatusPill({ status, className }: { status: DocStatus; className?: string }) {
+export function StatusPill({
+  status,
+  compact = false,
+  className,
+}: {
+  status: DocStatus;
+  compact?: boolean;
+  className?: string;
+}) {
   const c = statusConfig[status];
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold",
         c.text,
         c.bg,
         c.line,
         className,
       )}
     >
-      {t(c.label)}
+      {t(compact ? c.shortLabel : c.label)}
     </span>
   );
 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { cn } from "@etymos/shared";
 
 interface PillBox {
@@ -13,27 +13,45 @@ interface PillBox {
  * the sidebar nav) sits inside it.
  * Put `ref` on the pill (which needs `relative`), mark the selected button
  * with `data-pill-active`, and render <PillIndicator {...pill} /> first inside
- * the pill. Positions are measured within the pill, so scrolling or route
- * changes never move it: it slides only when `active` changes or the options
- * resize (a language switch changes label widths).
+ * the pill. A callback ref tracks conditionally mounted containers (e.g.
+ * FormatToolbar once `hasOriginal` becomes true) so they measure immediately.
+ * Positions are measured within the pill, so scrolling or route changes never
+ * move it: it slides only when `active` changes or the options resize (a
+ * language switch changes label widths).
  */
 export function usePill<T extends HTMLElement>(active: unknown) {
-  const ref = useRef<T>(null);
+  const [pill, setPill] = useState<T | null>(null);
   const [box, setBox] = useState<PillBox | null>(null);
 
+  const ref = useCallback((el: T | null) => {
+    setPill(el);
+    if (!el) setBox(null);
+  }, []);
+
   useLayoutEffect(() => {
-    const pill = ref.current;
     if (!pill) return;
     const measure = () => {
       const on = pill.querySelector<HTMLElement>("[data-pill-active='true']");
-      setBox(on ? { x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight } : null);
+      const next: PillBox | null =
+        on && (on.offsetWidth > 0 || on.offsetHeight > 0)
+          ? { x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight }
+          : null;
+      setBox((prev) => {
+        if (prev === next) return prev;
+        if (prev && next && prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h) {
+          return prev;
+        }
+        return next;
+      });
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(pill);
-    for (const child of pill.children) observer.observe(child);
+    for (const child of pill.children) {
+      if (!child.hasAttribute("data-pill-indicator")) observer.observe(child);
+    }
     return () => observer.disconnect();
-  }, [active]);
+  }, [pill, active]);
 
   return { ref, box };
 }
@@ -54,6 +72,7 @@ export function PillIndicator({
   return (
     <span
       aria-hidden="true"
+      data-pill-indicator=""
       style={{ width: box.w, height: box.h, transform: `translate(${box.x}px, ${box.y}px)` }}
       className={cn(
         "pointer-events-none absolute left-0 top-0",
