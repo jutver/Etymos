@@ -105,6 +105,8 @@ Optional CPU OCR and formula-extraction defaults (override only if tuning thread
 
 *(Optional lightweight OCR fallback)*: Installing `tesseract-ocr` and `tesseract-ocr-vie` (e.g. `apt-get install -y tesseract-ocr tesseract-ocr-vie`) enables the CPU `pytesseract` Vietnamese+English fallback whenever custom Vietnamese ONNX weights are not provisioned.
 
+*(Optional formula OCR recognizer)*: `rapid-latex-ocr` is intentionally omitted from `backend/requirements.txt` because its PyPI metadata pins `numpy<2` against our `numpy>=2.1.0`. Without it, `pdf_formula.py` degrades cleanly to native LaTeX conversion and 250 DPI cropped PNG fallbacks. If you want ONNX image-to-LaTeX recognition for rasterized display formulas, install it separately with `pip install --no-deps rapid-latex-ocr==0.0.9` (all of its runtime dependencies, including `tokenizers`, `onnxruntime`, `opencv`, `Pillow`, and `PyYAML`, are already present in the venv).
+
 ```bash
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=replace-with-real-service-role-key
