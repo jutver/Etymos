@@ -51,7 +51,20 @@ router = APIRouter()
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = Path(os.getenv("LOG_DIR", str(BACKEND_DIR / "logs")))
 SUPERVISOR_CONF = Path(os.getenv("SUPERVISOR_CONF", str(BACKEND_DIR / "supervisord.conf")))
-SUPERVISORCTL = Path(os.getenv("SUPERVISORCTL", str(BACKEND_DIR / ".venv" / "bin" / "supervisorctl")))
+
+
+def _default_supervisorctl() -> Path:
+    env = os.getenv("SUPERVISORCTL")
+    if env:
+        return Path(env)
+    venv_bin = BACKEND_DIR / ".venv" / "bin" / "supervisorctl"
+    if venv_bin.exists():
+        return venv_bin
+    on_path = shutil.which("supervisorctl")
+    return Path(on_path) if on_path else venv_bin
+
+
+SUPERVISORCTL = _default_supervisorctl()
 API_PROGRAM = os.getenv("SUPERVISOR_API_PROGRAM", "etymos-api")
 
 # name -> (file in LOG_DIR, what it is). The order is the order shown.

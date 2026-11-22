@@ -26,7 +26,16 @@ BACKEND="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$BACKEND/.." && pwd)"
 SCRIPT="$BACKEND/scripts/deploy_watch.sh"
 PY="$BACKEND/.venv/bin/python"
-SV=("$BACKEND/.venv/bin/supervisorctl" -c "$BACKEND/supervisord.conf")
+if [ -n "${SUPERVISORCTL:-}" ]; then
+  SV_BIN="$SUPERVISORCTL"
+elif [ -x "$BACKEND/.venv/bin/supervisorctl" ]; then
+  SV_BIN="$BACKEND/.venv/bin/supervisorctl"
+elif command -v supervisorctl >/dev/null 2>&1; then
+  SV_BIN="$(command -v supervisorctl)"
+else
+  SV_BIN="$BACKEND/.venv/bin/supervisorctl"
+fi
+SV=("$SV_BIN" -c "$BACKEND/supervisord.conf")
 STATE="$BACKEND/logs/deploy_skip"   # last commit that failed the tests or the health check
 TEST_LOG="$BACKEND/logs/deploy_tests.log"   # output of the last test run
 
@@ -124,12 +133,21 @@ install_requirements() {
 }
 
 restart_and_check() {
-  "${SV[@]}" restart etymos-api >/dev/null
-  local waited=0
+  local old_pid new_pid waited=0
+  old_pid="$(health_field pid)"
+  if ! "${SV[@]}" restart etymos-api >/dev/null; then
+    log "Failed to restart etymos-api via ${SV[0]}"
+    return 1
+  fi
   while [ "$waited" -lt "$HEALTH_WAIT" ]; do
     sleep 5
     waited=$((waited + 5))
-    [ "$(health_field status)" = "ok" ] && return 0
+    if [ "$(health_field status)" = "ok" ]; then
+      new_pid="$(health_field pid)"
+      if [ -z "$old_pid" ] || [ -z "$new_pid" ] || [ "$new_pid" != "$old_pid" ]; then
+        return 0
+      fi
+    fi
   done
   return 1
 }
