@@ -485,7 +485,7 @@ export default function ServerPage() {
                 title={s && !s.process.supervised ? t("This API isn't running under supervisor, so it can't restart itself.") : undefined}
                 onClick={() => setConfirmRestart(true)}
               >
-                {t("Restart…")}
+                {t("Restart")}
               </button>
             )}
           </div>

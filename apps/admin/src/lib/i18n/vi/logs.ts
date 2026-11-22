@@ -134,7 +134,7 @@ export const logs: Record<string, string> = {
   Refresh: "Làm mới",
   "Restart and lose {{count}} check(s)": "Khởi động lại và mất {{count}} lượt kiểm tra",
   "Restart the API": "Khởi động lại API",
-  "Restart…": "Khởi động lại…",
+  Restart: "Khởi động lại",
   "Restarting…": "Đang khởi động lại…",
   Run: "Chạy",
   "Running…": "Đang chạy…",
