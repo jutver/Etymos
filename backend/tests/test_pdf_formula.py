@@ -164,3 +164,13 @@ def test_get_latex_ocr_engine_supports_both_class_names(tmp_path, monkeypatch):
                 ).is_file()
         finally:
             pdf_formula.reset_formula_engine_cache()
+
+
+def test_get_latex_ocr_engine_returns_none_when_package_missing(monkeypatch):
+    pdf_formula.reset_formula_engine_cache()
+    monkeypatch.setenv("OCR_AUTO_DOWNLOAD", "true")
+    monkeypatch.setitem(sys.modules, "rapid_latex_ocr", None)
+    try:
+        assert pdf_formula.get_latex_ocr_engine() is None
+    finally:
+        pdf_formula.reset_formula_engine_cache()
