@@ -261,3 +261,38 @@ def test_recording_never_fails_the_action(monkeypatch):
 
     monkeypatch.setattr(admin_log, "get_client", lambda: Broken())
     admin_log.record_admin_action(ADMIN.user_id, "support.replied")  # no exception
+
+
+def test_default_supervisorctl_prefers_env_then_venv_then_path(tmp_path, monkeypatch):
+    conf = tmp_path / "supervisord.conf"
+    conf.write_text("[supervisord]\n", encoding="utf-8")
+    monkeypatch.setattr(admin_ops, "BACKEND_DIR", tmp_path)
+    monkeypatch.setattr(admin_ops, "SUPERVISOR_CONF", conf)
+
+    # 1. Explicit SUPERVISORCTL env override wins first.
+    monkeypatch.setenv("SUPERVISORCTL", str(tmp_path / "custom-supervisorctl"))
+    assert admin_ops._default_supervisorctl() == tmp_path / "custom-supervisorctl"
+
+    # 2. .venv/bin/supervisorctl wins over $PATH when it exists.
+    monkeypatch.delenv("SUPERVISORCTL", raising=False)
+    venv_bin = tmp_path / ".venv" / "bin" / "supervisorctl"
+    venv_bin.parent.mkdir(parents=True)
+    venv_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    path_bin = tmp_path / "global-supervisorctl"
+    path_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(admin_ops.shutil, "which", lambda _cmd: str(path_bin))
+    assert admin_ops._default_supervisorctl() == venv_bin
+
+    # 3. $PATH fallback is used when .venv/bin/supervisorctl does not exist.
+    venv_bin.unlink()
+    resolved = admin_ops._default_supervisorctl()
+    assert resolved == path_bin
+    monkeypatch.setattr(admin_ops, "SUPERVISORCTL", resolved)
+    assert admin_ops._supervised() is True
+
+    # 4. Non-existent venv fallback keeps _supervised() False when neither exists.
+    monkeypatch.setattr(admin_ops.shutil, "which", lambda _cmd: None)
+    missing = admin_ops._default_supervisorctl()
+    assert missing == venv_bin
+    monkeypatch.setattr(admin_ops, "SUPERVISORCTL", missing)
+    assert admin_ops._supervised() is False

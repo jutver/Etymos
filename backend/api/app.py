@@ -500,7 +500,7 @@ class CiteRequest(BaseModel):
 def health():
     # active_jobs: checks in progress, so scripts/deploy_watch.sh can wait for
     # them to finish before restarting.
-    return {"status": "ok", "service": "plagiarism-checker", "active_jobs": active_count()}
+    return {"status": "ok", "service": "plagiarism-checker", "active_jobs": active_count(), "pid": os.getpid()}
 
 
 def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
