@@ -642,7 +642,7 @@ export default function UploadPage() {
                     {/* `status` is only real once the check completes (it defaults
                         to "clean" before that), so show the job state until then. */}
                     {h.checkState === "completed" ? (
-                      <StatusPill status={h.status} className="shrink-0" />
+                      <StatusPill status={h.status} compact className="shrink-0" />
                     ) : (
                       <CheckStatePill state={h.checkState} className="shrink-0" />
                     )}

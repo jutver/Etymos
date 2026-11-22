@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FileMagnifyingGlass, Sparkle } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
+import { MotionConfig, m } from "motion/react";
 import type { PdfRect } from "@etymos/shared";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
 import { changedRecheckQuote, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
@@ -269,6 +270,11 @@ export default function ReportPage() {
   // the uploaded file — the Document (extracted-text) view is opt-in via the
   // toolbar's view switcher, not the first thing a user sees.
   const [view, setView] = useState<ReportView>("original");
+  const hasSwitchedViewRef = useRef(false);
+  const handleViewChange = useCallback((next: ReportView) => {
+    hasSwitchedViewRef.current = true;
+    setView(next);
+  }, []);
   // Pasted text and the sample report have no uploaded file, so the Original
   // view could only say so: open those on the Document view instead.
   const noFile = !!doc && !doc.fileName && !cachedDoc?.pdfUrl;
@@ -1008,7 +1014,7 @@ export default function ReportPage() {
             onRequestLock={() => setView("document")}
             hasOriginal={hasOriginal}
             view={view}
-            onViewChange={setView}
+            onViewChange={handleViewChange}
             showHighlights={showHighlights}
             onToggleHighlights={() => {
               setShowHighlights((v) => !v);
@@ -1037,48 +1043,63 @@ export default function ReportPage() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {view === "original" ? (
-            <div className="relative flex-1 overflow-hidden">
-              <PlagiarismPdfViewer
-                pdfUrl={effectivePdfUrl ?? ""}
-                unavailableMessage={tl(pdfFetchError) ?? undefined}
-                matches={shownMatches}
-                activeMatchId={activeMatchId}
-                onMatchClick={(matchId) => {
-                  if (!isWideScreen()) setSidebarOpen(true);
-                  setActiveMatchId(matchId);
-                  setActiveAiSegmentId(null);
-                }}
-                onPageChange={handleOriginalPageChange}
-                overLimitOffset={overLimitOffset}
-                aiSegments={shownAiSegments}
-                activeAiSegmentId={activeAiSegmentId}
-                onAiSegmentClick={handleSelectAiSegment}
-                onReady={handlePdfReady}
-              />
-            </div>
-          ) : (
-            <div data-tour="report-document" className="relative flex min-h-0 flex-1 flex-col">
-              <DocumentCanvas
-                ref={canvasRef}
-                rendered={rendered}
-                colorIndexByMatch={colorIndexByMatch}
-                activeMatchId={focusMatchId}
-                focusTick={focusTick}
-                showHighlights={showSourceHighlights}
-                onSelectMatch={handleSelectMatch}
-                onClearSelection={clearSelection}
-                locked={locked}
-                onInput={handleInput}
-                onPageChange={handlePageChange}
-                resetKey={resetKey}
-                editorRef={editorRef}
-                overLimitOffset={overLimitOffset}
-                aiFlaggedPassageIds={shownAiFlaggedIds}
-                activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
-              />
-            </div>
-          )}
+          <MotionConfig reducedMotion="user">
+            {view === "original" ? (
+              <m.div
+                key="original"
+                initial={hasSwitchedViewRef.current ? { opacity: 0 } : false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+                className="relative flex-1 overflow-hidden"
+              >
+                <PlagiarismPdfViewer
+                  pdfUrl={effectivePdfUrl ?? ""}
+                  unavailableMessage={tl(pdfFetchError) ?? undefined}
+                  matches={shownMatches}
+                  activeMatchId={activeMatchId}
+                  onMatchClick={(matchId) => {
+                    if (!isWideScreen()) setSidebarOpen(true);
+                    setActiveMatchId(matchId);
+                    setActiveAiSegmentId(null);
+                  }}
+                  onPageChange={handleOriginalPageChange}
+                  overLimitOffset={overLimitOffset}
+                  aiSegments={shownAiSegments}
+                  activeAiSegmentId={activeAiSegmentId}
+                  onAiSegmentClick={handleSelectAiSegment}
+                  onReady={handlePdfReady}
+                />
+              </m.div>
+            ) : (
+              <m.div
+                key="document"
+                data-tour="report-document"
+                initial={hasSwitchedViewRef.current ? { opacity: 0 } : false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+                className="relative flex min-h-0 flex-1 flex-col"
+              >
+                <DocumentCanvas
+                  ref={canvasRef}
+                  rendered={rendered}
+                  colorIndexByMatch={colorIndexByMatch}
+                  activeMatchId={focusMatchId}
+                  focusTick={focusTick}
+                  showHighlights={showSourceHighlights}
+                  onSelectMatch={handleSelectMatch}
+                  onClearSelection={clearSelection}
+                  locked={locked}
+                  onInput={handleInput}
+                  onPageChange={handlePageChange}
+                  resetKey={resetKey}
+                  editorRef={editorRef}
+                  overLimitOffset={overLimitOffset}
+                  aiFlaggedPassageIds={shownAiFlaggedIds}
+                  activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
+                />
+              </m.div>
+            )}
+          </MotionConfig>
 
           {showsText ? (
             <WordCountPill
