@@ -15,11 +15,13 @@ import {
   type ServerAction,
   type ServerStatus,
 } from "../../lib/opsApi";
+import { Skeleton } from "../../components/Skeleton";
 import { ApiError } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
 import { pushToast } from "../../lib/toast";
 import { currentLocale, t, tn, tr } from "../../lib/i18n";
 import { formatSeconds, shortJob } from "./format";
+import { ServerStatusSkeleton } from "./Skeletons";
 
 const REFRESH_MS = 10_000;
 
@@ -202,7 +204,7 @@ const ACTIONS: ActionDef[] = [
 export default function ServerPage() {
   const [status, setStatus] = useState<ServerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<ServerAction | null>(null);
   const [level, setLevel] = useState<LogLevel>("INFO");
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -258,9 +260,15 @@ export default function ServerPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-caption text-fg-subtle">
-          {s ? t("Updated {{time}} · refreshes every 10 seconds", { time: new Date(s.checked_at).toLocaleTimeString(currentLocale()) }) : ""}
-        </p>
+        <div className="text-caption text-fg-subtle">
+          {s ? (
+            t("Updated {{time}} · refreshes every 10 seconds", { time: new Date(s.checked_at).toLocaleTimeString(currentLocale()) })
+          ) : loading ? (
+            <Skeleton className="h-3.5 w-56" />
+          ) : (
+            ""
+          )}
+        </div>
         <button
           type="button"
           onClick={() => void load()}
@@ -278,8 +286,11 @@ export default function ServerPage() {
         </p>
       )}
 
-      {s && (
-        <>
+      {!s && loading ? (
+        <ServerStatusSkeleton />
+      ) : (
+        s && (
+          <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Card title={t("API process")}>
               <Item label={t("Up for")}>{s.process.uptime}</Item>
@@ -384,6 +395,7 @@ export default function ServerPage() {
             <JobsTable jobs={s.jobs.recent} empty={t("No checks have finished since the API started.")} />
           </section>
         </>
+        )
       )}
 
       <section className="rounded-card border border-border bg-surface p-4 shadow-card">

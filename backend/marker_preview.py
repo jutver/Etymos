@@ -26,11 +26,9 @@ Setup (one-time, per machine — see docs/SETUP_MARKER.md):
     python -m venv marker_env
     marker_env/Scripts/pip install marker-pdf        # Windows
     marker_env/bin/pip install marker-pdf            # Linux/macOS
-    # marker's "balanced" mode (best accuracy, needed for equations) spawns
-    # a vLLM server via Docker on first use — Docker must be installed and
-    # running. Falls back to raising MarkerUnavailable if it can't reach it
-    # (see run_marker_conversion's except-branch below); callers treat that
-    # as "no preview today", never as a hard failure of the check itself.
+    # Runs marker in "fast" mode by default (no external daemon needed).
+    # Callers treat MarkerUnavailable as "no preview today", never as a
+    # hard failure of the check itself.
 """
 
 from __future__ import annotations
@@ -49,9 +47,8 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).parent
 MARKER_ENV_DIR = BACKEND_DIR / "marker_env"
 
-# On a card smaller than this, the preview stays off the GPU by default: the
-# balanced mode's vLLM container keeps several GB reserved, which a 12 GB
-# card needs for the checks' own models (gpu_models.py).
+# On a card smaller than this, the preview stays off the GPU by default so
+# a 12 GB card reserves its VRAM for the checks' own models (gpu_models.py).
 MARKER_GPU_MIN_VRAM_GB = float(os.getenv("MARKER_GPU_MIN_VRAM_GB", "20"))
 
 
@@ -64,11 +61,10 @@ def _small_gpu() -> bool:
 
 def marker_mode() -> str:
     """
-    MARKER_MODE: "balanced" (VLM layout + OCR, needs Docker+GPU, best
-    accuracy — see docs/SETUP_MARKER.md) or "fast" (lighter models, no extra
-    infra, weaker on math). Default: balanced, or fast on a small GPU.
+    MARKER_MODE: defaults to "fast" (lightweight in-process detectors, no
+    external daemon required — see docs/SETUP_MARKER.md).
     """
-    return os.getenv("MARKER_MODE") or ("fast" if _small_gpu() else "balanced")
+    return os.getenv("MARKER_MODE") or "fast"
 
 
 def marker_device() -> str | None:
@@ -81,7 +77,7 @@ def marker_device() -> str | None:
 
 def uses_gpu() -> bool:
     """Whether a conversion needs a GPU job slot."""
-    return marker_mode() == "balanced" or marker_device() != "cpu"
+    return marker_device() != "cpu"
 
 
 # How long a single conversion may run before being treated as failed.
@@ -89,15 +85,6 @@ def uses_gpu() -> bool:
 # are much faster. Generous on purpose — this runs in a background thread,
 # never blocking the user-facing check itself.
 MARKER_TIMEOUT_SECONDS = int(os.getenv("MARKER_TIMEOUT_SECONDS", "900"))
-
-# Without this, surya (marker's balanced-mode VLM backend) tears its vLLM
-# Docker container down after every single conversion and re-spawns a fresh
-# one on the next — paying the ~1-2 minute engine-init/CUDA-graph/
-# torch.compile warmup cost (see docs/SETUP_MARKER.md) on EVERY report, not
-# just the first. Defaulting this on trades that recurring latency for the
-# container (and its GPU memory) staying up continuously in the background;
-# set MARKER_KEEP_ALIVE=false to opt back out of that tradeoff.
-MARKER_KEEP_ALIVE = os.getenv("MARKER_KEEP_ALIVE", "true").lower() not in ("false", "0", "")
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
@@ -126,9 +113,8 @@ def convert_pdf_to_markdown(pdf_path: Path, work_dir: Path, *, mode: str | None 
     + any extracted images under `work_dir`. Returns the path to the
     produced .md file.
 
-    Raises MarkerUnavailable on any failure (missing venv, Docker/vLLM not
-    reachable for balanced mode, conversion error, timeout) — callers
-    degrade to "no preview" rather than propagate.
+    Raises MarkerUnavailable on any failure (missing venv, conversion error,
+    timeout) — callers degrade to "no preview" rather than propagate.
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     marker_single = _marker_single_script()
@@ -143,8 +129,6 @@ def convert_pdf_to_markdown(pdf_path: Path, work_dir: Path, *, mode: str | None 
     ]
 
     env = dict(os.environ)
-    if MARKER_KEEP_ALIVE:
-        env["SURYA_INFERENCE_KEEP_ALIVE"] = "true"
     device = marker_device()
     if device:
         env["TORCH_DEVICE"] = device

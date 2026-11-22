@@ -73,7 +73,7 @@ export interface BackendDocumentBlock {
   block_id: string;
   section: string;
   label: string;
-  /** "title" | "heading" | "paragraph" | "list_item" | "table" | "image" */
+  /** "title" | "heading" | "paragraph" | "list_item" | "table" | "image" | "formula" */
   type: string;
   index: number;
   /** Inclusive character offset into `BackendReport.input_text`. */
@@ -82,12 +82,19 @@ export interface BackendDocumentBlock {
   end: number;
   level?: number;
   list_type?: string;
+  list_number?: number;
+  list_depth?: number;
   page?: number;
+  layout_band?: number;
+  column_role?: "full" | "left" | "right";
+  column_count?: 1 | 2;
   rows?: string[][];
-  /** Supabase Storage URL for an extracted image; present only on
-   * `type: "image"` blocks that were successfully uploaded (see
-   * backend/api/report_store.py's _extract_and_upload_images). */
-  image_url?: string;
+  /** Supabase Storage URL for an extracted image; present on `type: "image"`,
+   * image-fallback `"table"`, or image-fallback `"formula"` blocks. */
+  image_url?: string | null;
+  formula_latex?: string | null;
+  equation_number?: string | null;
+  inline_formulas?: Array<{ start: number; end: number; latex: string }> | null;
   /** The block's own words when it has none in `input_text` - set on the
    * zero-length section-heading blocks (backend/document_model.py's
    * _interleave_section_headings). */
@@ -104,6 +111,7 @@ export interface BackendDocument {
   sections?: Array<{ section: string; label: string; start: number; end: number }>;
   blocks?: BackendDocumentBlock[];
   text_field?: string;
+  extraction_meta?: unknown;
 }
 
 export interface BackendMatchInputOffset {

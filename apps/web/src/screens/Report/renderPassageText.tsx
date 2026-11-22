@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
-import type { DocPassage, TextMark } from "@etymos/shared";
+import type { DocPassage, InlineFormula, TextMark } from "@etymos/shared";
 import { cn } from "@etymos/shared";
+import { FormulaBlock, renderSafeKatex } from "./FormulaBlock";
 import { chunkPassage, colorForIndex, LIGHT_HIGHLIGHT, type PassageSpan } from "./highlights";
 import type { MatchColorIndex } from "./blocks";
+
+export { FormulaBlock };
 
 /** Renders one passage's text as alternating plain / highlighted spans — the
  * same `<mark>` markup every text block type (paragraph, heading, list item)
@@ -11,20 +14,43 @@ import type { MatchColorIndex } from "./blocks";
  * it without duplicating the highlight-rendering logic. */
 /**
  * Splits `segment` (which starts at `base` in the passage text) at the
- * bold/italic mark boundaries and wraps the styled pieces in
- * <strong>/<em>. Plain text comes back as the bare string, so a passage
- * without marks renders exactly as it did before.
+ * bold/italic mark and inline-formula boundaries and wraps the styled pieces
+ * in `<strong>`/`<em>` or atomic non-editable KaTeX spans. Plain text comes
+ * back as the bare string, so a passage without marks renders exactly as it did before.
  */
-function renderMarked(segment: string, base: number, textMarks: TextMark[] | undefined): ReactNode {
-  if (!textMarks || textMarks.length === 0 || !segment) return segment;
+function renderMarked(
+  segment: string,
+  base: number,
+  textMarks: TextMark[] | undefined,
+  inlineFormulas?: InlineFormula[],
+): ReactNode {
+  if (!segment) return segment;
+  const hasMarks = Boolean(textMarks && textMarks.length > 0);
+  const hasFormulas = Boolean(inlineFormulas && inlineFormulas.length > 0);
+  if (!hasMarks && !hasFormulas) return segment;
+
   const end = base + segment.length;
-  const relevant = textMarks.filter((m) => m.end > base && m.start < end);
-  if (relevant.length === 0) return segment;
+  const relevantMarks = hasMarks
+    ? textMarks!.filter((m) => m.end > base && m.start < end)
+    : [];
+  const relevantFormulas = hasFormulas
+    ? inlineFormulas!.filter((f) => f.start >= base && f.end <= end && f.end > f.start)
+    : [];
+  if (relevantMarks.length === 0 && relevantFormulas.length === 0) return segment;
+
+  const insideFormula = (pos: number) =>
+    relevantFormulas.some((f) => pos > f.start && pos < f.end);
 
   const cuts = new Set<number>([base, end]);
-  for (const m of relevant) {
-    cuts.add(Math.max(base, m.start));
-    cuts.add(Math.min(end, m.end));
+  for (const f of relevantFormulas) {
+    cuts.add(f.start);
+    cuts.add(f.end);
+  }
+  for (const m of relevantMarks) {
+    const ms = Math.max(base, m.start);
+    const me = Math.min(end, m.end);
+    if (!insideFormula(ms)) cuts.add(ms);
+    if (!insideFormula(me)) cuts.add(me);
   }
   const points = [...cuts].sort((a, b) => a - b);
 
@@ -33,9 +59,27 @@ function renderMarked(segment: string, base: number, textMarks: TextMark[] | und
     const from = points[k];
     const to = points[k + 1];
     if (to <= from) continue;
+
+    const formula = relevantFormulas.find((f) => f.start === from && f.end === to);
+    if (formula) {
+      const katexHtml = renderSafeKatex(formula.latex, false);
+      if (katexHtml) {
+        nodes.push(
+          <span
+            key={`f${from}`}
+            contentEditable={false}
+            data-inline-formula={formula.latex}
+            className="inline-formula"
+            dangerouslySetInnerHTML={{ __html: katexHtml }}
+          />,
+        );
+        continue;
+      }
+    }
+
     const piece = segment.slice(from - base, to - base);
-    const bold = relevant.some((m) => m.style === "bold" && m.start <= from && m.end >= to);
-    const italic = relevant.some((m) => m.style === "italic" && m.start <= from && m.end >= to);
+    const bold = relevantMarks.some((m) => m.style === "bold" && m.start <= from && m.end >= to);
+    const italic = relevantMarks.some((m) => m.style === "italic" && m.start <= from && m.end >= to);
     let node: ReactNode = piece;
     if (italic) node = <em key={`i${from}`}>{node}</em>;
     if (bold) node = <strong key={`b${from}`}>{node}</strong>;
@@ -49,12 +93,13 @@ export function renderChunks(
   spans: PassageSpan[],
   colorIndexByMatch: MatchColorIndex,
   textMarks?: TextMark[],
+  inlineFormulas?: InlineFormula[],
 ) {
   let offset = 0;
   return chunkPassage(text, spans).map((chunk, i) => {
     const chunkStart = offset;
     offset += chunk.text.length;
-    const content = renderMarked(chunk.text, chunkStart, textMarks);
+    const content = renderMarked(chunk.text, chunkStart, textMarks, inlineFormulas);
     if (!chunk.matchId) return <span key={i}>{content}</span>;
     const colorIdx = colorIndexByMatch.get(chunk.matchId) ?? 0;
     const color = chunk.tone === "light" ? LIGHT_HIGHLIGHT : colorForIndex(colorIdx);
@@ -101,8 +146,9 @@ export function renderPassageText(
   colorIndexByMatch: MatchColorIndex,
   muted: boolean,
   textMarks?: TextMark[],
+  inlineFormulas?: InlineFormula[],
 ) {
-  const chunks = renderChunks(text, muted ? [] : spans, colorIndexByMatch, textMarks);
+  const chunks = renderChunks(text, muted ? [] : spans, colorIndexByMatch, textMarks, inlineFormulas);
   if (!muted) return chunks;
   return <span className="text-ink-300">{chunks}</span>;
 }

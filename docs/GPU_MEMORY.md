@@ -56,21 +56,15 @@ Unloading e5 (0.5 GB) to make room
 | `GPU_JOB_SLOTS` | `2` | GPU jobs at once. `1` on 12 GB gives the models 1 GB more and means fewer unloads, but jobs queue more |
 | `GPU_EVICT_GRACE_SECONDS` | `10` | A model used this recently isn't unloaded |
 | `GPU_MODEL_WAIT_SECONDS` | `300` | Longest wait for room before loading anyway |
-| `MARKER_GPU_MIN_VRAM_GB` | `20` | Below this, the DOCX preview defaults to `fast` mode on the CPU |
-| `MARKER_MODE` / `MARKER_DEVICE` | auto | Override the preview's mode (`balanced`/`fast`) and device (`cpu`/`cuda`) |
+| `MARKER_GPU_MIN_VRAM_GB` | `20` | Below this, the DOCX preview defaults to running on the CPU |
+| `MARKER_MODE` / `MARKER_DEVICE` | `fast` / auto | Override the preview's mode and device (`cpu`/`cuda`) |
 
 ## The DOCX preview on 12 GB
 
-Its `balanced` mode starts a vLLM container that keeps several GB reserved
-for as long as it runs. A 12 GB card doesn't have that to spare, so below
-`MARKER_GPU_MIN_VRAM_GB` the preview uses `fast` mode on the CPU. It's
-slower and weaker on equations, but it runs in the background after the
-check, so nobody waits on it, and it doesn't take a GPU job slot.
-
-To force `balanced` on 12 GB anyway, set `MARKER_MODE=balanced` and
-`MARKER_KEEP_ALIVE=false`. Idle check models are then unloaded before each
-conversion and the container stops after it, but every preview pays the
-1–2 minute warm-up.
+Below `MARKER_GPU_MIN_VRAM_GB`, the preview defaults to `fast` mode on the
+CPU so the 12 GB card reserves its VRAM for the plagiarism and AI checks'
+own models. It runs in the background after the check, so nobody waits on
+it, and it doesn't take a GPU job slot.
 
 ## Checking the real numbers
 

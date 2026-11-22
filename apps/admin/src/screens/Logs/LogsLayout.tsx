@@ -1,5 +1,6 @@
 // Logs: two groups. Server logs (what the backend is doing) and Admin
 // actions (everything admins did, from the database and the backend).
+import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { Scroll, UserList } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
@@ -43,7 +44,9 @@ export function LogsLayout() {
       </div>
 
       <div className="mt-5">
-        <Outlet />
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   );
@@ -72,7 +75,9 @@ export function ServerLogsLayout() {
         ))}
       </div>
       <div className="mt-4">
-        <Outlet />
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   );

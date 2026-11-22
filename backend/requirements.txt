@@ -37,3 +37,12 @@ pytest==8.3.3
 
 # --- Marker-pdf preview rendering (marker_preview.py) ---
 Markdown==3.7
+
+# --- Hybrid CPU-first PDF OCR & Formula Extraction (ONNX Runtime) ---
+onnxruntime>=1.19.0
+opencv-python-headless>=4.10.0
+Pillow>=10.4.0
+rapidocr-onnxruntime>=1.3.24
+rapid-latex-ocr>=0.0.10
+# Optional lightweight fallback (also needs system `tesseract-ocr` + `tesseract-ocr-vie`)
+pytesseract>=0.3.13

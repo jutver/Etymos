@@ -94,26 +94,47 @@ export function findFuzzyMatch(
 
   const minWindow = Math.max(1, target - 2);
   const maxWindow = target + 4;
+  const minNeeded = Math.ceil(target * 0.7);
 
-  const anchorWords = snippetWords.slice(0, 3);
-  const anchorStarts = new Set<number>();
-  pageTokens.forEach((t, i) => {
-    if (anchorWords.includes(t.word)) anchorStarts.add(i);
-  });
-  if (anchorStarts.size === 0) return null;
+  // Pick up to 3 longest distinct words from the opening prefix so we anchor
+  // on distinctive terms instead of high-frequency stopwords like "the"/"of".
+  const candidateAnchors: { word: string; wordIdx: number }[] = [];
+  const seenAnchors = new Set<string>();
+  const prefixLimit = Math.min(6, snippetWords.length);
+  for (let i = 0; i < prefixLimit; i++) {
+    const word = snippetWords[i];
+    if (!seenAnchors.has(word)) {
+      seenAnchors.add(word);
+      candidateAnchors.push({ word, wordIdx: i });
+    }
+  }
+  candidateAnchors.sort((a, b) => b.word.length - a.word.length || a.wordIdx - b.wordIdx);
+  const chosenAnchors = candidateAnchors.slice(0, 3);
+  const offsetByAnchor = new Map(chosenAnchors.map((a) => [a.word, a.wordIdx]));
 
+  const winStarts = new Set<number>();
+  for (let i = 0; i < pageTokens.length; i++) {
+    const offset = offsetByAnchor.get(pageTokens[i].word);
+    if (offset !== undefined) {
+      winStarts.add(Math.max(0, i - offset - 2));
+    }
+  }
+  if (winStarts.size === 0) return null;
+
+  const used = new Uint8Array(maxWindow);
   let best: { start: number; end: number; score: number } | null = null;
-  for (const anchor of anchorStarts) {
-    const winStart = Math.max(0, anchor - 2);
+  for (const winStart of winStarts) {
     for (let win = minWindow; win <= maxWindow; win++) {
       const end = winStart + win;
       if (end > pageTokens.length) break;
-      const used = new Array(win).fill(false);
+      used.fill(0, 0, win);
       let matchedCount = 0;
-      for (const sw of snippetWords) {
+      for (let swIdx = 0; swIdx < target; swIdx++) {
+        if (matchedCount + (target - swIdx) < minNeeded) break;
+        const sw = snippetWords[swIdx];
         for (let k = 0; k < win; k++) {
-          if (!used[k] && pageTokens[winStart + k].word === sw) {
-            used[k] = true;
+          if (used[k] === 0 && pageTokens[winStart + k].word === sw) {
+            used[k] = 1;
             matchedCount++;
             break;
           }

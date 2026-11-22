@@ -8,21 +8,13 @@ actual host. (First real deploy went to `n2.ckey.vn`, not `n1.ckey.vn` —
 check whatever hostname your provider actually gives you rather than
 assuming it matches this doc's title.)
 
-**No Docker here on purpose.** n1.ckey.vn hands you shell access *inside* an
-already-running GPU container (the NVIDIA driver is passed through by the
-provider) — there is no `dockerd` of your own to build/run against. Installing
-Docker and running `docker compose up` in that situation would mean nesting a
-container inside a container (Docker-in-Docker), which adds complexity for no
-benefit and often doesn't work without privileged mode. Instead, the API runs
-directly in a Python venv, kept alive and auto-restarted by `supervisord`
-(works without systemd, which single-container environments generally don't
-run as PID 1).
+The deployment host hands you shell access *inside* a provider-managed GPU
+environment (the NVIDIA driver is already passed through) without systemd as
+PID 1. The API runs directly in a Python venv, kept alive and auto-restarted
+by `supervisord`.
 
 Related files:
-- `backend/Dockerfile`, `docker-compose.yml` (repo root) — kept for local dev
-  parity and for a possible future deploy onto a real VM. **Not used** by the
-  steps below.
-- `cloudflared/config.yml` — tunnel ingress template, still used as-is.
+- `cloudflared/config.yml` — tunnel ingress template, used for named tunnels.
 
 This is a manual runbook. No agent has shell access to n1.ckey.vn or any real
 credentials for it — every command below is meant to be run **by you**.
@@ -102,6 +94,16 @@ covered by `.gitignore`'s `.env*` pattern — never commit it). Required keys:
 | `SUPABASE_JWT_SECRET` | Supabase project's JWT secret, used by `backend/api/auth.py` to verify caller tokens locally without a network round-trip. |
 | `GEMINI_API_KEY` | A freshly rotated Gemini API key (Google AI Studio). Do not reuse the key formerly hardcoded in `backend/api/app.py`. |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins for the production frontend(s), e.g. `https://app.yourdomain.com`. No `*` in production. |
+
+Optional CPU OCR and formula-extraction defaults (override only if tuning threads or pre-baking ONNX weights):
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `ORT_NUM_THREADS` | `4` | Caps OpenMP / MKL / ONNX Runtime CPU threads per worker so CPU OCR and formula inference do not oversubscribe cores. |
+| `OCR_MODEL_DIR` | `./models/ocr` | Directory for cached ONNX weights (`doclayout_yolo.onnx`, `vietocr.onnx`, `vietnamese_dict.txt`, `latex_ocr/`). Overridable individually via `DOCLAYOUT_ONNX_PATH`, `VIETOCR_ONNX_PATH`, `VIETOCR_DICT_PATH`, and `LATEX_OCR_MODEL_DIR`. |
+| `OCR_AUTO_DOWNLOAD` | `true` | Allows downloading missing ONNX weights on first OCR run (`false` skips network fetches and uses local fallbacks). |
+
+*(Optional lightweight OCR fallback)*: Installing `tesseract-ocr` and `tesseract-ocr-vie` (e.g. `apt-get install -y tesseract-ocr tesseract-ocr-vie`) enables the CPU `pytesseract` Vietnamese+English fallback whenever custom Vietnamese ONNX weights are not provisioned.
 
 ```bash
 SUPABASE_URL=https://your-project-ref.supabase.co
@@ -193,40 +195,50 @@ your shell's — that's a property of the config file, not an instruction to
 run these commands from elsewhere.
 
 ```ini
+; Etymos backend process manager. Start:  supervisord -c /workspace/Etymos/backend/supervisord.conf
+; Control: supervisorctl -c /workspace/Etymos/backend/supervisord.conf status|restart <name>|tail -f <name> stderr
+; All paths are absolute: supervisord does not resolve them relative to this file.
+
 [supervisord]
-logfile=/path/to/etymos/backend/logs/supervisord.log
-pidfile=/path/to/etymos/backend/logs/supervisord.pid
+logfile=/workspace/Etymos/backend/logs/supervisord.log
+pidfile=/workspace/Etymos/backend/logs/supervisord.pid
+childlogdir=/workspace/Etymos/backend/logs
 nodaemon=false
 
-# Without this block `supervisorctl` has nothing to connect to — it talks to
-# supervisord over this socket, not by inspecting the process directly.
 [unix_http_server]
-file=/path/to/etymos/backend/logs/supervisor.sock
+file=/workspace/Etymos/backend/logs/supervisor.sock
+chmod=0700
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl=unix:///path/to/etymos/backend/logs/supervisor.sock
+serverurl=unix:///workspace/Etymos/backend/logs/supervisor.sock
 
 [program:etymos-api]
-command=/path/to/etymos/backend/scripts/run_api.sh
-directory=/path/to/etymos/backend
+command=/workspace/Etymos/backend/scripts/run_api.sh
+directory=/workspace/Etymos/backend
 autostart=true
 autorestart=true
+startsecs=10
 stopsignal=TERM
-stderr_logfile=/path/to/etymos/backend/logs/api.err.log
-stdout_logfile=/path/to/etymos/backend/logs/api.out.log
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/workspace/Etymos/backend/logs/api.out.log
+stderr_logfile=/workspace/Etymos/backend/logs/api.err.log
+stdout_logfile_maxbytes=20MB
+stderr_logfile_maxbytes=20MB
 
-# `command=` here depends on which path you took in step 4 below — see that
-# section for the two alternatives (quick tunnel vs. named tunnel + domain).
+; Named tunnel: api.etymos.site -> localhost:8000 (see /workspace/.cloudflared/config.yml)
 [program:cloudflared]
-command=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
+command=/usr/local/bin/cloudflared --no-autoupdate tunnel --config /workspace/.cloudflared/config.yml run etymos-api
 autostart=true
 autorestart=true
 stopsignal=TERM
-stderr_logfile=/path/to/etymos/backend/logs/cloudflared.err.log
-stdout_logfile=/path/to/etymos/backend/logs/cloudflared.out.log
+stdout_logfile=/workspace/Etymos/backend/logs/cloudflared.out.log
+stderr_logfile=/workspace/Etymos/backend/logs/cloudflared.err.log
+stdout_logfile_maxbytes=10MB
+stderr_logfile_maxbytes=10MB
 ```
 
 ```bash

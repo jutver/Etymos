@@ -12,9 +12,9 @@ import { tr } from "../../lib/i18n";
  * Accessibility: colour is never the only signal. Every mark also carries a
  * dotted underline plus a superscript index badge that matches the number on
  * the sidebar card, so the mapping survives greyscale, colour-blindness and
- * high-contrast modes. Each entry ships a light and a dark treatment; the web
- * app is currently `color-scheme: light` only, so the `dark:` classes are
- * inert today but keep the palette correct if a dark theme lands later.
+ * high-contrast modes. The web app is light-only (`color-scheme: light`) and
+ * deliberately omits `dark:` utility classes so OS dark mode
+ * (`prefers-color-scheme: dark`) never turns light pastel highlights dark.
  */
 export interface HighlightColor {
   key: string;
@@ -24,46 +24,88 @@ export interface HighlightColor {
   mark: string;
   /** Small solid swatch used on the sidebar card + legend. */
   chip: string;
+  /** Translucent pastel fills & subtle bottom accent for Original PDF overlays. */
+  pdf: {
+    fill: string;
+    fillActive: string;
+    accent: string;
+  };
 }
 
 export const HIGHLIGHT_COLORS: HighlightColor[] = [
   {
     key: "amber",
     label: tr("Amber"),
-    mark: "bg-[#fdf0c9] text-[#5a4408] decoration-[#b45309] dark:bg-[#5a4408] dark:text-[#fdf0c9] dark:decoration-[#fbbf24]",
+    mark: "bg-[#fef8e2] text-[#1e293b] decoration-[#d97706]/60",
     chip: "bg-[#eab308]",
+    pdf: {
+      fill: "rgba(234, 179, 8, 0.14)",
+      fillActive: "rgba(234, 179, 8, 0.28)",
+      accent: "rgba(217, 119, 6, 0.45)",
+    },
   },
   {
     key: "rose",
     label: tr("Rose"),
-    mark: "bg-[#fde0e4] text-[#7f1d3a] decoration-[#be123c] dark:bg-[#5c1024] dark:text-[#fde0e4] dark:decoration-[#fb7185]",
+    mark: "bg-[#fef0f2] text-[#1e293b] decoration-[#e11d48]/55",
     chip: "bg-[#e11d48]",
+    pdf: {
+      fill: "rgba(225, 29, 72, 0.11)",
+      fillActive: "rgba(225, 29, 72, 0.24)",
+      accent: "rgba(225, 29, 72, 0.40)",
+    },
   },
   {
     key: "violet",
     label: tr("Violet"),
-    mark: "bg-[#e9e2fd] text-[#4c1d95] decoration-[#7c3aed] dark:bg-[#3b1e75] dark:text-[#e9e2fd] dark:decoration-[#a78bfa]",
+    mark: "bg-[#f4f0fe] text-[#1e293b] decoration-[#7c3aed]/55",
     chip: "bg-[#7c3aed]",
+    pdf: {
+      fill: "rgba(124, 58, 237, 0.11)",
+      fillActive: "rgba(124, 58, 237, 0.24)",
+      accent: "rgba(124, 58, 237, 0.40)",
+    },
   },
   {
     key: "teal",
     label: tr("Teal"),
-    mark: "bg-[#cdf3ea] text-[#0f4f45] decoration-[#0d9488] dark:bg-[#0c3b34] dark:text-[#cdf3ea] dark:decoration-[#2dd4bf]",
+    mark: "bg-[#e6faf5] text-[#1e293b] decoration-[#0d9488]/55",
     chip: "bg-[#0d9488]",
+    pdf: {
+      fill: "rgba(13, 148, 136, 0.11)",
+      fillActive: "rgba(13, 148, 136, 0.24)",
+      accent: "rgba(13, 148, 136, 0.40)",
+    },
   },
   {
     key: "sky",
     label: tr("Sky"),
-    mark: "bg-[#d9e8fe] text-[#1e3a8a] decoration-[#2563eb] dark:bg-[#10315e] dark:text-[#d9e8fe] dark:decoration-[#60a5fa]",
+    mark: "bg-[#ebf3ff] text-[#1e293b] decoration-[#2563eb]/55",
     chip: "bg-[#2563eb]",
+    pdf: {
+      fill: "rgba(37, 99, 235, 0.11)",
+      fillActive: "rgba(37, 99, 235, 0.24)",
+      accent: "rgba(37, 99, 235, 0.40)",
+    },
   },
   {
     key: "lime",
     label: tr("Lime"),
-    mark: "bg-[#e6f5c8] text-[#3f5c0c] decoration-[#65a30d] dark:bg-[#2f4110] dark:text-[#e6f5c8] dark:decoration-[#a3e635]",
+    mark: "bg-[#f2fae3] text-[#1e293b] decoration-[#65a30d]/55",
     chip: "bg-[#65a30d]",
+    pdf: {
+      fill: "rgba(101, 163, 13, 0.12)",
+      fillActive: "rgba(101, 163, 13, 0.25)",
+      accent: "rgba(101, 163, 13, 0.40)",
+    },
   },
 ];
+
+export const AI_PDF_HIGHLIGHT = {
+  fill: "rgba(124, 58, 237, 0.08)",
+  fillActive: "rgba(124, 58, 237, 0.18)",
+  accent: "rgba(124, 58, 237, 0.35)",
+} as const;
 
 export function colorForIndex(index: number): HighlightColor {
   return HIGHLIGHT_COLORS[index % HIGHLIGHT_COLORS.length];
@@ -93,8 +135,13 @@ export function matchTone(match: Pick<MatchedSource, "matchPercent">): MatchTone
 export const LIGHT_HIGHLIGHT: HighlightColor = {
   key: "blush",
   label: tr("Light pink"),
-  mark: "bg-[#fdeef2] text-[#7f1d3a] decoration-[#f4a9bd] dark:bg-[#4a1826] dark:text-[#fde0e4] dark:decoration-[#fb9db4]",
+  mark: "bg-[#fef5f8] text-[#1e293b] decoration-[#f4a9bd]/70",
   chip: "bg-[#f4a9bd]",
+  pdf: {
+    fill: "rgba(244, 114, 182, 0.09)",
+    fillActive: "rgba(244, 114, 182, 0.20)",
+    accent: "rgba(244, 114, 182, 0.35)",
+  },
 };
 
 /** Colour for a match's highlight and its sidebar swatch (they must agree). */

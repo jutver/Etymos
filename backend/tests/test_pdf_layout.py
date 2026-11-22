@@ -14,6 +14,7 @@ import fitz
 import pytest
 
 import pdf_layout
+import pdf_ocr
 from extractor import (
     extract_lines_from_pdf,
     extract_structured_sections_from_pdf,
@@ -386,6 +387,15 @@ def test_stray_vertical_line_is_dropped(tmp_path):
     assert not any("arXiv" in l["text"] for l in extract_lines_from_pdf(str(pdf)))
 
 
+def test_rotated_sideways_stamp_removed_even_in_ocr_lines():
+    raw = [
+        {"bbox": [12.0, 200.0, 24.0, 420.0], "text": "arXiv:1408.5882v2 [cs.CL] 3 Sep 2014", "size": 9.0, "page": 1, "page_height": 842.0},
+        {"bbox": [72.0, 120.0, 480.0, 134.0], "text": "Normal body text line inside document.", "size": 10.0, "page": 1, "page_height": 842.0},
+    ]
+    kept = pdf_ocr._assign_ocr_blocks(raw, 1, 595.0, 842.0) if hasattr(raw, "__iter__") else []
+    assert [l["text"] for l in kept] == ["Normal body text line inside document."]
+
+
 # --- Paragraphs -----------------------------------------------------------------------
 
 def test_paragraphs_are_split_where_the_layout_shows_it(tmp_path):
@@ -460,3 +470,54 @@ def test_golden_mednext_two_column_paper():
     # Table 3 only: the ruled algorithm listing is not a table.
     assert len(tables) == 1
     assert len([b for b in blocks if b["type"] == "image"]) == 1
+
+
+def test_numbered_lists_emit_list_number_and_depth(tmp_path):
+    doc = fitz.open()
+    w = Writer(doc)
+    w.line("1 Introduction", size=14, bold=True, gap=10)
+    w.paragraph(BODY)
+    w.line("1. First step in pipeline.", x=72)
+    w.line("2. Second step in pipeline.", x=72)
+    w.line("1. Nested sub-step A.", x=90)
+    w.line("3. Third top step.", x=72)
+    pdf = tmp_path / "list_meta.pdf"
+    doc.save(str(pdf))
+
+    _structured, blocks = _structure(pdf)
+    items = [b for b in blocks if b["type"] == "list_item"]
+    assert [(b.get("list_number"), b.get("list_depth")) for b in items] == [
+        (1, 0),
+        (2, 0),
+        (1, 1),
+        (3, 0),
+    ]
+
+
+def test_two_column_pdf_emits_layout_band_and_never_merges_full_header_into_column(tmp_path):
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((60, 72), "Full Width Paper Title For Columns", fontsize=18, fontname="hebo")
+    page.insert_text(
+        (60, 102),
+        "This abstract line spans across the top without terminal punctuation",
+        fontsize=11,
+        fontname="helv",
+    )
+    # Two-column body below y=150
+    for idx in range(6):
+        y = 160 + idx * 16
+        page.insert_text((54, y), f"Left column line {idx + 1} with plenty of prose text.", fontsize=10, fontname="helv")
+        page.insert_text((320, y), f"Right column line {idx + 1} with plenty of prose text.", fontsize=10, fontname="helv")
+    pdf = tmp_path / "two_col_layout.pdf"
+    doc.save(str(pdf))
+
+    _structured, blocks = _structure(pdf)
+    col_blocks = [b for b in blocks if b.get("column_count") == 2]
+    assert any(b.get("column_role") == "left" for b in col_blocks)
+    assert any(b.get("column_role") == "right" for b in col_blocks)
+    # Full-width abstract must not merge into the left column block.
+    assert not any(
+        "spans across the top" in b["text"] and "Left column line 1" in b["text"]
+        for b in blocks
+    )

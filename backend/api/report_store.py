@@ -79,8 +79,9 @@ def _image_storage_path(user_id: str, report_id: str, index: int, ext: str) -> s
 
 def _extract_and_upload_images(report_id: str, report: dict[str, Any], user_id: Optional[str]) -> None:
     """
-    Best-effort: upload every extracted image (docx inline pictures /
-    PDF page images — see extract_docx.py / extractor.py) to Supabase
+    Best-effort: upload every extracted image (docx inline pictures,
+    PDF page figures, unreliable tables, and formula fallback PNG crops —
+    see extract_docx.py / extractor.py / pdf_formula.py) to Supabase
     Storage and set `image_url` on its block, so the Document view can
     render a real `<img>` instead of the placeholder box.
 
@@ -245,6 +246,17 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 report_id, exc,
             )
 
+    extraction_meta = (report.get("document") or {}).get("extraction_meta")
+    if extraction_meta:
+        try:
+            client.table("documents").update({"extraction_meta": extraction_meta}).eq("id", report_id).execute()
+        except Exception as exc:
+            logger.warning(
+                "Could not persist extraction_meta for report_id=%s "
+                "(has supabase/migrations/20261122000000_document_layout_and_formulas.sql been applied?): %s",
+                report_id, exc,
+            )
+
     try:
         matches = report.get("matches") or []
         rows = []
@@ -351,13 +363,12 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             # "text" (see document_model._interleave_section_headings).
             if not text and block.get("section_heading"):
                 text = (block.get("text") or "").strip()
-            # An "image" block is zero-length by construction (see
-            # document_model._interleave_image_blocks — it has no text of
-            # its own, only a position) and must NOT be dropped here the
-            # way an accidentally-empty text block should be; every other
-            # block type keeps the original "no text -> nothing to
-            # persist" behaviour unchanged.
-            if not text and block.get("type") != "image":
+            # "image" and "formula" blocks are zero-length by construction (see
+            # document_model._interleave_image_blocks — no characters of their
+            # own in input_text, only a reading-order position) and must NOT be
+            # dropped here. Every other block type keeps the original
+            # "no text -> nothing to persist" behaviour unchanged.
+            if not text and block.get("type") not in ("image", "formula"):
                 continue
 
             # Mirrors buildPassagesFromBlocks() in
@@ -394,9 +405,17 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 "block_type": block.get("type"),
                 "level": block.get("level"),
                 "list_type": block.get("list_type"),
+                "list_number": block.get("list_number"),
+                "list_depth": block.get("list_depth"),
                 "page": block.get("page"),
+                "layout_band": block.get("layout_band"),
+                "column_role": block.get("column_role"),
+                "column_count": block.get("column_count"),
                 "table_rows": table_rows if table_rows is not None else None,
                 "image_url": block.get("image_url"),
+                "formula_latex": block.get("formula_latex"),
+                "equation_number": block.get("equation_number"),
+                "inline_formulas": block.get("inline_formulas") or None,
                 # Inline bold/italic ranges (supabase/migrations/
                 # 20260927000000_document_passage_text_marks.sql).
                 "text_marks": block.get("marks") or None,
@@ -405,25 +424,50 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
         # Idempotent re-save, same pattern as document_matches above.
         client.table("document_passages").delete().eq("document_id", report_id).execute()
         if passage_rows:
-            try:
-                client.table("document_passages").insert(passage_rows).execute()
-            except Exception:
-                # Most likely a migration hasn't been applied yet: the
-                # text_marks column, or level 4 headings (20261023000000_
-                # document_passage_level_4.sql). Keep the passages, without
-                # inline formatting and with level-4 headings as level 3.
-                logger.warning(
-                    "Inserting document_passages failed for report_id=%s; "
-                    "retrying without inline formatting and level-4 headings.",
-                    report_id, exc_info=True,
-                )
-                client.table("document_passages").insert([
-                    {
-                        **{k: v for k, v in row.items() if k != "text_marks"},
-                        "level": min(row["level"], 3) if row.get("level") else row.get("level"),
-                    }
-                    for row in passage_rows
-                ]).execute()
+            v2_columns = {
+                "layout_band", "column_role", "column_count",
+                "list_number", "list_depth",
+                "formula_latex", "equation_number", "inline_formulas",
+            }
+
+            def _downgrade_rows(rows_in: list[dict[str, Any]], *, drop_v2: bool, drop_legacy_extras: bool) -> list[dict[str, Any]]:
+                out: list[dict[str, Any]] = []
+                for row in rows_in:
+                    item = dict(row)
+                    if drop_v2:
+                        for col in v2_columns:
+                            item.pop(col, None)
+                        if item.get("block_type") == "formula":
+                            if item.get("image_url"):
+                                item["block_type"] = "image"
+                            else:
+                                continue
+                    if drop_legacy_extras:
+                        item.pop("text_marks", None)
+                        if item.get("level"):
+                            item["level"] = min(item["level"], 3)
+                    out.append(item)
+                return out
+
+            passage_attempts = [
+                passage_rows,
+                _downgrade_rows(passage_rows, drop_v2=True, drop_legacy_extras=False),
+                _downgrade_rows(passage_rows, drop_v2=True, drop_legacy_extras=True),
+            ]
+            for idx, payload in enumerate(passage_attempts):
+                if not payload:
+                    break
+                try:
+                    client.table("document_passages").insert(payload).execute()
+                    break
+                except Exception:
+                    if idx == len(passage_attempts) - 1:
+                        raise
+                    logger.warning(
+                        "Inserting document_passages failed for report_id=%s (attempt %d); "
+                        "retrying with downgraded schema columns.",
+                        report_id, idx + 1, exc_info=True,
+                    )
     except Exception as exc:
         logger.exception("Failed to persist document_passages for report_id=%s", report_id)
         if strict:
@@ -469,6 +513,7 @@ def _fetch_from_supabase(report_id: str) -> Optional[dict[str, Any]]:
             "overall_score": doc.get("similarity_score"),
             "document_status": doc.get("status"),
             "ai_detection": doc.get("ai_detection"),
+            "extraction_meta": doc.get("extraction_meta"),
             "unlocked_tier": doc.get("unlocked_tier"),
             "is_sample": bool(doc.get("is_sample")),
             "matches": matches,

@@ -44,8 +44,18 @@ ProgressCallback = Callable[..., None]
 SECTION = "input_text"
 SEPARATOR = "\n\n"
 
-# Formatting carried from the stored passage onto the new block.
-_PASSAGE_FIELDS = ("level", "list_type", "page")
+# Formatting & layout carried from the stored passage onto the new block.
+_PASSAGE_FIELDS = (
+    "level",
+    "list_type",
+    "list_number",
+    "list_depth",
+    "page",
+    "layout_band",
+    "column_role",
+    "column_count",
+)
+_MEDIA_LAYOUT_FIELDS = ("page", "layout_band", "column_role", "column_count")
 
 _WS_RE = re.compile(r"\s+")
 
@@ -162,6 +172,11 @@ def full_report(report: dict[str, Any], passages: dict[str, dict[str, Any]]) -> 
             "sections": document["sections"],
             "blocks": document["blocks"],
             "text_field": "input_text",
+            **(
+                {"extraction_meta": report["extraction_meta"]}
+                if report.get("extraction_meta") is not None
+                else {}
+            ),
         },
     }
 
@@ -196,12 +211,33 @@ def build_edited_document(
 
         if block_type == "image":
             if passage.get("image_url"):
-                doc_blocks.append({
+                img_block: dict[str, Any] = {
                     "block_id": f"{SECTION}_{len(doc_blocks)}", "section": SECTION, "label": label,
                     "type": "image", "index": len(doc_blocks), "start": cursor, "end": cursor,
                     "image_url": passage["image_url"],
-                    **({"page": passage["page"]} if passage.get("page") is not None else {}),
-                })
+                }
+                for field in _MEDIA_LAYOUT_FIELDS:
+                    if passage.get(field) is not None:
+                        img_block[field] = passage[field]
+                doc_blocks.append(img_block)
+            continue
+
+        if block_type == "formula":
+            if passage.get("formula_latex") or passage.get("image_url"):
+                formula_block: dict[str, Any] = {
+                    "block_id": f"{SECTION}_{len(doc_blocks)}", "section": SECTION, "label": label,
+                    "type": "formula", "index": len(doc_blocks), "start": cursor, "end": cursor,
+                }
+                if passage.get("formula_latex"):
+                    formula_block["formula_latex"] = passage["formula_latex"]
+                if passage.get("equation_number"):
+                    formula_block["equation_number"] = passage["equation_number"]
+                if passage.get("image_url"):
+                    formula_block["image_url"] = passage["image_url"]
+                for field in _MEDIA_LAYOUT_FIELDS:
+                    if passage.get(field) is not None:
+                        formula_block[field] = passage[field]
+                doc_blocks.append(formula_block)
             continue
 
         text = normalize_block_text(block.get("text") or "")
@@ -240,12 +276,14 @@ def build_edited_document(
                 doc_block["image_url"] = passage["image_url"]
             if passage.get("text_marks"):
                 doc_block["marks"] = passage["text_marks"]
+            if passage.get("inline_formulas"):
+                doc_block["inline_formulas"] = passage["inline_formulas"]
         doc_blocks.append(doc_block)
         changed.append(is_changed)
 
     text = "".join(parts)
     document = {
-        "version": 1,
+        "version": 2,
         "text": text,
         "total_chars": len(text),
         "sections": [{"section": SECTION, "label": label, "start": 0, "end": len(text)}] if text else [],
@@ -256,7 +294,7 @@ def build_edited_document(
 
 
 def _text_blocks(document: dict[str, Any]) -> list[dict[str, Any]]:
-    return [b for b in document["blocks"] if b["type"] != "image"]
+    return [b for b in document["blocks"] if b["type"] not in ("image", "formula")]
 
 
 def changed_runs(document: dict[str, Any], changed: list[bool]) -> list[tuple[int, int]]:
@@ -545,6 +583,12 @@ def merge_report(
             "sections": document["sections"],
             "blocks": document["blocks"],
             "text_field": "input_text",
+            **(
+                {"extraction_meta": (previous_report.get("document") or {})["extraction_meta"]}
+                if isinstance(previous_report.get("document"), dict)
+                and previous_report["document"].get("extraction_meta") is not None
+                else {}
+            ),
         },
         "coverage": {**previous_coverage, **new["coverage"]} if new["coverage"]["status"] != "nothing_to_search"
         else previous_coverage,

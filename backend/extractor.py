@@ -3,6 +3,7 @@ import re
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 
+import pdf_formula
 import pdf_layout
 from document_model import SENTENCE_BOUNDARY
 
@@ -42,20 +43,26 @@ def is_heavy_math_line(text):
     symbol_count = sum(1 for c in text if c in math_symbols)
     symbol_count += len(re.findall(r"(?<=\s)-(?=\s)", text))
 
-    # Nếu 1 dòng ngắn hoặc vừa mà có từ 3-4 ký hiệu toán học trở lên -> Chắc chắn là phương trình
-    if symbol_count >= 3:
-        return True
+    # 3. Heuristic dựa trên tỷ lệ chữ cái
+    # Dòng text bình thường sẽ có mật độ chữ cái (a-z) rất cao.
+    # Công thức toán thường chứa nhiều khoảng trắng, ngoặc, số, và ký tự rời rạc.
+    alpha_count = sum(1 for c in text if c.isalpha())
+    total_chars = len(text.replace(" ", ""))
+    long_prose_words = len(re.findall(r"\b[^\W\d_]{4,}\b", text))
 
     # Đuôi trích dẫn bị ngắt dòng ("et al. , 2022 ).") ít chữ cái nhưng là văn xuôi,
     # vứt nó làm hỏng câu chứa trích dẫn.
     if re.search(r"\bet\s+al\b", text, re.IGNORECASE):
         return False
 
-    # 3. Heuristic dựa trên tỷ lệ chữ cái
-    # Dòng text bình thường sẽ có mật độ chữ cái (a-z) rất cao.
-    # Công thức toán thường chứa nhiều khoảng trắng, ngoặc, số, và ký tự rời rạc.
-    alpha_count = sum(1 for c in text if c.isalpha())
-    total_chars = len(text.replace(" ", ""))
+    # Câu văn xuôi thực sự chứa một vài ký hiệu nội dòng ("... with α ∈ ℝ and y = wx + b.")
+    # phải được giữ lại để trích xuất công thức nội dòng thay vì bị xóa trắng dòng.
+    if long_prose_words >= 4 and total_chars > 0 and alpha_count / total_chars >= 0.55:
+        return False
+
+    # Nếu 1 dòng ngắn hoặc vừa mà có từ 3-4 ký hiệu toán học trở lên -> Chắc chắn là phương trình
+    if symbol_count >= 3:
+        return True
 
     # Dòng không có chữ cái nào ("-", "1", "( )") là ký tự lạc/số trang, không phải văn xuôi.
     if alpha_count == 0:
@@ -183,13 +190,15 @@ def line_from_layout(raw):
     texts, sizes, fonts = [], [], []
     bold_flags = []
     styled_spans = []
+    raw_spans = []
 
     for span in raw.get("spans", []):
         text = ZERO_WIDTH_RE.sub("", span.get("text", "")).strip()
         if text:
             texts.append(text)
             sizes.append(span.get("size", 0))
-            fonts.append(span.get("font", ""))
+            sfont = span.get("font", "")
+            fonts.append(sfont)
             # PyMuPDF span flag bit 4 (value 16) = bold.
             bold_flags.append(bool(span.get("flags", 0) & 16))
             styled_spans.append((
@@ -197,6 +206,7 @@ def line_from_layout(raw):
                 _span_is_bold(span),
                 _span_is_italic(span),
             ))
+            raw_spans.append((text, sfont))
 
     line_text = " ".join(texts).strip()
     if not line_text or not sizes:
@@ -215,6 +225,7 @@ def line_from_layout(raw):
         # above - lets build_structured_blocks() keep inline bold/italic as
         # block "marks".
         "spans": styled_spans,
+        "raw_spans": raw_spans,
         # Position on the page (pdf_layout.py): paragraph breaks, page
         # furniture, and where tables and figures go back into the flow.
         "bbox": raw.get("bbox"),
@@ -224,6 +235,9 @@ def line_from_layout(raw):
         "page_height": raw.get("page_height"),
         "exact_position": raw.get("exact_position", False),
     }
+    for key in ("layout_band", "column_role", "column_count", "source"):
+        if raw.get(key) is not None:
+            line[key] = raw[key]
     if raw.get("caption"):
         line["caption"] = raw["caption"]
         line["caption_id"] = raw["caption_id"]
@@ -1334,11 +1348,38 @@ def _continues_list_item(item_lines, line):
     return 0.4 * size < indent < 3 * size and -size < gap < 0.9 * size
 
 
+LIST_NUMBER_PREFIX_RE = re.compile(r"^\s*\(?(\d{1,3})[.)]")
+
+
+def _parse_list_meta(line, list_type, body_size, col_left):
+    """Extract sequential list_number (for ordered items) and clamped list_depth (0..4)."""
+    meta = {}
+    if list_type == "number":
+        match = LIST_NUMBER_PREFIX_RE.match(line.get("text") or "")
+        if match:
+            value = int(match.group(1))
+            if value >= 1:
+                meta["list_number"] = value
+    bbox = line.get("bbox")
+    if bbox and col_left is not None:
+        step = max(14.0, (body_size or 10.0) * 1.4)
+        depth = int(round((bbox[0] - col_left) / step))
+        meta["list_depth"] = max(0, min(4, depth))
+    else:
+        meta["list_depth"] = 0
+    return meta
+
+
 def _stamp_positions(block, source_lines):
     indices = [line["idx"] for line in source_lines if line.get("idx") is not None]
     if indices:
         block["_first_idx"] = min(indices)
         block["_last_idx"] = max(indices)
+    if source_lines:
+        first = source_lines[0]
+        for key in ("layout_band", "column_role", "column_count"):
+            if first.get(key) is not None:
+                block[key] = first[key]
     # Where each line of the block sits on its page, so a match inside the
     # block can be highlighted in the original PDF (pdf_geometry.py). An
     # in-process carrier like `_image_bytes`: never persisted.
@@ -1374,6 +1415,14 @@ def build_structured_blocks(section_lines, body_size):
     """
     blocks = []
     current = None
+    col_left_by_scope = {}
+    for line in section_lines:
+        bbox = line.get("bbox")
+        if bbox:
+            scope = (line.get("page"), line.get("column_role") or "full")
+            candidate_left = min(line.get("block_x0", bbox[0]), bbox[0])
+            if scope not in col_left_by_scope or candidate_left < col_left_by_scope[scope]:
+                col_left_by_scope[scope] = candidate_left
 
     def flush():
         nonlocal current
@@ -1385,6 +1434,11 @@ def build_structured_blocks(section_lines, body_size):
                 marks = _block_marks(source_lines, cleaned)
                 if marks:
                     current["marks"] = marks
+                if current["type"] in ("paragraph", "list_item"):
+                    raw_spans = [pair for sl in source_lines for pair in (sl.get("raw_spans") or [])]
+                    inline_formulas = pdf_formula.detect_inline_formulas(cleaned, raw_spans)
+                    if inline_formulas:
+                        current["inline_formulas"] = inline_formulas
                 _stamp_positions(current, source_lines)
                 blocks.append(current)
         current = None
@@ -1419,6 +1473,8 @@ def build_structured_blocks(section_lines, body_size):
                 "text": text, "page": line["page"],
             }
             if btype == "list_item":
+                scope = (line.get("page"), line.get("column_role") or "full")
+                block.update(_parse_list_meta(line, list_type, body_size, col_left_by_scope.get(scope)))
                 # Kept open: the item's wrapped lines follow as "paragraph"
                 # lines and join it in the branch above.
                 block["_lines"] = [line]
@@ -1502,17 +1558,43 @@ def _layout_item_blocks(layout, lines):
             "text": text, "page": table["page"], "rows": rows,
             "_anchor": _anchor_index(lines, table["anchor"]),
         }
+        for key in ("layout_band", "column_role", "column_count"):
+            if table.get(key) is not None:
+                block[key] = table[key]
         if table.get("image_bytes"):
             block["_image_bytes"] = table["image_bytes"]
             block["_image_ext"] = "png"
         items.append(block)
     for figure in layout.get("figures", []):
-        items.append({
+        fig_block = {
             "type": "image", "level": None, "list_type": None,
             "text": "", "page": figure["page"],
             "_image_bytes": figure["image_bytes"], "_image_ext": "png",
             "_anchor": _anchor_index(lines, figure["anchor"]),
-        })
+        }
+        for key in ("layout_band", "column_role", "column_count"):
+            if figure.get(key) is not None:
+                fig_block[key] = figure[key]
+        items.append(fig_block)
+    for formula in layout.get("formulas", []):
+        fblock = {
+            "type": "formula", "level": None, "list_type": None,
+            "text": "", "page": formula["page"],
+            "_anchor": _anchor_index(lines, formula["anchor"]),
+        }
+        if formula.get("formula_latex"):
+            fblock["formula_latex"] = formula["formula_latex"]
+        if formula.get("equation_number"):
+            fblock["equation_number"] = formula["equation_number"]
+        if formula.get("image_bytes") and (
+            formula.get("used_fallback") or not formula.get("formula_latex")
+        ):
+            fblock["_image_bytes"] = formula["image_bytes"]
+            fblock["_image_ext"] = "png"
+        for key in ("layout_band", "column_role", "column_count"):
+            if formula.get(key) is not None:
+                fblock[key] = formula[key]
+        items.append(fblock)
     return items
 
 
@@ -2011,6 +2093,7 @@ def extract_structured_sections_from_pdf(pdf_path, heading_labels=None, media=Tr
         "sections": result_sections,
         # Reading order of the parts, for document_model.build_document.
         "section_order": order if "title" in result_sections else ["title"] + order,
+        "extraction_meta": layout.get("extraction_meta"),
     }
 
 
@@ -2223,7 +2306,9 @@ def flatten_structured_sections(structured):
     for name, blocks in structured["sections"].items():
         sections[name] = "\n\n".join(
             b["text"] for b in blocks
-            if b["text"] and not b.get("section_heading")
+            if b["text"]
+            and not b.get("section_heading")
+            and b.get("type") not in ("image", "formula")
         )
 
     return sections

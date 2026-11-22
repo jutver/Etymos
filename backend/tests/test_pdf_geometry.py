@@ -36,10 +36,19 @@ def test_two_column_page_is_read_column_by_column(tmp_path):
     pdf = tmp_path / "columns.pdf"
     doc.save(str(pdf))
 
-    texts = [l["text"] for l in pdf_layout.analyze_pdf(str(pdf), media=False)["lines"]]
+    analyzed = pdf_layout.analyze_pdf(str(pdf), media=False)
+    lines = analyzed["lines"]
+    texts = [l["text"] for l in lines]
     assert texts[0] == "A Title Across Both Columns"
     assert texts[1:13] == left
     assert texts[13:] == right
+
+    assert analyzed["extraction_meta"]["multi_column_pages"] == [1]
+    assert (lines[0]["column_role"], lines[0]["column_count"]) == ("full", 1)
+    assert all((l["column_role"], l["column_count"]) == ("left", 2) for l in lines[1:13])
+    assert all((l["column_role"], l["column_count"]) == ("right", 2) for l in lines[13:])
+    assert lines[1]["layout_band"] == lines[13]["layout_band"]
+    assert lines[1]["layout_band"] != lines[0]["layout_band"]
 
 
 def test_single_column_order_is_left_alone():
@@ -135,6 +144,52 @@ def test_sideways_page_has_no_boxes(tmp_path):
     report = _report(pdf, "Rotated row 3")
     pdf_geometry.attach_pdf_rects(report, str(pdf))
     assert "pdf_rects" not in report["matches"][0]
+
+
+def test_pdf_rotation_and_nonzero_cropbox_produce_clamped_upright_boxes(tmp_path):
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    # Write vertically upward then set /Rotate 90 so the text reads horizontally upright in visual view.
+    page.insert_text((140, 700), "Rotated CropBox target sentence is placed here accurately.", fontsize=11, fontname="helv", rotate=90)
+    page.set_cropbox(fitz.Rect(50, 60, 520, 760))
+    page.set_rotation(90)
+    pdf = tmp_path / "rotated_cropbox.pdf"
+    doc.save(str(pdf))
+    page_w, page_h = page.rect.width, page.rect.height
+    doc.close()
+
+    phrase = "target sentence is placed"
+    report = _report(pdf, phrase)
+    pdf_geometry.attach_pdf_rects(report, str(pdf))
+    rects = report["matches"][0].get("pdf_rects")
+    assert rects
+    for r in rects:
+        assert r["page"] == 1
+        assert 0.0 <= r["x0"] < r["x1"] <= page_w
+        assert 0.0 <= r["y0"] < r["y1"] <= page_h
+
+
+def test_flattened_ocr_lines_produce_bounded_pdf_rects(tmp_path):
+    src = fitz.open()
+    sp = src.new_page(width=595, height=842)
+    sp.insert_text((72, 130), "Flattened scan highlight positioning accuracy test sentence.", fontsize=12, fontname="helv")
+    pix = sp.get_pixmap(dpi=200, colorspace=fitz.csRGB, alpha=False)
+    src.close()
+
+    flat = fitz.open()
+    fp = flat.new_page(width=595, height=842)
+    fp.insert_image(fp.rect, stream=pix.tobytes("png"))
+    pdf = tmp_path / "flat_geom.pdf"
+    flat.save(str(pdf))
+    flat.close()
+
+    report = _report(pdf, "highlight positioning")
+    pdf_geometry.attach_pdf_rects(report, str(pdf))
+    rects = report["matches"][0].get("pdf_rects")
+    assert rects
+    assert rects[0]["page"] == 1
+    assert 70.0 <= rects[0]["x0"] < rects[0]["x1"] <= 595.0
+    assert 90.0 <= rects[0]["y0"] < rects[0]["y1"] <= 160.0
 
 
 # --- .docx -> PDF ----------------------------------------------------------------

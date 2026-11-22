@@ -56,27 +56,6 @@ Pick the `cuXXX` index matching your driver from
 https://pytorch.org/get-started/locally/ — marker-pdf currently requires
 `torch>=2.7.0`.
 
-### Docker (required for `MARKER_MODE=balanced`, the default on cards of 20 GB or more)
-
-marker-pdf's high-accuracy **balanced** mode (needed for readable equations —
-see the accuracy discussion this feature was scoped from) runs its
-layout/OCR model via a vLLM server that marker **auto-spawns in a Docker
-container** on first use. Requirements:
-
-- Docker Desktop installed and **running** (the daemon, not just the app
-  installed).
-- GPU passthrough working: `docker run --rm --gpus all
-  nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` should print your GPU.
-- First conversion pulls the vLLM image and downloads the OCR model from
-  Hugging Face — expect several GB and a few minutes the first time only.
-  The container (`surya-vllm-<port>`) then stays up in the background for
-  subsequent conversions.
-
-**No Docker / no GPU?** Set `MARKER_MODE=fast` in the backend's environment.
-This uses lightweight CPU detectors instead — works with zero extra infra,
-but is noticeably weaker on math-heavy papers (equations render far less
-reliably; plain text/tables/headings are still fine). See `marker_preview.py`.
-
 ### Pandoc
 
 The real, downloadable `.docx` is produced by converting marker's Markdown
@@ -96,21 +75,19 @@ sudo apt-get install pandoc
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MARKER_MODE` | `balanced`; `fast` below `MARKER_GPU_MIN_VRAM_GB` | `balanced` (Docker+vLLM, best accuracy) or `fast` (no extra infra) |
+| `MARKER_MODE` | `fast` | Runs marker's lightweight in-process detectors with no external daemon required |
 | `MARKER_DEVICE` | marker's choice; `cpu` below `MARKER_GPU_MIN_VRAM_GB` | Passed to marker as `TORCH_DEVICE` |
 | `MARKER_GPU_MIN_VRAM_GB` | `20` | Smaller cards keep the preview off the GPU — see `GPU_MEMORY.md` |
 | `MARKER_TIMEOUT_SECONDS` | `900` | Max seconds for one PDF's marker conversion before it's treated as failed |
 | `MARKER_PREVIEW_DIR` | `./storage/marker_previews` | Where per-report HTML/docx output is kept (local disk only — see `marker_preview_store.py`'s docstring on the durability tradeoff, same as `job_manager.py`'s in-memory jobs) |
-| `MARKER_KEEP_ALIVE` | `true` | Keeps the vLLM Docker container (`balanced` mode) running between conversions instead of tearing it down after each one. Without this, **every** conversion re-pays a ~1-2 minute engine-init/CUDA-graph/torch.compile warmup (confirmed while building this feature — the model weights themselves are cached on disk via a mounted volume and are NOT re-downloaded, only the warmup repeats). The tradeoff: the container (and its GPU memory) stays resident continuously in the background. Set to `false` to opt out. |
 
 ## Verifying the setup works
 
 ```bash
 cd backend
-marker_env\Scripts\marker_single.exe some-paper.pdf --output_dir /tmp/marker_test --output_format markdown --mode balanced
+marker_env/bin/marker_single some-paper.pdf --output_dir /tmp/marker_test --output_format markdown --mode fast
 ```
 
-First run: Docker pulls the vLLM image + downloads model weights (can take
-several minutes). Subsequent runs reuse the running container and are much
-faster. If this succeeds and produces a `.md` file, the backend's
+First run downloads model weights into the local cache. Subsequent runs are
+much faster. If this succeeds and produces a `.md` file, the backend's
 `/api/reports/{id}/marker-preview` endpoint will work the same way.

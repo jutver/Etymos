@@ -82,22 +82,43 @@ def line_entries(document: dict, text: str) -> list[dict]:
 
 
 class _PageChars:
-    """The PDF's own character boxes, read once per page, to trim a box to
-    the exact characters a match starts or ends on."""
+    """The PDF's own character boxes (normalized into visible upright `page.rect`
+    coordinates via `page.rotation_matrix`), read once per page, to trim a box
+    to the exact characters a match starts or ends on."""
 
     def __init__(self, doc):
         self.doc = doc
         self.cache: dict[int, list] = {}
+        self.bounds_cache: dict[int, tuple[float, float]] = {}
+
+    def page_bounds(self, page_number: int) -> tuple[float, float] | None:
+        if page_number not in self.bounds_cache:
+            try:
+                rect = self.doc[page_number - 1].rect
+                self.bounds_cache[page_number] = (float(rect.width), float(rect.height))
+            except Exception:
+                return None
+        return self.bounds_cache[page_number]
 
     def chars(self, page_number: int) -> list:
         if page_number not in self.cache:
             found = []
             try:
-                data = self.doc[page_number - 1].get_text("rawdict")
+                page = self.doc[page_number - 1]
+                data = page.get_text("rawdict")
+                mat = page.rotation_matrix if page.rotation else None
+                vrect = page.rect
                 for block in data.get("blocks", []):
                     for line in block.get("lines", []):
                         for span in line.get("spans", []):
-                            found.extend(span.get("chars", []))
+                            for char in span.get("chars", []):
+                                if mat is not None and char.get("bbox"):
+                                    tb = (fitz.Rect(char["bbox"]) * mat) & vrect
+                                    if tb.is_empty:
+                                        continue
+                                    found.append({**char, "bbox": tuple(tb)})
+                                else:
+                                    found.append(char)
             except Exception:
                 logger.exception("Could not read character boxes on page %d", page_number)
             self.cache[page_number] = found
@@ -155,7 +176,17 @@ def rects_for_range(entries: list[dict], start: int, end: int, page_chars: _Page
             if trimmed is None:
                 continue
             x0, x1 = trimmed
-        if x1 - x0 < 0.5:
+        bounds = page_chars.page_bounds(entry["page"]) if page_chars else None
+        if bounds is not None:
+            pw, ph = bounds
+            x0 = max(0.0, min(x0, pw))
+            x1 = max(0.0, min(x1, pw))
+            y0 = max(0.0, min(y0, ph))
+            y1 = max(0.0, min(y1, ph))
+        else:
+            x0 = max(0.0, x0)
+            y0 = max(0.0, y0)
+        if x1 - x0 < 0.5 or y1 - y0 < 0.5:
             continue
         rects.append({
             "page": entry["page"],

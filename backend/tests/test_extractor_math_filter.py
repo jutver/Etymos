@@ -54,3 +54,29 @@ def test_real_math_and_noise_still_dropped(line):
 
 def test_blank_line_is_dropped():
     assert is_heavy_math_line("   ") is True
+
+
+def test_hyphenated_prose_survives_alongside_extracted_display_formula(tmp_path, monkeypatch):
+    import fitz
+    import extractor
+    import pdf_formula
+
+    monkeypatch.setattr(pdf_formula, "get_latex_ocr_engine", lambda: None)
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 72), "1 Abstract", fontsize=14, fontname="hebo")
+    page.insert_text((72, 102), "By harnessing the power of a text-to-text architec-", fontsize=10.5, fontname="helv")
+    page.insert_text((72, 118), "ture, state-of-the-art models show clear gains.", fontsize=10.5, fontname="helv")
+    page.insert_htmlbox(fitz.Rect(180, 140, 420, 164), '<p style="font-size:11pt;margin:0">z = x − y + w × v</p>')
+    page.insert_text((500, 154), "(1)", fontsize=10.5, fontname="helv")
+    pdf = tmp_path / "hyphen_and_math.pdf"
+    doc.save(str(pdf))
+
+    structured = extractor.extract_structured_sections_from_pdf(str(pdf), media=True)
+    flat = extractor.flatten_structured_sections(structured)
+    joined = " ".join(flat.values())
+    assert "text-to-text" in joined
+    assert "state-of-the-art" in joined
+    assert "−" not in joined
+    blocks = [b for sec in structured["sections"].values() for b in sec]
+    assert any(b["type"] == "formula" for b in blocks)

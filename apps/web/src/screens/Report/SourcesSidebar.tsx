@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, MotionConfig, m, type TargetAndTransition } from "motion/react";
 import { CaretDown, CaretRight, CaretUp, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
 import type { AiDetection, MatchedSource } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
+import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { AiDetectionSection } from "./AiDetectionSection";
 import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
 import { t, tn } from "../../lib/i18n";
@@ -41,6 +42,8 @@ const PANEL_CONTENT = {
   folded: { opacity: 0, transition: { duration: 0.12 } },
   open: { opacity: 1, transition: { duration: 0.24, delay: 0.1 } },
 };
+const TAB_EASE = [0.32, 0.72, 0, 1] as const;
+const TAB_PANEL_TRANSITION = { duration: 0.24, ease: TAB_EASE } as const;
 
 export interface SourcesSidebarProps {
   matches: MatchedSource[];
@@ -81,7 +84,7 @@ export interface SourcesSidebarProps {
   onToggle: () => void;
 }
 
-export function SourcesSidebar({
+export const SourcesSidebar = memo(function SourcesSidebar({
   matches,
   lockedCount,
   activeMatchId,
@@ -120,6 +123,7 @@ export function SourcesSidebar({
     [onTabChange],
   );
   const activeTab = hasAiTab ? tab : "sources";
+  const tabPill = usePill<HTMLDivElement>(activeTab);
 
   // Haystacks are built once per match list; each keystroke is then just a
   // handful of `includes` calls, which matters with hundreds of matches.
@@ -208,12 +212,22 @@ export function SourcesSidebar({
         className="flex min-h-0 flex-1 flex-col lg:w-[22rem] xl:w-[24rem]"
       >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-bold text-navy-900">
-            {activeTab === "ai" ? t("AI-generated content") : isFiltering ? t("{{shown}} of {{total}} matched sources", { shown: shownIndexes.length, total: matches.length }) : tn(matches.length, "{{count}} matched source", "{{count}} matched sources")}
-          </h2>
-          <p className="mt-0.5 text-xs text-ink-500">
-            {activeTab === "ai" ? t("Paragraphs that look machine-written, and why.") : t("Each colour matches a highlight in your document.")}</p>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            <m.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.14, ease: TAB_EASE }}
+            >
+              <h2 className="text-sm font-bold text-navy-900">
+                {activeTab === "ai" ? t("AI-generated content") : isFiltering ? t("{{shown}} of {{total}} matched sources", { shown: shownIndexes.length, total: matches.length }) : tn(matches.length, "{{count}} matched source", "{{count}} matched sources")}
+              </h2>
+              <p className="mt-0.5 text-xs text-ink-500">
+                {activeTab === "ai" ? t("Paragraphs that look machine-written, and why.") : t("Each colour matches a highlight in your document.")}</p>
+            </m.div>
+          </AnimatePresence>
         </div>
         <button
           type="button"
@@ -230,7 +244,21 @@ export function SourcesSidebar({
       </div>
 
       {hasAiTab && (
-        <div role="tablist" aria-label={t("Sidebar sections")} className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
+        <div ref={tabPill.ref} role="tablist" aria-label={t("Sidebar sections")} className="relative flex shrink-0 gap-1 border-b border-line px-3 py-2">
+          <PillIndicator box={tabPill.box} rounded="rounded-lg" className="overflow-hidden">
+            <span
+              className={cn(
+                "absolute inset-0 rounded-lg bg-gradient-to-r from-emerald-50 to-green-100/90 ring-1 ring-inset ring-emerald-200/80 transition-opacity duration-300 motion-reduce:transition-none",
+                activeTab === "sources" ? "opacity-100" : "opacity-0",
+              )}
+            />
+            <span
+              className={cn(
+                "absolute inset-0 rounded-lg bg-ai-flag-bg ring-1 ring-inset ring-ai-flag-line/60 transition-opacity duration-300 motion-reduce:transition-none",
+                activeTab === "ai" ? "opacity-100" : "opacity-0",
+              )}
+            />
+          </PillIndicator>
           {([
             { id: "sources", label: t("Matched sources"), badge: String(matches.length), icon: <ShieldCheck size={14} /> },
             {
@@ -239,143 +267,188 @@ export function SourcesSidebar({
               badge: aiDetection?.available ? `${Math.round(aiDetection.overallScore)}%` : "",
               icon: <Robot size={14} />,
             },
-          ] as const).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === item.id}
-              onClick={() => setTab(item.id)}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
-                activeTab === item.id
-                  ? item.id === "ai"
-                    ? "bg-ai-flag-bg text-ai-flag"
-                    : "bg-brand-100/60 text-navy-900"
-                  : "text-ink-500 hover:bg-surface-muted hover:text-ink-900",
-              )}
-            >
-              {item.icon}
-              {item.label}
-              {item.badge && <span className="tabular-nums opacity-80">{item.badge}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {activeTab === "sources" && matches.length > 0 && (
-        <div className="shrink-0 border-b border-line px-3 py-2.5">
-          <label className="relative block">
-            <span className="sr-only">{t("Search matched sources")}</span>
-            <MagnifyingGlass
-              size={14}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-500"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape" && query) {
-                  e.preventDefault();
-                  setQuery("");
-                }
-              }}
-              placeholder={t("Search title, author or text…")}
-              autoComplete="off"
-              className="h-11 w-full rounded-[var(--radius-input)] border border-line bg-white pl-9 pr-10 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
-            />
-            {query && (
+          ] as const).map((item) => {
+            const isSelected = activeTab === item.id;
+            return (
               <button
+                key={item.id}
+                id={`sidebar-tab-${item.id}`}
                 type="button"
-                onClick={() => setQuery("")}
-                aria-label={t("Clear search")}
-                className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`sidebar-panel-${item.id}`}
+                data-pill-active={isSelected}
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors duration-200",
+                  isSelected
+                    ? item.id === "ai"
+                      ? "text-ai-flag"
+                      : "text-emerald-700"
+                    : "text-ink-500 hover:bg-surface-muted/70 hover:text-ink-900",
+                )}
               >
-                <X size={12} />
+                {item.icon}
+                {item.label}
+                {item.badge && <span className="tabular-nums opacity-80">{item.badge}</span>}
               </button>
-            )}
-          </label>
+            );
+          })}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
-        {activeTab === "sources" && (<>
-        {matches.length === 0 ? (
-          <div className="flex flex-col items-center px-4 py-14 text-center">
-            <ShieldCheck size={28} className="text-success" />
-            <p className="mt-3 text-sm font-semibold text-navy-900">{t("No matched sources")}</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-500">
-              {t("Nothing in this document overlapped the sources we scanned.")}</p>
-          </div>
-        ) : shownIndexes.length === 0 ? (
-          <div className="flex flex-col items-center px-4 py-12 text-center">
-            <MagnifyingGlass size={26} className="text-ink-300" />
-            <p className="mt-3 text-sm font-semibold text-navy-900">{t("No sources match")}</p>
-            <p className="mt-1 break-words text-xs leading-relaxed text-ink-500">
-              {t("Nothing matched \"")}{query.trim()}{t("\". Try a different word from the title, author or text.")}</p>
-            <Button size="sm" variant="outline" className="mt-3 h-8 px-3 text-xs" onClick={() => setQuery("")}>
-              {t("Clear search")}</Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            {shownIndexes.map((i) => {
-              const m = matches[i];
-              return (
-                <div
-                  key={m.id}
-                  ref={(el) => {
-                    if (el) cardRefs.current.set(m.id, el);
-                    else cardRefs.current.delete(m.id);
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <m.div
+          id="sidebar-panel-sources"
+          role="tabpanel"
+          aria-labelledby={hasAiTab ? "sidebar-tab-sources" : undefined}
+          aria-hidden={activeTab !== "sources"}
+          inert={activeTab !== "sources" ? true : undefined}
+          initial={false}
+          animate={
+            activeTab === "sources"
+              ? { opacity: 1, x: 0, visibility: "visible" as const }
+              : { opacity: 0, x: -18, transitionEnd: { visibility: "hidden" as const } }
+          }
+          transition={TAB_PANEL_TRANSITION}
+          className={cn(
+            "flex min-h-0 flex-col",
+            activeTab === "sources" ? "relative flex-1" : "pointer-events-none absolute inset-0",
+          )}
+        >
+          {matches.length > 0 && (
+            <div className="shrink-0 border-b border-line px-3 py-2.5">
+              <label className="relative block">
+                <span className="sr-only">{t("Search matched sources")}</span>
+                <MagnifyingGlass
+                  size={14}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-500"
+                />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && query) {
+                      e.preventDefault();
+                      setQuery("");
+                    }
                   }}
-                >
-                  <MatchCard
-                    match={m}
-                    index={i}
-                    locked={explanationLocked}
-                    rewriteLocked={rewriteLocked}
-                    selected={activeMatchId === m.id}
-                    resolved={resolvedIds.has(m.id)}
-                    stillFlaggedBy={stillFlaggedNotes?.get(m.id)}
-                    notLocated={locatedIds ? !locatedIds.has(m.id) : false}
-                    onSelect={onSelect}
-                    onViewComparison={onViewComparison}
-                    onRewrite={onRewrite}
-                    onCite={onCite}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  placeholder={t("Search title, author or text…")}
+                  autoComplete="off"
+                  className="h-11 w-full rounded-[var(--radius-input)] border border-line bg-white pl-9 pr-10 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 [&::-webkit-search-cancel-button]:appearance-none"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label={t("Clear search")}
+                    className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted hover:text-ink-900"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </label>
+            </div>
+          )}
 
-        {lockedCount > 0 && (
-          <div
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
+            {matches.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-14 text-center">
+                <ShieldCheck size={28} className="text-success" />
+                <p className="mt-3 text-sm font-semibold text-navy-900">{t("No matched sources")}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-500">
+                  {t("Nothing in this document overlapped the sources we scanned.")}</p>
+              </div>
+            ) : shownIndexes.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-12 text-center">
+                <MagnifyingGlass size={26} className="text-ink-300" />
+                <p className="mt-3 text-sm font-semibold text-navy-900">{t("No sources match")}</p>
+                <p className="mt-1 break-words text-xs leading-relaxed text-ink-500">
+                  {t("Nothing matched \"")}{query.trim()}{t("\". Try a different word from the title, author or text.")}</p>
+                <Button size="sm" variant="outline" className="mt-3 h-8 px-3 text-xs" onClick={() => setQuery("")}>
+                  {t("Clear search")}</Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {shownIndexes.map((i) => {
+                  const m = matches[i];
+                  return (
+                    <div
+                      key={m.id}
+                      ref={(el) => {
+                        if (el) cardRefs.current.set(m.id, el);
+                        else cardRefs.current.delete(m.id);
+                      }}
+                      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 240px" }}
+                    >
+                      <MatchCard
+                        match={m}
+                        index={i}
+                        locked={explanationLocked}
+                        rewriteLocked={rewriteLocked}
+                        selected={activeMatchId === m.id}
+                        resolved={resolvedIds.has(m.id)}
+                        stillFlaggedBy={stillFlaggedNotes?.get(m.id)}
+                        notLocated={locatedIds ? !locatedIds.has(m.id) : false}
+                        onSelect={onSelect}
+                        onViewComparison={onViewComparison}
+                        onRewrite={onRewrite}
+                        onCite={onCite}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {lockedCount > 0 && (
+              <div
+                className={cn(
+                  "mt-3 rounded-[var(--radius-card)] border border-dashed border-brand-300 bg-brand-100/30 p-4 text-center",
+                )}
+              >
+                <GraduationCap size={20} weight="bold" className="mx-auto text-brand-600" />
+                <p className="mt-2 text-xs font-semibold text-navy-900">
+                  {lockedCount}{" "}{t("more found by Semantic Detection")}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-500">
+                  {t("Upgrade to catch paraphrased and reworded copying too.")}</p>
+                <Button size="sm" className="mt-3 h-8 px-3 text-xs" onClick={() => onUpgrade("semantic")}>
+                  {t("Unlock")}</Button>
+              </div>
+            )}
+          </div>
+        </m.div>
+
+        {hasAiTab && (
+          <m.div
+            id="sidebar-panel-ai"
+            role="tabpanel"
+            aria-labelledby="sidebar-tab-ai"
+            aria-hidden={activeTab !== "ai"}
+            inert={activeTab !== "ai" ? true : undefined}
+            initial={false}
+            animate={
+              activeTab === "ai"
+                ? { opacity: 1, x: 0, visibility: "visible" as const }
+                : { opacity: 0, x: 18, transitionEnd: { visibility: "hidden" as const } }
+            }
+            transition={TAB_PANEL_TRANSITION}
             className={cn(
-              "mt-3 rounded-[var(--radius-card)] border border-dashed border-brand-300 bg-brand-100/30 p-4 text-center",
+              "min-h-0 overflow-y-auto scrollbar-thin px-3 py-3",
+              activeTab === "ai" ? "relative flex-1" : "pointer-events-none absolute inset-0",
             )}
           >
-            <GraduationCap size={20} weight="bold" className="mx-auto text-brand-600" />
-            <p className="mt-2 text-xs font-semibold text-navy-900">
-              {lockedCount}{" "}{t("more found by Semantic Detection")}</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-500">
-              {t("Upgrade to catch paraphrased and reworded copying too.")}</p>
-            <Button size="sm" className="mt-3 h-8 px-3 text-xs" onClick={() => onUpgrade("semantic")}>
-              {t("Unlock")}</Button>
-          </div>
-        )}
-        </>)}
-
-        {activeTab === "ai" && (
-        <AiDetectionSection
-          detection={aiDetection}
-          locked={explanationLocked}
-          onUpgrade={() => onUpgrade("ai-detection")}
-          activeSegmentId={activeAiSegmentId}
-          onSegmentClick={onAiSegmentClick}
-          defaultExpanded
-        />
+            <AiDetectionSection
+              detection={aiDetection}
+              locked={explanationLocked}
+              onUpgrade={() => onUpgrade("ai-detection")}
+              activeSegmentId={activeAiSegmentId}
+              onSegmentClick={onAiSegmentClick}
+              defaultExpanded
+            />
+          </m.div>
         )}
       </div>
       </m.div>
@@ -384,4 +457,4 @@ export function SourcesSidebar({
     </AnimatePresence>
     </MotionConfig>
   );
-}
+});

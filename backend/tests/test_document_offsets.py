@@ -375,3 +375,67 @@ def test_document_without_a_reference_list_is_scored_whole():
 
     document = build_document(SECTIONS)
     assert reference_span(document, document["text"]) is None
+
+
+def test_docx_list_number_and_depth_propagate_through_document_model(tmp_path):
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from extract_docx import extract_structured_sections_from_docx
+    from extractor import flatten_structured_sections
+
+    docx_file = tmp_path / "lists.docx"
+    doc = Document()
+
+    def add_num_para(text, style, ilvl=0):
+        p = doc.add_paragraph(text, style=style)
+        if ilvl > 0:
+            p_pr = p._p.get_or_add_pPr()
+            num_pr = OxmlElement("w:numPr")
+            el_ilvl = OxmlElement("w:ilvl")
+            el_ilvl.set(qn("w:val"), str(ilvl))
+            num_pr.append(el_ilvl)
+            p_pr.append(num_pr)
+        return p
+
+    add_num_para("First numbered item.", "List Number", ilvl=0)
+    add_num_para("Nested numbered sub-item.", "List Number", ilvl=1)
+    add_num_para("Second top numbered item.", "List Number", ilvl=0)
+    doc.add_paragraph("Plain divider paragraph.")
+    doc.add_paragraph("4. Manual continued step.")
+    doc.add_paragraph("5. Manual fifth step.")
+    doc.save(str(docx_file))
+
+    structured = extract_structured_sections_from_docx(str(docx_file))
+    items = [b for b in structured["sections"]["body"] if b["type"] == "list_item"]
+    assert [(b["list_type"], b.get("list_number"), b.get("list_depth")) for b in items] == [
+        ("number", 1, 0),
+        ("number", 1, 1),
+        ("number", 2, 0),
+        ("number", 4, 0),
+        ("number", 5, 0),
+    ]
+
+    flat = flatten_structured_sections(structured)
+    built = build_document(
+        flat,
+        structured_sections=structured["sections"],
+        extraction_meta={
+            "pipeline_version": 2,
+            "document_mode": "native",
+            "total_pages": 1,
+            "ocr_pages": [],
+            "multi_column_pages": [],
+            "formula_count": 0,
+            "formula_fallback_count": 0,
+            "warnings": [],
+        },
+    )
+    built_lists = [b for b in built["blocks"] if b["type"] == "list_item"]
+    assert [(b.get("list_number"), b.get("list_depth")) for b in built_lists] == [
+        (1, 0),
+        (1, 1),
+        (2, 0),
+        (4, 0),
+        (5, 0),
+    ]

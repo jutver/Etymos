@@ -63,10 +63,12 @@ export function PillIndicator({
   box,
   className,
   rounded = "rounded-full",
+  children,
 }: {
   box: PillBox | null;
-  className: string;
+  className?: string;
   rounded?: string;
+  children?: React.ReactNode;
 }) {
   if (!box) return null;
   return (
@@ -80,6 +82,8 @@ export function PillIndicator({
         "transition-[transform,width,height] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
         className,
       )}
-    />
+    >
+      {children}
+    </span>
   );
 }

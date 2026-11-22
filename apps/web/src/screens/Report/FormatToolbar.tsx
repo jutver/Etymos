@@ -335,7 +335,7 @@ export function FormatToolbar({
                 exit="leave"
                 className="flex min-h-8 items-center gap-0.5 whitespace-nowrap"
               >
-                {view !== "original" && onToggleHighlights && (
+                {onToggleHighlights && (
                   <>
                     <button
                       type="button"

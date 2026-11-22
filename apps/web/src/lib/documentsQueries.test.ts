@@ -122,6 +122,109 @@ describe("fetchCheckedDocument", () => {
     expect(doc?.matches).toEqual([]);
     expect(doc?.passages).toEqual([]);
   });
+
+  it("handles legacy reports with null v2 columns as well as DOCX, pasted-text, and v2 formula documents", async () => {
+    // Legacy report (pre-migration nulls, repeating list items without list_number)
+    mockFrom({
+      documents: { data: { id: "legacy-1", uploaded_at: "2025-12-01", file_name: null, extraction_meta: null }, error: null },
+      document_matches: { data: [], error: null },
+      document_passages: {
+        data: [
+          {
+            id: "p1",
+            text: "First legacy item",
+            block_type: "list_item",
+            list_type: "number",
+            layout_band: null,
+            column_role: null,
+            column_count: null,
+            list_number: null,
+            list_depth: null,
+            formula_latex: null,
+            equation_number: null,
+            inline_formulas: null,
+          },
+          {
+            id: "p2",
+            text: "Second legacy item",
+            block_type: "list_item",
+            list_type: "number",
+          },
+        ],
+        error: null,
+      },
+    });
+    const legacy = await fetchCheckedDocument("legacy-1");
+    expect(legacy?.extractionMeta).toBeUndefined();
+    expect(legacy?.passages).toHaveLength(2);
+    expect(legacy?.passages[0]).toMatchObject({ id: "p1", blockType: "list_item", listType: "number" });
+    expect(legacy?.passages[0].listNumber).toBeUndefined();
+    expect(legacy?.passages[0].layoutBand).toBeUndefined();
+    expect(legacy?.passages[1]).toMatchObject({ id: "p2", blockType: "list_item", listType: "number" });
+    expect(legacy?.passages[1].listNumber).toBeUndefined();
+
+    // V2 STEM report keeping zero-length formula block + inline formulas + extractionMeta
+    mockFrom({
+      documents: {
+        data: {
+          id: "v2-stem",
+          uploaded_at: "2026-11-22",
+          file_name: "stem.pdf",
+          extraction_meta: {
+            pipeline_version: 2,
+            document_mode: "hybrid",
+            total_pages: 3,
+            ocr_pages: [2],
+            multi_column_pages: [1, 2],
+            formula_count: 1,
+            formula_fallback_count: 0,
+            warnings: ["page_3_illegible_scan"],
+          },
+        },
+        error: null,
+      },
+      document_matches: { data: [], error: null },
+      document_passages: {
+        data: [
+          {
+            id: "intro-p",
+            text: "Let x = 1 here.",
+            block_type: "paragraph",
+            layout_band: 1,
+            column_role: "left",
+            column_count: 2,
+            inline_formulas: [{ start: 4, end: 9, latex: "x = 1" }],
+          },
+          {
+            id: "eq-1",
+            text: "",
+            block_type: "formula",
+            layout_band: 1,
+            column_role: "left",
+            column_count: 2,
+            formula_latex: "E = mc^2",
+            equation_number: "(1)",
+          },
+        ],
+        error: null,
+      },
+    });
+    const v2 = await fetchCheckedDocument("v2-stem");
+    expect(v2?.extractionMeta).toMatchObject({
+      pipelineVersion: 2,
+      documentMode: "hybrid",
+      ocrPages: [2],
+      warnings: ["page_3_illegible_scan"],
+    });
+    expect(v2?.passages).toHaveLength(2);
+    expect(v2?.passages[0].inlineFormulas).toEqual([{ start: 4, end: 9, latex: "x = 1" }]);
+    expect(v2?.passages[1]).toMatchObject({
+      id: "eq-1",
+      blockType: "formula",
+      formulaLatex: "E = mc^2",
+      equationNumber: "(1)",
+    });
+  });
 });
 
 describe("moveDocumentToTrash", () => {

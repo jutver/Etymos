@@ -86,7 +86,7 @@ export interface PlanDefinition {
  * Absent (or "paragraph") is the historical default — every passage before
  * this field existed, and every passage from a source that can't classify
  * structure (plain pasted text), is a plain paragraph. */
-export type DocBlockType = "title" | "heading" | "paragraph" | "list_item" | "table" | "image";
+export type DocBlockType = "title" | "heading" | "paragraph" | "list_item" | "table" | "image" | "formula";
 
 /** An inline formatting range inside a passage's `text` (offsets into it,
  * end exclusive) - bold/italic kept from the original file. */
@@ -94,6 +94,27 @@ export interface TextMark {
   start: number;
   end: number;
   style: "bold" | "italic";
+}
+
+/** An inline mathematical formula anchored to a clean readable span inside
+ * a passage's `text` (offsets into it, end exclusive). */
+export interface InlineFormula {
+  start: number;
+  end: number;
+  latex: string;
+}
+
+/** Document-level extraction provenance emitted by the v2 CPU hybrid pipeline
+ * (`backend/pdf_ocr.py`, `backend/pdf_layout.py`, `backend/extractor.py`). */
+export interface ExtractionMeta {
+  pipelineVersion: number;
+  documentMode: "native" | "ocr" | "hybrid";
+  totalPages: number;
+  ocrPages: number[];
+  multiColumnPages: number[];
+  formulaCount: number;
+  formulaFallbackCount: number;
+  warnings?: string[];
 }
 
 export interface DocPassage {
@@ -122,14 +143,24 @@ export interface DocPassage {
   level?: 1 | 2 | 3 | 4;
   /** Bullet vs. numbered, meaningful only when `blockType === "list_item"`. */
   listType?: "bullet" | "number";
-  /** 1-based source page number (PDF page, or a synthetic bucket for
-   * .docx — see backend/extract_docx.py). Consecutive passages sharing a
-   * page render inside the same "sheet"; a change in `page` is where the
-   * Document view draws a real blank-space page break. Undefined means
-   * "no page information" — the whole document renders as one sheet, the
-   * same single-scroll layout the view always used before this field
-   * existed. */
+  /** 1-based list number parsed for ordered lists (`blockType === "list_item"`). */
+  listNumber?: number;
+  /** Nesting depth (0..4) for indented sub-lists. */
+  listDepth?: number;
+  /** 1-based source PDF page number. */
   page?: number;
+  /** 0-based horizontal band index within `page`. */
+  layoutBand?: number;
+  /** Column assignment within `layoutBand` ("full" | "left" | "right"). */
+  columnRole?: "full" | "left" | "right";
+  /** Total active columns in `layoutBand` (1 or 2). */
+  columnCount?: 1 | 2;
+  /** Validated LaTeX source when `blockType === "formula"`. */
+  formulaLatex?: string;
+  /** Optional display equation tag such as `"(1)"` or `"(3a)"`. */
+  equationNumber?: string;
+  /** Inline math spans anchored within this passage's `text`. */
+  inlineFormulas?: InlineFormula[];
   /** Grid contents, meaningful only when `blockType === "table"`. */
   tableRows?: string[][];
   /** Supabase Storage URL for an extracted image, meaningful when
@@ -314,6 +345,8 @@ export interface CheckedDocument {
   /** The ready-made sample report every new account gets
    * (documents.is_sample): read-only, can't be re-checked. */
   isSample?: boolean;
+  /** Provenance & capabilities reported by the extraction pipeline. */
+  extractionMeta?: ExtractionMeta;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";
