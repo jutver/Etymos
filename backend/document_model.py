@@ -78,7 +78,22 @@ LABEL_WEIGHT = {
     "common_academic_definition": 0.1,
 }
 
-DOCUMENT_MODEL_VERSION = 1
+DOCUMENT_MODEL_VERSION = 2
+
+_LAYOUT_BLOCK_FIELDS = (
+    "page",
+    "layout_band",
+    "column_role",
+    "column_count",
+    "list_number",
+    "list_depth",
+)
+
+
+def _copy_fields(dest: dict, src: dict, fields: tuple[str, ...]) -> None:
+    for field in fields:
+        if src.get(field) is not None:
+            dest[field] = src[field]
 
 
 def _ordered_section_names(sections: dict) -> list[str]:
@@ -134,31 +149,22 @@ def _interleave_image_blocks(
     section_start: int,
 ) -> list[dict]:
     """
-    Splice "image" hints from `struct_blocks` into `section_blocks` (the
-    already-built title/paragraph/list/table blocks, 1:1 aligned to the
-    section's non-image hints) at their original document position.
+    Splice zero-length media hints ("image" and "formula") from `struct_blocks`
+    into `section_blocks` (the already-built title/paragraph/list/table
+    blocks, 1:1 aligned to the section's non-media text hints) at their
+    original document position.
 
-    An image hint has no text, so it can't be a `_split_paragraphs` span
-    the way every other block type is (see build_document's docstring) —
-    instead its position is inferred from how many *text* hints precede
-    it in `struct_blocks`'s original document order: an image that
-    appeared after the Nth text hint (1-indexed) is inserted right after
-    `section_blocks[N-1]`; an image before any text hint is inserted at
-    the very start of the section.
-
-    The inserted block has zero-length span (`start == end`) at that
-    position — it has no characters of its own in the document text, only
-    a place in the reading order — and carries forward `page` plus the
-    raw-bytes carrier fields (`_image_bytes` / `_image_ext`) an upload
-    step downstream turns into `image_url` and then strips (never
-    JSON-serialized as-is; see report_store._extract_and_upload_images).
+    Neither an image nor a display formula contributes characters to canonical
+    `document["text"]` / `input_text`, so they get zero-length spans
+    (`start == end`) positioned relative to the preceding text hint.
     """
     # anchor_index -> hints to insert right after section_blocks[anchor_index]
     # (anchor_index == -1 means "before the first block").
     insertions: dict[int, list[dict]] = {}
     text_count = 0
     for hint in struct_blocks:
-        if (hint or {}).get("type") == "image":
+        htype = (hint or {}).get("type")
+        if htype in ("image", "formula"):
             insertions.setdefault(text_count - 1, []).append(hint)
         elif (hint or {}).get("section_heading"):
             # Placed separately by _interleave_section_headings; it has no
@@ -167,7 +173,29 @@ def _interleave_image_blocks(
         else:
             text_count += 1
 
-    def make_image_block(hint: dict, position: int, image_index: int) -> dict:
+    def make_media_block(hint: dict, position: int, image_index: int, formula_index: int) -> dict:
+        if hint.get("type") == "formula":
+            block = {
+                "block_id": f"{name}_formula_{formula_index}",
+                "section": name,
+                "label": label,
+                "type": "formula",
+                "index": formula_index,
+                "start": position,
+                "end": position,
+            }
+            _copy_fields(block, hint, ("page", "layout_band", "column_role", "column_count"))
+            if hint.get("formula_latex"):
+                block["formula_latex"] = hint["formula_latex"]
+            if hint.get("equation_number"):
+                block["equation_number"] = hint["equation_number"]
+            if hint.get("image_url"):
+                block["image_url"] = hint["image_url"]
+            if hint.get("_image_bytes") is not None:
+                block["_image_bytes"] = hint["_image_bytes"]
+                block["_image_ext"] = hint.get("_image_ext") or "png"
+            return block
+
         block = {
             "block_id": f"{name}_image_{image_index}",
             "section": name,
@@ -177,8 +205,7 @@ def _interleave_image_blocks(
             "start": position,
             "end": position,
         }
-        if hint.get("page") is not None:
-            block["page"] = hint["page"]
+        _copy_fields(block, hint, ("page", "layout_band", "column_role", "column_count"))
         if hint.get("_image_bytes") is not None:
             block["_image_bytes"] = hint["_image_bytes"]
         if hint.get("_image_ext"):
@@ -187,19 +214,27 @@ def _interleave_image_blocks(
 
     merged: list[dict] = []
     image_index = 0
+    formula_index = 0
+
+    def append_hint(hint: dict, position: int) -> None:
+        nonlocal image_index, formula_index
+        block = make_media_block(hint, position, image_index, formula_index)
+        merged.append(block)
+        if hint.get("type") == "formula":
+            formula_index += 1
+        else:
+            image_index += 1
 
     for i, block in enumerate(section_blocks):
         for hint in insertions.get(i - 1, []):
             position = section_blocks[i - 1]["end"] if i > 0 else section_blocks[0]["start"]
-            merged.append(make_image_block(hint, position, image_index))
-            image_index += 1
+            append_hint(hint, position)
         merged.append(block)
 
-    # Images that came after the section's last text hint.
+    # Media items that came after the section's last text hint.
     for hint in insertions.get(len(section_blocks) - 1, []):
         position = section_blocks[-1]["end"] if section_blocks else section_start
-        merged.append(make_image_block(hint, position, image_index))
-        image_index += 1
+        append_hint(hint, position)
 
     return merged
 
@@ -229,8 +264,8 @@ def _interleave_section_headings(
     headings that precede every text hint are kept (at the section start):
     guessing a mid-section position would misplace them.
     """
-    text_blocks = [b for b in section_blocks if b.get("type") != "image"]
-    image_blocks = [b for b in section_blocks if b.get("type") == "image"]
+    text_blocks = [b for b in section_blocks if b.get("type") not in ("image", "formula")]
+    media_blocks = [b for b in section_blocks if b.get("type") in ("image", "formula")]
 
     def make_heading_block(hint: dict, heading_index: int) -> dict:
         block = {
@@ -245,30 +280,29 @@ def _interleave_section_headings(
             "text": hint.get("text") or "",
             "section_heading": True,
         }
-        if hint.get("page") is not None:
-            block["page"] = hint["page"]
+        _copy_fields(block, hint, ("page", "layout_band", "column_role", "column_count"))
         return block
 
     merged: list[dict] = []
     heading_index = 0
 
     if reliable:
-        ti = ii = 0
+        ti = mi = 0
         for hint in struct_blocks:
             hint = hint or {}
             if hint.get("section_heading"):
                 if hint.get("text"):
                     merged.append(make_heading_block(hint, heading_index))
                     heading_index += 1
-            elif hint.get("type") == "image":
-                if ii < len(image_blocks):
-                    merged.append(image_blocks[ii])
-                    ii += 1
+            elif hint.get("type") in ("image", "formula"):
+                if mi < len(media_blocks):
+                    merged.append(media_blocks[mi])
+                    mi += 1
             elif ti < len(text_blocks):
                 merged.append(text_blocks[ti])
                 ti += 1
         merged.extend(text_blocks[ti:])
-        merged.extend(image_blocks[ii:])
+        merged.extend(media_blocks[mi:])
     else:
         for hint in struct_blocks:
             hint = hint or {}
@@ -303,6 +337,7 @@ def build_document(
     sections: dict,
     structured_sections: dict | None = None,
     section_order: list[str] | None = None,
+    extraction_meta: dict | None = None,
 ) -> dict:
     """
     Build the canonical document from a `sections` dict (as returned by
@@ -402,9 +437,9 @@ def build_document(
         # its neighbouring text, via `_interleave_image_blocks` below.
         text_hints = [
             h for h in struct_blocks
-            if (h or {}).get("type") != "image" and not (h or {}).get("section_heading")
+            if (h or {}).get("type") not in ("image", "formula") and not (h or {}).get("section_heading")
         ]
-        image_hints = [h for h in struct_blocks if (h or {}).get("type") == "image"]
+        media_hints = [h for h in struct_blocks if (h or {}).get("type") in ("image", "formula")]
         type_hints = text_hints if len(text_hints) == len(spans) else None
 
         section_label = SECTION_LABELS.get(name, name.replace("_", " ").title())
@@ -428,12 +463,13 @@ def build_document(
                     block["list_type"] = hint["list_type"]
                 if hint.get("rows") is not None:
                     block["rows"] = hint["rows"]
-                if hint.get("page") is not None:
-                    block["page"] = hint["page"]
+                _copy_fields(block, hint, _LAYOUT_BLOCK_FIELDS)
                 if hint.get("marks"):
                     # Inline bold/italic, offsets relative to this block's
                     # start (the hint text IS the block text).
                     block["marks"] = hint["marks"]
+                if hint.get("inline_formulas"):
+                    block["inline_formulas"] = hint["inline_formulas"]
                 if hint.get("_geometry"):
                     # Where the block's lines sit on the PDF page; turned
                     # into match rectangles by pdf_geometry.py, then dropped.
@@ -446,11 +482,11 @@ def build_document(
                     block["_image_ext"] = hint.get("_image_ext") or "png"
             section_blocks.append(block)
 
-        # Only interleave images when the text zip above was reliable
+        # Only interleave media when the text zip above was reliable
         # (type_hints is not None) — on a counts-mismatch fallback we
-        # already can't trust hint alignment, so guessing image position
+        # already can't trust hint alignment, so guessing position
         # would risk misplacing it worse than just dropping it.
-        if image_hints and type_hints is not None:
+        if media_hints and type_hints is not None:
             section_blocks = _interleave_image_blocks(
                 section_blocks, struct_blocks,
                 name=name, label=section_label, section_start=start,
@@ -467,7 +503,7 @@ def build_document(
 
     text = "".join(parts)
 
-    return {
+    result = {
         "version": DOCUMENT_MODEL_VERSION,
         "text": text,
         "total_chars": len(text),
@@ -475,6 +511,9 @@ def build_document(
         "section_offsets": {entry["section"]: entry["start"] for entry in section_entries},
         "blocks": blocks,
     }
+    if extraction_meta is not None:
+        result["extraction_meta"] = extraction_meta
+    return result
 
 
 # =========================

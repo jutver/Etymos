@@ -4,6 +4,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FocusEvent,
@@ -22,7 +23,15 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { BlockItem } from "./BlockItem";
-import { blocksFromRendered, newTableBlock, type DocBlock, type MatchColorIndex, type TableData } from "./blocks";
+import {
+  blocksFromRendered,
+  computeListNumbers,
+  groupBlocksIntoBands,
+  newTableBlock,
+  type DocBlock,
+  type MatchColorIndex,
+  type TableData,
+} from "./blocks";
 import type { RenderedPassage } from "./highlights";
 import { replaceMarkWithText, selectMatchText } from "./replaceMatch";
 import { t } from "../../lib/i18n";
@@ -205,6 +214,10 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeAiBlockId, focusTick, editorRef]);
 
+  const listNumbers = useMemo(() => computeListNumbers(blocks), [blocks]);
+  const bands = useMemo(() => groupBlocksIntoBands(blocks), [blocks]);
+  const editorHasColumns = useMemo(() => bands.some((b) => b.kind === "columns"), [bands]);
+
   if (blocks.length === 0) {
     return (
       <div className="flex flex-col items-center py-16 text-center">
@@ -215,6 +228,20 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
       </div>
     );
   }
+
+  const renderBlock = (block: DocBlock) => (
+    <BlockItem
+      key={block.id}
+      block={block}
+      colorIndexByMatch={colorIndexByMatch}
+      overLimitOffset={overLimitOffset}
+      locked={locked}
+      onTableChange={handleTableChange}
+      aiFlagged={aiFlaggedPassageIds.has(block.id)}
+      aiActive={block.id === activeAiBlockId}
+      listNumber={listNumbers.get(block.id)}
+    />
+  );
 
   return (
     <div
@@ -230,7 +257,8 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
       onClick={handleClick}
       onInput={(e) => onInput((e.currentTarget as HTMLDivElement).innerText)}
       className={cn(
-        "relative pl-8 text-[1.0625rem] leading-[1.85] text-ink-900 outline-none sm:pl-10",
+        "relative text-[1.0625rem] leading-[1.85] text-ink-900 outline-none",
+        locked ? "pl-0" : "pl-8 sm:pl-10",
         "[&_p]:mb-5 [&_p:last-child]:mb-0",
         "[&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-h2 [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:text-navy-900",
         "[&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-h3 [&_h2]:font-bold [&_h2]:leading-tight [&_h2]:text-navy-900",
@@ -246,18 +274,26 @@ const DocumentEditor = forwardRef<DocumentCanvasHandle, DocumentEditorProps>(fun
     >
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-          {blocks.map((block) => (
-            <BlockItem
-              key={block.id}
-              block={block}
-              colorIndexByMatch={colorIndexByMatch}
-              overLimitOffset={overLimitOffset}
-              locked={locked}
-              onTableChange={handleTableChange}
-              aiFlagged={aiFlaggedPassageIds.has(block.id)}
-              aiActive={block.id === activeAiBlockId}
-            />
-          ))}
+          {locked && editorHasColumns
+            ? bands.map((band) =>
+                band.kind === "single" ? (
+                  band.blocks.map(renderBlock)
+                ) : (
+                  <div
+                    key={band.key}
+                    data-layout-band="columns"
+                    className="my-5 grid grid-cols-1 items-start gap-x-9 gap-y-4 lg:grid-cols-2"
+                  >
+                    <div data-column-role="left" className="min-w-0">
+                      {band.left.map(renderBlock)}
+                    </div>
+                    <div data-column-role="right" className="min-w-0">
+                      {band.right.map(renderBlock)}
+                    </div>
+                  </div>
+                ),
+              )
+            : blocks.map(renderBlock)}
         </SortableContext>
       </DndContext>
     </div>
@@ -330,9 +366,20 @@ export const DocumentCanvas = forwardRef<DocumentCanvasHandle, DocumentCanvasPro
     onPageChange(1, 1);
   }, [onPageChange, resetKey]);
 
+  const hasColumns = useMemo(
+    () =>
+      locked &&
+      rendered.some(
+        (r) =>
+          r.passage.columnCount === 2 &&
+          (r.passage.columnRole === "left" || r.passage.columnRole === "right"),
+      ),
+    [locked, rendered],
+  );
+
   return (
     <div className="relative flex-1 overflow-y-auto scrollbar-thin bg-white px-4 pb-32">
-      <div className="mx-auto w-full max-w-[52rem] pt-10">
+      <div className={cn("mx-auto w-full pt-10", hasColumns ? "max-w-[68rem]" : "max-w-[52rem]")}>
         <DocumentEditor
           key={resetKey}
           ref={innerRef}

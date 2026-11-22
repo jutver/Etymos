@@ -635,3 +635,65 @@ def test_the_sample_document_cannot_be_rechecked_or_quoted(api, monkeypatch):
         assert res.status_code == 400
         assert res.json()["detail"]["code"] == "sample_document"
     assert state["checks"] == [] and state["charged"] == []
+
+
+def test_recheck_preserves_layout_lists_formulas_and_handles_legacy_passages(no_search):
+    stored = {
+        "b0": {
+            "id": "b0",
+            "text": P1,
+            "block_type": "list_item",
+            "list_type": "number",
+            "list_number": 2,
+            "list_depth": 1,
+            "layout_band": 1,
+            "column_role": "left",
+            "column_count": 2,
+            "inline_formulas": [{"start": 4, "end": 9, "latex": "x = 1"}],
+        },
+        "eq0": {
+            "id": "eq0",
+            "text": "",
+            "block_type": "formula",
+            "layout_band": 1,
+            "column_role": "left",
+            "column_count": 2,
+            "formula_latex": r"E = mc^2",
+            "equation_number": "(1)",
+        },
+        "b1": {
+            "id": "b1",
+            "text": P2,
+            "block_type": "paragraph",
+        },
+    }
+    edited_blocks = [
+        {"block_id": "b0", "text": P1},  # Unchanged: retains inline_formulas + layout + list meta
+        {"block_id": "eq0", "text": ""},  # Formula stays zero-length out of canonical text
+        {"block_id": "b1", "text": P2 + " Updated."},  # Edited: keeps legacy nullable fields safely
+    ]
+    prev = previous_report((P1, P2), P1)
+    prev["document"]["extraction_meta"] = {
+        "pipeline_version": 2,
+        "document_mode": "hybrid",
+        "total_pages": 1,
+        "ocr_pages": [],
+        "multi_column_pages": [1],
+        "formula_count": 1,
+        "formula_fallback_count": 0,
+        "warnings": [],
+    }
+
+    result = recheck.run_recheck(prev, edited_blocks, stored)
+    blocks_out = result["document"]["blocks"]
+    assert blocks_out[0]["list_number"] == 2
+    assert blocks_out[0]["list_depth"] == 1
+    assert blocks_out[0]["column_role"] == "left"
+    assert blocks_out[0]["inline_formulas"] == [{"start": 4, "end": 9, "latex": "x = 1"}]
+
+    assert blocks_out[1]["type"] == "formula"
+    assert blocks_out[1]["start"] == blocks_out[1]["end"]
+    assert blocks_out[1]["formula_latex"] == r"E = mc^2"
+    assert blocks_out[1]["equation_number"] == "(1)"
+    assert "mc^2" not in result["input_text"]
+    assert result["document"]["extraction_meta"]["formula_count"] == 1

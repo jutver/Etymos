@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DocPassage, MatchedSource } from "@etymos/shared";
 import {
+  AI_PDF_HIGHLIGHT,
   buildMatchFocusMap,
   buildRenderedPassages,
   chunkPassage,
   colorForMatch,
   colorForIndex,
   HEAVY_MATCH_PERCENT,
+  HIGHLIGHT_COLORS,
   LIGHT_HIGHLIGHT,
   matchTone,
 } from "./highlights";
@@ -218,5 +220,59 @@ describe("chunkPassage", () => {
       ["m1", "heavy"],
       ["m2", "light"],
     ]);
+  });
+});
+
+function parseHexRgb(hex: string): [number, number, number] {
+  const clean = hex.replace("#", "");
+  return [
+    Number.parseInt(clean.slice(0, 2), 16),
+    Number.parseInt(clean.slice(2, 4), 16),
+    Number.parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = parseHexRgb(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(hexA: string, hexB: string): number {
+  const l1 = relativeLuminance(hexA);
+  const l2 = relativeLuminance(hexB);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+describe("highlight palette WCAG AA contrast & viewer parity", () => {
+  it("meets >= 4.5:1 WCAG AA contrast for every lighter mark token", () => {
+    for (const token of [...HIGHLIGHT_COLORS, LIGHT_HIGHLIGHT]) {
+      const bgMatch = token.mark.match(/\bbg-\[(#[0-9a-fA-F]{6})\]/);
+      const textMatch = token.mark.match(/\btext-\[(#[0-9a-fA-F]{6})\]/);
+      expect(bgMatch, `${token.key} missing bg-[#...]`).not.toBeNull();
+      expect(textMatch, `${token.key} missing text-[#...]`).not.toBeNull();
+      const bg = bgMatch![1]!;
+      const fg = textMatch![1]!;
+      expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(bg, "#0f172a")).toBeGreaterThanOrEqual(4.5);
+      // Confirm lighter pastel backgrounds (high luminance > 0.85).
+      expect(relativeLuminance(bg)).toBeGreaterThan(0.85);
+      expect(token.mark, `${token.key} must not include dark: overrides in a light-only app`).not.toMatch(/\bdark:/);
+    }
+  });
+
+  it("exposes unified pdf overlay tokens and soft AI wash for every source identity", () => {
+    for (const token of [...HIGHLIGHT_COLORS, LIGHT_HIGHLIGHT]) {
+      expect(token.chip).toMatch(/^bg-\[/);
+      expect(token.pdf.fill).toMatch(/^rgba\(/);
+      expect(token.pdf.fillActive).toMatch(/^rgba\(/);
+      expect(token.pdf.accent).toMatch(/^rgba\(/);
+    }
+    expect(AI_PDF_HIGHLIGHT.fill).toMatch(/^rgba\(124, 58, 237,/);
+    expect(AI_PDF_HIGHLIGHT.fillActive).toMatch(/^rgba\(124, 58, 237,/);
   });
 });

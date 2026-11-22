@@ -19,6 +19,7 @@ import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQu
 import { trackEvent } from "../../lib/analytics";
 import { parseExplanationFacts } from "../../lib/matchExplanation";
 import { parseAiDetection } from "../../lib/aiDetection";
+import { parseExtractionMeta, parseInlineFormulas } from "../../lib/extractionMeta";
 import { parsePdfRects } from "../../lib/pdfRects";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
@@ -105,19 +106,16 @@ function splitDocumentIntoPassages(text: string): PassageSlice[] {
 /** Backend block types the Document view knows how to render. Anything else
  * (a value the backend might add later) degrades to a plain paragraph
  * rather than being dropped — see DocumentCanvas's rendering switch. */
-const KNOWN_BLOCK_TYPES = new Set(["title", "heading", "paragraph", "list_item", "table", "image"]);
+const KNOWN_BLOCK_TYPES = new Set([
+  "title",
+  "heading",
+  "paragraph",
+  "list_item",
+  "table",
+  "image",
+  "formula",
+]);
 
-/**
- * Builds passages straight from the backend's structural blocks
- * (`report.document.blocks` — backend/document_model.py) instead of
- * re-splitting the flat `input_text` client-side. This is what gives the
- * Document view real headings/lists/tables/page-breaks: each block already
- * carries its own type, level, list marker, source page, and (for tables)
- * grid rows, and its `start`/`end` are exact offsets into `input_text` — no
- * guessing paragraph boundaries the way splitDocumentIntoPassages() has to
- * for inputs that don't carry a `document` (the pasted-text check path,
- * and any report generated before this shipped).
- */
 function toHeadingLevel(level: number | undefined): 1 | 2 | 3 | 4 | undefined {
   return level === 1 || level === 2 || level === 3 || level === 4 ? level : undefined;
 }
@@ -137,12 +135,10 @@ function buildPassagesFromBlocks(
       // Section headings are zero-length and bring their own words in
       // `block.text` (see BackendDocumentBlock.text).
       const text = inputText.slice(block.start, block.end).trim() || block.text?.trim() || "";
-      // An "image" block is zero-length by construction (backend/
-      // document_model.py's _interleave_image_blocks — it has no text of
-      // its own, only a position in reading order), so it would otherwise
-      // be silently dropped by the empty-text check every other block
-      // type needs. Every other block type keeps the original behaviour.
-      if (!text && block.type !== "image") return null;
+      // "image" and "formula" blocks are zero-length by construction (no
+      // characters in `input_text`, only a reading-order position), so keep
+      // them even when `text` is empty.
+      if (!text && block.type !== "image" && block.type !== "formula") return null;
 
       const matchingMatch =
         matches.find(
@@ -160,6 +156,11 @@ function buildPassagesFromBlocks(
 
       const level = toHeadingLevel(block.level);
       const listType = toListType(block.list_type);
+      const columnRole =
+        block.column_role === "full" || block.column_role === "left" || block.column_role === "right"
+          ? block.column_role
+          : undefined;
+      const columnCount = block.column_count === 1 || block.column_count === 2 ? block.column_count : undefined;
 
       return {
         id: `${docId}-passage-${index}`,
@@ -171,13 +172,31 @@ function buildPassagesFromBlocks(
         blockType: KNOWN_BLOCK_TYPES.has(block.type) ? (block.type as CheckedDocument["passages"][number]["blockType"]) : "paragraph",
         level,
         listType,
+        listNumber: typeof block.list_number === "number" && block.list_number >= 1 ? block.list_number : undefined,
+        listDepth: typeof block.list_depth === "number" && block.list_depth >= 0 ? block.list_depth : undefined,
         page: block.page,
+        layoutBand: typeof block.layout_band === "number" ? block.layout_band : undefined,
+        columnRole,
+        columnCount,
         tableRows: block.rows,
-        imageUrl: block.image_url,
+        imageUrl: block.image_url ?? undefined,
+        formulaLatex: block.formula_latex ?? undefined,
+        equationNumber: block.equation_number ?? undefined,
+        inlineFormulas: parseInlineFormulas(block.inline_formulas, text.length),
         textMarks: block.marks,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
+}
+
+function localizePdfJobError(message: string): string {
+  if (message === "This PDF is password-protected or corrupted and cannot be read.") {
+    return tr("This PDF is password-protected or corrupted and cannot be read.");
+  }
+  if (message === "No readable text could be extracted from this PDF.") {
+    return tr("No readable text could be extracted from this PDF.");
+  }
+  return message;
 }
 
 export default function AnalyzingPage() {
@@ -282,7 +301,7 @@ export default function AnalyzingPage() {
           if (cancelled) return;
 
           if (job.status === "failed") {
-            const message = job.error ?? tr("Analysis failed.");
+            const message = job.error ? localizePdfJobError(job.error) : tr("Analysis failed.");
             setJobStatus("failed");
             setJobMessage(message);
             // Settle the row the Upload screen inserted, so Documents/History
@@ -454,6 +473,7 @@ export default function AnalyzingPage() {
             matches,
             pdfUrl: state.pdfDataUrl ?? undefined, // ← thêm dòng này
             aiDetection: parseAiDetection(report.ai_detection),
+            extractionMeta: parseExtractionMeta(report.document?.extraction_meta),
             unlockedTier: report.unlocked_tier ?? undefined,
           };
 

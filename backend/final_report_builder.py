@@ -426,6 +426,8 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             "blocks": document.get("blocks", []),
             "text_field": "input_text",
         }
+        if document.get("extraction_meta") is not None:
+            report["document"]["extraction_meta"] = document["extraction_meta"]
 
     return report
 

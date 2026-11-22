@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   ArrowsLeftRight,
   CaretDown,
@@ -47,7 +47,7 @@ interface MatchCardProps {
  * disclosure so a document with a dozen matches still scans as a list rather
  * than a wall.
  */
-export function MatchCard({
+export const MatchCard = memo(function MatchCard({
   match,
   index,
   locked = false,
@@ -216,4 +216,4 @@ export function MatchCard({
       </div>
     </article>
   );
-}
+});

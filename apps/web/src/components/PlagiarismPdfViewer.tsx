@@ -1,170 +1,353 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import {
   ArrowsOutLineHorizontal,
-  CaretLeft,
-  CaretRight,
   FrameCorners,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
+  SidebarSimple,
 } from "@phosphor-icons/react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import type { MatchedSource, Severity } from "../lib/types";
+import type { MatchedSource } from "../lib/types";
 import type { PdfRect } from "@etymos/shared";
-import { pdfRectPages, pdfRectsOnPage } from "../lib/pdfRects";
+import { cn } from "@etymos/shared";
+import { dedupeOverlappingPdfOverlays, pdfRectPages, pdfRectsOnPage } from "../lib/pdfRects";
+import { computeCanvasDpr, computeMountedPagesWindow, diffEvictedPages, sameNumberSet } from "../lib/pdfViewerMemory";
 import { extractWordTokens, findFuzzyMatch, normalize, normalizeWithMap } from "../lib/textMatch";
+import { AI_PDF_HIGHLIGHT, colorForMatch, matchTone } from "../screens/Report/highlights";
+import type { MatchColorIndex } from "../screens/Report/blocks";
+import { PdfThumbnailRail } from "./PdfThumbnailRail";
 import { t, tr } from "../lib/i18n";
 
-// Ép nó load chính xác version đang dùng qua mạng
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
-type PlagiarismPdfViewerProps = {
-  pdfUrl: File | string;
-  matches: MatchedSource[];
-  activeMatchId?: string | null;
-  onMatchClick?: (matchId: string) => void;
-  // Set by the caller when it tried and failed to resolve a real pdfUrl
-  // (e.g. a signed-URL fetch error) — distinct from simply having no PDF to
-  // show at all (e.g. a text-only submission), so the empty state doesn't
-  // read as a false "everything's fine, there's just nothing here".
-  unavailableMessage?: string;
-  /** Fires whenever the current page or total page count changes, so a
-   * parent status bar (WordCountPill) can show "Page X of Y" for this view
-   * too, not just the editable Document view. */
-  onPageChange?: (page: number, pageCount: number) => void;
-  /** Character offset (into the document's full text) past which the word
-   * limit has been exceeded. `Infinity`/undefined means nothing is over the
-   * limit. See the suppression logic inside `measurePage` for exactly how
-   * this is used — it's a deliberate approximation, documented there. */
-  overLimitOffset?: number;
-  /** AI-detection segments to give the same "find it on the page" treatment
-   * as plagiarism matches — a separate, always-violet wash (DESIGN.md's
-   * Functional Wall Rule: different signal, never sharing severity colours).
-   * Located by searching each page's text layer for `excerpt`, the same way
-   * matches are searched for `userSnippet` — this viewer only ever sees
-   * rendered PDF text, never the backend's character offsets. Optional so
-   * existing callers (e.g. Upload's bare file preview) don't need it. */
-  aiSegments?: { id: string; excerpt: string; score: number; pdfRects?: PdfRect[] }[];
-  activeAiSegmentId?: string | null;
-  onAiSegmentClick?: (segmentId: string) => void;
-  /** How the page is sized to start with: the full width of the viewer
-   * (reading, the default) or the whole page in view (a quick preview). */
-  defaultFit?: FitMode;
-  /** Fires once per file: when the first page's canvas and text layer have
-   * both drawn, or when the file couldn't be loaded. Lets the Report keep
-   * the splash up until the PDF is actually on screen. */
-  onReady?: () => void;
-};
 
 type FitMode = "width" | "page";
 
-// Stable defaults: a fresh `[]` on every render would retrigger the text-scan
-// effect below, which sets state, which renders again — an endless loop.
+export interface PdfPageRenderTask {
+  promise: Promise<void>;
+  cancel?: () => void;
+}
+
+export interface PdfPageProxyLike {
+  getViewport: (opts: { scale: number }) => { width: number; height: number };
+  getTextContent: () => Promise<{ items: any[] }>;
+  render?: (params: {
+    canvas: HTMLCanvasElement;
+    canvasContext: CanvasRenderingContext2D;
+    viewport: { width: number; height: number };
+  }) => PdfPageRenderTask;
+  cleanup?: () => void;
+}
+
+export interface PdfProxy {
+  numPages: number;
+  getPage: (n: number) => Promise<PdfPageProxyLike>;
+}
+
+export type PlagiarismPdfViewerProps = {
+  pdfUrl: File | string;
+  matches: MatchedSource[];
+  /** Shared source-identity color index map matching SourcesSidebar & DocumentCanvas. */
+  colorIndexByMatch?: MatchColorIndex;
+  activeMatchId?: string | null;
+  onMatchClick?: (matchId: string) => void;
+  /** Respects FormatToolbar's highlight visibility toggle on Original PDF view too. */
+  showHighlights?: boolean;
+  /** Controls visibility of AI-flagged paragraph overlays independently of array identity. */
+  showAiHighlights?: boolean;
+  unavailableMessage?: string;
+  isLoadingUrl?: boolean;
+  onRefreshUrl?: () => Promise<boolean>;
+  onPageChange?: (page: number, pageCount: number) => void;
+  overLimitOffset?: number;
+  aiSegments?: { id: string; excerpt: string; score: number; pdfRects?: PdfRect[] }[];
+  activeAiSegmentId?: string | null;
+  onAiSegmentClick?: (segmentId: string) => void;
+  defaultFit?: FitMode;
+  onReady?: () => void;
+};
+
 const NO_AI_SEGMENTS: NonNullable<PlagiarismPdfViewerProps["aiSegments"]> = [];
+const EMPTY_COLOR_INDEX: MatchColorIndex = new Map();
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.15;
-// A fit never blows the page up past this, so a very wide window doesn't draw
-// a huge canvas (zooming in by hand still goes further).
 const MAX_FIT_SCALE = 1.75;
-// A 2× canvas is already sharp on retina; 3× screens would otherwise draw
-// 2.25× the pixels for no visible gain.
 const PIXEL_RATIO = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
-// Padding of the viewer box (p-4) on each side, left out of the fit maths.
-const VIEWER_PADDING = 16;
+const DEFAULT_PAGE_SIZE = { width: 595, height: 842 };
 
-// Toạ độ ở đây là PIXEL THẬT trên màn hình tại scale hiện tại (đo trực tiếp
-// từ text layer thật của trình duyệt bằng Range API) - không cần nhân thêm
-// với `scale` khi render nữa, và không còn lệch/lem vì không tự tính bằng tay.
-type HighlightRect = {
+interface HighlightBox {
   matchId: string;
-  severity: Severity;
   x: number;
   y: number;
   width: number;
   height: number;
-};
+  priority: number;
+}
 
-// Vị trí "logic" của 1 match trên 1 trang: item bắt đầu/kết thúc trong
-// textContent.items của pdf.js + offset ký tự bên trong item đó. Tính 1 lần
-// lúc quét toàn văn bản, dùng lại để đo pixel khi trang đó được render.
-type MatchLocation = {
-  id: string;
-  severity: Severity;
-  itemStart: number;
-  startOffsetInItem: number;
-  itemEnd: number;
-  endOffsetInItem: number;
-};
-
-// Cùng cấu trúc MatchLocation/HighlightRect ở trên nhưng cho đoạn nghi AI viết
-// - không có severity (AI detection không phân mức cao/vừa/thấp như đạo văn),
-// tô 1 màu tím cố định, đo bằng đúng cơ chế Range API như match.
-type AiSegmentLocation = {
-  id: string;
-  itemStart: number;
-  startOffsetInItem: number;
-  itemEnd: number;
-  endOffsetInItem: number;
-};
-
-type AiHighlightRect = {
+interface AiHighlightBox {
   segmentId: string;
   x: number;
   y: number;
   width: number;
   height: number;
-};
-
-const SEVERITY_COLOR: Record<Severity, { fill: string; fillActive: string; border: string }> = {
-  high: { fill: "rgba(220, 38, 38, 0.16)", fillActive: "rgba(220, 38, 38, 0.38)", border: "rgba(220, 38, 38, 0.55)" },
-  moderate: { fill: "rgba(217, 119, 6, 0.15)", fillActive: "rgba(217, 119, 6, 0.36)", border: "rgba(217, 119, 6, 0.55)" },
-  low: { fill: "rgba(37, 99, 235, 0.13)", fillActive: "rgba(37, 99, 235, 0.34)", border: "rgba(37, 99, 235, 0.5)" },
-};
-
-// Cùng màu --color-ai-flag (#7c3aed) dùng cho chip/card AI Detection ở
-// sidebar, để 2 nơi luôn khớp nhau về mặt màu sắc.
-const AI_FLAG_COLOR = {
-  fill: "rgba(124, 58, 237, 0.10)",
-  fillActive: "rgba(124, 58, 237, 0.24)",
-  border: "rgba(124, 58, 237, 0.4)",
-};
-
-const SEVERITY_LABEL: Record<Severity, string> = {
-  high: tr("High match"),
-  moderate: tr("Moderate match"),
-  low: tr("Common phrasing"),
-};
-
-const SEVERITY_RANK: Record<Severity, number> = { high: 3, moderate: 2, low: 1 };
-
-// Khi nhiều match (khác nguồn) cùng trùng vào 1 vùng chữ, tránh tô chồng
-// nhiều lớp màu lên nhau (nhìn rối mắt) — chỉ giữ lại box có mức độ nghiêm
-// trọng cao nhất cho vùng đó, bỏ các box còn lại chồng >50% diện tích.
-function dedupeOverlappingRects(rects: HighlightRect[]): HighlightRect[] {
-  const sorted = [...rects].sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);
-  const kept: HighlightRect[] = [];
-  for (const r of sorted) {
-    const overlapsExisting = kept.some((k) => {
-      const ix = Math.max(0, Math.min(r.x + r.width, k.x + k.width) - Math.max(r.x, k.x));
-      const iy = Math.max(0, Math.min(r.y + r.height, k.y + k.height) - Math.max(r.y, k.y));
-      const overlapArea = ix * iy;
-      const rArea = r.width * r.height || 1;
-      return overlapArea / rArea > 0.5;
-    });
-    if (!overlapsExisting) kept.push(r);
-  }
-  return kept;
 }
+
+const EMPTY_HIGHLIGHTS: HighlightBox[] = [];
+const EMPTY_AI_HIGHLIGHTS: AiHighlightBox[] = [];
+
+interface MatchLocation {
+  id: string;
+  itemStart: number;
+  startOffsetInItem: number;
+  itemEnd: number;
+  endOffsetInItem: number;
+}
+
+interface AiSegmentLocation {
+  id: string;
+  itemStart: number;
+  startOffsetInItem: number;
+  itemEnd: number;
+  endOffsetInItem: number;
+}
+
+function getLeafTextSpans(pageEl: HTMLElement): HTMLElement[] {
+  const layer = pageEl.querySelector<HTMLElement>(".react-pdf__Page__textContent") ?? pageEl;
+  return Array.from(layer.querySelectorAll<HTMLElement>("span")).filter(
+    (span) => span.childElementCount === 0 && (span.textContent?.length ?? 0) > 0,
+  );
+}
+
+function sameHighlightBoxes(a: HighlightBox[] | undefined, b: HighlightBox[]): boolean {
+  if (!a) return b.length === 0;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.matchId !== y.matchId ||
+      Math.abs(x.x - y.x) > 0.25 ||
+      Math.abs(x.y - y.y) > 0.25 ||
+      Math.abs(x.width - y.width) > 0.25 ||
+      Math.abs(x.height - y.height) > 0.25
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameAiBoxes(a: AiHighlightBox[] | undefined, b: AiHighlightBox[]): boolean {
+  if (!a) return b.length === 0;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.segmentId !== y.segmentId ||
+      Math.abs(x.x - y.x) > 0.25 ||
+      Math.abs(x.y - y.y) > 0.25 ||
+      Math.abs(x.width - y.width) > 0.25 ||
+      Math.abs(x.height - y.height) > 0.25
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+interface MemoPdfPageProps {
+  pageNumber: number;
+  scale: number;
+  devicePixelRatio: number;
+  renderTextLayer: boolean;
+  needsLegacySearch: boolean;
+  onPageLoadSuccessRef: React.RefObject<(pageNumber: number, width: number, height: number) => void>;
+  onPageRenderReadyRef: React.RefObject<(pageNumber: number) => void>;
+  onTextLayerReadyRef: React.RefObject<(pageNumber: number) => void>;
+}
+
+/**
+ * Memoized wrapper around `react-pdf`'s `<Page>` keeping callback identities
+ * invariant across renders so `TextLayer`'s `renderTextLayer` layout effect
+ * never tears down and re-runs in a CPU loop on parent state changes.
+ */
+const MemoPdfPage = memo(function MemoPdfPage({
+  pageNumber,
+  scale,
+  devicePixelRatio,
+  renderTextLayer,
+  needsLegacySearch,
+  onPageLoadSuccessRef,
+  onPageRenderReadyRef,
+  onTextLayerReadyRef,
+}: MemoPdfPageProps) {
+  const handleLoadSuccess = useCallback(
+    (page: { originalWidth?: number; originalHeight?: number; width?: number; height?: number }) => {
+      const w = page.originalWidth ?? page.width;
+      const h = page.originalHeight ?? page.height;
+      if (w && h) onPageLoadSuccessRef.current(pageNumber, w, h);
+    },
+    [pageNumber, onPageLoadSuccessRef],
+  );
+
+  const handleRenderSuccess = useCallback(() => {
+    onPageRenderReadyRef.current(pageNumber);
+  }, [pageNumber, onPageRenderReadyRef]);
+
+  const handleTextLayerSuccess = useCallback(() => {
+    onTextLayerReadyRef.current(pageNumber);
+  }, [pageNumber, onTextLayerReadyRef]);
+
+  return (
+    <Page
+      pageNumber={pageNumber}
+      scale={scale}
+      devicePixelRatio={devicePixelRatio}
+      renderAnnotationLayer={false}
+      renderTextLayer={renderTextLayer}
+      loading={null}
+      onLoadSuccess={handleLoadSuccess}
+      onRenderSuccess={pageNumber === 1 ? handleRenderSuccess : undefined}
+      onRenderTextLayerSuccess={needsLegacySearch ? handleTextLayerSuccess : undefined}
+    />
+  );
+});
+
+interface PdfPageOverlaysProps {
+  slotW: number;
+  combinedRects: HighlightBox[];
+  aiRects: AiHighlightBox[];
+  matchById: Map<string, MatchedSource>;
+  colorIndexByMatch: MatchColorIndex;
+  activeMatchId?: string | null;
+  activeAiSegmentId?: string | null;
+  onMatchClick?: (matchId: string) => void;
+  onAiSegmentClick?: (segmentId: string) => void;
+}
+
+/**
+ * Owns per-page hover state locally so moving the cursor across highlights
+ * only re-renders that page's overlay container, never the PDF canvases.
+ */
+const PdfPageOverlays = memo(function PdfPageOverlays({
+  slotW,
+  combinedRects,
+  aiRects,
+  matchById,
+  colorIndexByMatch,
+  activeMatchId,
+  activeAiSegmentId,
+  onMatchClick,
+  onAiSegmentClick,
+}: PdfPageOverlaysProps) {
+  const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
+
+  const hoveredMatch = hoveredMatchId ? matchById.get(hoveredMatchId) : null;
+  const hoveredRect = hoveredMatchId ? combinedRects.find((r) => r.matchId === hoveredMatchId) : undefined;
+
+  return (
+    <>
+      {aiRects.length > 0 && (
+        <div className="pointer-events-none absolute inset-0">
+          {aiRects.map((r, i) => {
+            const isActive = activeAiSegmentId === r.segmentId;
+            return (
+              <div
+                key={`ai-${r.segmentId}-${i}`}
+                onClick={() => onAiSegmentClick?.(r.segmentId)}
+                className="pointer-events-auto absolute cursor-pointer rounded-[2px] transition-colors"
+                style={{
+                  left: r.x,
+                  top: r.y,
+                  width: r.width,
+                  height: r.height,
+                  backgroundColor: isActive ? AI_PDF_HIGHLIGHT.fillActive : AI_PDF_HIGHLIGHT.fill,
+                  borderBottom: `1.5px solid ${AI_PDF_HIGHLIGHT.accent}`,
+                  boxShadow: isActive ? `inset 0 0 0 1.5px ${AI_PDF_HIGHLIGHT.accent}` : undefined,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {combinedRects.length > 0 && (
+        <div className="pointer-events-none absolute inset-0">
+          {combinedRects.map((r, i) => {
+            const match = matchById.get(r.matchId);
+            const colorIdx = colorIndexByMatch.get(r.matchId) ?? 0;
+            const palette = match ? colorForMatch(match, colorIdx) : colorForMatch({ matchPercent: 95 }, colorIdx);
+            const isActive = activeMatchId === r.matchId;
+            const isHovered = hoveredMatchId === r.matchId;
+            const dimmed = Boolean(activeMatchId && !isActive);
+            return (
+              <div
+                key={`${r.matchId}-${i}`}
+                data-match-overlay={r.matchId}
+                onClick={() => onMatchClick?.(r.matchId)}
+                onMouseEnter={() => setHoveredMatchId(r.matchId)}
+                onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
+                className={cn(
+                  "pointer-events-auto absolute cursor-pointer rounded-[2px] transition-[background-color,opacity,box-shadow]",
+                  dimmed && "opacity-30",
+                )}
+                style={{
+                  left: r.x,
+                  top: r.y,
+                  width: r.width,
+                  height: r.height,
+                  backgroundColor: isActive || isHovered ? palette.pdf.fillActive : palette.pdf.fill,
+                  borderBottom: `1.5px solid ${palette.pdf.accent}`,
+                  boxShadow: isActive || isHovered ? `inset 0 0 0 1.5px ${palette.pdf.accent}` : undefined,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {hoveredMatch && hoveredRect && (
+        <div
+          className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
+          style={{
+            left: Math.min(hoveredRect.x, Math.max(8, slotW - 240)),
+            top: Math.max(8, hoveredRect.y - 8),
+            transform: "translateY(-100%)",
+          }}
+        >
+          <div className="flex items-center gap-1.5 font-semibold text-white">
+            <span
+              className={cn(
+                "inline-block size-2 shrink-0 rounded-full",
+                colorForMatch(hoveredMatch, colorIndexByMatch.get(hoveredMatch.id) ?? 0).chip,
+              )}
+            />
+            <span>
+              #{(colorIndexByMatch.get(hoveredMatch.id) ?? 0) + 1} · {hoveredMatch.matchPercent}%
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
+        </div>
+      )}
+    </>
+  );
+});
 
 export function PlagiarismPdfViewer({
   pdfUrl,
   matches,
+  colorIndexByMatch = EMPTY_COLOR_INDEX,
   activeMatchId,
   onMatchClick,
+  showHighlights = true,
+  showAiHighlights = true,
   unavailableMessage,
+  isLoadingUrl = false,
+  onRefreshUrl,
   onPageChange,
   overLimitOffset = Infinity,
   aiSegments = NO_AI_SEGMENTS,
@@ -173,49 +356,64 @@ export function PlagiarismPdfViewer({
   defaultFit = "width",
   onReady,
 }: PlagiarismPdfViewerProps) {
+  const [loadedPdf, setLoadedPdf] = useState<PdfProxy | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
-  // Only this page is mounted: one canvas and one text layer at a time, however
-  // long the document is.
   const [currentPage, setCurrentPage] = useState(1);
-  // Zoom is relative to the fit: 1 means "exactly fits", whatever the viewer size.
   const [fit, setFit] = useState<FitMode>(defaultFit);
   const [zoom, setZoom] = useState(1);
-  // Unscaled size of the current page (PDF points), read when it loads.
-  const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
-  // Inner size of the viewer box, kept current by a ResizeObserver.
+  const [pageSizes, setPageSizes] = useState<Map<number, { width: number; height: number }>>(() => new Map());
   const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
-  // Size of the last page drawn, held while the next one renders so the box
-  // doesn't collapse and jump between pages.
-  const [renderedBox, setRenderedBox] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-
+  const [retryingRefresh, setRetryingRefresh] = useState(false);
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
   const [bufferError, setBufferError] = useState<string | null>(null);
+  const [railOpen, setRailOpen] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1280 && defaultFit !== "page",
+  );
+  const [mountedPages, setMountedPages] = useState<Set<number>>(() => new Set([1, 2]));
+  const [intersectingPages, setIntersectingPages] = useState<Set<number>>(() => new Set([1]));
+  const [analysisTick, setAnalysisTick] = useState(0);
 
-  // Trang nào có match nào (chỉ để hiện chỉ báo trang + nhảy trang) - KHÔNG
-  // chứa toạ độ hình học, nên không thể bị lem.
-  const [matchesByPage, setMatchesByPage] = useState<Record<number, string[]>>({});
-  const [analyzing, setAnalyzing] = useState(false);
-  const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
-
-  // Toạ độ pixel thật của các match, đo trực tiếp từ DOM text layer của TỪNG
-  // TRANG mỗi khi trang đó render text layer xong - khoá theo số trang vì bây
-  // giờ mọi trang đều mount cùng lúc (chính xác tuyệt đối, không lem).
-  const [pageRects, setPageRects] = useState<Record<number, HighlightRect[]>>({});
-
-  // Song song với matchesByPage/pageRects/matchLocationsCache ở trên, nhưng
-  // cho đoạn AI - tách riêng hẳn (không gộp chung state) để không đụng vào
-  // logic match đã chạy ổn định.
-  const [aiSegmentsByPage, setAiSegmentsByPage] = useState<Record<number, string[]>>({});
-  const [aiPageRects, setAiPageRects] = useState<Record<number, AiHighlightRect[]>>({});
+  // Legacy text-layer fallback measurements (only used for old reports without `pdfRects`).
+  const [legacyByPage, setLegacyByPage] = useState<Record<number, string[]>>({});
+  const [rawLegacyRectsByPage, setRawLegacyRectsByPage] = useState<Record<number, HighlightBox[]>>({});
+  const [legacyAiByPage, setLegacyAiByPage] = useState<Record<number, string[]>>({});
+  const [rawLegacyAiRectsByPage, setRawLegacyAiRectsByPage] = useState<Record<number, AiHighlightBox[]>>({});
+  const matchLocationsCache = useRef<Record<number, MatchLocation[]>>({});
   const aiLocationsCache = useRef<Record<number, AiSegmentLocation[]>>({});
 
-  const matchLocationsCache = useRef<Record<number, MatchLocation[]>>({});
-  // Container DOM của trang đang hiển thị (để đo Range/getClientRects).
-  const pageContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  // Vùng cuộn riêng của viewer (KHÔNG phải toàn bộ trang Report), để trang
-  // bên ngoài không bị cuộn theo khi trang PDF cao hơn khung nhìn.
+  const pageSlotRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const viewerRef = useRef<HTMLDivElement | null>(null);
+  const [viewerEl, setViewerEl] = useState<HTMLDivElement | null>(null);
+  const setViewerNode = useCallback((el: HTMLDivElement | null) => {
+    viewerRef.current = el;
+    setViewerEl((prev) => (prev === el ? prev : el));
+  }, []);
+
+  const programmaticScrollRef = useRef(false);
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+  const mountedPagesRef = useRef(mountedPages);
+  mountedPagesRef.current = mountedPages;
+  const intersectingPagesRef = useRef<Set<number>>(new Set([1]));
+  const loadedPdfRef = useRef<PdfProxy | null>(null);
+  loadedPdfRef.current = loadedPdf;
+  const docLoadGenRef = useRef(0);
+  const lastScrolledMatchRef = useRef<string | null>(null);
+  const lastScrolledAiRef = useRef<string | null>(null);
+  const hasAutoRetriedRef = useRef(false);
+  const awaitingRetryLoadRef = useRef(false);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const onRefreshUrlRef = useRef(onRefreshUrl);
+  onRefreshUrlRef.current = onRefreshUrl;
+  const pdfUrlRef = useRef(pdfUrl);
+  pdfUrlRef.current = pdfUrl;
 
   const matchById = useMemo(() => {
     const map = new Map<string, MatchedSource>();
@@ -223,8 +421,7 @@ export function PlagiarismPdfViewer({
     return map;
   }, [matches]);
 
-
-  // --- 1. Đọc file thành ArrayBuffer (ổn định hơn blob URL) ---
+  // --- Read File inputs into a clean ArrayBuffer ---
   useEffect(() => {
     if (typeof pdfUrl === "string") {
       setFileBuffer(null);
@@ -253,288 +450,205 @@ export function PlagiarismPdfViewer({
     return fileBuffer;
   }, [pdfUrl, fileBuffer]);
 
-  // First-draw tracking for `onReady`, reset per file below.
-  const firstDraw = useRef({ canvas: false, text: false, fired: false });
+  const readyFiredRef = useRef(false);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
-  const markDrawn = useCallback((part: "canvas" | "text" | "failed") => {
-    const s = firstDraw.current;
-    if (part === "canvas") s.canvas = true;
-    if (part === "text") s.text = true;
-    if (s.fired || (part !== "failed" && !(s.canvas && s.text))) return;
-    s.fired = true;
+  const fireReadyOnce = useCallback(() => {
+    if (readyFiredRef.current) return;
+    readyFiredRef.current = true;
     onReadyRef.current?.();
   }, []);
 
-  // Đổi file (tài liệu mới) -> mọi ref/toạ độ trang cũ không còn hợp lệ nữa.
   useEffect(() => {
-    firstDraw.current = { canvas: false, text: false, fired: false };
-    pageContainerRefs.current.clear();
-    setPageRects({});
-    setAiPageRects({});
+    docLoadGenRef.current += 1;
+    readyFiredRef.current = false;
+    lastScrolledMatchRef.current = null;
+    lastScrolledAiRef.current = null;
+    pageSlotRefs.current.clear();
+    if (fileSource) {
+      if (awaitingRetryLoadRef.current) {
+        awaitingRetryLoadRef.current = false;
+      } else {
+        hasAutoRetriedRef.current = false;
+      }
+    }
+    setLoadedPdf(null);
+    setNumPages(null);
     setCurrentPage(1);
-    setPageSize(null);
-    setRenderedBox(null);
+    setLoadError(null);
+    setRetryingRefresh(false);
+    setPageSizes(new Map());
+    const initialMounted = new Set([1, 2]);
+    mountedPagesRef.current = initialMounted;
+    setMountedPages(initialMounted);
+    const initialIntersecting = new Set([1]);
+    intersectingPagesRef.current = initialIntersecting;
+    setIntersectingPages(initialIntersecting);
+    setLegacyByPage({});
+    setRawLegacyRectsByPage({});
+    setLegacyAiByPage({});
+    setRawLegacyAiRectsByPage({});
+    matchLocationsCache.current = {};
+    aiLocationsCache.current = {};
   }, [fileSource]);
 
-  // Track the viewer's inner size so "fit" follows window and panel resizes.
   useEffect(() => {
-    const el = viewerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = Math.floor(entry.contentRect.width);
-      const height = Math.floor(entry.contentRect.height);
+    if (bufferError || loadError) fireReadyOnce();
+  }, [bufferError, loadError, fireReadyOnce]);
+
+  // Track inner viewport dimensions via ResizeObserver (callback ref ensures it attaches once <Document> loads).
+  useEffect(() => {
+    if (!viewerEl) return;
+    let raf = 0;
+    const updateSize = (w: number, h: number) => {
+      const width = Math.max(0, Math.floor(w) - 32);
+      const height = Math.max(0, Math.floor(h) - 32);
       setViewport((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
+    };
+    const rect = viewerEl.getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0) updateSize(rect.width, rect.height);
+
+    const observer = new ResizeObserver(([entry]) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        updateSize(entry.contentRect.width, entry.contentRect.height);
+      });
     });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    observer.observe(viewerEl);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [viewerEl]);
+
+  const primaryPageSize = pageSizes.get(1) ?? DEFAULT_PAGE_SIZE;
 
   const scale = useMemo(() => {
-    if (!pageSize || !viewport) return 1;
-    const byWidth = viewport.width / pageSize.width;
+    if (!viewport || viewport.width <= 0) return 1;
+    const byWidth = viewport.width / primaryPageSize.width;
     const fitScale = Math.min(
       MAX_FIT_SCALE,
-      fit === "width" ? byWidth : Math.min(byWidth, viewport.height / pageSize.height),
+      fit === "width" ? byWidth : Math.min(byWidth, viewport.height / primaryPageSize.height),
     );
-    // Rounded (down, so a fitted page never overflows by a pixel) so sub-pixel
-    // resize noise doesn't re-render the page.
     return Math.max(0.1, Math.floor(fitScale * zoom * 100) / 100);
-  }, [fit, zoom, pageSize, viewport]);
+  }, [fit, zoom, primaryPageSize, viewport]);
 
-  // --- 2. Đo toạ độ pixel THẬT của match trên MỘT trang cụ thể, bằng Range
-  //         API trên text layer thật của trình duyệt. Đây là lý do hết lem
-  //         hoàn toàn: không còn tự suy ra vị trí/độ rộng chữ bằng công thức
-  //         transform hay ước lượng tỉ lệ ký tự nữa, mà lấy đúng
-  //         getClientRects() của chính đoạn text đó do trình duyệt layout ra.
-  //         Trước đây hàm này chỉ chạy cho "trang đang xem"; giờ mỗi trang
-  //         trong dải cuộn dài tự gọi hàm này qua onRenderTextLayerSuccess
-  //         của chính nó, nên tất cả các trang đã mount đều được tô cùng lúc. ---
-  const measurePage = useCallback(
-    (page: number) => {
-      const container = pageContainerRefs.current.get(page);
-      const locations = matchLocationsCache.current[page] ?? [];
-      // Matches the backend placed on the page (MatchedSource.pdfRects): their
-      // boxes are drawn as given, scaled to the zoom - no text search.
-      const placed = matches.filter((m) => m.pdfRects?.some((r) => r.page === page));
-      if (!container || (locations.length === 0 && placed.length === 0)) {
-        setPageRects((prev) => {
-          if (!(page in prev)) return prev;
-          const next: Record<number, HighlightRect[]> = {};
-          for (const key of Object.keys(prev)) {
-            const k = Number(key);
-            if (k !== page) next[k] = prev[k];
-          }
-          return next;
-        });
-        return;
-      }
-      const spans = container.querySelectorAll<HTMLElement>("span");
-      if (spans.length === 0 && placed.length === 0) {
-        setPageRects((prev) => ({ ...prev, [page]: [] }));
-        return;
-      }
-      const containerRect = container.getBoundingClientRect();
-      const rects: HighlightRect[] = [];
-
-      for (const m of placed) {
-        if (m.startOffset != null && m.startOffset >= overLimitOffset) continue;
-        for (const box of pdfRectsOnPage(m.pdfRects ?? [], page, scale)) {
-          rects.push({ matchId: m.id, severity: m.severity, ...box });
-        }
-      }
-
-      for (const loc of locations) {
-        // --- Ẩn highlight của các match đã vượt giới hạn số từ ---------------
-        // `overLimitOffset` là offset ký tự (vào full text tài liệu) đánh dấu
-        // ranh giới "quá giới hạn". Chỉ những match CÓ `startOffset` từ backend
-        // mới được so sánh chính xác với ranh giới này - nếu match không có
-        // `startOffset` (rất nhiều match chỉ có snippet text, không có offset
-        // tuyệt đối) thì KHÔNG đoán mò vị trí của nó, cứ tô bình thường. Đây là
-        // lựa chọn đơn giản hoá có chủ đích (không phải thiếu sót): suy ra vị
-        // trí gần đúng cho match không có offset kém tin cậy hơn là cứ hiển thị nó.
-        const src = matchById.get(loc.id);
-        if (src?.startOffset != null && src.startOffset >= overLimitOffset) continue;
-
-        const startSpan = spans[loc.itemStart];
-        const endSpan = spans[loc.itemEnd];
-        const startNode = startSpan?.firstChild;
-        const endNode = endSpan?.firstChild;
-        if (!startNode || !endNode) continue;
-
-        try {
-          const range = document.createRange();
-          const startLen = startNode.textContent?.length ?? 0;
-          const endLen = endNode.textContent?.length ?? 0;
-          range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
-          range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
-
-          for (const cr of Array.from(range.getClientRects())) {
-            if (cr.width <= 0 || cr.height <= 0) continue;
-            rects.push({
-              matchId: loc.id,
-              severity: loc.severity,
-              x: cr.left - containerRect.left,
-              y: cr.top - containerRect.top,
-              width: cr.width,
-              height: cr.height,
-            });
-          }
-        } catch {
-          // Bỏ qua nếu range không hợp lệ (hiếm gặp, VD trang có cấu trúc đặc biệt)
-        }
-      }
-
-      setPageRects((prev) => ({ ...prev, [page]: dedupeOverlappingRects(rects) }));
-    },
-    [matches, matchById, overLimitOffset, scale],
+  const canvasDpr = useMemo(
+    () => computeCanvasDpr(primaryPageSize.width, primaryPageSize.height, scale, PIXEL_RATIO),
+    [primaryPageSize.width, primaryPageSize.height, scale],
   );
 
-  // Song song measurePage() ở trên, nhưng đo vị trí pixel của đoạn AI-flagged
-  // - cùng kỹ thuật Range API, tách hàm riêng (không gộp vào measurePage) để
-  // không đụng/rủi ro logic match đã chạy ổn định. Không có khái niệm
-  // "overLimitOffset suppression" hay severity ở đây - AI segments không có 2
-  // khái niệm đó.
-  const measureAiPage = useCallback((page: number) => {
-    const container = pageContainerRefs.current.get(page);
-    const locations = aiLocationsCache.current[page] ?? [];
-    const placed = aiSegments.filter((s) => s.pdfRects?.some((r) => r.page === page));
-    if (!container || (locations.length === 0 && placed.length === 0)) {
-      setAiPageRects((prev) => {
-        if (!(page in prev)) return prev;
-        const next: Record<number, AiHighlightRect[]> = {};
-        for (const key of Object.keys(prev)) {
-          const k = Number(key);
-          if (k !== page) next[k] = prev[k];
+  // --- Declarative live-scale `pdfRects` projection (zero stale closures; works on flattened PDFs) ---
+  const placedRectsByPage = useMemo(() => {
+    const map = new Map<number, HighlightBox[]>();
+    for (const m of matches) {
+      if (!m.pdfRects?.length) continue;
+      if (m.startOffset != null && m.startOffset >= overLimitOffset) continue;
+      const priority = (matchTone(m) === "heavy" ? 1000 : 0) + m.matchPercent;
+      for (const page of pdfRectPages(m.pdfRects)) {
+        const bounds = pageSizes.get(page);
+        const list = map.get(page) ?? [];
+        for (const box of pdfRectsOnPage(m.pdfRects, page, scale, bounds)) {
+          list.push({ matchId: m.id, priority, ...box });
         }
-        return next;
-      });
-      return;
-    }
-    const spans = container.querySelectorAll<HTMLElement>("span");
-    if (spans.length === 0 && placed.length === 0) {
-      setAiPageRects((prev) => ({ ...prev, [page]: [] }));
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const rects: AiHighlightRect[] = [];
-
-    for (const s of placed) {
-      for (const box of pdfRectsOnPage(s.pdfRects ?? [], page, scale)) {
-        rects.push({ segmentId: s.id, ...box });
+        map.set(page, list);
       }
     }
+    for (const [page, list] of map.entries()) {
+      map.set(page, dedupeOverlappingPdfOverlays(list, activeMatchId));
+    }
+    return map;
+  }, [matches, overLimitOffset, pageSizes, scale, activeMatchId]);
 
-    for (const loc of locations) {
-      const startSpan = spans[loc.itemStart];
-      const endSpan = spans[loc.itemEnd];
-      const startNode = startSpan?.firstChild;
-      const endNode = endSpan?.firstChild;
-      if (!startNode || !endNode) continue;
-
-      try {
-        const range = document.createRange();
-        const startLen = startNode.textContent?.length ?? 0;
-        const endLen = endNode.textContent?.length ?? 0;
-        range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
-        range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
-
-        for (const cr of Array.from(range.getClientRects())) {
-          if (cr.width <= 0 || cr.height <= 0) continue;
-          rects.push({
-            segmentId: loc.id,
-            x: cr.left - containerRect.left,
-            y: cr.top - containerRect.top,
-            width: cr.width,
-            height: cr.height,
-          });
+  const placedAiRectsByPage = useMemo(() => {
+    const map = new Map<number, AiHighlightBox[]>();
+    for (const seg of aiSegments) {
+      if (!seg.pdfRects?.length) continue;
+      for (const page of pdfRectPages(seg.pdfRects)) {
+        const bounds = pageSizes.get(page);
+        const list = map.get(page) ?? [];
+        for (const box of pdfRectsOnPage(seg.pdfRects, page, scale, bounds)) {
+          list.push({ segmentId: seg.id, ...box });
         }
-      } catch {
-        // Bỏ qua nếu range không hợp lệ, giống measurePage().
+        map.set(page, list);
       }
     }
+    return map;
+  }, [aiSegments, pageSizes, scale]);
 
-    setAiPageRects((prev) => ({ ...prev, [page]: rects }));
-  }, [aiSegments, scale]);
+  // --- Legacy text-layer fallback search (reuses already-loaded PDF proxy — no duplicate getDocument) ---
+  const needsLegacySearch = useMemo(
+    () =>
+      matches.some((m) => !m.pdfRects?.length && Boolean(m.userSnippet?.trim())) ||
+      aiSegments.some((s) => !s.pdfRects?.length && s.excerpt.trim().length >= 8),
+    [matches, aiSegments],
+  );
 
-  // --- 3. Quét toàn bộ văn bản để biết trang nào có match nào, và lưu lại vị
-  //         trí "logic" (item + offset ký tự) của từng match. KHÔNG tính toạ
-  //         độ pixel ở bước này - toạ độ pixel do trình duyệt tự đo thật khi
-  //         từng trang render (bước 2), nên không còn sai số/lem nữa. ---
   useEffect(() => {
-    if (!fileSource) return;
-    if (matches.length === 0 && aiSegments.length === 0) {
-      setMatchesByPage({});
+    if (!loadedPdf || !needsLegacySearch) {
       matchLocationsCache.current = {};
-      setAiSegmentsByPage({});
       aiLocationsCache.current = {};
+      setLegacyByPage({});
+      setLegacyAiByPage({});
+      setRawLegacyRectsByPage({});
+      setRawLegacyAiRectsByPage({});
       return;
     }
 
     let cancelled = false;
-    setAnalyzing(true);
 
-    const analysisSource =
-      typeof fileSource === "string" ? fileSource : { data: fileSource.slice(0) };
-
-    pdfjs
-      .getDocument(analysisSource as any)
-      .promise.then(async (pdfDoc) => {
+    void (async () => {
+      try {
         const byPage: Record<number, string[]> = {};
         const locCache: Record<number, MatchLocation[]> = {};
         const aiByPage: Record<number, string[]> = {};
         const aiLocCache: Record<number, AiSegmentLocation[]> = {};
 
-        // Matches and paragraphs the backend already placed need no search:
-        // only their pages are recorded (for jumping to them and counts).
-        for (const m of matches) {
-          for (const p of pdfRectPages(m.pdfRects ?? [])) (byPage[p] ??= []).push(m.id);
-        }
-        for (const s of aiSegments) {
-          for (const p of pdfRectPages(s.pdfRects ?? [])) (aiByPage[p] ??= []).push(s.id);
-        }
-
         const normalizedSnippets = matches
-          .filter((m) => !m.pdfRects?.length)
-          .filter((m) => m.userSnippet && m.userSnippet.trim().length > 0)
-          .map((m) => ({ id: m.id, severity: m.severity, snippet: normalize(m.userSnippet) }));
+          .filter((m) => !m.pdfRects?.length && Boolean(m.userSnippet?.trim()))
+          .map((m) => {
+            const snippet = normalize(m.userSnippet);
+            return { id: m.id, snippet, words: snippet.split(" ").filter(Boolean) };
+          });
 
-        // Excerpt luôn là 160 ký tự đầu của đoạn, có thể bị cắt kèm "…" -
-        // bỏ ký tự đó trước khi tìm, không thì indexOf/fuzzy sẽ không bao
-        // giờ khớp (trang PDF không có ký tự "…" ở giữa câu).
-        const normalizedAiSegments = aiSegments
+        const normalizedAi = aiSegments
           .filter((s) => !s.pdfRects?.length)
-          .map((s) => ({ id: s.id, snippet: normalize(s.excerpt.replace(/…$/, "").trim()) }))
+          .map((s) => {
+            const snippet = normalize(s.excerpt.replace(/…$/, "").trim());
+            return { id: s.id, snippet, words: snippet.split(" ").filter(Boolean) };
+          })
           .filter((s) => s.snippet.length >= 8);
 
-        // Every match and paragraph placed already: no page text to read.
-        const pagesToSearch = normalizedSnippets.length + normalizedAiSegments.length > 0 ? pdfDoc.numPages : 0;
-        for (let pageIdx = 1; pageIdx <= pagesToSearch; pageIdx++) {
+        for (let pageIdx = 1; pageIdx <= loadedPdf.numPages; pageIdx++) {
           if (cancelled) return;
-          const page = await pdfDoc.getPage(pageIdx);
+          const page = await loadedPdf.getPage(pageIdx);
+          if (cancelled) return;
           const textContent = await page.getTextContent();
+          if (cancelled) return;
 
-          // Indexes here are SPAN indexes in the rendered text layer, not
-          // textContent item indexes: pdf.js draws no span for an empty item
-          // (often just a line break), so counting items would shift every
-          // highlight after the first empty one onto the wrong words.
           let pageText = "";
           const charToItem: number[] = [];
           const charOffsetInItem: number[] = [];
           let spanIdx = -1;
           let spanLen = 0;
+
           textContent.items.forEach((item: any) => {
             const str = item.str ?? "";
+            const tx = Array.isArray(item.transform) ? item.transform : null;
+            const isVertical = tx ? Math.abs(Math.atan2(tx[1], tx[0])) > Math.PI / 4 : false;
             if (str.length > 0) {
               spanIdx++;
               spanLen = str.length;
+            }
+            if (isVertical) {
+              // Advance span index to keep sync with DOM spans, but exclude vertical stamp text from search.
+              return;
             }
             for (let c = 0; c < str.length; c++) {
               charToItem.push(spanIdx);
               charOffsetInItem.push(c);
             }
             pageText += str;
-            // The separator belongs to the last drawn span, just past its end.
             if (item.hasEOL || !str.endsWith(" ")) {
               pageText += " ";
               charToItem.push(Math.max(0, spanIdx));
@@ -543,306 +657,735 @@ export function PlagiarismPdfViewer({
           });
 
           const { normalized: normalizedPageText, map: rawIndexMap } = normalizeWithMap(pageText);
-          // Chỉ tách từ khi thực sự cần fallback (indexOf thất bại) - tránh
-          // tốn chi phí cho trường hợp phổ biến là khớp tuyệt đối thành công.
           let pageTokensCache: ReturnType<typeof extractWordTokens> | null = null;
+          let pageWordSet: Set<string> | null = null;
           const getPageTokens = () => (pageTokensCache ??= extractWordTokens(normalizedPageText));
+          const getPageWordSet = () => (pageWordSet ??= new Set(getPageTokens().map((t) => t.word)));
 
-          for (const { id, severity, snippet } of normalizedSnippets) {
-            if (!snippet || snippet.length < 8) continue; // câu quá ngắn dễ match sai
-
+          for (const { id, snippet, words } of normalizedSnippets) {
+            if (!snippet || snippet.length < 8) continue;
             let matchStart: number;
             let matchEndInclusive: number;
-
             const idx = normalizedPageText.indexOf(snippet);
             if (idx !== -1) {
               matchStart = idx;
               matchEndInclusive = idx + snippet.length - 1;
             } else {
-              // Khớp tuyệt đối thất bại - thử fallback mờ theo chuỗi từ thay
-              // vì âm thầm bỏ qua match này (đây chính là lỗi khiến nhiều
-              // match không được highlight dù thực sự có trên trang).
-              const snippetWords = snippet.split(" ").filter(Boolean);
-              const fuzzy = findFuzzyMatch(getPageTokens(), snippetWords);
+              if (words.length < 3) continue;
+              const wordSet = getPageWordSet();
+              const minNeeded = Math.ceil(words.length * 0.7);
+              let hits = 0;
+              for (const w of words) {
+                if (wordSet.has(w)) hits++;
+              }
+              if (hits < minNeeded) continue;
+              const fuzzy = findFuzzyMatch(getPageTokens(), words);
               if (!fuzzy) continue;
               matchStart = fuzzy.start;
               matchEndInclusive = fuzzy.end;
             }
-
             const rawStart = rawIndexMap[matchStart] ?? 0;
-            const rawEnd =
-              rawIndexMap[Math.min(matchEndInclusive, rawIndexMap.length - 1)] ?? rawStart;
-
-            const itemStart = charToItem[rawStart] ?? 0;
-            const itemEnd = charToItem[rawEnd] ?? charToItem[charToItem.length - 1] ?? 0;
-            const startOffsetInItem = charOffsetInItem[rawStart] ?? 0;
-            const endOffsetInItem = charOffsetInItem[rawEnd] ?? 0;
-
+            const rawEnd = rawIndexMap[Math.min(matchEndInclusive, rawIndexMap.length - 1)] ?? rawStart;
             (byPage[pageIdx] ??= []).push(id);
             (locCache[pageIdx] ??= []).push({
               id,
-              severity,
-              itemStart,
-              startOffsetInItem,
-              itemEnd,
-              endOffsetInItem,
+              itemStart: charToItem[rawStart] ?? 0,
+              startOffsetInItem: charOffsetInItem[rawStart] ?? 0,
+              itemEnd: charToItem[rawEnd] ?? charToItem[charToItem.length - 1] ?? 0,
+              endOffsetInItem: charOffsetInItem[rawEnd] ?? 0,
             });
           }
 
-          // Cùng cơ chế tìm kiếm ở trên (exact rồi fuzzy), tái dùng đúng
-          // normalizedPageText/rawIndexMap/charToItem/getPageTokens vừa tính
-          // cho trang này - không parse lại PDF lần 2.
-          for (const { id, snippet } of normalizedAiSegments) {
+          for (const { id, snippet, words } of normalizedAi) {
             let matchStart: number;
             let matchEndInclusive: number;
-
             const idx = normalizedPageText.indexOf(snippet);
             if (idx !== -1) {
               matchStart = idx;
               matchEndInclusive = idx + snippet.length - 1;
             } else {
-              const snippetWords = snippet.split(" ").filter(Boolean);
-              const fuzzy = findFuzzyMatch(getPageTokens(), snippetWords);
+              if (words.length < 3) continue;
+              const wordSet = getPageWordSet();
+              const minNeeded = Math.ceil(words.length * 0.7);
+              let hits = 0;
+              for (const w of words) {
+                if (wordSet.has(w)) hits++;
+              }
+              if (hits < minNeeded) continue;
+              const fuzzy = findFuzzyMatch(getPageTokens(), words);
               if (!fuzzy) continue;
               matchStart = fuzzy.start;
               matchEndInclusive = fuzzy.end;
             }
-
             const rawStart = rawIndexMap[matchStart] ?? 0;
-            const rawEnd =
-              rawIndexMap[Math.min(matchEndInclusive, rawIndexMap.length - 1)] ?? rawStart;
-
-            const itemStart = charToItem[rawStart] ?? 0;
-            const itemEnd = charToItem[rawEnd] ?? charToItem[charToItem.length - 1] ?? 0;
-            const startOffsetInItem = charOffsetInItem[rawStart] ?? 0;
-            const endOffsetInItem = charOffsetInItem[rawEnd] ?? 0;
-
+            const rawEnd = rawIndexMap[Math.min(matchEndInclusive, rawIndexMap.length - 1)] ?? rawStart;
             (aiByPage[pageIdx] ??= []).push(id);
             (aiLocCache[pageIdx] ??= []).push({
               id,
-              itemStart,
-              startOffsetInItem,
-              itemEnd,
-              endOffsetInItem,
+              itemStart: charToItem[rawStart] ?? 0,
+              startOffsetInItem: charOffsetInItem[rawStart] ?? 0,
+              itemEnd: charToItem[rawEnd] ?? charToItem[charToItem.length - 1] ?? 0,
+              endOffsetInItem: charOffsetInItem[rawEnd] ?? 0,
             });
           }
+
+          if (!mountedPagesRef.current.has(pageIdx)) {
+            page.cleanup?.();
+          }
+
+          // Yield between pages so main-thread scrolling stays fluid on large PDFs.
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         }
 
         if (!cancelled) {
           matchLocationsCache.current = locCache;
-          setMatchesByPage(byPage);
           aiLocationsCache.current = aiLocCache;
-          setAiSegmentsByPage(aiByPage);
-          // Trang đang hiển thị có thể đã render text layer XONG TRƯỚC KHI
-          // bước quét này hoàn tất (chạy song song), nên chủ động đo lại ngay
-          // khi có kết quả quét mới, thay vì chờ một sự kiện render khác
-          // không chắc sẽ xảy ra.
-          requestAnimationFrame(() => {
-            if (cancelled) return;
-            pageContainerRefs.current.forEach((_, p) => {
-              measurePage(p);
-              measureAiPage(p);
-            });
-          });
+          setLegacyByPage(byPage);
+          setLegacyAiByPage(aiByPage);
+          setAnalysisTick((t0) => t0 + 1);
         }
-      })
-      .catch((err) => {
-        console.error("PDF text analysis error:", err);
-      })
-      .finally(() => {
-        if (!cancelled) setAnalyzing(false);
-      });
+      } catch (err) {
+        if (!cancelled) console.error("PDF legacy fallback text analysis error:", err);
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-    // measurePage/measureAiPage cố ý không nằm trong dependency: chúng chỉ
-    // được gọi lại ở đây để "bù" race giữa quét văn bản và render trang,
-    // không phải điều khiển luồng chính của effect này (chỉ nên chạy lại khi
-    // file/matches/aiSegments đổi).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileSource, matches, aiSegments]);
+  }, [loadedPdf, needsLegacySearch, matches, aiSegments]);
 
-  // Xoá toàn bộ highlight cũ ngay khi đổi zoom để không hiện sai vị trí trong
-  // lúc chờ các trang render lại theo scale mới (mỗi trang sẽ tự đo lại qua
-  // onRenderTextLayerSuccess bên dưới).
+  const measureLegacyPage = useCallback(
+    (page: number) => {
+      const container = pageSlotRefs.current.get(page);
+      const locs = matchLocationsCache.current[page] ?? [];
+      const aiLocs = aiLocationsCache.current[page] ?? [];
+      if (!container || (locs.length === 0 && aiLocs.length === 0)) {
+        setRawLegacyRectsByPage((prev) => {
+          if (!(page in prev) || prev[page].length === 0) return prev;
+          return { ...prev, [page]: EMPTY_HIGHLIGHTS };
+        });
+        setRawLegacyAiRectsByPage((prev) => {
+          if (!(page in prev) || prev[page].length === 0) return prev;
+          return { ...prev, [page]: EMPTY_AI_HIGHLIGHTS };
+        });
+        return;
+      }
+      const spans = getLeafTextSpans(container);
+      if (spans.length === 0) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const maxSpanRatio = containerRect.width > 0 ? containerRect.width * 0.85 : Infinity;
+
+      const measured: HighlightBox[] = [];
+      for (const loc of locs) {
+        const src = matchById.get(loc.id);
+        if (!src || (src.startOffset != null && src.startOffset >= overLimitOffset)) continue;
+        const startNode = spans[loc.itemStart]?.firstChild;
+        const endNode = spans[loc.itemEnd]?.firstChild;
+        if (!startNode || !endNode) continue;
+        try {
+          const range = document.createRange();
+          const startLen = startNode.textContent?.length ?? 0;
+          const endLen = endNode.textContent?.length ?? 0;
+          range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
+          range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
+          const priority = (matchTone(src) === "heavy" ? 1000 : 0) + src.matchPercent;
+          for (const cr of Array.from(range.getClientRects())) {
+            if (cr.width <= 0 || cr.height <= 0) continue;
+            if (cr.height > cr.width * 2.2) continue; // skip sideways stamps
+            if (cr.width > maxSpanRatio && loc.itemEnd - loc.itemStart > 8) continue; // cross-column artifact
+            measured.push({
+              matchId: loc.id,
+              priority,
+              x: cr.left - containerRect.left,
+              y: cr.top - containerRect.top,
+              width: cr.width,
+              height: cr.height,
+            });
+          }
+        } catch {
+          // Ignore invalid range
+        }
+      }
+
+      const measuredAi: AiHighlightBox[] = [];
+      for (const loc of aiLocs) {
+        const startNode = spans[loc.itemStart]?.firstChild;
+        const endNode = spans[loc.itemEnd]?.firstChild;
+        if (!startNode || !endNode) continue;
+        try {
+          const range = document.createRange();
+          const startLen = startNode.textContent?.length ?? 0;
+          const endLen = endNode.textContent?.length ?? 0;
+          range.setStart(startNode, Math.min(loc.startOffsetInItem, startLen));
+          range.setEnd(endNode, Math.min(loc.endOffsetInItem + 1, endLen));
+          for (const cr of Array.from(range.getClientRects())) {
+            if (cr.width <= 0 || cr.height <= 0 || cr.height > cr.width * 2.2) continue;
+            measuredAi.push({
+              segmentId: loc.id,
+              x: cr.left - containerRect.left,
+              y: cr.top - containerRect.top,
+              width: cr.width,
+              height: cr.height,
+            });
+          }
+        } catch {
+          // Ignore invalid range
+        }
+      }
+
+      setRawLegacyRectsByPage((prev) =>
+        sameHighlightBoxes(prev[page], measured) ? prev : { ...prev, [page]: measured },
+      );
+      setRawLegacyAiRectsByPage((prev) =>
+        sameAiBoxes(prev[page], measuredAi) ? prev : { ...prev, [page]: measuredAi },
+      );
+    },
+    [matchById, overLimitOffset],
+  );
+
+  // Dedupe legacy measurements declaratively on activeMatchId change (never re-runs DOM Range queries).
+  const legacyRectsByPage = useMemo(() => {
+    const out: Record<number, HighlightBox[]> = {};
+    for (const [pageKey, list] of Object.entries(rawLegacyRectsByPage)) {
+      if (list.length > 0) out[Number(pageKey)] = dedupeOverlappingPdfOverlays(list, activeMatchId);
+    }
+    return out;
+  }, [rawLegacyRectsByPage, activeMatchId]);
+
+  const legacyAiRectsByPage = rawLegacyAiRectsByPage;
+
+  const visibleRectsByPage = useMemo(() => {
+    const map = new Map<number, HighlightBox[]>();
+    const pages = new Set<number>([
+      ...placedRectsByPage.keys(),
+      ...Object.keys(legacyRectsByPage).map(Number),
+    ]);
+    for (const page of pages) {
+      const merged = [...(placedRectsByPage.get(page) ?? []), ...(legacyRectsByPage[page] ?? [])].filter(
+        (r) => showHighlights || r.matchId === activeMatchId,
+      );
+      if (merged.length > 0) map.set(page, merged);
+    }
+    return map;
+  }, [placedRectsByPage, legacyRectsByPage, showHighlights, activeMatchId]);
+
+  const visibleAiRectsByPage = useMemo(() => {
+    const map = new Map<number, AiHighlightBox[]>();
+    const pages = new Set<number>([
+      ...placedAiRectsByPage.keys(),
+      ...Object.keys(legacyAiRectsByPage).map(Number),
+    ]);
+    for (const page of pages) {
+      const merged = [...(placedAiRectsByPage.get(page) ?? []), ...(legacyAiRectsByPage[page] ?? [])].filter(
+        (r) => showAiHighlights || r.segmentId === activeAiSegmentId,
+      );
+      if (merged.length > 0) map.set(page, merged);
+    }
+    return map;
+  }, [placedAiRectsByPage, legacyAiRectsByPage, showAiHighlights, activeAiSegmentId]);
+
+  const onPageRenderReadyRef = useRef((pageNumber: number) => {
+    if (pageNumber === 1) fireReadyOnce();
+  });
+  onPageRenderReadyRef.current = (pageNumber: number) => {
+    if (pageNumber === 1) fireReadyOnce();
+  };
+
+  const onTextLayerReadyRef = useRef((pageNumber: number) => {
+    if (needsLegacySearch) measureLegacyPage(pageNumber);
+  });
+  onTextLayerReadyRef.current = (pageNumber: number) => {
+    if (needsLegacySearch) measureLegacyPage(pageNumber);
+  };
+
+  const onPageLoadSuccessRef = useRef((pageNumber: number, w: number, h: number) => {
+    if (w <= 0 || h <= 0) return;
+    setPageSizes((prev) => {
+      const cur = prev.get(pageNumber);
+      if (cur && Math.abs(cur.width - w) <= 0.5 && Math.abs(cur.height - h) <= 0.5) return prev;
+      const primary = prev.get(1);
+      if (
+        pageNumber !== 1 &&
+        !cur &&
+        primary &&
+        Math.abs(primary.width - w) <= 0.5 &&
+        Math.abs(primary.height - h) <= 0.5
+      ) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(pageNumber, { width: w, height: h });
+      return next;
+    });
+  });
+
+  const cleanupEvictedPages = useCallback((pages: number[]) => {
+    const pdf = loadedPdfRef.current;
+    if (!pdf || pages.length === 0) return;
+    for (const p of pages) {
+      void pdf
+        .getPage(p)
+        .then((pg) => {
+          if (!mountedPagesRef.current.has(p)) pg.cleanup?.();
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const syncMountedWindow = useCallback(
+    (page: number, total: number) => {
+      if (total <= 0) return;
+      const next = computeMountedPagesWindow(page, total, intersectingPagesRef.current, 1);
+      const prev = mountedPagesRef.current;
+      if (sameNumberSet(prev, next)) return;
+      const evicted = diffEvictedPages(prev, next);
+      mountedPagesRef.current = next;
+      setMountedPages(next);
+      cleanupEvictedPages(evicted);
+    },
+    [cleanupEvictedPages],
+  );
+
+  // Clear legacy coords on scale change, and re-measure mounted pages when scale or legacy search updates.
   useEffect(() => {
-    setPageRects({});
-    setAiPageRects({});
-  }, [scale]);
+    if (!needsLegacySearch) return;
+    setRawLegacyRectsByPage({});
+    setRawLegacyAiRectsByPage({});
+    const frame = requestAnimationFrame(() => {
+      mountedPagesRef.current.forEach((p) => measureLegacyPage(p));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scale, analysisTick, needsLegacySearch, measureLegacyPage]);
+
+  // --- Strictly bounded virtualized page mounting via IntersectionObserver ---
+  useEffect(() => {
+    if (!viewerEl || !numPages) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const nextIntersecting = new Set(intersectingPagesRef.current);
+        let changed = false;
+        for (const entry of entries) {
+          const p = Number((entry.target as HTMLElement).dataset.pageNumber);
+          if (!Number.isFinite(p)) continue;
+          if (entry.isIntersecting) {
+            if (!nextIntersecting.has(p)) {
+              nextIntersecting.add(p);
+              changed = true;
+            }
+          } else if (nextIntersecting.delete(p)) {
+            changed = true;
+          }
+        }
+        if (!changed) return;
+        intersectingPagesRef.current = nextIntersecting;
+        setIntersectingPages((prev) => (sameNumberSet(prev, nextIntersecting) ? prev : nextIntersecting));
+        syncMountedWindow(currentPageRef.current, numPages);
+      },
+      { root: viewerEl, rootMargin: "160px 0px" },
+    );
+
+    pageSlotRefs.current.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [viewerEl, numPages, syncMountedWindow]);
+
+  useEffect(() => {
+    if (numPages) syncMountedWindow(currentPage, numPages);
+  }, [currentPage, numPages, syncMountedWindow]);
+
+  // Keep currentPage synchronized as user scrolls continuously without rebinding on page change.
+  useEffect(() => {
+    if (!viewerEl || !numPages) return;
+    let raf = 0;
+
+    const handleScroll = () => {
+      if (programmaticScrollRef.current) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const mid = viewerEl.scrollTop + viewerEl.clientHeight * 0.4;
+        const cur = currentPageRef.current;
+        let bestPage = cur;
+        let bestDist = Infinity;
+        for (let p = 1; p <= numPages; p++) {
+          const el = pageSlotRefs.current.get(p);
+          if (!el) continue;
+          const center = el.offsetTop + el.offsetHeight / 2;
+          const dist = Math.abs(center - mid);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestPage = p;
+          }
+        }
+        if (bestPage !== cur) setCurrentPage(bestPage);
+      });
+    };
+
+    viewerEl.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      viewerEl.removeEventListener("scroll", handleScroll);
+    };
+  }, [viewerEl, numPages]);
 
   useEffect(() => {
     if (numPages) onPageChange?.(currentPage, numPages);
   }, [currentPage, numPages, onPageChange]);
 
-  // --- 4. Lật trang: chỉ đổi trang đang mount, rồi đưa khung nhìn về đầu trang. ---
-  const goToPage = useCallback(
-    (page: number) => {
+  const scrollToPage = useCallback(
+    (page: number, targetYRatio?: number) => {
       if (!numPages) return;
       const next = Math.min(Math.max(1, page), numPages);
       setCurrentPage(next);
-      viewerRef.current?.scrollTo({ top: 0 });
+      syncMountedWindow(next, numPages);
+      const viewer = viewerRef.current;
+      const slot = pageSlotRefs.current.get(next);
+      if (!viewer || !slot) return;
+      programmaticScrollRef.current = true;
+      const extraY = targetYRatio !== undefined ? targetYRatio : -20;
+      const top = Math.max(0, slot.offsetTop + extraY);
+      viewer.scrollTo({ top, behavior: "smooth" });
+      window.setTimeout(() => {
+        programmaticScrollRef.current = false;
+      }, 450);
     },
-    [numPages],
+    [numPages, syncMountedWindow],
   );
 
-  // --- 5. Mở trang chứa match khi activeMatchId đổi ---
+  // Scroll to active match when selected from sidebar (guarded so scale changes don't hijack scroll).
   useEffect(() => {
-    if (!activeMatchId) return;
-    const targetPage = Object.entries(matchesByPage).find(([, ids]) => ids.includes(activeMatchId))?.[0];
-    if (targetPage) goToPage(Number(targetPage));
-  }, [activeMatchId, matchesByPage, goToPage]);
+    if (!activeMatchId) {
+      lastScrolledMatchRef.current = null;
+      return;
+    }
+    if (lastScrolledMatchRef.current === activeMatchId) return;
+    const match = matchById.get(activeMatchId);
+    let targetPage: number | undefined;
+    if (match?.pdfRects?.length) {
+      targetPage = pdfRectPages(match.pdfRects)[0];
+    } else {
+      const entry = Object.entries(legacyByPage).find(([, ids]) => ids.includes(activeMatchId));
+      if (entry) targetPage = Number(entry[0]);
+    }
+    if (!targetPage) return;
+    lastScrolledMatchRef.current = activeMatchId;
 
-  // Cùng cơ chế ở trên, cho việc bấm 1 đoạn "nghi AI viết" từ card sidebar.
-  useEffect(() => {
-    if (!activeAiSegmentId) return;
-    const targetPage = Object.entries(aiSegmentsByPage).find(([, ids]) => ids.includes(activeAiSegmentId))?.[0];
-    if (targetPage) goToPage(Number(targetPage));
-  }, [activeAiSegmentId, aiSegmentsByPage, goToPage]);
-
-  // Once the active highlight's page is drawn, bring the highlight into view
-  // when the page is taller than the viewer.
-  useEffect(() => {
-    const id = activeMatchId ?? activeAiSegmentId;
     const viewer = viewerRef.current;
-    if (!id || !viewer) return;
     const rect =
-      pageRects[currentPage]?.find((r) => r.matchId === id) ??
-      aiPageRects[currentPage]?.find((r) => r.segmentId === id);
-    const container = pageContainerRefs.current.get(currentPage);
-    if (!rect || !container) return;
-    const top = container.offsetTop + rect.y - viewer.clientHeight / 3;
-    viewer.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }, [activeMatchId, activeAiSegmentId, currentPage, pageRects, aiPageRects]);
+      placedRectsByPage.get(targetPage)?.find((r) => r.matchId === activeMatchId) ??
+      legacyRectsByPage[targetPage]?.find((r) => r.matchId === activeMatchId);
+    const yOffset = rect && viewer ? rect.y - viewer.clientHeight / 3 : undefined;
+    scrollToPage(targetPage, yOffset);
+  }, [activeMatchId, matchById, placedRectsByPage, legacyByPage, legacyRectsByPage, scrollToPage]);
+
+  useEffect(() => {
+    if (!activeAiSegmentId) {
+      lastScrolledAiRef.current = null;
+      return;
+    }
+    if (lastScrolledAiRef.current === activeAiSegmentId) return;
+    const seg = aiSegments.find((s) => s.id === activeAiSegmentId);
+    let targetPage: number | undefined;
+    if (seg?.pdfRects?.length) {
+      targetPage = pdfRectPages(seg.pdfRects)[0];
+    } else {
+      const entry = Object.entries(legacyAiByPage).find(([, ids]) => ids.includes(activeAiSegmentId));
+      if (entry) targetPage = Number(entry[0]);
+    }
+    if (!targetPage) return;
+    lastScrolledAiRef.current = activeAiSegmentId;
+
+    const viewer = viewerRef.current;
+    const rect =
+      placedAiRectsByPage.get(targetPage)?.find((r) => r.segmentId === activeAiSegmentId) ??
+      legacyAiRectsByPage[targetPage]?.find((r) => r.segmentId === activeAiSegmentId);
+    const yOffset = rect && viewer ? rect.y - viewer.clientHeight / 3 : undefined;
+    scrollToPage(targetPage, yOffset);
+  }, [activeAiSegmentId, aiSegments, placedAiRectsByPage, legacyAiByPage, legacyAiRectsByPage, scrollToPage]);
+
+  // Indicator badges for thumbnail rail (source chip colors & AI pages).
+  const { pageIndicatorClasses, aiPages } = useMemo(() => {
+    const classMap = new Map<number, string[]>();
+    const aiSet = new Set<number>();
+    const seenPerPage = new Map<number, Set<string>>();
+
+    if (showHighlights || activeMatchId) {
+      for (const m of matches) {
+        if (!showHighlights && m.id !== activeMatchId) continue;
+        if (m.startOffset != null && m.startOffset >= overLimitOffset) continue;
+        const pages = m.pdfRects?.length
+          ? pdfRectPages(m.pdfRects)
+          : Object.entries(legacyByPage)
+              .filter(([, ids]) => ids.includes(m.id))
+              .map(([p]) => Number(p));
+        const color = colorForMatch(m, colorIndexByMatch.get(m.id) ?? 0);
+        for (const p of pages) {
+          const seen = seenPerPage.get(p) ?? new Set<string>();
+          if (seen.has(color.key)) continue;
+          seen.add(color.key);
+          seenPerPage.set(p, seen);
+          const list = classMap.get(p) ?? [];
+          if (list.length < 3) {
+            list.push(color.chip);
+            classMap.set(p, list);
+          }
+        }
+      }
+    }
+
+    if (showAiHighlights || activeAiSegmentId) {
+      for (const seg of aiSegments) {
+        if (!showAiHighlights && seg.id !== activeAiSegmentId) continue;
+        const pages = seg.pdfRects?.length
+          ? pdfRectPages(seg.pdfRects)
+          : Object.entries(legacyAiByPage)
+              .filter(([, ids]) => ids.includes(seg.id))
+              .map(([p]) => Number(p));
+        pages.forEach((p) => aiSet.add(p));
+      }
+    }
+
+    return { pageIndicatorClasses: classMap, aiPages: aiSet };
+  }, [
+    matches,
+    overLimitOffset,
+    legacyByPage,
+    colorIndexByMatch,
+    aiSegments,
+    legacyAiByPage,
+    showHighlights,
+    showAiHighlights,
+    activeMatchId,
+    activeAiSegmentId,
+  ]);
+
+  const handleDocumentLoadSuccess = useCallback((pdf: PdfProxy) => {
+    const gen = ++docLoadGenRef.current;
+    hasAutoRetriedRef.current = false;
+    awaitingRetryLoadRef.current = false;
+    setLoadedPdf(pdf);
+    setNumPages(pdf.numPages);
+    setCurrentPage(1);
+    setLoadError(null);
+    setRetryingRefresh(false);
+
+    if (pdf.numPages <= 0) return;
+
+    void pdf.getPage(1).then((p1) => {
+      if (docLoadGenRef.current !== gen) return;
+      const vp1 = p1.getViewport({ scale: 1 });
+      const size1 = { width: vp1.width, height: vp1.height };
+      setPageSizes((prev) => {
+        const cur = prev.get(1);
+        if (cur && cur.width === size1.width && cur.height === size1.height) return prev;
+        const next = new Map(prev);
+        next.set(1, size1);
+        return next;
+      });
+    });
+  }, []);
+
+  const handleDocumentLoadError = useCallback((err: Error) => {
+    console.error("PDF load error:", err);
+    if (
+      typeof pdfUrlRef.current === "string" &&
+      pdfUrlRef.current.length > 0 &&
+      onRefreshUrlRef.current &&
+      !hasAutoRetriedRef.current
+    ) {
+      hasAutoRetriedRef.current = true;
+      awaitingRetryLoadRef.current = true;
+      setRetryingRefresh(true);
+      void onRefreshUrlRef
+        .current()
+        .then((refreshed) => {
+          if (!isMountedRef.current) return;
+          setRetryingRefresh(false);
+          if (!refreshed) {
+            awaitingRetryLoadRef.current = false;
+            setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
+          }
+        })
+        .catch(() => {
+          if (!isMountedRef.current) return;
+          awaitingRetryLoadRef.current = false;
+          setRetryingRefresh(false);
+          setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
+        });
+      return;
+    }
+    setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
+  }, []);
 
   function onViewerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.target instanceof HTMLInputElement) return;
-    if (e.key === "ArrowRight" || e.key === "PageDown") {
+    if (e.key === "PageDown") {
       e.preventDefault();
-      goToPage(currentPage + 1);
-    } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+      scrollToPage(currentPage + 1);
+    } else if (e.key === "PageUp") {
       e.preventDefault();
-      goToPage(currentPage - 1);
+      scrollToPage(currentPage - 1);
     } else if (e.key === "Home") {
       e.preventDefault();
-      goToPage(1);
+      scrollToPage(1);
     } else if (e.key === "End" && numPages) {
       e.preventDefault();
-      goToPage(numPages);
+      scrollToPage(numPages);
     }
   }
-
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-    setNumPages(numPages);
-    setCurrentPage(1);
-    setLoadError(null);
-  }
-
-  // Natural size of each page as it loads: pages in one PDF can differ in
-  // size or orientation, so the fit is recomputed per page.
-  const onPageLoadSuccess = useCallback((page: { originalWidth: number; originalHeight: number }) => {
-    setPageSize((prev) =>
-      prev && prev.width === page.originalWidth && prev.height === page.originalHeight
-        ? prev
-        : { width: page.originalWidth, height: page.originalHeight },
-    );
-  }, []);
-
-  // Stable per page: react-pdf redraws the canvas / text layer when these
-  // callbacks change identity, and each redraw re-measures and sets state —
-  // inline functions here would loop.
-  const onPageRenderSuccess = useCallback(() => {
-    const el = pageContainerRefs.current.get(currentPage)?.querySelector("canvas");
-    if (!el) return;
-    const width = el.clientWidth;
-    const height = el.clientHeight;
-    setRenderedBox((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
-    markDrawn("canvas");
-  }, [currentPage, markDrawn]);
-
-  const onTextLayerRendered = useCallback(() => {
-    measurePage(currentPage);
-    measureAiPage(currentPage);
-    markDrawn("text");
-  }, [currentPage, measurePage, measureAiPage, markDrawn]);
-
-  const setPageContainer = useCallback(
-    (el: HTMLDivElement | null) => {
-      if (el) pageContainerRefs.current.set(currentPage, el);
-      else pageContainerRefs.current.delete(currentPage);
-    },
-    [currentPage],
-  );
-
-  function onDocumentLoadError(err: Error) {
-    console.error("PDF load error:", err);
-    setLoadError(tr("Could not load the PDF. The file may be corrupted or unsupported."));
-  }
-
-  const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
-
-  // Nothing more will draw once the file has failed — release `onReady` waiters.
-  useEffect(() => {
-    if (bufferError || loadError) markDrawn("failed");
-  }, [bufferError, loadError, markDrawn]);
-  // Counted from where matches were located in the text (every page), not
-  // from the boxes drawn on the one page currently on screen.
-  const severityCounts = useMemo(() => {
-    const counts: Record<Severity, number> = { high: 0, moderate: 0, low: 0 };
-    const seen = new Set<string>();
-    Object.values(matchesByPage).forEach((ids) =>
-      ids.forEach((id) => {
-        const m = matchById.get(id);
-        if (!m || seen.has(id)) return;
-        if (m.startOffset != null && m.startOffset >= overLimitOffset) return;
-        seen.add(id);
-        counts[m.severity] = (counts[m.severity] ?? 0) + 1;
-      }),
-    );
-    return counts;
-  }, [matchesByPage, matchById, overLimitOffset]);
-  const hasHighlights = severityCounts.high + severityCounts.moderate + severityCounts.low > 0;
-  const aiSegmentCount = useMemo(
-    () => new Set(Object.values(aiSegmentsByPage).flat()).size,
-    [aiSegmentsByPage],
-  );
-  const hoveredMatch = hoveredMatchId ? matchById.get(hoveredMatchId) : null;
-  const hoveredLocation = useMemo(() => {
-    if (!hoveredMatchId) return null;
-    for (const [pageStr, rects] of Object.entries(pageRects)) {
-      const rect = rects.find((r) => r.matchId === hoveredMatchId);
-      if (rect) return { page: Number(pageStr), rect };
-    }
-    return null;
-  }, [hoveredMatchId, pageRects]);
 
   const [pageInput, setPageInput] = useState("1");
   useEffect(() => setPageInput(String(currentPage)), [currentPage]);
   function commitPageInput() {
     const n = Number.parseInt(pageInput, 10);
-    if (Number.isFinite(n)) goToPage(n);
+    if (Number.isFinite(n)) scrollToPage(n);
     else setPageInput(String(currentPage));
   }
 
-  const rects = pageRects[currentPage] ?? [];
-  const aiRects = aiPageRects[currentPage] ?? [];
-  const toolbarButton =
-    "flex size-8 items-center justify-center rounded-lg border border-line bg-white text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-40";
+  const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
+  const pillBtn =
+    "flex size-7 items-center justify-center rounded-full text-ink-600 transition-colors hover:bg-surface-muted hover:text-ink-900 disabled:pointer-events-none disabled:opacity-40";
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border border-line bg-surface-tint p-3 sm:p-4">
-      {/* Toolbar */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1}
-            className={toolbarButton}
-            aria-label={t("Previous page")}
+    <div className="relative flex h-full min-h-0 flex-1 bg-surface-muted/60">
+      {isLoadingUrl || retryingRefresh ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="py-12 text-center text-sm text-ink-400">{t("Loading PDF...")}</p>
+        </div>
+      ) : !pdfUrl ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className={`py-12 text-center text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}>
+            {unavailableMessage ?? t("No original PDF available to preview.")}
+          </p>
+        </div>
+      ) : bufferError ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(bufferError)}</p>
+        </div>
+      ) : loadError ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(loadError)}</p>
+        </div>
+      ) : isPreparingFile ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="py-12 text-center text-sm text-ink-400">{t("Preparing file...")}</p>
+        </div>
+      ) : fileSource ? (
+        <Document
+          file={fileSource}
+          onLoadSuccess={handleDocumentLoadSuccess as any}
+          onLoadError={handleDocumentLoadError}
+          loading={
+            <div className="flex flex-1 items-center justify-center px-6">
+              <p className="py-12 text-center text-sm text-ink-400">{t("Loading PDF...")}</p>
+            </div>
+          }
+          className="flex min-h-0 flex-1 overflow-hidden"
+        >
+          {numPages && (
+            <PdfThumbnailRail
+              pdf={loadedPdf}
+              numPages={numPages}
+              currentPage={currentPage}
+              open={railOpen}
+              onSelectPage={scrollToPage}
+              pageIndicatorClasses={pageIndicatorClasses}
+              aiPages={aiPages}
+              pageSizes={pageSizes}
+              defaultPageAspect={primaryPageSize.height / primaryPageSize.width}
+            />
+          )}
+
+          <div
+            ref={setViewerNode}
+            tabIndex={0}
+            onKeyDown={onViewerKeyDown}
+            aria-label={t("Document preview")}
+            className="relative min-h-0 flex-1 overflow-auto outline-none scrollbar-thin [scrollbar-gutter:stable] focus-visible:ring-2 focus-visible:ring-brand-300"
           >
-            <CaretLeft size={16} />
-          </button>
-          <label className="flex items-center gap-1.5 text-sm font-medium text-ink-700">
+            {numPages && (
+              <div className="mx-auto flex w-max min-w-full flex-col items-center gap-5 px-4 py-6 pb-20">
+                {Array.from({ length: numPages }, (_, idx) => idx + 1).map((pageNumber) => {
+                  const baseSize = pageSizes.get(pageNumber) ?? primaryPageSize;
+                  const slotW = Math.round(baseSize.width * scale);
+                  const slotH = Math.round(baseSize.height * scale);
+                  const isMounted = mountedPages.has(pageNumber);
+                  const renderTextLayer =
+                    needsLegacySearch || pageNumber === currentPage || intersectingPages.has(pageNumber);
+
+                  const combinedRects = visibleRectsByPage.get(pageNumber) ?? EMPTY_HIGHLIGHTS;
+                  const aiRects = visibleAiRectsByPage.get(pageNumber) ?? EMPTY_AI_HIGHLIGHTS;
+
+                  return (
+                    <div
+                      key={pageNumber}
+                      ref={(el) => {
+                        if (el) pageSlotRefs.current.set(pageNumber, el);
+                        else pageSlotRefs.current.delete(pageNumber);
+                      }}
+                      data-page-number={pageNumber}
+                      className="relative shrink-0 bg-white shadow-[var(--shadow-card)]"
+                      style={{ width: slotW, height: slotH }}
+                    >
+                      {isMounted && (
+                        <MemoPdfPage
+                          pageNumber={pageNumber}
+                          scale={scale}
+                          devicePixelRatio={canvasDpr}
+                          renderTextLayer={renderTextLayer}
+                          needsLegacySearch={needsLegacySearch}
+                          onPageLoadSuccessRef={onPageLoadSuccessRef}
+                          onPageRenderReadyRef={onPageRenderReadyRef}
+                          onTextLayerReadyRef={onTextLayerReadyRef}
+                        />
+                      )}
+
+                      {(combinedRects.length > 0 || aiRects.length > 0) && (
+                        <PdfPageOverlays
+                          slotW={slotW}
+                          combinedRects={combinedRects}
+                          aiRects={aiRects}
+                          matchById={matchById}
+                          colorIndexByMatch={colorIndexByMatch}
+                          activeMatchId={activeMatchId}
+                          activeAiSegmentId={activeAiSegmentId}
+                          onMatchClick={onMatchClick}
+                          onAiSegmentClick={onAiSegmentClick}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Document>
+      ) : null}
+
+      {/* Minimal integrated floating control pill (bottom-right, mirrors WordCountPill) */}
+      {numPages && (
+        <div
+          role="region"
+          aria-label={t("PDF viewer controls")}
+          className="pointer-events-auto absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-full border border-line/80 bg-white/95 px-2 py-1 text-xs shadow-[var(--shadow-card)]"
+        >
+          {numPages > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setRailOpen((v) => !v)}
+                className={cn(pillBtn, railOpen && "bg-brand-100 text-brand-700")}
+                aria-label={railOpen ? t("Hide page thumbnails") : t("Show page thumbnails")}
+                title={railOpen ? t("Hide page thumbnails") : t("Show page thumbnails")}
+                aria-pressed={railOpen}
+              >
+                <SidebarSimple size={15} />
+              </button>
+              <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-line" />
+            </>
+          )}
+
+          <label className="flex items-center gap-1 px-1 text-xs font-medium text-ink-600">
             <span className="sr-only">{t("Go to page")}</span>
             <input
               value={pageInput}
@@ -851,207 +1394,52 @@ export function PlagiarismPdfViewer({
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitPageInput();
               }}
-              disabled={!numPages}
               inputMode="numeric"
-              className="h-8 w-11 rounded-lg border border-line bg-white text-center tabular-nums outline-none focus:border-brand-400"
+              className="h-6 w-8 rounded-md border border-line/80 bg-surface-tint text-center text-xs font-semibold tabular-nums text-ink-800 outline-none focus:border-brand-400"
             />
-            <span className="tabular-nums text-ink-500">/ {numPages ?? "…"}</span>
+            <span className="tabular-nums text-ink-400">/ {numPages}</span>
           </label>
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={!numPages || currentPage >= numPages}
-            className={toolbarButton}
-            aria-label={t("Next page")}
-          >
-            <CaretRight size={16} />
-          </button>
-          {analyzing && <span className="ml-1 text-xs text-ink-400">{t("(scanning for overlaps...)")}</span>}
-        </div>
 
-        <div className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-line" />
+
           <button
+            type="button"
             onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
             disabled={zoom <= ZOOM_MIN}
-            className={toolbarButton}
+            className={pillBtn}
             aria-label={t("Zoom out")}
+            title={t("Zoom out")}
           >
-            <MagnifyingGlassMinus size={16} />
+            <MagnifyingGlassMinus size={15} />
           </button>
-          <span className="w-11 text-center text-xs font-medium tabular-nums text-ink-500">
+          <span className="w-10 text-center text-[11px] font-semibold tabular-nums text-ink-600">
             {Math.round(scale * 100)}%
           </span>
           <button
+            type="button"
             onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
             disabled={zoom >= ZOOM_MAX}
-            className={toolbarButton}
+            className={pillBtn}
             aria-label={t("Zoom in")}
+            title={t("Zoom in")}
           >
-            <MagnifyingGlassPlus size={16} />
+            <MagnifyingGlassPlus size={15} />
           </button>
+
           <button
+            type="button"
             onClick={() => {
               setFit((f) => (f === "width" ? "page" : "width"));
               setZoom(1);
             }}
-            className={toolbarButton}
+            className={pillBtn}
             aria-label={fit === "width" ? t("Fit page") : t("Fit width")}
             title={fit === "width" ? t("Fit page") : t("Fit width")}
           >
-            {fit === "width" ? <FrameCorners size={16} /> : <ArrowsOutLineHorizontal size={16} />}
+            {fit === "width" ? <FrameCorners size={15} /> : <ArrowsOutLineHorizontal size={15} />}
           </button>
         </div>
-      </div>
-
-      {/* Legend mức độ trùng lặp, kiểu Turnitin */}
-      {(hasHighlights || aiSegmentCount > 0) && (
-        <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-line bg-white px-3 py-2 text-xs">
-          {(Object.keys(SEVERITY_LABEL) as Severity[]).map((sev) => (
-            <div key={sev} className="flex items-center gap-1.5">
-              <span
-                className="inline-block size-2.5 rounded-full"
-                style={{ backgroundColor: SEVERITY_COLOR[sev].border }}
-              />
-              <span className="text-ink-600">{t(SEVERITY_LABEL[sev])}</span>
-              <span className="font-semibold text-ink-800">{severityCounts[sev] ?? 0}</span>
-            </div>
-          ))}
-          {aiSegmentCount > 0 && (
-            <div className="flex items-center gap-1.5 border-l border-line pl-4">
-              <span
-                className="inline-block size-2.5 rounded-full"
-                style={{ backgroundColor: AI_FLAG_COLOR.border }}
-              />
-              <span className="text-ink-600">{t("AI content")}</span>
-              <span className="font-semibold text-ink-800">{aiSegmentCount}</span>
-            </div>
-          )}
-        </div>
       )}
-
-      {/* Viewer - vùng cuộn riêng của component: chỉ 1 trang được mount, và
-          trang chỉ cuộn bên trong khung này khi cao/rộng hơn khung nhìn. */}
-      <div
-        ref={viewerRef}
-        tabIndex={0}
-        onKeyDown={onViewerKeyDown}
-        aria-label={t("Document preview")}
-        className="min-h-0 flex-1 overflow-auto rounded-lg bg-ink-100/40 outline-none [scrollbar-gutter:stable] focus-visible:ring-2 focus-visible:ring-brand-300"
-        style={{ padding: VIEWER_PADDING }}
-      >
-        {!pdfUrl ? (
-          <p
-            className={`py-12 text-center text-sm ${unavailableMessage ? "font-medium text-severity-high" : "text-ink-400"}`}
-          >
-            {t(unavailableMessage) ?? t("No original PDF available to preview.")}
-          </p>
-        ) : bufferError ? (
-          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(bufferError)}</p>
-        ) : loadError ? (
-          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(loadError)}</p>
-        ) : isPreparingFile ? (
-          <p className="py-12 text-center text-sm text-ink-400">{t("Preparing file...")}</p>
-        ) : fileSource ? (
-          <Document
-            file={fileSource}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError}
-            loading={<p className="py-12 text-center text-sm text-ink-400">{t("Loading PDF...")}</p>}
-            className="flex min-h-full w-max min-w-full items-start justify-center"
-          >
-            {numPages && (
-              <div
-                ref={setPageContainer}
-                data-page-number={currentPage}
-                className="relative bg-white shadow-[var(--shadow-card)]"
-                // Hold the previous page's footprint until this one has drawn.
-                style={renderedBox ? { minWidth: renderedBox.width, minHeight: renderedBox.height } : undefined}
-              >
-                <Page
-                  key={currentPage}
-                  pageNumber={currentPage}
-                  scale={scale}
-                  devicePixelRatio={PIXEL_RATIO}
-                  renderAnnotationLayer={false}
-                  renderTextLayer
-                  loading={null}
-                  onLoadSuccess={onPageLoadSuccess}
-                  onRenderSuccess={onPageRenderSuccess}
-                  onRenderTextLayerSuccess={onTextLayerRendered}
-                />
-
-                {/* Overlay đoạn nghi AI viết - vẽ TRƯỚC overlay match nên
-                    nằm DƯỚI nó trong thứ tự DOM/stacking: match (câu, hẹp
-                    hơn) luôn nhận click trước khi trùng vùng với AI wash
-                    (đoạn, rộng hơn) - đúng "Functional Wall Rule", 2 tín
-                    hiệu vẫn tách biệt về màu/click nhưng không giành nhau. */}
-                <div className="pointer-events-none absolute inset-0">
-                  {aiRects.map((r, i) => {
-                    const isActive = activeAiSegmentId === r.segmentId;
-                    return (
-                      <div
-                        key={`ai-${r.segmentId}-${i}`}
-                        onClick={() => onAiSegmentClick?.(r.segmentId)}
-                        className="pointer-events-auto absolute cursor-pointer rounded-[2px] transition-colors"
-                        style={{
-                          left: r.x,
-                          top: r.y,
-                          width: r.width,
-                          height: r.height,
-                          backgroundColor: isActive ? AI_FLAG_COLOR.fillActive : AI_FLAG_COLOR.fill,
-                          boxShadow: isActive ? `inset 0 0 0 1px ${AI_FLAG_COLOR.border}` : undefined,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* Overlay highlight - toạ độ đã là pixel thật, không nhân scale nữa */}
-                <div className="pointer-events-none absolute inset-0">
-                  {rects.map((r, i) => {
-                    const isActive = activeMatchId === r.matchId;
-                    const isHovered = hoveredMatchId === r.matchId;
-                    const color = SEVERITY_COLOR[r.severity] ?? SEVERITY_COLOR.moderate;
-                    return (
-                      <div
-                        key={`${r.matchId}-${i}`}
-                        onClick={() => onMatchClick?.(r.matchId)}
-                        onMouseEnter={() => setHoveredMatchId(r.matchId)}
-                        onMouseLeave={() => setHoveredMatchId((cur) => (cur === r.matchId ? null : cur))}
-                        className="pointer-events-auto absolute cursor-pointer rounded-[3px] transition-colors"
-                        style={{
-                          left: r.x,
-                          top: r.y,
-                          width: r.width,
-                          height: r.height,
-                          backgroundColor: isActive || isHovered ? color.fillActive : color.fill,
-                          boxShadow: `inset 0 0 0 1px ${color.border}`,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* Tooltip khi hover */}
-                {hoveredMatch && hoveredLocation && hoveredLocation.page === currentPage && (
-                  <div
-                    className="pointer-events-none absolute z-30 max-w-xs rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-white shadow-[var(--shadow-pop)]"
-                    style={{
-                      left: hoveredLocation.rect.x,
-                      top: Math.max(0, hoveredLocation.rect.y - 8),
-                      transform: "translateY(-100%)",
-                    }}
-                  >
-                    <p className="font-semibold text-white">
-                      {t(SEVERITY_LABEL[hoveredMatch.severity])} · {hoveredMatch.matchPercent}%
-                    </p>
-                    <p className="mt-0.5 truncate text-ink-300">{hoveredMatch.sourceTitle}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </Document>
-        ) : null}
-      </div>
     </div>
   );
 }

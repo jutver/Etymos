@@ -89,7 +89,7 @@ uvicorn api.app:app --host 0.0.0.0 --port 8000
 
 On Windows, `.\backend\run_api.ps1` loads the env file and starts uvicorn. Swagger docs are at `http://127.0.0.1:8000/docs`, and a health check is at `/api/health`.
 
-The backend reads `backend/.env` or the repo-root `.env.backend` (the same file `docker-compose.yml` uses). The main settings:
+The backend reads `backend/.env` or the repo-root `.env.backend`. The main settings:
 
 | Variable | Purpose |
 |---|---|
@@ -104,8 +104,6 @@ The backend reads `backend/.env` or the repo-root `.env.backend` (the same file 
 | `SMTP_*`, `SUPPORT_*` | Outgoing email and the support inbox |
 | `GPU_*`, `MARKER_*` | GPU memory budget and the Marker PDF preview |
 | `RATE_LIMIT_*` | Per-endpoint rate limits |
-
-To run it in Docker instead, use `docker compose up` (GPU) or `docker compose -f docker-compose.cpu.yml up`.
 
 ### Database
 

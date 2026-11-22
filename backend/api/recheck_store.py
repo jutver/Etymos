@@ -22,7 +22,14 @@ logger = logging.getLogger(__name__)
 # A finished re-check is worth one retry: the GPU work is already done.
 _INSERT_ATTEMPTS = 2
 
-_PASSAGE_COLUMNS = "id, text, block_type, level, list_type, page, table_rows, image_url, text_marks"
+_LEGACY_PASSAGE_COLUMNS = (
+    "id, text, block_type, level, list_type, page, table_rows, image_url, text_marks"
+)
+_V2_PASSAGE_COLUMNS = (
+    "layout_band, column_role, column_count, list_number, list_depth, "
+    "formula_latex, equation_number, inline_formulas"
+)
+_PASSAGE_COLUMNS = f"{_LEGACY_PASSAGE_COLUMNS}, {_V2_PASSAGE_COLUMNS}"
 
 
 class RecheckStoreError(RuntimeError):
@@ -32,19 +39,26 @@ class RecheckStoreError(RuntimeError):
 def fetch_passages(document_id: str) -> dict[str, dict[str, Any]]:
     """document_passages rows keyed by id, in document order ({} without
     Supabase or on error: the re-check then tells changed blocks apart by text
-    alone)."""
+    alone). Retries with legacy columns if the v2 migration has not landed."""
     client = get_client()
     if client is None:
         return {}
-    try:
-        resp = (
-            client.table("document_passages").select(_PASSAGE_COLUMNS).eq("document_id", document_id)
-            .order("sort_order").execute()
-        )
-    except Exception:
-        logger.exception("Failed to load passages for document_id=%s", document_id)
-        return {}
-    return {str(row["id"]): row for row in (resp.data or []) if row.get("id") is not None}
+    for columns in (_PASSAGE_COLUMNS, _LEGACY_PASSAGE_COLUMNS):
+        try:
+            resp = (
+                client.table("document_passages").select(columns).eq("document_id", document_id)
+                .order("sort_order").execute()
+            )
+            return {str(row["id"]): row for row in (resp.data or []) if row.get("id") is not None}
+        except Exception:
+            if columns == _LEGACY_PASSAGE_COLUMNS:
+                logger.exception("Failed to load passages for document_id=%s", document_id)
+            else:
+                logger.warning(
+                    "Selecting v2 passage columns failed for document_id=%s; falling back to legacy columns.",
+                    document_id,
+                )
+    return {}
 
 
 def version_belongs_to(version_id: str, document_id: str) -> bool:

@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "./fonts.css";
 @import "lenis/dist/lenis.css";
+@import "katex/dist/katex.min.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   /* Brand — research navy and accessible blue */
@@ -366,4 +369,25 @@ mark[data-edited]::after {
   .studio-page tbody tr:hover { background-color: #f1f5fb; }
   @media (prefers-reduced-motion: reduce) {
     .studio-page input, .studio-page textarea, .studio-page select, .studio-page tbody tr { transition: none; }
+  }
+
+  /* Report > Document view: multi-column bands & KaTeX math blocks. */
+  [data-layout-band="columns"] p,
+  [data-layout-band="columns"] li {
+    overflow-wrap: anywhere;
+  }
+
+  .formula-block {
+    overflow-x: auto;
+    user-select: text;
+  }
+
+  .formula-block .katex-display {
+    margin: 0;
+  }
+
+  .inline-formula {
+    display: inline-block;
+    vertical-align: middle;
+    padding: 0 0.125rem;
   }

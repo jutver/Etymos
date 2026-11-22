@@ -5,8 +5,8 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import "./MetallicPaint.css";
 
-const WORKING_SIZE = 512;
-const MAX_SIDE = 2048;
+const WORKING_SIZE = 256;
+const MAX_SIDE = 512;
 const MAX_PIXELS = 2560 * 1600 * 2;
 
 const VERTEX = `#version 300 es
@@ -433,6 +433,10 @@ const processShape = (source: HTMLCanvasElement) => {
   outCtx.drawImage(small, 0, 0, workW, workH, 0, 0, width, height);
   const result = outCtx.getImageData(0, 0, width, height);
   const original = source.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, width, height).data;
+  small.width = 0;
+  small.height = 0;
+  out.width = 0;
+  out.height = 0;
   for (let i = 0; i < result.data.length; i += 4) {
     const alpha = original[i + 3];
     if (alpha === 0) {
@@ -813,6 +817,8 @@ export default function MetallicPaint({
       gl.deleteBuffer(buffer);
       gl.deleteVertexArray(vao);
       gl.deleteProgram(program);
+      canvas.width = 0;
+      canvas.height = 0;
     };
   }, []);
 
@@ -826,8 +832,15 @@ export default function MetallicPaint({
     engineRef.current?.setPending(true);
     source
       .then((canvas) => {
-        if (!active || !canvas) return;
+        if (!canvas) return;
+        if (!active) {
+          canvas.width = 0;
+          canvas.height = 0;
+          return;
+        }
         const data = processShape(canvas);
+        canvas.width = 0;
+        canvas.height = 0;
         if (active) engineRef.current?.setImage(data);
       })
       .catch(() => {

@@ -30,7 +30,12 @@ from collections import Counter, defaultdict
 
 import fitz
 
+import pdf_formula
+import pdf_ocr
+
 logger = logging.getLogger(__name__)
+
+_ARXIV_STAMP_RE = re.compile(r"^\s*arXiv\s*:\s*\d{4}\.\d{4,5}", re.IGNORECASE)
 
 # A page counts as rotated (a landscape table set sideways on a portrait
 # page) when most of its characters run vertically.
@@ -105,6 +110,44 @@ def dominant_rotation(page_dict):
     return 0
 
 
+def _normalize_page_dict(page_dict, page):
+    """
+    Transform raw PyMuPDF `get_text("dict")` bboxes and direction vectors by
+    `page.rotation_matrix` (clamped to visible `page.rect`) so pages with
+    `page.rotation != 0` or non-zero `CropBox` produce exact upright
+    `pdf.js` page coordinates and visual directions.
+    """
+    if not page.rotation:
+        return page_dict
+    mat = page.rotation_matrix
+    vrect = page.rect
+    blocks_out = []
+    for block in page_dict.get("blocks", []):
+        if block.get("type") != 0:
+            blocks_out.append(block)
+            continue
+        new_lines = []
+        for raw in block.get("lines", []):
+            dx, dy = raw.get("dir", (1.0, 0.0))
+            vdx = dx * mat.a + dy * mat.c
+            vdy = dx * mat.b + dy * mat.d
+            bbox = (fitz.Rect(raw["bbox"]) * mat) & vrect
+            if bbox.is_empty:
+                continue
+            new_spans = []
+            for span in raw.get("spans", []):
+                sbbox = (fitz.Rect(span["bbox"]) * mat) & vrect if span.get("bbox") else bbox
+                new_spans.append({**span, "bbox": tuple(sbbox)})
+            new_lines.append({
+                **raw,
+                "dir": (vdx, vdy),
+                "bbox": tuple(bbox),
+                "spans": new_spans,
+            })
+        blocks_out.append({**block, "lines": new_lines})
+    return {**page_dict, "blocks": blocks_out}
+
+
 def _page_lines(page_dict, page_number):
     """Horizontal text lines of one page, with fragments on the same row of
     the same PyMuPDF block joined ("3.1" + "Dataset" -> "3.1 Dataset").
@@ -141,28 +184,37 @@ def _page_lines(page_dict, page_number):
         if merged:
             block_x0 = min(line["bbox"][0] for line in merged)
             block_x1 = max(line["bbox"][2] for line in merged)
+            kept = []
             for line in merged:
-                line["text"] = _line_text(line["spans"])
+                text = _line_text(line["spans"])
+                if _ARXIV_STAMP_RE.match(text):
+                    continue
+                line["text"] = text
                 line["block_x0"] = block_x0
                 line["block_x1"] = block_x1
-            lines.extend(merged)
+                line["source"] = "native"
+                kept.append(line)
+            lines.extend(kept)
     return lines
+
+
+def _stamp_band_meta(lines, band: int, role: str, column_count: int) -> None:
+    for line in lines:
+        line["layout_band"] = band
+        line["column_role"] = role
+        line["column_count"] = column_count
 
 
 def reading_order(lines):
     """
-    Lines of one page in reading order.
+    Lines of one page in reading order, annotated with explicit layout band and
+    column role metadata (`layout_band`, `column_role`, `column_count`).
 
-    PyMuPDF returns blocks in the order the PDF draws them, which is the
-    reading order for most files but not for every two-column layout (a
-    right column drawn first, a text box added late). On a two-column page
-    the page is cut into bands at blocks spanning both columns (the title,
-    a wide table, a figure caption across the page); inside each band the
-    left column is read top to bottom, then the right one.
-
-    A single-column page keeps PyMuPDF's order untouched.
+    A single-column page stamps metadata in place and keeps the exact input list
+    object untouched (`reading_order(lines) is lines`).
     """
     if len(lines) < 10:
+        _stamp_band_meta(lines, 0, "full", 1)
         return lines
     x0 = min(l["bbox"][0] for l in lines)
     x1 = max(l["bbox"][2] for l in lines)
@@ -171,13 +223,32 @@ def reading_order(lines):
     left = [l for l in lines if l["bbox"][2] <= middle + gutter and len(l["text"].split()) >= 5]
     right = [l for l in lines if l["bbox"][0] >= middle - gutter and len(l["text"].split()) >= 5]
     if len(left) < 5 or len(right) < 5:
+        _stamp_band_meta(lines, 0, "full", 1)
         return lines
 
-    blocks = defaultdict(list)
+    raw_blocks = defaultdict(list)
     for line in lines:
-        blocks[line["block"]].append(line)
+        raw_blocks[line["block"]].append(line)
+
+    def _line_col(l):
+        bx0, _, bx1, _ = l["bbox"]
+        if bx1 <= middle + gutter:
+            return 0
+        if bx0 >= middle - gutter:
+            return 1
+        return None
+
+    blocks = []
+    for block_lines in raw_blocks.values():
+        cols = {_line_col(l) for l in block_lines}
+        if None not in cols and cols == {0, 1}:
+            blocks.append([l for l in block_lines if _line_col(l) == 0])
+            blocks.append([l for l in block_lines if _line_col(l) == 1])
+        else:
+            blocks.append(block_lines)
+
     boxes = []
-    for block_lines in blocks.values():
+    for block_lines in blocks:
         bx0 = min(l["bbox"][0] for l in block_lines)
         bx1 = max(l["bbox"][2] for l in block_lines)
         by0 = min(l["bbox"][1] for l in block_lines)
@@ -194,23 +265,35 @@ def reading_order(lines):
     ordered = []
     placed = set()
     top = float("-inf")
+    band_idx = 0
     for separator in spanning + [None]:
         bottom = separator["y0"] if separator else float("inf")
-        for column in (0, 1):
+        col_placed = False
+        for column, role in ((0, "left"), (1, "right")):
             band = [
                 b for b in boxes
                 if b["column"] == column and id(b) not in placed
                 and top - 1 <= (b["y0"] + b["y1"]) / 2 < bottom + 1
             ]
             for b in sorted(band, key=lambda b: b["y0"]):
+                _stamp_band_meta(b["lines"], band_idx, role, 2)
                 ordered.append(b)
                 placed.add(id(b))
+                col_placed = True
+        if col_placed:
+            band_idx += 1
         if separator is not None:
+            _stamp_band_meta(separator["lines"], band_idx, "full", 1)
             ordered.append(separator)
             placed.add(id(separator))
+            band_idx += 1
             top = separator["y1"]
     # Anything a band missed (overlapping boxes) keeps its place at the end.
-    ordered += [b for b in boxes if id(b) not in placed]
+    leftover = [b for b in boxes if id(b) not in placed]
+    if leftover:
+        for b in leftover:
+            _stamp_band_meta(b["lines"], band_idx, "full", 1)
+            ordered.append(b)
     return [line for b in ordered for line in b["lines"]]
 
 
@@ -430,14 +513,30 @@ def _mark_captions(lines):
 # --- Tables -----------------------------------------------------------------
 
 def _drawings(page):
-    """The page's vector paths in PyMuPDF's raw form (tuples, no Point
-    objects): `get_drawings()` builds Python objects for every point and
-    takes seconds on a page with a dense plot."""
+    """The page's vector paths normalized into visible `page.rect` coordinates."""
     try:
-        return page.get_cdrawings()
+        raw = page.get_cdrawings()
     except Exception:
         logger.exception("Could not read drawings on page %s", page.number + 1)
         return []
+    if not page.rotation:
+        return raw
+    mat = page.rotation_matrix
+    vrect = page.rect
+    out = []
+    for d in raw:
+        items = []
+        for item in d.get("items", []):
+            kind = item[0]
+            if kind == "l":
+                items.append(("l", item[1] * mat, item[2] * mat))
+            elif kind == "re":
+                items.append(("re", fitz.Rect(item[1]) * mat))
+            else:
+                items.append(item)
+        r = (fitz.Rect(d["rect"]) * mat) & vrect
+        out.append({**d, "rect": tuple(r), "items": items})
+    return out
 
 
 def _horizontal_rules(drawings):
@@ -460,9 +559,22 @@ def _horizontal_rules(drawings):
 
 def _words_in(page, rect):
     try:
-        return [w for w in page.get_text("words", clip=rect) if w[4].strip()]
+        words = page.get_text("words") if page.rotation else page.get_text("words", clip=rect)
     except Exception:
         return []
+    out = []
+    mat = page.rotation_matrix if page.rotation else None
+    vrect = page.rect
+    for w in words:
+        if not str(w[4]).strip():
+            continue
+        wb = fitz.Rect(w[:4])
+        if mat is not None:
+            wb = (wb * mat) & vrect
+            if wb.is_empty or not wb.intersects(rect):
+                continue
+        out.append((wb.x0, wb.y0, wb.x1, wb.y1, w[4], w[5], w[6], w[7]))
+    return out
 
 
 def _word_rows(words, size):
@@ -786,7 +898,7 @@ def _detect_figures(page, page_number, page_lines, body_size, limits, repeated_x
     except Exception:
         infos = []
     for info in infos:
-        rect = fitz.Rect(info["bbox"]) & page.rect
+        rect = pdf_ocr.transform_rect_to_viewport(info["bbox"], page)
         if rect.is_empty or info.get("xref") in repeated_xrefs:
             continue
         share = rect.width * rect.height / area
@@ -911,23 +1023,71 @@ def _snapshot(page, rect):
 
 # --- Whole document ---------------------------------------------------------
 
+def _stamp_item_column_meta(item, page_lines, rect, page_width):
+    """Infer `layout_band`, `column_role`, `column_count` for a table/figure/formula box."""
+    is_two_col = any(l.get("column_count") == 2 for l in page_lines)
+    if is_two_col and page_lines:
+        x0 = min(l["bbox"][0] for l in page_lines)
+        x1 = max(l["bbox"][2] for l in page_lines)
+        middle = (x0 + x1) / 2
+        gutter = 0.02 * (x1 - x0)
+        if rect.x1 <= middle + gutter:
+            role, col_count = "left", 2
+        elif rect.x0 >= middle - gutter:
+            role, col_count = "right", 2
+        else:
+            role, col_count = "full", 1
+    else:
+        role, col_count = "full", 1
+
+    above_same = [
+        l for l in page_lines
+        if l.get("bbox") and l["bbox"][1] <= rect.y0 + 4 and (col_count == 1 or l.get("column_count") == 2)
+    ]
+    if above_same:
+        band = max(above_same, key=lambda l: l["bbox"][1]).get("layout_band", 0)
+    elif page_lines:
+        band = min(page_lines, key=lambda l: abs(l["bbox"][1] - rect.y0)).get("layout_band", 0)
+    else:
+        band = 0
+    item["layout_band"] = band
+    item["column_role"] = role
+    item["column_count"] = col_count
+
+
 def analyze_pdf(pdf_path, media=True):
     """
     Returns {
       "lines":  content lines in reading order (each {"page", "block",
                 "bbox", "size", "spans", "text", "block_x0", "block_x1",
+                "layout_band", "column_role", "column_count",
                 optional "caption"/"caption_id"}) — page furniture, the
-                table of contents, and the text of detected tables and
-                figure labels removed;
+                table of contents, vertical margin watermarks, and the text
+                of detected tables and figure labels removed;
       "tables": [{"page", "rows", "reliable", "caption_id", "image_bytes"?,
                   "anchor": (page, y)}];
       "figures": [{"page", "image_bytes", "anchor": (page, y)}];
       "rotated_pages": [page numbers read through an upright copy];
+      "extraction_meta": {pipeline_version, document_mode, total_pages, ...};
     }
     With media=False (source papers, where only the text matters) tables
     and figures are not looked for, and their text stays in the lines.
     """
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:
+        raise ValueError("This PDF is password-protected or corrupted and cannot be read.") from exc
+
+    if doc.needs_pass or doc.is_encrypted:
+        authenticated = False
+        try:
+            authenticated = bool(doc.authenticate(""))
+        except Exception:
+            authenticated = False
+        if not authenticated:
+            doc.close()
+            raise ValueError("This PDF is password-protected or corrupted and cannot be read.")
+
     keep_alive = []
     try:
         return _analyze(doc, media, keep_alive)
@@ -940,31 +1100,55 @@ def analyze_pdf(pdf_path, media=True):
 def _analyze(doc, media, keep_alive):
     pages = []
     rotated_pages = []
+    ocr_pages = []
+    warnings = []
     for index, page in enumerate(doc):
         number = index + 1
         try:
-            data = page.get_text("dict")
-            rotation = dominant_rotation(data)
+            raw_dict = page.get_text("dict")
+            mode, mode_meta = pdf_ocr.classify_page_mode(page, raw_dict)
+            rotation = 0
             work_page = page
-            if rotation:
-                upright = fitz.open()
-                keep_alive.append(upright)
-                rect = page.rect
-                work_page = upright.new_page(width=rect.height, height=rect.width)
-                work_page.show_pdf_page(work_page.rect, doc, index, rotate=rotation)
-                data = work_page.get_text("dict")
-                rotated_pages.append(number)
-            lines = reading_order(_page_lines(data, number))
-            # Positions on a page shown as-is: the PDF viewer can draw a
-            # highlight there (pdf_geometry.py). Not on a sideways page read
-            # through an upright copy, nor on one the PDF itself rotates.
-            exact = not rotation and page.rotation == 0
-            for line in lines:
-                line["page_height"] = work_page.rect.height
-                line["exact_position"] = exact
+
+            if mode == "ocr":
+                ocr_res = pdf_ocr.extract_page_with_ocr(page, number, mode="ocr")
+                lines = reading_order(ocr_res.lines)
+                ocr_pages.append(number)
+                warnings.extend(ocr_res.warnings)
+                page_layout_regions = ocr_res.layout_regions
+            else:
+                page_layout_regions = []
+                data = _normalize_page_dict(raw_dict, page)
+                rotation = dominant_rotation(data)
+                if rotation:
+                    upright = fitz.open()
+                    keep_alive.append(upright)
+                    rect = page.rect
+                    work_page = upright.new_page(width=rect.height, height=rect.width)
+                    work_page.show_pdf_page(work_page.rect, doc, index, rotate=rotation)
+                    data = work_page.get_text("dict")
+                    rotated_pages.append(number)
+                native_lines = _page_lines(data, number)
+                if mode == "hybrid" and mode_meta.get("ocr_regions"):
+                    ocr_res = pdf_ocr.extract_page_with_ocr(
+                        page, number, mode="hybrid", ocr_regions=mode_meta["ocr_regions"]
+                    )
+                    if ocr_res.lines:
+                        native_lines.extend(ocr_res.lines)
+                        ocr_pages.append(number)
+                    warnings.extend(ocr_res.warnings)
+                    page_layout_regions = ocr_res.layout_regions
+                lines = reading_order(native_lines)
+                # Positions in visible upright `page.rect` frame are exact for
+                # both native pages (including rotated CropBox pages) and OCR
+                # pages, except sideways pages copied onto an upright canvas.
+                exact = not rotation
+                for line in lines:
+                    line["page_height"] = work_page.rect.height
+                    line["exact_position"] = exact
         except Exception:
             logger.exception("Could not read page %d; skipping it.", number)
-            work_page, lines, rotation = page, [], 0
+            work_page, lines, rotation, page_layout_regions = page, [], 0, []
         pages.append({
             "number": number,
             "page": work_page,
@@ -972,6 +1156,7 @@ def _analyze(doc, media, keep_alive):
             "width": work_page.rect.width,
             "rotated": bool(rotation),
             "lines": lines,
+            "layout_regions": page_layout_regions,
         })
 
     all_lines = [l for p in pages for l in p["lines"]]
@@ -986,7 +1171,9 @@ def _analyze(doc, media, keep_alive):
     all_lines = [l for p in pages for l in p["lines"]]
     _mark_captions(all_lines)
 
-    tables, figures = [], []
+    tables, figures, formulas = [], [], []
+    formula_count = 0
+    formula_fallback_count = 0
     if media:
         counts = _image_page_counts(doc)
         page_total = len(doc) or 1
@@ -1023,29 +1210,77 @@ def _analyze(doc, media, keep_alive):
                 figs = []
             for figure in figs:
                 consumed |= figure.pop("absorbed")
+            try:
+                found_formulas, consumed_formulas = pdf_formula.detect_display_formulas(
+                    page["page"],
+                    [l for l in page_lines if id(l) not in consumed],
+                    body_size,
+                    doclayout_regions=page.get("layout_regions"),
+                    table_rects=[t["bbox"] for t in found],
+                    figure_rects=[f["bbox"] for f in figs],
+                )
+            except Exception:
+                logger.exception("Formula detection failed on page %d", page["number"])
+                found_formulas, consumed_formulas = [], set()
+            consumed |= consumed_formulas
             page["lines"] = [l for l in page_lines if id(l) not in consumed]
             for table in found:
                 table["anchor"] = _anchor(page, table, table["bbox"])
+                _stamp_item_column_meta(table, page["lines"], table["bbox"], page["width"])
                 if not table["reliable"]:
                     table["image_bytes"] = _snapshot(table["_render_page"], table["bbox"])
                 tables.append(table)
             for figure in figs:
                 figure["anchor"] = _anchor(page, figure, figure["bbox"])
+                _stamp_item_column_meta(figure, page["lines"], figure["bbox"], page["width"])
                 figure["image_bytes"] = _snapshot(figure["_render_page"], figure["bbox"])
                 if figure["image_bytes"]:
                     figures.append(figure)
+            for formula in found_formulas:
+                formula["anchor"] = _anchor(page, formula, formula["bbox"])
+                _stamp_item_column_meta(formula, page["lines"], formula["bbox"], page["width"])
+                formula_count += 1
+                if formula.get("used_fallback"):
+                    formula_fallback_count += 1
+                formulas.append(formula)
 
-    for item in tables + figures:
+    for item in tables + figures + formulas:
         item.pop("_render_page", None)
         item["bbox"] = tuple(item["bbox"])
 
     lines = [l for p in pages for l in p["lines"]]
+    total_pages = len(pages)
+    ocr_page_set = sorted(set(ocr_pages))
+    multi_column_pages = sorted({
+        p["number"] for p in pages
+        if any(l.get("column_count") == 2 for l in p["lines"])
+    })
+    if not ocr_page_set:
+        doc_mode = "native"
+    elif len(ocr_page_set) == total_pages and all(
+        l.get("source") == "ocr" for p in pages for l in p["lines"]
+    ):
+        doc_mode = "ocr"
+    else:
+        doc_mode = "hybrid"
+
     return {
         "lines": lines,
         "tables": tables,
         "figures": figures,
+        "formulas": formulas,
         "rotated_pages": rotated_pages,
         "body_size": body_size,
+        "extraction_meta": {
+            "pipeline_version": 2,
+            "document_mode": doc_mode,
+            "total_pages": total_pages,
+            "ocr_pages": ocr_page_set,
+            "multi_column_pages": multi_column_pages,
+            "formula_count": formula_count,
+            "formula_fallback_count": formula_fallback_count,
+            "warnings": warnings,
+        },
     }
 
 
@@ -1071,6 +1306,21 @@ def starts_new_paragraph(previous, line, body_size):
     if not previous.get("bbox") or not line.get("bbox"):
         return False
     if previous.get("caption_id") != line.get("caption_id"):
+        return True
+    if (
+        previous.get("column_count") is not None
+        and line.get("column_count") is not None
+        and previous["column_count"] != line["column_count"]
+    ):
+        return True
+    if (
+        previous["page"] == line["page"]
+        and previous.get("column_count") == 2
+        and line.get("column_count") == 2
+        and previous.get("layout_band") is not None
+        and line.get("layout_band") is not None
+        and previous["layout_band"] != line["layout_band"]
+    ):
         return True
     ends_sentence = previous["text"].rstrip().endswith(TERMINAL_PUNCTUATION)
     if previous["page"] != line["page"]:

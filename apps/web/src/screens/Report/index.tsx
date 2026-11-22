@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FileMagnifyingGlass, Sparkle } from "@phosphor-icons/react";
+import { FileMagnifyingGlass, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
 import { MotionConfig, m } from "motion/react";
-import type { PdfRect } from "@etymos/shared";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
 import { changedRecheckQuote, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -43,20 +42,14 @@ import { estimateScore, type PassageCheck } from "./rewriteScore";
 import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types";
 import { t as tl, tr, useLanguage } from "../../lib/i18n";
 import { effectiveTier, paywallPath } from "../../lib/paywall";
+import { PDF_SIGNED_URL_TTL_SECONDS, computeSignedUrlExpiresAt, isSignedUrlStale } from "../../lib/pdfSignedUrl";
 
 // Private Storage bucket the backend uploads original PDFs into (see
 // backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
 const DOCUMENTS_BUCKET = "documents";
 
-// Stable empties for the highlight kind that is switched off (see
-// highlightMode), so the PDF viewer doesn't re-search on every render.
-const NO_MATCHES: MatchedSource[] = [];
-const NO_AI_SEGMENTS: { id: string; start: number; end: number; excerpt: string; score: number; pdfRects?: PdfRect[] }[] = [];
+// Stable empty set when AI passage overlays are hidden in DocumentCanvas.
 const NO_PASSAGE_IDS = new Set<string>();
-// Short-lived on purpose (regenerated fresh every time this screen loads a
-// historical document — see the signed-URL effect below), matching the
-// pattern already used in apps/admin/src/lib/verificationQueries.ts.
-const PDF_SIGNED_URL_TTL_SECONDS = 300;
 /** Longest the splash waits for the original PDF to draw. */
 const PDF_SPLASH_TIMEOUT_MS = 15_000;
 
@@ -182,41 +175,109 @@ export default function ReportPage() {
   // bucket at `{user_id}/{document_id}.pdf` (backend/api/app.py's
   // _storage_path/get_source_pdf).
   const { user } = useAuth();
-  const [signedPdfUrl, setSignedPdfUrl] = useState<string | null>(null);
-  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
-
+  const userId = user?.id ?? null;
+  const docFileName = doc?.fileName ?? "";
+  const hasCachedPdfUrl = Boolean(cachedDoc?.pdfUrl);
   // A .docx has a PDF there only when the server could render one (backend
   // docx_to_pdf.py, needs LibreOffice). Without it the document simply has
   // no Original view - not an error.
-  const isDocx = /\.docx$/i.test(doc?.fileName ?? "");
+  const isDocx = /\.docx$/i.test(docFileName);
+
+  const [signedPdfUrl, setSignedPdfUrl] = useState<string | null>(null);
+  const [signedPdfLoading, setSignedPdfLoading] = useState(false);
+  const [hadSignedPdf, setHadSignedPdf] = useState(false);
+  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
+  const signedPdfExpiresAtRef = useRef<number | null>(null);
+  const signedPdfReqGenRef = useRef(0);
+  const signedPdfInFlightRef = useRef<Promise<boolean> | null>(null);
+
+  const fetchSignedPdfUrl = useCallback(
+    (opts?: { clearExisting?: boolean }): Promise<boolean> => {
+      if (!id || hasCachedPdfUrl || !docFileName || !userId) {
+        return Promise.resolve(false);
+      }
+      if (signedPdfInFlightRef.current) {
+        return signedPdfInFlightRef.current;
+      }
+
+      const gen = ++signedPdfReqGenRef.current;
+      if (opts?.clearExisting) {
+        setSignedPdfUrl(null);
+      }
+      setSignedPdfLoading(true);
+      setPdfFetchError(null);
+
+      const promise = (async () => {
+        try {
+          const { data, error } = await supabase.storage
+            .from(DOCUMENTS_BUCKET)
+            .createSignedUrl(`${userId}/${id}.pdf`, PDF_SIGNED_URL_TTL_SECONDS);
+          if (signedPdfReqGenRef.current !== gen) return false;
+          if (error || !data?.signedUrl) {
+            signedPdfExpiresAtRef.current = null;
+            setSignedPdfUrl(null);
+            setPdfFetchError(
+              isDocx ? null : (error?.message ?? tl("Could not create a preview link for the original PDF.")),
+            );
+            return false;
+          }
+          signedPdfExpiresAtRef.current = computeSignedUrlExpiresAt();
+          setHadSignedPdf(true);
+          setSignedPdfUrl(data.signedUrl);
+          return true;
+        } catch (err) {
+          if (signedPdfReqGenRef.current !== gen) return false;
+          signedPdfExpiresAtRef.current = null;
+          setSignedPdfUrl(null);
+          setPdfFetchError(
+            isDocx
+              ? null
+              : err instanceof Error
+                ? err.message
+                : tl("Could not create a preview link for the original PDF."),
+          );
+          return false;
+        } finally {
+          if (signedPdfReqGenRef.current === gen) {
+            setSignedPdfLoading(false);
+            signedPdfInFlightRef.current = null;
+          }
+        }
+      })();
+
+      signedPdfInFlightRef.current = promise;
+      return promise;
+    },
+    [id, hasCachedPdfUrl, docFileName, userId, isDocx],
+  );
+
   useEffect(() => {
+    setHadSignedPdf(false);
+    signedPdfExpiresAtRef.current = null;
+
     // A fresh check of a PDF already has the file in memory (pdfUrl); a fresh
     // .docx check doesn't, but its rendering may be in Storage by now.
-    if (!id || cachedDoc?.pdfUrl || !doc || !doc.fileName || !user) {
+    if (!id || hasCachedPdfUrl || !docFileName || !userId) {
+      signedPdfReqGenRef.current += 1;
+      signedPdfInFlightRef.current = null;
       setSignedPdfUrl(null);
+      setSignedPdfLoading(false);
       setPdfFetchError(null);
       return;
     }
-    let cancelled = false;
-    setPdfFetchError(null);
-    supabase.storage
-      .from(DOCUMENTS_BUCKET)
-      .createSignedUrl(`${user.id}/${id}.pdf`, PDF_SIGNED_URL_TTL_SECONDS)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data?.signedUrl) {
-          setSignedPdfUrl(null);
-          setPdfFetchError(
-            isDocx ? null : (error?.message ?? tl("Could not create a preview link for the original PDF.")),
-          );
-          return;
-        }
-        setSignedPdfUrl(data.signedUrl);
-      });
+
+    void fetchSignedPdfUrl({ clearExisting: true });
+
     return () => {
-      cancelled = true;
+      signedPdfReqGenRef.current += 1;
+      signedPdfInFlightRef.current = null;
     };
-  }, [id, cachedDoc, doc, user, isDocx]);
+  }, [id, hasCachedPdfUrl, docFileName, userId, fetchSignedPdfUrl]);
+
+  const handleRefreshPdfUrl = useCallback(
+    () => (hasCachedPdfUrl ? Promise.resolve(false) : fetchSignedPdfUrl({ clearExisting: true })),
+    [hasCachedPdfUrl, fetchSignedPdfUrl],
+  );
 
   const effectivePdfUrl = cachedDoc?.pdfUrl || signedPdfUrl || undefined;
 
@@ -231,7 +292,8 @@ export default function ReportPage() {
     const timer = window.setTimeout(() => setPdfReady(true), PDF_SPLASH_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [id]);
-  const pdfComing = Boolean(effectivePdfUrl) || (!cachedDoc && Boolean(doc?.fileName) && !pdfFetchError);
+  const pdfComing =
+    Boolean(effectivePdfUrl) || signedPdfLoading || (!cachedDoc && Boolean(doc?.fileName) && !pdfFetchError);
 
   // --- Editor state --------------------------------------------------------
   const editorRef = useRef<HTMLDivElement>(null);
@@ -253,6 +315,7 @@ export default function ReportPage() {
   const [focusTick, setFocusTick] = useState(0);
   // Plagiarism highlights on/off in the Document view (presentational only).
   const [showHighlights, setShowHighlights] = useState(true);
+  const [scanWarningDismissed, setScanWarningDismissed] = useState(false);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [comparisonMatch, setComparisonMatch] = useState<MatchedSource | null>(null);
   const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
@@ -271,10 +334,23 @@ export default function ReportPage() {
   // toolbar's view switcher, not the first thing a user sees.
   const [view, setView] = useState<ReportView>("original");
   const hasSwitchedViewRef = useRef(false);
-  const handleViewChange = useCallback((next: ReportView) => {
-    hasSwitchedViewRef.current = true;
-    setView(next);
-  }, []);
+  const handleViewChange = useCallback(
+    (next: ReportView) => {
+      hasSwitchedViewRef.current = true;
+      setView(next);
+      if (
+        next === "original" &&
+        !hasCachedPdfUrl &&
+        docFileName &&
+        userId &&
+        (!isDocx || hadSignedPdf || Boolean(signedPdfUrl)) &&
+        (!signedPdfUrl || isSignedUrlStale(signedPdfExpiresAtRef.current))
+      ) {
+        void fetchSignedPdfUrl({ clearExisting: true });
+      }
+    },
+    [hasCachedPdfUrl, docFileName, userId, isDocx, hadSignedPdf, signedPdfUrl, fetchSignedPdfUrl],
+  );
   // Pasted text and the sample report have no uploaded file, so the Original
   // view could only say so: open those on the Document view instead.
   const noFile = !!doc && !doc.fileName && !cachedDoc?.pdfUrl;
@@ -432,8 +508,6 @@ export default function ReportPage() {
   // One kind of highlight at a time. With no AI result the sidebar has no AI
   // tab, so the document stays on source highlights.
   const highlightMode: SidebarTab = doc?.aiDetection?.available ? sidebarTab : "sources";
-  const shownMatches = highlightMode === "ai" ? NO_MATCHES : visibleMatches;
-  const shownAiSegments = highlightMode === "ai" ? flaggedAiSegments : NO_AI_SEGMENTS;
   const shownAiFlaggedIds = highlightMode === "ai" ? aiFlaggedIds : NO_PASSAGE_IDS;
   const showSourceHighlights = showHighlights && highlightMode === "sources";
 
@@ -463,11 +537,11 @@ export default function ReportPage() {
   }, [refreshEditedSinceCheck]);
 
   const handlePageChange = useCallback((page: number, pageCount: number) => {
-    setPageState({ page, pageCount });
+    setPageState((prev) => (prev.page === page && prev.pageCount === pageCount ? prev : { page, pageCount }));
   }, []);
 
   const handleOriginalPageChange = useCallback((page: number, pageCount: number) => {
-    setOriginalPageState({ page, pageCount });
+    setOriginalPageState((prev) => (prev.page === page && prev.pageCount === pageCount ? prev : { page, pageCount }));
   }, []);
 
   // The Original view isn't editable, so its word/character counts come
@@ -673,12 +747,56 @@ export default function ReportPage() {
     return true;
   }
 
+  const replacePendingRewriteRef = useRef(replaceFlaggedPassage);
+  replacePendingRewriteRef.current = replaceFlaggedPassage;
   useEffect(() => {
     if (view !== "edit" || !pendingRewriteRef.current) return;
     const { match, rewritten } = pendingRewriteRef.current;
     pendingRewriteRef.current = null;
-    replaceFlaggedPassage(match, rewritten);
-  });
+    replacePendingRewriteRef.current(match, rewritten);
+  }, [view]);
+
+  const handleToggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const handleViewComparison = useCallback((match: MatchedSource) => {
+    trackEvent("source_comparison_opened");
+    setComparisonMatch(match);
+  }, []);
+  const handleRewriteMatch = useCallback(
+    (match: MatchedSource) => {
+      if (tier !== "professional") {
+        navigate(paywallPath("rewrite", id));
+        return;
+      }
+      if (locked) {
+        notifyReadingMode();
+        return;
+      }
+      trackEvent("rewrite_opened");
+      setRewriteMatch(match);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tier, navigate, id, locked],
+  );
+  const handleUpgrade = useCallback((reason: "semantic" | "ai-detection") => {
+    navigate(paywallPath(reason, id));
+  }, [navigate, id]);
+  const handleToggleHighlights = useCallback(() => {
+    setShowHighlights((v) => !v);
+    setActiveMatchId(null);
+  }, []);
+  const handleRequestUnlock = useCallback(() => {
+    if (doc?.isSample) {
+      pushToast({
+        kind: "info",
+        title: tr("This is a sample report"),
+        description: tr("Upload your own document to edit and re-check it."),
+      });
+      return;
+    }
+    setView("edit");
+  }, [doc?.isSample, pushToast]);
+  const handleRequestLock = useCallback(() => setView("document"), []);
+  const handleInsertTable = useCallback(() => canvasRef.current?.insertTable(), []);
 
   async function handleRename(next: string) {
     if (!id) return;
@@ -958,7 +1076,8 @@ export default function ReportPage() {
     );
   }
 
-  const hasOriginal = Boolean(effectivePdfUrl) || Boolean(pdfFetchError);
+  const hasOriginal =
+    Boolean(effectivePdfUrl) || Boolean(pdfFetchError) || (signedPdfLoading && (!isDocx || hadSignedPdf));
 
   return (
     <div className="studio-report fixed inset-x-0 bottom-0 top-[var(--banner-h,0px)] z-40 flex flex-col bg-surface-muted">
@@ -999,32 +1118,16 @@ export default function ReportPage() {
         toolbarSlot={
           <FormatToolbar
             locked={locked}
-            onRequestUnlock={() => {
-              // The sample is a demo: there's nothing of the user's to edit or re-check.
-              if (doc.isSample) {
-                pushToast({
-                  kind: "info",
-                  title: tr("This is a sample report"),
-                  description: tr("Upload your own document to edit and re-check it."),
-                });
-                return;
-              }
-              setView("edit");
-            }}
-            onRequestLock={() => setView("document")}
+            onRequestUnlock={handleRequestUnlock}
+            onRequestLock={handleRequestLock}
             hasOriginal={hasOriginal}
             view={view}
             onViewChange={handleViewChange}
             showHighlights={showHighlights}
-            onToggleHighlights={() => {
-              setShowHighlights((v) => !v);
-              // Flipping the switch is an explicit "show all / hide all", so it
-              // also drops any focused source rather than fighting it.
-              setActiveMatchId(null);
-            }}
-            focusActive={showsText && focusMatchId !== null}
+            onToggleHighlights={handleToggleHighlights}
+            focusActive={showsText ? focusMatchId !== null : activeMatchId !== null}
             onClearFocus={clearSelection}
-            onInsertTable={() => canvasRef.current?.insertTable()}
+            onInsertTable={handleInsertTable}
           />
         }
       />
@@ -1041,6 +1144,24 @@ export default function ReportPage() {
         </div>
       )}
 
+      {!scanWarningDismissed &&
+        doc.extractionMeta?.warnings?.some((w) => /illegible_scan/i.test(w)) && (
+          <div className="flex shrink-0 items-center justify-center gap-3 border-b border-severity-moderate-line bg-severity-moderate-bg/80 px-4 py-1.5 text-xs text-ink-700">
+            <span className="flex items-center gap-1.5">
+              <WarningCircle size={14} weight="fill" className="shrink-0 text-severity-moderate" />
+              {tl("Some scanned pages could not be read clearly and were skipped during text extraction.")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setScanWarningDismissed(true)}
+              aria-label={tr("Dismiss")}
+              className="rounded p-0.5 text-ink-500 transition-colors hover:bg-black/5 hover:text-ink-900"
+            >
+              <X size={12} weight="bold" />
+            </button>
+          </div>
+        )}
+
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <MotionConfig reducedMotion="user">
@@ -1050,21 +1171,22 @@ export default function ReportPage() {
                 initial={hasSwitchedViewRef.current ? { opacity: 0 } : false}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-                className="relative flex-1 overflow-hidden"
+                className="relative flex flex-1 overflow-hidden"
               >
                 <PlagiarismPdfViewer
                   pdfUrl={effectivePdfUrl ?? ""}
                   unavailableMessage={tl(pdfFetchError) ?? undefined}
-                  matches={shownMatches}
+                  isLoadingUrl={signedPdfLoading && !effectivePdfUrl}
+                  onRefreshUrl={!hasCachedPdfUrl ? handleRefreshPdfUrl : undefined}
+                  matches={visibleMatches}
+                  colorIndexByMatch={colorIndexByMatch}
+                  showHighlights={showSourceHighlights}
+                  showAiHighlights={highlightMode === "ai"}
                   activeMatchId={activeMatchId}
-                  onMatchClick={(matchId) => {
-                    if (!isWideScreen()) setSidebarOpen(true);
-                    setActiveMatchId(matchId);
-                    setActiveAiSegmentId(null);
-                  }}
+                  onMatchClick={handleSelectMatch}
                   onPageChange={handleOriginalPageChange}
                   overLimitOffset={overLimitOffset}
-                  aiSegments={shownAiSegments}
+                  aiSegments={flaggedAiSegments}
                   activeAiSegmentId={activeAiSegmentId}
                   onAiSegmentClick={handleSelectAiSegment}
                   onReady={handlePdfReady}
@@ -1137,25 +1259,10 @@ export default function ReportPage() {
           tab={sidebarTab}
           onTabChange={handleSidebarTabChange}
           onSelect={handleSelectMatch}
-          onViewComparison={(match) => {
-            trackEvent("source_comparison_opened");
-            setComparisonMatch(match);
-          }}
-          onRewrite={(match) => {
-            if (tier !== "professional") {
-              navigate(paywallPath("rewrite", id));
-              return;
-            }
-            // Don't spend an AI call on a rewrite that can't be applied.
-            if (locked) {
-              notifyReadingMode();
-              return;
-            }
-            trackEvent("rewrite_opened");
-            setRewriteMatch(match);
-          }}
+          onViewComparison={handleViewComparison}
+          onRewrite={handleRewriteMatch}
           onCite={handleCite}
-          onUpgrade={(reason) => navigate(paywallPath(reason, id))}
+          onUpgrade={handleUpgrade}
           scoreBadge={
             <ScoreChip
               compact
@@ -1165,7 +1272,7 @@ export default function ReportPage() {
             />
           }
           open={sidebarOpen}
-          onToggle={() => setSidebarOpen((v) => !v)}
+          onToggle={handleToggleSidebar}
         />
       </div>
 

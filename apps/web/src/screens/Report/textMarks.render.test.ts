@@ -41,4 +41,30 @@ describe("renderPassageText with text marks", () => {
   it("renders unchanged when there are no marks", () => {
     expect(html(renderPassageText(text, [], new Map(), false))).toBe(`<span>${text}</span>`);
   });
+
+  it("renders inline formulas alongside textMarks and plagiarism highlights without editing corruption", () => {
+    const mathText = "We optimize L = wx + b where α ∈ ℝ for PhoBERT.";
+    const mathFormulas = [
+      { start: 12, end: 22, latex: "L = wx + b" },
+      { start: 29, end: 34, latex: String.raw`\alpha \in \mathbb{R}` },
+    ];
+    const boldPho = [{ start: 39, end: 46, style: "bold" as const }];
+    const highlightSpan: PassageSpan = {
+      matchId: "m1",
+      tone: "heavy",
+      start: 23,
+      end: 35,
+      approximate: false,
+    };
+
+    const out = html(
+      renderPassageText(mathText, [highlightSpan], new Map([["m1", 0]]), false, boldPho, mathFormulas),
+    );
+    expect(out).toContain('data-inline-formula="L = wx + b"');
+    expect(out).toContain('contentEditable="false"');
+    expect(out).toContain('class="inline-formula"');
+    expect(out).toContain("<mark");
+    expect(out).toContain("<strong>PhoBERT</strong>");
+    expect(out).toContain("katex");
+  });
 });

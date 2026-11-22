@@ -11,6 +11,7 @@ import type { CheckedDocument, DocPassage, DocStatus, HistoryEntry, MatchedSourc
 import { statusFromScore } from "../components/Severity";
 import type { DocumentVersion, VersionCheck } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
+import { parseExtractionMeta, parseInlineFormulas } from "./extractionMeta";
 import { parseExplanationFacts } from "./matchExplanation";
 import { parsePdfRects } from "./pdfRects";
 import { tr } from "./i18n";
@@ -43,6 +44,8 @@ interface DocumentRow {
   unlocked_tier?: "student" | "professional" | null;
   // Added by supabase/migrations/20261110000000_onboarding_trial_sample.sql.
   is_sample?: boolean | null;
+  // Added by supabase/migrations/20261122000000_document_layout_and_formulas.sql.
+  extraction_meta?: unknown;
 }
 
 /** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
@@ -105,6 +108,15 @@ interface DocumentPassageRow {
   // Added by supabase/migrations/20260927000000_document_passage_text_marks.sql.
   // Optional: absent until that migration is applied.
   text_marks?: DocPassage["textMarks"] | null;
+  // Added by supabase/migrations/20261122000000_document_layout_and_formulas.sql.
+  layout_band?: number | null;
+  column_role?: string | null;
+  column_count?: number | null;
+  list_number?: number | null;
+  list_depth?: number | null;
+  formula_latex?: string | null;
+  equation_number?: string | null;
+  inline_formulas?: unknown;
 }
 
 function toHistoryEntry(row: DocumentRow): HistoryEntryWithCheck {
@@ -192,19 +204,35 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     pdfRects: parsePdfRects(m.pdf_rects),
   }));
 
-  const passages: DocPassage[] = passageRows.map((p) => ({
-    id: p.id,
-    text: p.text ?? "",
-    severity: p.severity ?? undefined,
-    matchId: p.match_id ?? undefined,
-    blockType: p.block_type ?? undefined,
-    level: p.level ?? undefined,
-    listType: p.list_type ?? undefined,
-    page: p.page ?? undefined,
-    tableRows: p.table_rows ?? undefined,
-    imageUrl: p.image_url ?? undefined,
-    textMarks: p.text_marks ?? undefined,
-  }));
+  const passages: DocPassage[] = passageRows.map((p) => {
+    const passageText = p.text ?? "";
+    const columnRole =
+      p.column_role === "full" || p.column_role === "left" || p.column_role === "right"
+        ? p.column_role
+        : undefined;
+    const columnCount = p.column_count === 1 || p.column_count === 2 ? p.column_count : undefined;
+    return {
+      id: p.id,
+      text: passageText,
+      severity: p.severity ?? undefined,
+      matchId: p.match_id ?? undefined,
+      blockType: p.block_type ?? undefined,
+      level: p.level ?? undefined,
+      listType: p.list_type ?? undefined,
+      listNumber: typeof p.list_number === "number" && p.list_number >= 1 ? p.list_number : undefined,
+      listDepth: typeof p.list_depth === "number" && p.list_depth >= 0 ? p.list_depth : undefined,
+      page: p.page ?? undefined,
+      layoutBand: typeof p.layout_band === "number" ? p.layout_band : undefined,
+      columnRole,
+      columnCount,
+      tableRows: p.table_rows ?? undefined,
+      imageUrl: p.image_url ?? undefined,
+      formulaLatex: p.formula_latex ?? undefined,
+      equationNumber: p.equation_number ?? undefined,
+      inlineFormulas: parseInlineFormulas(p.inline_formulas, passageText.length),
+      textMarks: p.text_marks ?? undefined,
+    };
+  });
 
   return {
     id: docRow.id,
@@ -220,6 +248,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     passages,
     matches,
     aiDetection: parseAiDetection(docRow.ai_detection),
+    extractionMeta: parseExtractionMeta(docRow.extraction_meta),
     unlockedTier: docRow.unlocked_tier ?? undefined,
     ...(docRow.is_sample ? { isSample: true } : {}),
   };

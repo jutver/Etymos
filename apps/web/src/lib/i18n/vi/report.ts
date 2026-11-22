@@ -277,4 +277,14 @@ export const report: Record<string, string> = {
   "Saved without a re-check, so it has no score.": "Đã lưu nhưng chưa kiểm tra lại, nên chưa có điểm.",
   "Similarity {{score}}%": "Tương đồng {{score}}%",
   "AI {{score}}%": "AI {{score}}%",
+  "Some scanned pages could not be read clearly and were skipped during text extraction.":
+    "Một số trang quét không đủ rõ để đọc nên đã được bỏ qua khi trích xuất văn bản.",
+  "This PDF is password-protected or corrupted and cannot be read.":
+    "File PDF này có mật khẩu bảo vệ hoặc bị hỏng nên không thể đọc.",
+  "No readable text could be extracted from this PDF.":
+    "Không thể trích xuất văn bản đọc được từ file PDF này.",
+  "Mathematical formula": "Công thức toán học",
+  "Shown as an image: this formula could not be converted to editable math":
+    "Hiển thị dạng ảnh: công thức này chưa thể chuyển sang định dạng toán học",
+  "Formula unavailable": "Không thể hiển thị công thức",
 };

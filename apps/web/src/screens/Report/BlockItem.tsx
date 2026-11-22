@@ -4,6 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DotsSixVertical, ImageSquare } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import type { DocBlock, MatchColorIndex, TableData } from "./blocks";
+import { FormulaBlock } from "./FormulaBlock";
 import { isOverLimit, renderPassageText } from "./renderPassageText";
 import { TableBlock } from "./TableBlock";
 import { t } from "../../lib/i18n";
@@ -24,12 +25,14 @@ export interface BlockItemProps {
   /** True when this is the block the reader picked from the AI Detection
    * sidebar card — same "focused" emphasis matches get, scoped to AI. */
   aiActive: boolean;
+  /** Computed sequential 1-based index for ordered list items. */
+  listNumber?: number;
 }
 
 /** Renders one block's actual content (no drag chrome). Split out from
  * `BlockItem` purely for readability — both are memoized together as one
  * unit below. */
-function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTableChange, aiFlagged, aiActive }: BlockItemProps) {
+function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTableChange, aiFlagged, aiActive, listNumber }: BlockItemProps) {
   const muted = isOverLimit(block.passage, overLimitOffset);
   // Paragraph-level AI wash: a left rule + faint violet background, applied
   // straight onto the block's own element (not an extra wrapper) so it still
@@ -37,8 +40,8 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
   // surrounding <ul>/<ol>.
   const aiClass = aiFlagged
     ? cn(
-        "-ml-3 rounded-r-sm border-l-[3px] border-ai-flag-line bg-ai-flag-bg/25 pl-3",
-        aiActive && "bg-ai-flag-bg/50 ring-1 ring-inset ring-ai-flag-line",
+        "-ml-3 rounded-r-sm border-l-[3px] border-ai-flag-line bg-ai-flag-bg/18 pl-3",
+        aiActive && "bg-ai-flag-bg/35 ring-1 ring-inset ring-ai-flag-line",
       )
     : undefined;
 
@@ -92,8 +95,27 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
     );
   }
 
+  if (block.kind === "formula") {
+    return (
+      <FormulaBlock
+        formulaLatex={block.formulaLatex}
+        equationNumber={block.equationNumber}
+        imageUrl={block.imageUrl}
+        fallbackText={block.passage?.text}
+        muted={muted}
+      />
+    );
+  }
+
   const text = block.passage
-    ? renderPassageText(block.passage.text, block.spans, colorIndexByMatch, muted, block.passage.textMarks)
+    ? renderPassageText(
+        block.passage.text,
+        block.spans,
+        colorIndexByMatch,
+        muted,
+        block.passage.textMarks,
+        block.passage.inlineFormulas,
+      )
     : "";
   const editableProps = {
     contentEditable: !locked,
@@ -114,13 +136,23 @@ function BlockContent({ block, colorIndexByMatch, overLimitOffset, locked, onTab
   const aiTitle = aiFlagged ? t("Flagged by AI-content detection") : undefined;
 
   if (block.kind === "list_item") {
-    const ListTag = block.listType === "number" ? "ol" : "ul";
+    const depth = Math.max(0, Math.min(4, block.listDepth ?? 0));
+    const indentStyle = depth > 0 ? { marginLeft: `${depth * 1.25}rem` } : undefined;
+    if (block.listType === "number") {
+      return (
+        <ol start={listNumber ?? 1} className="mb-0" style={indentStyle}>
+          <li {...editableProps} className={cn(editableProps.className, aiClass)} title={aiTitle}>
+            {text}
+          </li>
+        </ol>
+      );
+    }
     return (
-      <ListTag className="mb-0">
+      <ul className="mb-0" style={indentStyle}>
         <li {...editableProps} className={cn(editableProps.className, aiClass)} title={aiTitle}>
           {text}
         </li>
-      </ListTag>
+      </ul>
     );
   }
 

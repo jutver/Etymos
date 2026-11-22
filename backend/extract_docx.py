@@ -32,7 +32,7 @@ from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from extractor import clean_text, LIST_MARKER_RE, BULLET_MARKER_CHARS, FALLBACK_SECTION
+from extractor import clean_text, LIST_MARKER_RE, LIST_NUMBER_PREFIX_RE, BULLET_MARKER_CHARS, FALLBACK_SECTION
 from extractor import compute_text_marks
 
 logger = logging.getLogger(__name__)
@@ -83,24 +83,134 @@ def _has_hard_page_break(paragraph: Paragraph) -> bool:
     return False
 
 
-def _list_type_from_style(paragraph: Paragraph) -> str | None:
+_NUMBERED_NUMFMTS = {
+    "decimal",
+    "decimalzero",
+    "lowerletter",
+    "upperletter",
+    "lowerroman",
+    "upperroman",
+    "ordinal",
+    "cardinaltext",
+    "ordinaltext",
+}
+
+
+def _numbering_definitions(document: Document) -> tuple[dict[str, str], dict[tuple[str, int], dict], dict[tuple[str, int], int]]:
+    """Read numbering.xml mappings so direct and styled DOCX lists keep true bullet/number types and start numbers."""
+    num_to_abstract: dict[str, str] = {}
+    level_meta: dict[tuple[str, int], dict] = {}
+    num_start_override: dict[tuple[str, int], int] = {}
+    try:
+        numbering_part = document.part.numbering_part
+        numbering_el = numbering_part.numbering_definitions._numbering if numbering_part is not None else None
+    except Exception:
+        return num_to_abstract, level_meta, num_start_override
+    if numbering_el is None:
+        return num_to_abstract, level_meta, num_start_override
+
+    for abstract in numbering_el.findall(qn("w:abstractNum")):
+        abs_id = abstract.get(qn("w:abstractNumId"))
+        if abs_id is None:
+            continue
+        for lvl in abstract.findall(qn("w:lvl")):
+            ilvl_raw = lvl.get(qn("w:ilvl"))
+            try:
+                ilvl = max(0, min(4, int(ilvl_raw or 0)))
+            except ValueError:
+                ilvl = 0
+            num_fmt_el = lvl.find(qn("w:numFmt"))
+            num_fmt = (num_fmt_el.get(qn("w:val")) or "").lower() if num_fmt_el is not None else ""
+            start_el = lvl.find(qn("w:start"))
+            try:
+                start_val = max(1, int(start_el.get(qn("w:val")))) if start_el is not None else 1
+            except (TypeError, ValueError):
+                start_val = 1
+            list_type = "number" if num_fmt in _NUMBERED_NUMFMTS else "bullet"
+            level_meta[(abs_id, ilvl)] = {"list_type": list_type, "start": start_val}
+
+    for num_el in numbering_el.findall(qn("w:num")):
+        num_id = num_el.get(qn("w:numId"))
+        abs_el = num_el.find(qn("w:abstractNumId"))
+        abs_id = abs_el.get(qn("w:val")) if abs_el is not None else None
+        if num_id is not None and abs_id is not None:
+            num_to_abstract[num_id] = abs_id
+        if num_id is not None:
+            for override in num_el.findall(qn("w:lvlOverride")):
+                try:
+                    ilvl = max(0, min(4, int(override.get(qn("w:ilvl")) or 0)))
+                except ValueError:
+                    ilvl = 0
+                start_ov = override.find(qn("w:startOverride"))
+                if start_ov is not None:
+                    try:
+                        num_start_override[(num_id, ilvl)] = max(1, int(start_ov.get(qn("w:val"))))
+                    except (TypeError, ValueError):
+                        pass
+
+    return num_to_abstract, level_meta, num_start_override
+
+
+def _paragraph_num_pr(paragraph: Paragraph) -> tuple[str | None, int]:
+    """Return (numId, clamped ilvl 0..4) from paragraph pPr or its style pPr."""
+    p_pr_candidates = []
+    if paragraph._p.pPr is not None:
+        p_pr_candidates.append(paragraph._p.pPr)
+    if paragraph.style is not None and getattr(paragraph.style._element, "pPr", None) is not None:
+        p_pr_candidates.append(paragraph.style._element.pPr)
+
+    num_id: str | None = None
+    ilvl = 0
+    found_ilvl = False
+    for p_pr in p_pr_candidates:
+        num_pr = p_pr.numPr
+        if num_pr is None:
+            continue
+        if num_id is None and num_pr.numId is not None and num_pr.numId.val is not None:
+            raw_id = str(num_pr.numId.val)
+            if raw_id != "0":
+                num_id = raw_id
+        if not found_ilvl and num_pr.ilvl is not None and num_pr.ilvl.val is not None:
+            try:
+                ilvl = max(0, min(4, int(num_pr.ilvl.val)))
+                found_ilvl = True
+            except (TypeError, ValueError):
+                pass
+    return num_id, ilvl
+
+
+def _manual_list_number(text: str) -> int | None:
+    match = LIST_NUMBER_PREFIX_RE.match(text or "")
+    if not match:
+        return None
+    val = int(match.group(1))
+    return val if val >= 1 else None
+
+
+def _list_type_from_style(
+    paragraph: Paragraph,
+    numbering_defs: tuple[dict[str, str], dict[tuple[str, int], dict], dict[tuple[str, int], int]] | None = None,
+) -> tuple[str | None, str | None, int, int | None]:
+    num_id, ilvl = _paragraph_num_pr(paragraph)
+    if num_id is not None and numbering_defs is not None:
+        num_to_abstract, level_meta, num_start_override = numbering_defs
+        abs_id = num_to_abstract.get(num_id)
+        if abs_id is not None and (abs_id, ilvl) in level_meta:
+            meta = level_meta[(abs_id, ilvl)]
+            start_val = num_start_override.get((num_id, ilvl), meta["start"])
+            return meta["list_type"], num_id, ilvl, start_val
+
     style_name = (paragraph.style.name or "").lower() if paragraph.style else ""
     if "bullet" in style_name:
-        return "bullet"
+        return "bullet", num_id, ilvl, None
     if "number" in style_name:
-        return "number"
+        return "number", num_id, ilvl, 1
 
     p_pr = paragraph._p.pPr
-    if p_pr is not None and p_pr.numPr is not None:
-        # Direct (non-styled) numbering is applied, but resolving whether
-        # it's a bullet or an ordered numbering scheme requires walking
-        # numbering.xml's abstractNum definitions. Default to "bullet" —
-        # the more common case for ad-hoc list formatting — rather than
-        # guessing wrong the other way; either way this is a display
-        # detail, not a content-loss risk.
-        return "bullet"
+    if (p_pr is not None and p_pr.numPr is not None) or num_id is not None:
+        return "bullet", num_id, ilvl, None
 
-    return None
+    return None, None, 0, None
 
 
 def _strip_manual_marker(text: str) -> tuple[str, str | None]:
@@ -148,7 +258,12 @@ def _with_marks(block: dict, paragraph: Paragraph) -> dict:
     return block
 
 
-def _paragraph_block(paragraph: Paragraph, page: int) -> dict | None:
+def _paragraph_block(
+    paragraph: Paragraph,
+    page: int,
+    numbering_defs: tuple[dict[str, str], dict[tuple[str, int], dict], dict[tuple[str, int], int]] | None = None,
+    list_counters: dict[str, dict[int, int]] | None = None,
+) -> dict | None:
     # clean_text() already collapses any manual-line-break "\n" python-docx
     # renders inside paragraph.text; the extra .replace is a defensive
     # no-op belt-and-braces guard, not load-bearing today. See the comment
@@ -161,23 +276,48 @@ def _paragraph_block(paragraph: Paragraph, page: int) -> dict | None:
     style_name = (paragraph.style.name or "").lower() if paragraph.style else ""
     level = HEADING_STYLE_LEVEL.get(style_name)
     if level is not None:
+        if list_counters is not None:
+            list_counters.pop("__manual__", None)
         return {"type": "heading", "level": level, "list_type": None, "text": text, "page": page}
 
-    list_type = _list_type_from_style(paragraph)
-    if list_type:
-        stripped, manual_type = _strip_manual_marker(text)
-        return _with_marks({
-            "type": "list_item", "level": None,
-            "list_type": manual_type or list_type,
-            "text": stripped, "page": page,
-        }, paragraph)
-
+    list_type, num_id, ilvl, start_val = _list_type_from_style(paragraph, numbering_defs)
     stripped, manual_type = _strip_manual_marker(text)
-    if manual_type:
-        return _with_marks(
-            {"type": "list_item", "level": None, "list_type": manual_type, "text": stripped, "page": page},
-            paragraph,
-        )
+    manual_num = _manual_list_number(text) if manual_type == "number" else None
+
+    if list_type or manual_type:
+        effective_type = manual_type or list_type
+        depth = max(0, min(4, ilvl))
+        block = {
+            "type": "list_item",
+            "level": None,
+            "list_type": effective_type,
+            "list_depth": depth,
+            "text": stripped if manual_type else text,
+            "page": page,
+        }
+        if effective_type == "number":
+            scope_key = num_id or "__manual__"
+            if list_counters is not None:
+                scope = list_counters.setdefault(scope_key, {})
+                for d in [k for k in scope if k > depth]:
+                    del scope[d]
+                prev = scope.get(depth)
+                if manual_num is not None:
+                    num = manual_num
+                elif prev is not None:
+                    num = prev + 1
+                else:
+                    num = start_val if start_val is not None else 1
+                scope[depth] = num
+            else:
+                num = manual_num if manual_num is not None else (start_val if start_val is not None else 1)
+            block["list_number"] = num
+        elif list_counters is not None and not num_id:
+            list_counters.pop("__manual__", None)
+        return _with_marks(block, paragraph)
+
+    if list_counters is not None:
+        list_counters.pop("__manual__", None)
 
     return _with_marks(
         {"type": "paragraph", "level": None, "list_type": None, "text": text, "page": page},
@@ -289,6 +429,8 @@ def extract_structured_sections_from_docx(docx_path: str) -> dict:
     the academic section buckets (see module docstring for why).
     """
     document = Document(docx_path)
+    numbering_defs = _numbering_definitions(document)
+    list_counters: dict[str, dict[int, int]] = {}
 
     blocks: list[dict] = []
     title = ""
@@ -297,6 +439,7 @@ def extract_structured_sections_from_docx(docx_path: str) -> dict:
 
     for item in _iter_block_items(document):
         if isinstance(item, Table):
+            list_counters.pop("__manual__", None)
             block = _table_block(item, page)
             if block:
                 blocks.append(block)
@@ -310,7 +453,7 @@ def extract_structured_sections_from_docx(docx_path: str) -> dict:
                 title = candidate
                 continue
 
-        block = _paragraph_block(item, page)
+        block = _paragraph_block(item, page, numbering_defs, list_counters)
         if block:
             blocks.append(block)
             blocks_on_page += 1

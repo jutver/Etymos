@@ -19,8 +19,8 @@ credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
 ingress:
   # Placeholder hostname — replace with the DNS name routed via
   # `cloudflared tunnel route dns etymos-api <hostname>`.
-  # Traffic for this hostname is forwarded to the FastAPI container's
-  # published port (see docker-compose.yml: api service, port 8000).
+  # Traffic for this hostname is forwarded to the local FastAPI API server
+  # listening on port 8000 (see docs/DEPLOY_BACKEND.md).
   - hostname: <API_HOSTNAME>
     service: http://localhost:8000
 

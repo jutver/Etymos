@@ -52,27 +52,10 @@ PAPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 def check_pdf_plagiarism(pdf_path, progress_callback=None):
     if progress_callback:
         progress_callback(
-            progress=5,
-            step="preparing",
-            message="Preparing document analysis"
+            progress=10,
+            step="extracting",
+            message="Extracting sections from PDF"
         )
-
-    print("\nBuilding heading candidates...")
-    lines = extract_lines_from_pdf(pdf_path)
-    candidates = build_heading_candidates(lines)
-    heading_texts = [c["text"] for c in candidates]
-
-    print("\n===== HEADING CANDIDATES =====")
-    for h in heading_texts:
-        print("-", h)
-
-
-        if progress_callback:
-          progress_callback(
-              progress=10,
-              step="extracting",
-              message="Extracting sections from PDF"
-          )
 
     structured = extract_structured_sections_from_pdf(pdf_path)
     sections = flatten_structured_sections(structured)
@@ -105,8 +88,11 @@ def check_pdf_plagiarism(pdf_path, progress_callback=None):
         sections,
         structured_sections=structured["sections"],
         section_order=structured.get("section_order"),
+        extraction_meta=structured.get("extraction_meta"),
     )
     input_text = document["text"]
+    if not (input_text or "").strip():
+        raise ValueError("No readable text could be extracted from this PDF.")
 
     print("\n===== TITLE =====")
     print(title)

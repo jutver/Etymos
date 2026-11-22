@@ -517,7 +517,15 @@ export const useAppStore = create<AppState>()(
       },
 
       recordCheckedDocument: (doc) =>
-        set((s) => ({ checkedDocuments: { ...s.checkedDocuments, [doc.id]: doc } })),
+        set((s) => {
+          const retained: Record<string, CheckedDocument> = {};
+          const olderEntries = Object.entries(s.checkedDocuments).filter(([key]) => key !== doc.id).slice(-2);
+          for (const [key, prev] of olderEntries) {
+            retained[key] = prev.pdfUrl ? { ...prev, pdfUrl: undefined } : prev;
+          }
+          retained[doc.id] = doc;
+          return { checkedDocuments: retained };
+        }),
 
       applyDocumentUnlock: (id, { unlockedTier, standardCredits, premiumCredits }) =>
         set((s) => ({
