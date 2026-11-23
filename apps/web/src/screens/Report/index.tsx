@@ -1024,13 +1024,14 @@ export default function ReportPage() {
 
   const docAiScore = doc?.aiDetection?.available ? doc.aiDetection.overallScore : null;
   const exportOptions = useMemo<ExportVersionOption[]>(() => {
+    void language;
     const opts: ExportVersionOption[] = [];
     if (dirty && editorRef.current) {
       opts.push({
         key: "draft",
         kind: "draft",
         versionId: null,
-        label: tr("Current Draft"),
+        label: tl("Current Draft"),
         createdAt: null,
         similarityScore: displayScore,
         aiScore: docAiScore,
@@ -1056,7 +1057,7 @@ export default function ReportPage() {
       key: "original",
       kind: "original",
       versionId: null,
-      label: originalVersion?.label ?? tr("Original Document"),
+      label: originalVersion?.label ? tl(originalVersion.label) : tl("Original Document"),
       createdAt: originalVersion?.createdAt ?? doc?.uploadedAt ?? null,
       similarityScore: originalVersion?.check?.score ?? displayScore ?? null,
       aiScore: originalVersion?.check?.aiScore ?? docAiScore,
@@ -1064,7 +1065,7 @@ export default function ReportPage() {
       html: null,
     });
     return opts;
-  }, [dirty, displayScore, doc?.uploadedAt, docAiScore, originalVersion, versions]);
+  }, [dirty, displayScore, doc?.uploadedAt, docAiScore, language, originalVersion, versions]);
 
   async function executeExport(option: ExportVersionOption) {
     if (!id || exporting) return;
@@ -1075,6 +1076,7 @@ export default function ReportPage() {
         version_kind: option.kind,
         version_id: option.versionId,
         version_label: option.label,
+        document_title: fileName || undefined,
         edited_html: option.html,
         lang: language === "vi" ? "vi" : "en",
         snapshot_scores: {
