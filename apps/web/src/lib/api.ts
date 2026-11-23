@@ -21,6 +21,7 @@ export interface BackendReport {
    * block — parse it with `parseAiDetection` (lib/aiDetection.ts). Absent on
    * reports produced before the detector existed. */
   ai_detection?: unknown;
+  published_paper_match?: unknown;
   /** Set when the check was paid with a credit (see CheckedDocument.unlockedTier). */
   unlocked_tier?: "student" | "professional" | null;
   matched_papers: Array<{

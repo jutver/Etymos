@@ -14,6 +14,7 @@ import { parseAiDetection } from "./aiDetection";
 import { parseExtractionMeta, parseInlineFormulas } from "./extractionMeta";
 import { parseExplanationFacts } from "./matchExplanation";
 import { parsePdfRects } from "./pdfRects";
+import { parsePublishedPaperMatch } from "./publishedPaperMatch";
 import { tr } from "./i18n";
 
 interface DocumentRow {
@@ -46,6 +47,8 @@ interface DocumentRow {
   is_sample?: boolean | null;
   // Added by supabase/migrations/20261122000000_document_layout_and_formulas.sql.
   extraction_meta?: unknown;
+  // Added by supabase/migrations/20261123000000_documents_published_paper_match.sql.
+  published_paper_match?: unknown;
 }
 
 /** Lifecycle of the *analysis job*, orthogonal to `status` (which is the
@@ -249,6 +252,7 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
     matches,
     aiDetection: parseAiDetection(docRow.ai_detection),
     extractionMeta: parseExtractionMeta(docRow.extraction_meta),
+    publishedPaperMatch: parsePublishedPaperMatch(docRow.published_paper_match),
     unlockedTier: docRow.unlocked_tier ?? undefined,
     ...(docRow.is_sample ? { isSample: true } : {}),
   };
@@ -268,7 +272,7 @@ export async function createCheckingDocument(params: {
   userId: string;
   title: string;
   fileName: string | null;
-  language: string;
+  language?: string | null;
   project: string | null;
 }): Promise<HistoryEntryWithCheck> {
   const { data, error } = await supabase
@@ -277,7 +281,7 @@ export async function createCheckingDocument(params: {
       user_id: params.userId,
       title: params.title,
       file_name: params.fileName,
-      language: params.language,
+      language: params.language ?? null,
       project: params.project,
       check_state: "checking",
       // `status`/`similarity_score` stay null until the analysis produces them.
@@ -334,6 +338,8 @@ export interface FinalizeCheckParams {
   /** Omitted when the report body couldn't be fetched — the row is still
    * settled (no stuck spinner), keeping whatever scores the backend wrote. */
   results?: CheckResults;
+  /** Auto-detected document language to store on the settled row. */
+  language?: CheckedDocument["language"] | null;
 }
 
 /**
@@ -352,7 +358,7 @@ export interface FinalizeCheckParams {
  * (rather than the rename + deletion the row shuffle would otherwise log).
  */
 export async function finalizeCheckingDocument(params: FinalizeCheckParams): Promise<string> {
-  const { placeholderId, reportId, results } = params;
+  const { placeholderId, reportId, results, language } = params;
 
   const { data, error } = await supabase.rpc("settle_checking_document", {
     p_placeholder_id: placeholderId,
@@ -372,7 +378,13 @@ export async function finalizeCheckingDocument(params: FinalizeCheckParams): Pro
     if (error.code === "P0002") return placeholderId;
     throw error;
   }
-  return String(data);
+  const finalId = String(data);
+  if (language) {
+    // `settle_checking_document` copies the placeholder's null language onto
+    // the backend row; persist the auto-detected language best-effort.
+    void supabase.from("documents").update({ language }).eq("id", finalId);
+  }
+  return finalId;
 }
 
 export async function moveDocumentToTrash(id: string): Promise<void> {

@@ -554,6 +554,14 @@ def merge_report(
     references = reference_span(document, document["text"])
     merged = drop_nested_duplicates(outside_references(merged, references))
     coverage = coverage_score(merged, document["total_chars"], references)
+    from final_report_builder import detect_published_paper_match
+    published_paper_match = detect_published_paper_match(
+        merged,
+        document=document,
+        input_text=document["text"],
+        document_total_chars=document["total_chars"],
+        references=references,
+    )
     ai_detection = previous_report.get("ai_detection")
     previous_coverage = previous_report.get("coverage") or {}
 
@@ -598,6 +606,11 @@ def merge_report(
         # Replaced by enrich() in run_recheck; kept (marked stale) if that fails.
         "ai_detection": {**ai_detection, "stale": True} if isinstance(ai_detection, dict) else ai_detection,
         "warnings": previous_report.get("warnings") or [],
+        **(
+            {"published_paper_match": published_paper_match}
+            if published_paper_match is not None
+            else {}
+        ),
         "recheck": {
             "changed_blocks": sum(changed),
             "total_blocks": len(changed),

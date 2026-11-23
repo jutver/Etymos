@@ -28,14 +28,9 @@ import { useAuth } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/cn";
-import type { Language, MatchedSource } from "../../lib/types";
+import type { MatchedSource } from "../../lib/types";
 import { t, tr, tn, currentLocale } from "../../lib/i18n";
 import { paywallPath } from "../../lib/paywall";
-
-const languages: { id: Language; label: string }[] = [
-  { id: "vi", label: "Tiếng Việt" },
-  { id: "en", label: tr("English") },
-];
 
 // The file preview has no matches to highlight; a stable empty list keeps the
 // viewer from re-scanning the PDF on every render of this screen.
@@ -70,8 +65,6 @@ export default function UploadPage() {
   const [pastedText, setPastedText] = useState("");
   const [webSources, setWebSources] = useState(true);
   const [academicSources, setAcademicSources] = useState(true);
-  const [language, setLanguage] = useState<Language>("vi");
-  const [langOpen, setLangOpen] = useState(false);
 
   const [project, setProject] = useState<string>(PROJECTS[0]);
   const [projectQuery, setProjectQuery] = useState("");
@@ -197,7 +190,7 @@ export default function UploadPage() {
           userId: user.id,
           title,
           fileName: tab === "paste" ? null : (docLabels[0] ?? null),
-          language,
+          language: null,
           project: project === PROJECTS[0] ? null : project,
         });
         placeholderId = entry.id;
@@ -228,7 +221,6 @@ export default function UploadPage() {
             project,
             webSources,
             academicSources,
-            language,
             jobId: job.job_id,
             documentId: placeholderId,
             reportMode: "backend",
@@ -265,7 +257,6 @@ export default function UploadPage() {
             project,
             webSources,
             academicSources,
-            language,
             jobId: job.job_id,
             documentId: placeholderId,
             reportMode: "backend",
@@ -517,47 +508,16 @@ export default function UploadPage() {
           <div className="mt-5 flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative">
               <button
-                onClick={() => setLangOpen((v) => !v)}
-                aria-expanded={langOpen}
-                aria-controls="language-options"
-                className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
-              >
-                {t(languages.find((l) => l.id === language)?.label)}
-                <CaretDown size={14} className={cn("transition-transform", langOpen && "rotate-180")} />
-              </button>
-              {langOpen && (
-                <div id="language-options" role="menu" className="studio-card absolute bottom-[calc(100%+6px)] left-0 z-20 w-40 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">
-                  {languages.map((l) => (
-                    <button
-                      key={l.id}
-                      onClick={() => {
-                        setLanguage(l.id);
-                        setLangOpen(false);
-                      }}
-                      role="menuitemradio"
-                      aria-checked={language === l.id}
-                      className={cn(
-                        "block w-full rounded-lg px-3 py-2 text-left text-sm font-medium",
-                        language === l.id ? "bg-brand-100 text-brand-700" : "text-ink-700 hover:bg-surface-tint",
-                      )}
-                    >
-                      {t(l.label)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <button
                 onClick={() => setProjectOpen((v) => !v)}
                 aria-expanded={projectOpen}
                 aria-controls="project-options"
-                className="flex items-center gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300"
+                className="flex w-full items-center justify-between gap-2 rounded-[var(--radius-control)] border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:border-brand-300 sm:w-64"
               >
-                <FolderSimple size={15} />
-                {project || t("No project")}
-                <CaretDown size={14} className={cn("transition-transform", projectOpen && "rotate-180")} />
+                <span className="flex min-w-0 items-center gap-2">
+                  <FolderSimple size={15} className="shrink-0" />
+                  <span className="truncate">{project || t("No project")}</span>
+                </span>
+                <CaretDown size={14} className={cn("shrink-0 transition-transform", projectOpen && "rotate-180")} />
               </button>
               {projectOpen && (
                 <div id="project-options" className="studio-card absolute bottom-[calc(100%+6px)] left-0 z-20 w-64 rounded-[var(--radius-card)] border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]">

@@ -1254,6 +1254,7 @@ export default function ReportPage() {
           explanationLocked={isFree}
           rewriteLocked={tier !== "professional"}
           aiDetection={doc.aiDetection}
+          publishedPaperMatch={doc.publishedPaperMatch}
           activeAiSegmentId={activeAiSegmentId}
           onAiSegmentClick={handleSelectAiSegment}
           tab={sidebarTab}
