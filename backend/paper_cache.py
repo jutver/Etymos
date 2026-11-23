@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from extractor import extract_sections_from_pdf, sentence_windows
 import paper_store
+from search_paper.paper_identity import classify_source_kind, strip_preprint_prefix
 
 CACHE_DIR = "paper_cache"
 
@@ -265,12 +266,20 @@ def search_terms(queries, max_terms=40):
     return terms[:max_terms]
 
 
+def _resolved_source_kind(*records):
+    """Default to 'academic' unless explicitly 'web' without academic URL/IDs."""
+    explicit_kinds = [r.get("source_kind") for r in records if isinstance(r, dict) and r.get("source_kind")]
+    if not explicit_kinds or "academic" in explicit_kinds:
+        return "academic"
+    if any(classify_source_kind(r) == "academic" for r in records if isinstance(r, dict)):
+        return "academic"
+    return "web"
+
+
 def paper_from_record(record):
     """A cached paper in the shape the search clients return, so it is ranked
     and cached like any other candidate."""
-    from search_paper.paper_identity import classify_source_kind, strip_preprint_prefix
-
-    source_kind = classify_source_kind(record)
+    source_kind = _resolved_source_kind(record)
     title = record.get("title") or ""
     if source_kind == "academic" and title:
         title = strip_preprint_prefix(title) or title
@@ -321,16 +330,12 @@ def find_open_access_pdf(paper):
 def _record_for(paper, paper_id, existing):
     """The paper's metadata merged over what is already cached: a later
     search result with fewer fields never blanks out an earlier one's."""
-    from search_paper.paper_identity import classify_source_kind, strip_preprint_prefix
-
     old = existing or {}
 
     def pick(key, value):
         return value if value else (old.get(key) or "")
 
-    source_kind = "academic" if (
-        classify_source_kind(paper) == "academic" or classify_source_kind(old) == "academic"
-    ) else "web"
+    source_kind = _resolved_source_kind(paper, old)
     title = pick("title", paper.get("title"))
     if source_kind == "academic" and title:
         title = strip_preprint_prefix(title) or title
@@ -565,13 +570,8 @@ def cache_candidate_papers(candidate_papers, top_k=10, build_text=True):
         # Carried through to load_candidate_chunks/match_chunks/final report
         # so a match can be labeled "web" vs "academic" and (eventually)
         # rendered as a real citation instead of a raw internal id.
-        result["source_kind"] = (
-            "academic"
-            if classify_source_kind(result) == "academic" or classify_source_kind(paper) == "academic"
-            else "web"
-        )
+        result["source_kind"] = _resolved_source_kind(result, paper)
         if result["source_kind"] == "academic" and result.get("title"):
-            from search_paper.paper_identity import strip_preprint_prefix
             result["title"] = strip_preprint_prefix(result["title"]) or result["title"]
         result["authors"] = paper.get("authors") or []
         result["year"] = result.get("year") or paper.get("year") or ""
