@@ -868,3 +868,38 @@ export async function getGuestSupportTicket(token: string): Promise<SupportConve
 export function replyAsGuest(token: string, body: string, files: File[]): Promise<SupportConversation> {
   return sendForm(`/api/support/guest/${encodeURIComponent(token)}/messages`, supportForm({ body }, files), {});
 }
+
+export interface ExportPdfPayload {
+  version_kind: "original" | "saved" | "draft";
+  version_id?: string | null;
+  version_label?: string | null;
+  edited_html?: string | null;
+  lang: "en" | "vi";
+  snapshot_scores?: {
+    similarity_score?: number | null;
+    ai_score?: number | null;
+    checked?: boolean;
+  } | null;
+}
+
+/** Downloads a compiled PDF (original or layout-preserving edited document +
+ * appended Similarity, AI & Matched Sources report pages). */
+export async function exportReportPdf(
+  reportId: string,
+  payload: ExportPdfPayload,
+): Promise<{ blob: Blob; filename: string }> {
+  const headers = { ...(await getAuthHeader()), "Content-Type": "application/json" };
+  const response = await fetch(buildUrl(`/api/reports/${encodeURIComponent(reportId)}/export-pdf`), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await errorFromResponse(response);
+  const cd = response.headers.get("Content-Disposition") ?? "";
+  const utfMatch = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  const asciiMatch = cd.match(/filename="([^"]+)"/i);
+  const filename = utfMatch?.[1]
+    ? decodeURIComponent(utfMatch[1])
+    : asciiMatch?.[1] || "Etymos-Report.pdf";
+  return { blob: await response.blob(), filename };
+}

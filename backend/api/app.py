@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Literal, Optional
 from uuid import UUID, uuid4
 import sys
+from urllib.parse import quote
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 from slowapi import _rate_limit_exceeded_handler
@@ -925,6 +926,92 @@ def get_source_pdf(report_id: str, user: AuthedUser = Depends(verify_supabase_jw
     if not fallback_path.exists():
         raise HTTPException(status_code=404, detail="Không tìm thấy file PDF gốc cho báo cáo này.")
     return FileResponse(path=fallback_path, media_type="application/pdf", filename=f"{report_id}.pdf")
+
+
+def load_original_pdf_bytes(report_id: str, owner_id: str | None) -> bytes | None:
+    """Load the original uploaded (or LibreOffice-converted) PDF bytes if available."""
+    client = get_client()
+    if client is not None and owner_id is not None:
+        try:
+            data = client.storage.from_(DOCUMENTS_BUCKET).download(_storage_path(owner_id, report_id))
+            if isinstance(data, (bytes, bytearray)) and len(data) > 0:
+                return bytes(data)
+        except Exception:
+            logger.debug("Supabase Storage PDF download unavailable for report_id=%s", report_id)
+    fallback_path = LOCAL_PDF_FALLBACK_DIR / f"{report_id}.pdf"
+    if fallback_path.exists():
+        return fallback_path.read_bytes()
+    return None
+
+
+class ExportSnapshotScores(BaseModel):
+    similarity_score: Optional[float] = None
+    ai_score: Optional[float] = None
+    checked: bool = False
+
+
+class ExportPdfRequest(BaseModel):
+    version_kind: Literal["original", "saved", "draft"] = "original"
+    version_id: Optional[str] = None
+    version_label: Optional[str] = Field(default=None, max_length=200)
+    edited_html: Optional[str] = Field(default=None, max_length=5_000_000)
+    lang: Literal["en", "vi"] = "en"
+    snapshot_scores: Optional[ExportSnapshotScores] = None
+
+
+def _safe_export_filename(title: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in (" ", "-", "_") else "_" for ch in (title or "Etymos-Report")).strip()
+    cleaned = "_".join(cleaned.split()) or "Etymos-Report"
+    return f"{cleaned[:80]}-report.pdf"
+
+
+@app.post("/api/reports/{report_id}/export-pdf")
+@limiter.limit("30/minute")
+def export_report_pdf(
+    request: Request,
+    report_id: str,
+    body: ExportPdfRequest,
+    user: AuthedUser = Depends(verify_supabase_jwt),
+):
+    from pdf_export import build_export_context, generate_export_pdf
+
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+
+    edited_html = body.edited_html
+    if body.version_kind in ("saved", "draft") and not (edited_html and edited_html.strip()):
+        raise HTTPException(status_code=400, detail="edited_html is required for edited version exports.")
+
+    title = str(report.get("file_name") or report.get("title") or "Etymos-Report")
+    orig_bytes = load_original_pdf_bytes(report_id, report.get("user_id"))
+    orig_text = original_text(report_id, report.get("input_text") or "")
+
+    context = build_export_context(
+        report_id=report_id,
+        title=title,
+        report=report,
+        version_kind=body.version_kind,
+        version_label=body.version_label,
+        edited_html=edited_html,
+        lang=body.lang,
+        snapshot_scores=body.snapshot_scores.model_dump() if body.snapshot_scores else None,
+    )
+    pdf_bytes = generate_export_pdf(
+        context=context,
+        original_pdf_bytes=orig_bytes,
+        original_text=orig_text,
+        edited_html=edited_html,
+    )
+    filename = _safe_export_filename(title)
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "Etymos-Report.pdf"
+    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @app.get("/api/reports/{report_id}/marker-preview")
