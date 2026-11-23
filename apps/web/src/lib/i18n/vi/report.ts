@@ -51,7 +51,6 @@ export const report: Record<string, string> = {
   "Drag to reorder row": "Kéo để sắp xếp lại hàng",
   "Drag to resize column": "Kéo để đổi độ rộng cột",
   "Each colour matches a highlight in your document.": "Mỗi màu tương ứng với một đoạn được tô sáng trong tài liệu của bạn.",
-  "Etymos-Report.pdf is ready.": "Etymos-Report.pdf đã sẵn sàng.",
   "Export PDF": "Xuất PDF",
   "Export PDF — upgrade to unlock": "Xuất PDF — nâng cấp để mở khóa",
   "Failed to load report": "Không tải được báo cáo",
@@ -290,4 +289,13 @@ export const report: Record<string, string> = {
   "Shown as an image: this formula could not be converted to editable math":
     "Hiển thị dạng ảnh: công thức này chưa thể chuyển sang định dạng toán học",
   "Formula unavailable": "Không thể hiển thị công thức",
+  "Choose version to export": "Chọn phiên bản để xuất",
+  "Your PDF will include the selected document plus similarity, AI, and matched sources pages at the end.":
+    "File PDF sẽ gồm tài liệu bạn chọn kèm các trang báo cáo tương đồng, AI và nguồn trùng khớp ở cuối.",
+  "Current Draft": "Bản nháp hiện tại",
+  "Original Document": "Tài liệu gốc",
+  "Not re-checked": "Chưa kiểm tra lại",
+  "Exporting PDF…": "Đang xuất PDF…",
+  "Couldn't export PDF": "Không thể xuất PDF",
+  "{{filename}} is ready.": "{{filename}} đã sẵn sàng.",
 };

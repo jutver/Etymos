@@ -4,7 +4,7 @@ import { FileMagnifyingGlass, Sparkle, WarningCircle, X } from "@phosphor-icons/
 import { supabase, cn } from "@etymos/shared";
 import { MotionConfig, m } from "motion/react";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
-import { changedRecheckQuote, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
+import { changedRecheckQuote, exportReportPdf, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { trackEvent } from "../../lib/analytics";
 import {
@@ -20,6 +20,7 @@ import { Button } from "../../components/ui/Button";
 import { useSplashHold } from "../../components/BootSplash";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
 import { SourceComparisonModal } from "./SourceComparisonModal";
+import { ExportVersionModal, type ExportVersionOption } from "./ExportVersionModal";
 import { CitationDialog } from "../../components/CitationDialog";
 import { RewritePanel } from "./RewritePanel";
 import { ReportTopBar } from "./ReportTopBar";
@@ -321,6 +322,8 @@ export default function ReportPage() {
   const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
   const [rewriteMatch, setRewriteMatch] = useState<MatchedSource | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportSelectedKey, setExportSelectedKey] = useState("original");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -1019,17 +1022,104 @@ export default function ReportPage() {
     setCitingMatch(match);
   }
 
+  const docAiScore = doc?.aiDetection?.available ? doc.aiDetection.overallScore : null;
+  const exportOptions = useMemo<ExportVersionOption[]>(() => {
+    const opts: ExportVersionOption[] = [];
+    if (dirty && editorRef.current) {
+      opts.push({
+        key: "draft",
+        kind: "draft",
+        versionId: null,
+        label: tr("Current Draft"),
+        createdAt: null,
+        similarityScore: displayScore,
+        aiScore: docAiScore,
+        isChecked: false,
+        html: editorRef.current.innerHTML,
+      });
+    }
+    for (const v of versions) {
+      const checked = v.check != null;
+      opts.push({
+        key: `version:${v.id}`,
+        kind: "saved",
+        versionId: v.id,
+        label: v.label,
+        createdAt: v.createdAt ?? null,
+        similarityScore: v.check?.score ?? displayScore ?? null,
+        aiScore: v.check?.aiScore ?? docAiScore,
+        isChecked: checked,
+        html: v.html,
+      });
+    }
+    opts.push({
+      key: "original",
+      kind: "original",
+      versionId: null,
+      label: originalVersion?.label ?? tr("Original Document"),
+      createdAt: originalVersion?.createdAt ?? doc?.uploadedAt ?? null,
+      similarityScore: originalVersion?.check?.score ?? displayScore ?? null,
+      aiScore: originalVersion?.check?.aiScore ?? docAiScore,
+      isChecked: true,
+      html: null,
+    });
+    return opts;
+  }, [dirty, displayScore, doc?.uploadedAt, docAiScore, originalVersion, versions]);
+
+  async function executeExport(option: ExportVersionOption) {
+    if (!id || exporting) return;
+    trackEvent("report_exported");
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportReportPdf(id, {
+        version_kind: option.kind,
+        version_id: option.versionId,
+        version_label: option.label,
+        edited_html: option.html,
+        lang: language === "vi" ? "vi" : "en",
+        snapshot_scores: {
+          similarity_score: option.similarityScore,
+          ai_score: option.aiScore,
+          checked: option.isChecked,
+        },
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportModalOpen(false);
+      pushToast({
+        kind: "success",
+        title: tr("Report exported"),
+        description: tl("{{filename}} is ready.", { filename }),
+      });
+    } catch (err) {
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't export PDF"),
+        description: err instanceof Error ? err.message : tr("Please try again."),
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function handleExport() {
     if (isFree) {
       navigate(paywallPath("export", id));
       return;
     }
-    trackEvent("report_exported");
-    setExporting(true);
-    window.setTimeout(() => {
-      setExporting(false);
-      pushToast({ kind: "success", title: tr("Report exported"), description: tr("Etymos-Report.pdf is ready.") });
-    }, 1200);
+    if (exportOptions.length <= 1) {
+      const only = exportOptions[0];
+      if (only) void executeExport(only);
+      return;
+    }
+    setExportSelectedKey(exportOptions[0]?.key ?? "original");
+    setExportModalOpen(true);
   }
 
   // The editor is a full-viewport workspace layered over the app chrome, so the
@@ -1278,6 +1368,20 @@ export default function ReportPage() {
       </div>
 
       <DesktopHintDialog />
+      <ExportVersionModal
+        open={exportModalOpen}
+        options={exportOptions}
+        selectedKey={exportSelectedKey}
+        exporting={exporting}
+        onSelect={setExportSelectedKey}
+        onConfirm={() => {
+          const chosen = exportOptions.find((o) => o.key === exportSelectedKey) ?? exportOptions[0];
+          if (chosen) void executeExport(chosen);
+        }}
+        onClose={() => {
+          if (!exporting) setExportModalOpen(false);
+        }}
+      />
       <SourceComparisonModal
         match={comparisonMatch}
         open={comparisonMatch !== null}
