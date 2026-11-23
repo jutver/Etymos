@@ -17,7 +17,6 @@ export const landing: Record<string, string> = {
   "Continue in background": "Tiếp tục chạy nền",
   "Create project \"": "Tạo dự án \"",
   "Drag & drop one or more files here": "Kéo và thả một hoặc nhiều file vào đây",
-  "English": "English",
   "Explainable AI": "AI giải thích được",
   "Extracting text": "Đang trích xuất văn bản",
   "Extracting text from all documents": "Đang trích xuất văn bản từ tất cả tài liệu",

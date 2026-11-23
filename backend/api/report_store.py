@@ -206,6 +206,14 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 **({"current_check_id": check_id} if check_id else {}),
             }).eq("id", report_id).execute()
         else:
+            ai_detection = report.get("ai_detection")
+            detected_lang = ai_detection.get("language") if isinstance(ai_detection, dict) else None
+            if detected_lang not in ("vi", "en", "fr", "ja"):
+                try:
+                    from ai_detector import guess_language
+                    detected_lang = guess_language((report.get("input_text") or "")[:6000])
+                except Exception:
+                    detected_lang = None
             document_row = {
                 "id": report_id,
                 "user_id": user_id,
@@ -214,6 +222,7 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 "status": _status_from_score(overall_score),
                 "similarity_score": overall_score,
                 "uploaded_at": _now_iso(),
+                **({"language": detected_lang} if detected_lang in ("vi", "en", "fr", "ja") else {}),
             }
             client.table("documents").upsert(document_row, on_conflict="id").execute()
     except Exception as exc:
@@ -254,6 +263,17 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             logger.warning(
                 "Could not persist extraction_meta for report_id=%s "
                 "(has supabase/migrations/20261122000000_document_layout_and_formulas.sql been applied?): %s",
+                report_id, exc,
+            )
+
+    published_paper_match = report.get("published_paper_match")
+    if published_paper_match is not None or existing:
+        try:
+            client.table("documents").update({"published_paper_match": published_paper_match}).eq("id", report_id).execute()
+        except Exception as exc:
+            logger.warning(
+                "Could not persist published_paper_match for report_id=%s "
+                "(has supabase/migrations/20261123000000_documents_published_paper_match.sql been applied?): %s",
                 report_id, exc,
             )
 

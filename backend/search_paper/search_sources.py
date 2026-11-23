@@ -1,38 +1,48 @@
 import re
 
+from search_paper.paper_identity import (
+    canonical_paper_keys,
+    classify_source_kind,
+    normalized_title_key,
+    strip_preprint_prefix,
+)
 from search_paper.search_arxiv import search_arxiv
 from search_paper.search_duckduckgo import search_duckduckgo
 from search_paper.search_semantic_scholar import search_semantic_scholar
 from search_paper.search_openalex import search_openalex
 
 
-_LINK_FIELDS = ("pdf_url", "arxiv_id", "acl_id", "doi", "abstract")
-
-# Shorter titles ("Introduction", "Home") are too generic to say two results
-# are the same paper.
-_MIN_TITLE_KEY = 20
+_LINK_FIELDS = ("pdf_url", "arxiv_id", "acl_id", "doi", "abstract", "url")
 
 
 def _title_key(title):
-    title = re.sub(r"[^a-z0-9\s]", " ", (title or "").lower())
-    return re.sub(r"\s+", " ", title).strip()
+    return normalized_title_key(title)
 
 
 def _keys(paper):
-    keys = [str(paper[field]).lower().strip() for field in ("doi", "url") if paper.get(field)]
-    title = _title_key(paper.get("title"))
-    if len(title) >= _MIN_TITLE_KEY:
-        keys.append("title:" + title)
-    return keys
+    return canonical_paper_keys(paper)
+
+
+def _normalize_candidate(paper):
+    """Classify academic repository URLs/IDs and strip noisy preprint prefixes."""
+    kind = classify_source_kind(paper)
+    paper["source_kind"] = kind
+    if kind == "academic" and paper.get("title"):
+        cleaned = strip_preprint_prefix(paper["title"])
+        if cleaned:
+            paper["title"] = cleaned
+    return paper
 
 
 def deduplicate_papers(papers):
     """One candidate per paper: results are the same paper when they share a
-    DOI, a URL or a (long enough) title."""
+    DOI, arXiv ID, ACL ID, normalized title, or URL. Academic classification
+    and clean bibliographic metadata take precedence over web hits."""
     seen = {}
     unique = []
 
     for paper in papers:
+        _normalize_candidate(paper)
         keys = _keys(paper)
 
         if not keys:
@@ -41,11 +51,23 @@ def deduplicate_papers(papers):
         kept = next((seen[key] for key in keys if key in seen), None)
 
         if kept is not None:
-            # Keep the first copy, but take the links another source
-            # found for it (OpenAlex often has the PDF Semantic Scholar lacks).
+            # Academic always takes precedence over web when unifying duplicates.
+            if paper.get("source_kind") == "academic" and kept.get("source_kind") != "academic":
+                kept["source_kind"] = "academic"
+                if paper.get("title"):
+                    kept["title"] = strip_preprint_prefix(paper["title"]) or paper["title"]
+            elif kept.get("source_kind") == "academic" and kept.get("title"):
+                kept["title"] = strip_preprint_prefix(kept["title"]) or kept["title"]
+
+            # Merge missing links and bibliographic metadata from the duplicate.
             for field in _LINK_FIELDS:
                 if paper.get(field) and not kept.get(field):
                     kept[field] = paper[field]
+            if paper.get("authors") and not kept.get("authors"):
+                kept["authors"] = paper["authors"]
+            if paper.get("year") and not kept.get("year"):
+                kept["year"] = paper["year"]
+
             for key in keys:
                 seen.setdefault(key, kept)
             continue

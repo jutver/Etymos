@@ -322,6 +322,18 @@ export type AiDetection =
       inconclusive?: boolean;
     };
 
+export interface PublishedPaperMatch {
+  detected: boolean;
+  sourcePaperId: string;
+  sourceTitle: string;
+  sourceAuthors: string[];
+  sourceYear?: string;
+  sourceUrl?: string;
+  sourceDoi?: string;
+  coveragePercent: number;
+  titleMatched: boolean;
+}
+
 export interface CheckedDocument {
   id: string;
   title: string;
@@ -347,6 +359,8 @@ export interface CheckedDocument {
   isSample?: boolean;
   /** Provenance & capabilities reported by the extraction pipeline. */
   extractionMeta?: ExtractionMeta;
+  /** Report-level notice when the uploaded document itself appears to be an already published paper. */
+  publishedPaperMatch?: PublishedPaperMatch;
 }
 
 export type DocStatus = "clean" | "low" | "moderate" | "high";

@@ -7,6 +7,12 @@ from document_model import (
     section_at_offset,
     weighted_coverage,
 )
+from search_paper.paper_identity import (
+    canonical_paper_keys,
+    classify_source_kind,
+    normalized_title_key,
+    strip_preprint_prefix,
+)
 
 
 SCORING_VERSION = 2
@@ -94,12 +100,29 @@ def outside_references(matches, span):
     ]
 
 
+def _canonical_bucket_id(record, key_to_bucket):
+    """Map a match record to a shared canonical bucket across all its keys
+    (DOI, arXiv ID, ACL ID, normalized title, URL, or source_paper_id)."""
+    keys = canonical_paper_keys(record)
+    fallback = str(record.get("source_paper_id") or record.get("source_title") or "")
+    if fallback:
+        keys.append(f"id:{fallback}")
+    bucket = next((key_to_bucket[k] for k in keys if k in key_to_bucket), None)
+    if bucket is None:
+        bucket = keys[0] if keys else fallback
+    for k in keys:
+        key_to_bucket.setdefault(k, bucket)
+    return bucket
+
+
 def group_by_source(matches):
-    """`matched_papers`: final match records grouped per source paper,
+    """`matched_papers`: final match records grouped per canonical source paper,
     strongest source first."""
+    key_to_bucket = {}
     groups = defaultdict(lambda: {
         "source_paper_id": "",
         "source_title": "",
+        "source_kind": "academic",
         "matches": [],
         "likely_count": 0,
         "suspicious_count": 0,
@@ -109,9 +132,12 @@ def group_by_source(matches):
 
     for record in matches:
         source_id = record.get("source_paper_id") or ""
-        group = groups[source_id or record.get("source_title") or ""]
-        group["source_paper_id"] = source_id
-        group["source_title"] = record.get("source_title", "")
+        group_key = _canonical_bucket_id(record, key_to_bucket)
+        group = groups[group_key]
+        if not group["source_paper_id"] or (record.get("source_kind") == "academic" and group["source_kind"] != "academic"):
+            group["source_paper_id"] = source_id
+            group["source_title"] = record.get("source_title", "")
+            group["source_kind"] = record.get("source_kind") or "academic"
         group["matches"].append(record)
         group["max_similarity"] = max(group["max_similarity"], record.get("semantic_similarity") or 0.0)
 
@@ -134,27 +160,41 @@ def group_by_source(matches):
     )
 
 
+def _merge_source_metadata(kept, dropped):
+    """Preserve academic classification and richest bibliographic fields when
+    unifying duplicate matches for the same canonical paper."""
+    if dropped.get("source_kind") == "academic" and kept.get("source_kind") != "academic":
+        kept["source_kind"] = "academic"
+    if kept.get("source_kind") == "academic" and kept.get("source_title"):
+        kept["source_title"] = strip_preprint_prefix(kept["source_title"]) or kept["source_title"]
+    for field in ("source_url", "source_pdf_url", "source_year", "source_doi"):
+        if dropped.get(field) and not kept.get(field):
+            kept[field] = dropped[field]
+    if dropped.get("source_authors") and not kept.get("source_authors"):
+        kept["source_authors"] = dropped["source_authors"]
+
+
 def drop_nested_duplicates(matches):
     """
-    Keep one match per source for any input span: when two matches from
-    the same source cover the same span, or one span lies inside the
-    other, only the stronger one stays. Overlapping chunks used to yield
-    the same passage twice (a full sentence plus a cut-off piece of it),
-    which showed as duplicate cards and merged highlights.
+    Keep one match per canonical source for any input span: when two matches
+    from the same canonical paper cover the same span, or one span lies inside
+    the other, only the stronger one stays (with 'academic' taking precedence
+    over 'web'). Overlapping chunks or duplicate web+academic hits used to
+    yield duplicate cards for the same sentence.
 
-    Matches from different sources are left alone, and so are matches
-    without offsets. Order is preserved.
+    Matches from different canonical sources are left alone, and so are
+    matches without offsets. Order is preserved.
     """
-    # Label first, then the longer span: a cut-off piece of a sentence
-    # often scores higher similarity than the whole sentence.
     def strength(m):
         offset = m["input_offset"]
         return (
+            1 if m.get("source_kind") == "academic" else 0,
             LABEL_WEIGHT.get(m.get("label"), 0),
             offset["end"] - offset["start"],
             m.get("semantic_similarity") or 0,
         )
 
+    key_to_bucket = {}
     kept_by_source = defaultdict(list)
     dropped = set()
 
@@ -167,16 +207,19 @@ def drop_nested_duplicates(matches):
     for i in ranked:
         m = matches[i]
         start, end = m["input_offset"]["start"], m["input_offset"]["end"]
-        kept = kept_by_source[m.get("source_paper_id") or m.get("source_title")]
+        source_key = _canonical_bucket_id(m, key_to_bucket)
+        kept = kept_by_source[source_key]
 
-        if any(
-            (s <= start and end <= e) or (start <= s and e <= end)
-            for s, e in kept
-        ):
+        overlapping = next(
+            (kept_match for s, e, kept_match in kept if (s <= start and end <= e) or (start <= s and e <= end)),
+            None,
+        )
+        if overlapping is not None:
+            _merge_source_metadata(overlapping, m)
             dropped.add(i)
             continue
 
-        kept.append((start, end))
+        kept.append((start, end, m))
 
     return [m for i, m in enumerate(matches) if i not in dropped]
 
@@ -311,6 +354,18 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
 
             source_title = item.get("source_title", "")
             meta = source_metadata.get(source_id) or {}
+            source_url = meta.get("source_url", "")
+            source_pdf_url = meta.get("source_pdf_url", "")
+            source_doi = meta.get("source_doi", "")
+            source_kind = classify_source_kind({
+                "source_kind": meta.get("source_kind", "academic"),
+                "source_url": source_url,
+                "source_pdf_url": source_pdf_url,
+                "source_doi": source_doi,
+                "source_title": source_title,
+            })
+            if source_kind == "academic" and source_title:
+                source_title = strip_preprint_prefix(source_title) or source_title
 
             record = {
                 "label": label,
@@ -335,12 +390,12 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
                 # citations.py's format_reference() later: {authors, year,
                 # title, url}. Never built into an actual citation string
                 # here — that UI/formatting is a separate, later task.
-                "source_url": meta.get("source_url", ""),
-                "source_pdf_url": meta.get("source_pdf_url", ""),
-                "source_kind": meta.get("source_kind", "academic"),
+                "source_url": source_url,
+                "source_pdf_url": source_pdf_url,
+                "source_kind": source_kind,
                 "source_authors": meta.get("source_authors", []),
                 "source_year": meta.get("source_year", ""),
-                "source_doi": meta.get("source_doi", "")
+                "source_doi": source_doi,
             }
 
             if doc_start is not None and doc_end is not None:
@@ -395,6 +450,13 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
 
     matched_papers = group_by_source(final_matches)
     final_matches = sort_matches(final_matches)
+    published_paper_match = detect_published_paper_match(
+        final_matches,
+        document=document,
+        input_text=input_text,
+        document_total_chars=document_total_chars,
+        references=references,
+    )
 
     report = {
         "overall_score": round(overall_score, 2),
@@ -415,6 +477,8 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             "legacy_total_chars": legacy_total_chars,
         },
     }
+    if published_paper_match is not None:
+        report["published_paper_match"] = published_paper_match
 
     if document is not None:
         # The document text itself is already returned as `input_text`;
@@ -430,6 +494,104 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
             report["document"]["extraction_meta"] = document["extraction_meta"]
 
     return report
+
+
+def _extract_document_title(document, input_text):
+    """Best-effort title from the structured document or first non-empty line."""
+    if document:
+        for sec in document.get("sections") or []:
+            if (sec.get("section") or sec.get("name")) == "title":
+                if sec.get("text"):
+                    return str(sec["text"]).strip()
+                start, end = sec.get("start"), sec.get("end")
+                if start is not None and end is not None and input_text:
+                    return input_text[start:end].strip()
+        for blk in document.get("blocks") or []:
+            if blk.get("type") in ("title", "heading") and blk.get("text"):
+                return str(blk["text"]).strip()
+    if input_text:
+        for line in input_text.splitlines():
+            stripped = line.strip()
+            if len(stripped) >= 12:
+                return stripped[:240]
+    return ""
+
+
+def _titles_match(doc_title, source_title):
+    """True when the uploaded document's title clearly matches the source title."""
+    a = normalized_title_key(doc_title)
+    b = normalized_title_key(source_title)
+    if len(a) < 12 or len(b) < 12:
+        return False
+    if a == b or a.startswith(b) or b.startswith(a):
+        return True
+    words_a = set(a.split())
+    words_b = set(b.split())
+    if not words_a or not words_b:
+        return False
+    return (len(words_a & words_b) / len(words_a | words_b)) >= 0.80
+
+
+def detect_published_paper_match(
+    final_matches,
+    *,
+    document=None,
+    input_text="",
+    document_total_chars=0,
+    references=None,
+):
+    """Identify when the uploaded document as a whole appears to be a single
+    already published academic paper rather than an original draft."""
+    if not final_matches or document_total_chars <= 0:
+        return None
+
+    key_to_bucket = {}
+    by_paper = defaultdict(list)
+    for m in final_matches:
+        if m.get("source_kind") != "academic":
+            continue
+        key = _canonical_bucket_id(m, key_to_bucket)
+        if key:
+            by_paper[key].append(m)
+
+    if not by_paper:
+        return None
+
+    doc_title = _extract_document_title(document, input_text)
+    best = None
+
+    for source_matches in by_paper.values():
+        rep = source_matches[0]
+        title = (rep.get("source_title") or "").strip()
+        if not title:
+            continue
+        cov = coverage_score(source_matches, document_total_chars, references)
+        raw_pct = float(cov.get("raw_coverage") or 0.0)
+        title_matched = _titles_match(doc_title, title)
+        if not (
+            (raw_pct >= 50.0 and len(source_matches) >= 3)
+            or (title_matched and raw_pct >= 25.0 and len(source_matches) >= 2)
+        ):
+            continue
+        candidate = (raw_pct, title_matched, len(source_matches), rep)
+        if best is None or candidate[:3] > best[:3]:
+            best = candidate
+
+    if best is None:
+        return None
+
+    raw_pct, title_matched, _, rep = best
+    return {
+        "detected": True,
+        "source_paper_id": rep.get("source_paper_id") or "",
+        "source_title": (rep.get("source_title") or "").strip(),
+        "source_authors": list(rep.get("source_authors") or []),
+        "source_year": str(rep.get("source_year") or ""),
+        "source_url": rep.get("source_url") or rep.get("source_pdf_url") or "",
+        "source_doi": rep.get("source_doi") or "",
+        "coverage_percent": round(min(100.0, raw_pct), 2),
+        "title_matched": bool(title_matched),
+    }
 
 
 def references_summary(span):

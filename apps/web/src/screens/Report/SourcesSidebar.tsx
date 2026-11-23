@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, MotionConfig, m, type TargetAndTransition } from "motion/react";
 import { CaretDown, CaretRight, CaretUp, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
-import type { AiDetection, MatchedSource } from "@etymos/shared";
+import type { AiDetection, MatchedSource, PublishedPaperMatch } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { AiDetectionSection } from "./AiDetectionSection";
+import { PublishedPaperNotice } from "./PublishedPaperNotice";
 import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
 import { t, tn } from "../../lib/i18n";
 
@@ -63,6 +64,7 @@ export interface SourcesSidebarProps {
    * (no detection run / old report) or `{ available: false }` renders
    * nothing, same as the chip. */
   aiDetection: AiDetection | undefined;
+  publishedPaperMatch?: PublishedPaperMatch;
   /** Passed straight through to AiDetectionSection — see its own docs. */
   activeAiSegmentId?: string | null;
   onAiSegmentClick?: (segmentId: string) => void;
@@ -94,6 +96,7 @@ export const SourcesSidebar = memo(function SourcesSidebar({
   explanationLocked,
   rewriteLocked,
   aiDetection,
+  publishedPaperMatch,
   activeAiSegmentId,
   onAiSegmentClick,
   tab: controlledTab,
@@ -354,6 +357,7 @@ export const SourcesSidebar = memo(function SourcesSidebar({
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
+            <PublishedPaperNotice match={publishedPaperMatch} />
             {matches.length === 0 ? (
               <div className="flex flex-col items-center px-4 py-14 text-center">
                 <ShieldCheck size={28} className="text-success" />

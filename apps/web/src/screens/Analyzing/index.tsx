@@ -19,6 +19,7 @@ import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQu
 import { trackEvent } from "../../lib/analytics";
 import { parseExplanationFacts } from "../../lib/matchExplanation";
 import { parseAiDetection } from "../../lib/aiDetection";
+import { parsePublishedPaperMatch } from "../../lib/publishedPaperMatch";
 import { parseExtractionMeta, parseInlineFormulas } from "../../lib/extractionMeta";
 import { parsePdfRects } from "../../lib/pdfRects";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
@@ -327,6 +328,13 @@ export default function AnalyzingPage() {
           // otherwise the placeholder itself. Using that id (rather than a
           // synthetic `check-<ts>`) means /report/:id resolves against
           // Supabase after a reload, not just this session's local cache.
+          const parsedAiDetection = parseAiDetection(report.ai_detection);
+          const rawDetectedLang = parsedAiDetection?.available ? parsedAiDetection.language : null;
+          const detectedLanguage: CheckedDocument["language"] | null =
+            rawDetectedLang === "vi" || rawDetectedLang === "en" || rawDetectedLang === "fr" || rawDetectedLang === "ja"
+              ? rawDetectedLang
+              : null;
+
           let docId = `check-${Date.now()}`;
           if (state.documentId) {
             try {
@@ -340,6 +348,7 @@ export default function AnalyzingPage() {
                   webSourcesScanned: (report.coverage?.total_candidate_papers as number) ?? 0,
                   academicSourcesScanned: (report.coverage?.checked_papers as number) ?? 0,
                 },
+                language: detectedLanguage,
               });
             } catch {
               // Couldn't settle in Supabase — fall back to the placeholder id
@@ -455,7 +464,7 @@ export default function AnalyzingPage() {
             id: docId,
             title: cleanTitle,
             fileName: docLabels[0] ?? "analysis",
-            language: (state.language as "vi" | "en" | "fr" | "ja") ?? "vi",
+            language: detectedLanguage ?? (state.language as CheckedDocument["language"] | undefined) ?? "vi",
             wordCount: estimatedWordCount,
             uploadedAt: today,
             similarityScore: overallScore,
@@ -472,8 +481,9 @@ export default function AnalyzingPage() {
             })),
             matches,
             pdfUrl: state.pdfDataUrl ?? undefined, // ← thêm dòng này
-            aiDetection: parseAiDetection(report.ai_detection),
+            aiDetection: parsedAiDetection,
             extractionMeta: parseExtractionMeta(report.document?.extraction_meta),
+            publishedPaperMatch: parsePublishedPaperMatch(report.published_paper_match),
             unlockedTier: report.unlocked_tier ?? undefined,
           };
 
