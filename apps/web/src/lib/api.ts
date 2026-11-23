@@ -873,6 +873,7 @@ export interface ExportPdfPayload {
   version_kind: "original" | "saved" | "draft";
   version_id?: string | null;
   version_label?: string | null;
+  document_title?: string | null;
   edited_html?: string | null;
   lang: "en" | "vi";
   snapshot_scores?: {

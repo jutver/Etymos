@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { setLanguage } from "../../lib/i18n";
 import { ExportVersionModal, type ExportVersionOption } from "./ExportVersionModal";
 
 const sampleOptions: ExportVersionOption[] = [
@@ -39,7 +40,12 @@ const sampleOptions: ExportVersionOption[] = [
 ];
 
 describe("ExportVersionModal", () => {
+  afterEach(() => {
+    setLanguage("en");
+  });
+
   it("renders all available version options and scores when open", () => {
+    setLanguage("en");
     const html = renderToStaticMarkup(
       <ExportVersionModal
         open
@@ -60,6 +66,7 @@ describe("ExportVersionModal", () => {
   });
 
   it("renders exporting state when exporting is true", () => {
+    setLanguage("en");
     const html = renderToStaticMarkup(
       <ExportVersionModal
         open
@@ -72,5 +79,27 @@ describe("ExportVersionModal", () => {
       />,
     );
     expect(html).toContain("Exporting PDF…");
+  });
+
+  it("renders localized Vietnamese labels when language is vi", () => {
+    setLanguage("vi");
+    const html = renderToStaticMarkup(
+      <ExportVersionModal
+        open
+        options={[
+          { ...sampleOptions[0], label: "Bản nháp hiện tại" },
+          { ...sampleOptions[2], label: "Tài liệu gốc" },
+        ]}
+        selectedKey="original"
+        exporting={false}
+        onSelect={vi.fn()}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Chọn phiên bản để xuất");
+    expect(html).toContain("Bản nháp hiện tại");
+    expect(html).toContain("Tài liệu gốc");
+    expect(html).toContain("Xuất PDF");
   });
 });

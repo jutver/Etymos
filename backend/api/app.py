@@ -954,6 +954,7 @@ class ExportPdfRequest(BaseModel):
     version_kind: Literal["original", "saved", "draft"] = "original"
     version_id: Optional[str] = None
     version_label: Optional[str] = Field(default=None, max_length=200)
+    document_title: Optional[str] = Field(default=None, max_length=300)
     edited_html: Optional[str] = Field(default=None, max_length=5_000_000)
     lang: Literal["en", "vi"] = "en"
     snapshot_scores: Optional[ExportSnapshotScores] = None
@@ -984,9 +985,24 @@ def export_report_pdf(
     if body.version_kind in ("saved", "draft") and not (edited_html and edited_html.strip()):
         raise HTTPException(status_code=400, detail="edited_html is required for edited version exports.")
 
-    title = str(report.get("file_name") or report.get("title") or "Etymos-Report")
+    input_meta = report.get("input") if isinstance(report.get("input"), dict) else {}
+    title = str(
+        (body.document_title or "").strip()
+        or report.get("title")
+        or report.get("file_name")
+        or input_meta.get("name")
+        or "Etymos-Report"
+    )
     orig_bytes = load_original_pdf_bytes(report_id, report.get("user_id"))
     orig_text = original_text(report_id, report.get("input_text") or "")
+    if not orig_text.strip():
+        passages = fetch_passages(report_id)
+        if passages:
+            orig_text = "\n\n".join(
+                str(row.get("text") or "").strip()
+                for row in passages.values()
+                if str(row.get("text") or "").strip()
+            )
 
     context = build_export_context(
         report_id=report_id,
@@ -997,6 +1013,8 @@ def export_report_pdf(
         edited_html=edited_html,
         lang=body.lang,
         snapshot_scores=body.snapshot_scores.model_dump() if body.snapshot_scores else None,
+        original_text=orig_text,
+        original_pdf_bytes=orig_bytes,
     )
     pdf_bytes = generate_export_pdf(
         context=context,
