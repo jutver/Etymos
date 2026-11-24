@@ -1,4 +1,9 @@
 import type { MatchedSource } from "@etymos/shared";
+import { sanitizeSourceTitle } from "./sourceTitle";
+
+function cleanMatchTitle(match: MatchedSource): string {
+  return sanitizeSourceTitle(match.sourceTitle || "", { isAcademic: match.sourceKind === "academic" });
+}
 
 /** Text-based citation (APA-ish), suitable for pasting into Word/Docs.
  * Mirrors backend/citations.py's format_reference() so the two stay
@@ -8,7 +13,7 @@ export function formatCitationText(match: MatchedSource): string {
   const parts: string[] = [];
   if (author) parts.push(author.endsWith(".") ? author : `${author}.`);
   if (match.sourceYear) parts.push(`(${match.sourceYear}).`);
-  const title = (match.sourceTitle || "").trim();
+  const title = cleanMatchTitle(match);
   if (title) parts.push(`${title.replace(/\.+$/, "")}.`);
   if (match.sourceUrl) parts.push(match.sourceUrl);
   return parts.length > 0 ? parts.join(" ") : title || "Untitled source";
@@ -16,7 +21,7 @@ export function formatCitationText(match: MatchedSource): string {
 
 function bibtexKey(match: MatchedSource): string {
   const lastName = (match.sourceAuthor || "").split(",")[0].split(" ").pop()?.replace(/[^a-zA-Z]/g, "") || "source";
-  const firstWord = (match.sourceTitle || "").trim().split(/\s+/)[0]?.replace(/[^a-zA-Z0-9]/g, "") || "";
+  const firstWord = cleanMatchTitle(match).split(/\s+/)[0]?.replace(/[^a-zA-Z0-9]/g, "") || "";
   return `${lastName}${match.sourceYear || ""}${firstWord}`;
 }
 
@@ -30,9 +35,10 @@ function escapeBibtex(value: string): string {
 export function formatCitationBibtex(match: MatchedSource): string {
   const entryType = match.sourceKind === "academic" ? "article" : "misc";
   const key = bibtexKey(match);
+  const title = cleanMatchTitle(match);
   const lines = [`@${entryType}{${key},`];
   if (match.sourceAuthor) lines.push(`  author = {${escapeBibtex(match.sourceAuthor)}},`);
-  if (match.sourceTitle) lines.push(`  title = {${escapeBibtex(match.sourceTitle)}},`);
+  if (title) lines.push(`  title = {${escapeBibtex(title)}},`);
   if (match.sourceYear) lines.push(`  year = {${escapeBibtex(match.sourceYear)}},`);
   if (match.sourceDoi) lines.push(`  doi = {${escapeBibtex(match.sourceDoi)}},`);
   if (match.sourceUrl) lines.push(`  url = {${escapeBibtex(match.sourceUrl)}},`);

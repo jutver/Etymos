@@ -310,15 +310,46 @@ function resolveSpan(passage: DocPassage, match: MatchedSource): PassageSpan {
   return { matchId: match.id, tone, start: 0, end: passage.text.length, approximate: true };
 }
 
+interface CompiledMatchMatcher {
+  trimmed: string;
+  firstWordLower: string;
+  loose: RegExp | null;
+}
+
+function compileMatchMatcher(snippet: string): CompiledMatchMatcher | null {
+  const trimmed = snippet.trim();
+  if (!trimmed) return null;
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const firstWord = words[0] ?? "";
+  return {
+    trimmed,
+    firstWordLower: firstWord.toLowerCase(),
+    loose: words.length > 0 ? new RegExp(words.map(escapeRegExp).join("\\s+"), "i") : null,
+  };
+}
+
 /** Exact, then whitespace-insensitive, snippet search — no anchor/whole-passage
  * fallback, because a wrong guess for a *secondary* match would highlight text
  * that isn't actually matched. */
-function locateSnippetLoose(passageText: string, snippet: string): { start: number; end: number } | null {
-  const trimmed = snippet.trim();
+function locateSnippetLoose(
+  passageText: string,
+  snippet: string,
+  compiled?: CompiledMatchMatcher | null,
+  passageLower?: string,
+): { start: number; end: number } | null {
+  const trimmed = compiled ? compiled.trimmed : snippet.trim();
   if (!trimmed) return null;
 
   const exact = passageText.indexOf(trimmed);
   if (exact !== -1) return { start: exact, end: exact + trimmed.length };
+
+  if (compiled) {
+    if (compiled.firstWordLower.length >= 3 && passageLower && !passageLower.includes(compiled.firstWordLower)) {
+      return null;
+    }
+    const hit = compiled.loose?.exec(passageText);
+    return hit ? { start: hit.index, end: hit.index + hit[0].length } : null;
+  }
 
   const loose = whitespaceInsensitivePattern(trimmed);
   const hit = loose?.exec(passageText);
@@ -335,7 +366,12 @@ function locateSnippetLoose(passageText: string, snippet: string): { start: numb
  * passage are skipped outright rather than text-searched, so a sentence quoted
  * twice in the document can't light up in the wrong place.
  */
-function locateSecondarySpan(passage: DocPassage, match: MatchedSource): PassageSpan | null {
+function locateSecondarySpan(
+  passage: DocPassage,
+  match: MatchedSource,
+  compiled?: CompiledMatchMatcher | null,
+  passageLower?: string,
+): PassageSpan | null {
   const tone = matchTone(match);
   const hasOffsets =
     match.startOffset != null &&
@@ -349,11 +385,11 @@ function locateSecondarySpan(passage: DocPassage, match: MatchedSource): Passage
     if (passage.text.slice(precise.start, precise.end).trim() === match.userSnippet.trim()) {
       return { matchId: match.id, tone, start: precise.start, end: precise.end, approximate: false };
     }
-    const reanchored = locateSnippetLoose(passage.text, match.userSnippet);
+    const reanchored = locateSnippetLoose(passage.text, match.userSnippet, compiled, passageLower);
     return reanchored ? { matchId: match.id, tone, ...reanchored, approximate: false } : null;
   }
 
-  const located = locateSnippetLoose(passage.text, match.userSnippet);
+  const located = locateSnippetLoose(passage.text, match.userSnippet, compiled, passageLower);
   return located ? { matchId: match.id, tone, ...located, approximate: false } : null;
 }
 
@@ -428,6 +464,10 @@ export function buildRenderedPassages(
   visibleMatches: MatchedSource[],
 ): RenderedPassage[] {
   const byId = new Map(visibleMatches.map((m) => [m.id, m]));
+  const compiledById = new Map<string, CompiledMatchMatcher | null>();
+  for (const m of visibleMatches) {
+    compiledById.set(m.id, compileMatchMatcher(m.userSnippet));
+  }
 
   const candidatesByPassage = passages.map((passage) => {
     const primary = passage.matchId ? byId.get(passage.matchId) : undefined;
@@ -438,9 +478,24 @@ export function buildRenderedPassages(
     }
 
     if (passage.text) {
+      const hasPassageOffsets = passage.startOffset != null && passage.endOffset != null;
+      const passageLower = passage.text.toLowerCase();
       for (const match of visibleMatches) {
         if (match === primary) continue;
-        const span = locateSecondarySpan(passage, match);
+        if (
+          hasPassageOffsets &&
+          match.startOffset != null &&
+          match.endOffset != null &&
+          (match.startOffset < passage.startOffset! || match.endOffset > passage.endOffset!)
+        ) {
+          continue;
+        }
+        const span = locateSecondarySpan(
+          passage,
+          match,
+          compiledById.get(match.id),
+          passageLower,
+        );
         if (span) candidates.push({ span, percent: match.matchPercent, primary: false });
       }
     }

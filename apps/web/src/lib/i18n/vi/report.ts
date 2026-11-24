@@ -51,6 +51,8 @@ export const report: Record<string, string> = {
   "Drag to reorder row": "Kéo để sắp xếp lại hàng",
   "Drag to resize column": "Kéo để đổi độ rộng cột",
   "Each colour matches a highlight in your document.": "Mỗi màu tương ứng với một đoạn được tô sáng trong tài liệu của bạn.",
+  "Document order": "Thứ tự tài liệu",
+  "Sort matched sources": "Sắp xếp nguồn trùng khớp",
   "Export PDF": "Xuất PDF",
   "Export PDF — upgrade to unlock": "Xuất PDF — nâng cấp để mở khóa",
   "Failed to load report": "Không tải được báo cáo",
@@ -62,6 +64,7 @@ export const report: Record<string, string> = {
   "Heading 2": "Tiêu đề 2",
   "Heading 3": "Tiêu đề 3",
   "Hide plagiarism highlights": "Ẩn tô sáng đạo văn",
+  "Highest similarity": "Tương đồng cao nhất",
   "Highlighted words appear in both passages. Overlap is measured at the phrase level, not just individual words.":
     "Các từ được tô sáng xuất hiện ở cả hai đoạn. Mức trùng lặp được đo theo cụm từ, không chỉ từng từ riêng lẻ.",
   "Image (position preserved, not extracted)": "Hình ảnh (giữ nguyên vị trí, không trích xuất)",
@@ -296,6 +299,7 @@ export const report: Record<string, string> = {
   "Original Document": "Tài liệu gốc",
   "Not re-checked": "Chưa kiểm tra lại",
   "Exporting PDF…": "Đang xuất PDF…",
+  "Preparing your document and report for download.": "Đang chuẩn bị tài liệu và báo cáo để tải xuống.",
   "Couldn't export PDF": "Không thể xuất PDF",
   "{{filename}} is ready.": "{{filename}} đã sẵn sàng.",
 };

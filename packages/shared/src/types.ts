@@ -177,6 +177,15 @@ export interface DocPassage {
   textMarks?: TextMark[];
 }
 
+export interface AiExplanationCacheEntry {
+  text: string;
+  source: "llm:gemini";
+  model: string;
+  generated_at: string;
+}
+
+export type MatchSortMode = "document" | "similarity";
+
 export interface MatchedSource {
   id: string;
   severity: Severity;
@@ -190,6 +199,10 @@ export interface MatchedSource {
   sourceSnippet: string;
   explanation: string;
   rewriteSuggestions: string[];
+  /** Optional 0-based canonical top-to-bottom document reading order. */
+  sortOrder?: number;
+  /** Cached on-demand AI explanations keyed by UI language. */
+  aiExplanations?: Partial<Record<"en" | "vi", AiExplanationCacheEntry>>;
   /** --- Backend-supplied match offsets (optional) --------------------------
    * Character offsets of `userSnippet` inside the report's `input_text`, as
    * emitted by the backend's `match.input_offset`. The backend guarantees
@@ -257,6 +270,8 @@ export interface MatchExplanationFacts {
   phrase: string;
   /** 0-100 meaning similarity. */
   semantic: number;
+  /** Short anchor excerpt of the flagged user passage for distinct fallback reasoning. */
+  excerpt?: string;
 }
 
 /** One analysed paragraph from the backend's AI-content detector. */

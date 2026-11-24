@@ -13,6 +13,7 @@ from search_paper.paper_identity import (
     normalized_title_key,
     strip_preprint_prefix,
 )
+from source_title import sanitize_source_title
 
 
 SCORING_VERSION = 2
@@ -165,8 +166,11 @@ def _merge_source_metadata(kept, dropped):
     unifying duplicate matches for the same canonical paper."""
     if dropped.get("source_kind") == "academic" and kept.get("source_kind") != "academic":
         kept["source_kind"] = "academic"
-    if kept.get("source_kind") == "academic" and kept.get("source_title"):
-        kept["source_title"] = strip_preprint_prefix(kept["source_title"]) or kept["source_title"]
+    if kept.get("source_title"):
+        kept["source_title"] = sanitize_source_title(
+            kept["source_title"],
+            is_academic=(kept.get("source_kind") == "academic"),
+        ) or kept["source_title"]
     for field in ("source_url", "source_pdf_url", "source_year", "source_doi"):
         if dropped.get(field) and not kept.get(field):
             kept[field] = dropped[field]
@@ -224,16 +228,45 @@ def drop_nested_duplicates(matches):
     return [m for i, m in enumerate(matches) if i not in dropped]
 
 
+def _match_order_key(idx: int, m: dict) -> tuple:
+    """Canonical top-to-bottom reading-order sort key for a match dict."""
+    offset = m.get("input_offset") or {}
+    start = offset.get("start")
+    end = offset.get("end")
+    sim = float(m.get("semantic_similarity") or 0.0)
+    if start is not None:
+        return (0, int(start), int(end) if end is not None else int(start), 0.0, -sim, idx)
+
+    rects = m.get("pdf_rects")
+    if isinstance(rects, list) and rects:
+        valid = []
+        for r in rects:
+            if not isinstance(r, dict):
+                continue
+            page = r.get("page")
+            y0 = r.get("y0")
+            x0 = r.get("x0")
+            if page is not None and y0 is not None and x0 is not None:
+                try:
+                    valid.append((int(page), round(float(y0), 1), round(float(x0), 1)))
+                except (TypeError, ValueError):
+                    continue
+        if valid:
+            p, y, x = min(valid)
+            return (1, p, y, x, -sim, idx)
+
+    return (2, 0, 0, 0.0, -sim, idx)
+
+
 def sort_matches(matches):
-    """Likely plagiarism first, then by similarity."""
-    return sorted(
-        matches,
-        key=lambda x: (
-            x["label"] == "likely_plagiarism",
-            x["semantic_similarity"]
-        ),
-        reverse=True
-    )
+    """Order matches top-to-bottom by document reading position, unlocated matches last."""
+    return [
+        m
+        for _, m in sorted(
+            enumerate(matches),
+            key=lambda pair: _match_order_key(pair[0], pair[1]),
+        )
+    ]
 
 
 def build_final_report(verified_matches, input_chunks, input_text=None, document=None,
@@ -364,8 +397,11 @@ def build_final_report(verified_matches, input_chunks, input_text=None, document
                 "source_doi": source_doi,
                 "source_title": source_title,
             })
-            if source_kind == "academic" and source_title:
-                source_title = strip_preprint_prefix(source_title) or source_title
+            if source_title:
+                source_title = sanitize_source_title(
+                    source_title,
+                    is_academic=(source_kind == "academic"),
+                ) or source_title
 
             record = {
                 "label": label,

@@ -447,6 +447,32 @@ export async function quickCheckPassage(
   });
 }
 
+export interface ExplainMatchResponse {
+  match_id: string;
+  language: "en" | "vi";
+  explanation: string;
+  source: "llm:gemini" | "facts";
+  model: string | null;
+  cached: boolean;
+}
+
+/** Generate (or return cached) passage-specific AI explanation for one match. */
+export async function explainReportMatch(
+  reportId: string,
+  matchId: string,
+  language: "en" | "vi",
+  signal?: AbortSignal,
+): Promise<ExplainMatchResponse> {
+  return requestJson<ExplainMatchResponse>(
+    `/api/reports/${encodeURIComponent(reportId)}/matches/${encodeURIComponent(matchId)}/explain`,
+    {
+      method: "POST",
+      body: JSON.stringify({ language }),
+      signal,
+    },
+  );
+}
+
 /** Asks the backend to load this report's sources and the embedding model
  * ahead of the first quick check. Fire and forget. */
 export async function warmQuickCheck(reportId: string): Promise<void> {
@@ -1107,6 +1133,6 @@ export async function exportReportPdf(
   const asciiMatch = cd.match(/filename="([^"]+)"/i);
   const filename = utfMatch?.[1]
     ? decodeURIComponent(utfMatch[1])
-    : asciiMatch?.[1] || "Etymos-Report.pdf";
+    : asciiMatch?.[1] || "Etymos Report.pdf";
   return { blob: await response.blob(), filename };
 }

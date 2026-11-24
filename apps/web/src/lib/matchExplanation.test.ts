@@ -55,8 +55,36 @@ describe("explainMatch on reports saved before explanation facts", () => {
     const stored =
       "Từ ngữ khác với nguồn, nhưng ý nghĩa giống 72% và câu đi theo đúng cấu trúc của nguồn. Kiểu diễn đạt lại sát như vậy vẫn bị đánh dấu: hãy tổ chức lại câu theo cách riêng của bạn và trích dẫn nguồn.";
     setLanguage("en");
-    expect(explainMatch(match({ explanation: stored }))).toBe(
+    expect(explainMatch(match({ sourceTitle: "", explanation: stored }))).toBe(
       "The wording differs from the source, but the meaning is 72% the same and the sentence follows the source's structure. Close paraphrases like this are still flagged: restructure the sentence in your own way and cite the source.",
     );
+  });
+
+  it("produces distinct passage-specific fallback text for different identical matches and cleans titles", () => {
+    const dirtyTitle = "(PDF) ViHateT5: Enhancing Hate Speech Detection ... · Hugging FaceViHateT5";
+    const factsA = parseExplanationFacts({
+      kind: "identical", label: "likely_plagiarism", title: dirtyTitle, shared: 10, total: 10, phrase: "", semantic: 99,
+    });
+    const factsB = parseExplanationFacts({
+      kind: "identical", label: "likely_plagiarism", title: dirtyTitle, shared: 12, total: 12, phrase: "", semantic: 98,
+    });
+
+    setLanguage("vi");
+    const a = explainMatch(match({
+      sourceTitle: dirtyTitle,
+      userSnippet: "First distinct benchmark evaluation sentence across splits.",
+      explanationFacts: factsA,
+    }));
+    const b = explainMatch(match({
+      sourceTitle: dirtyTitle,
+      userSnippet: "Second completely different ablation experiment methodology note.",
+      explanationFacts: factsB,
+    }));
+
+    expect(a).not.toEqual(b);
+    expect(a).toContain("First distinct benchmark");
+    expect(b).toContain("Second completely different");
+    expect(a).not.toContain("Hugging Face");
+    expect(a).toContain("ViHateT5: Enhancing Hate Speech Detection");
   });
 });

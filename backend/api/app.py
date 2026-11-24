@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,14 +54,22 @@ from job_manager import (
 )
 from gpu_queue import gpu_slot
 import gpu_models
-from report_store import delete_report, get_report, list_reports, save_report, set_cached_unlocked_tier
+from report_store import (
+    delete_report,
+    get_report,
+    list_reports,
+    load_match_for_explain,
+    save_match_ai_explanation,
+    save_report,
+    set_cached_unlocked_tier,
+)
 from main import check_pdf_plagiarism, check_docx_plagiarism
 from doan_van import check_text_plagiarism
 from ai_rewrite import RewriteUnavailable, register_flag as register_rewrite_flag, rewrite_sentence
 from quick_check import MAX_QUICK_CHECK_CHARS, check_passage, corpus_from_sources, quick_check_report_passage
 from quick_check import warm_up as warm_up_quick_check
 from report_store import get_local_report_file
-from ai_explain import register_flag as register_explain_flag
+from ai_explain import explain_single_match, register_flag as register_explain_flag
 from report_enrichment import register_flags as register_enrichment_flags
 from citations import DEFAULT_REFERENCE_HEADING, add_citation
 from rate_limit import limiter
@@ -1229,9 +1238,15 @@ class ExportPdfRequest(BaseModel):
 
 
 def _safe_export_filename(title: str) -> str:
-    cleaned = "".join(ch if ch.isalnum() or ch in (" ", "-", "_") else "_" for ch in (title or "Etymos-Report")).strip()
-    cleaned = "_".join(cleaned.split()) or "Etymos-Report"
-    return f"{cleaned[:80]}-report.pdf"
+    import re
+
+    raw = (title or "").strip()
+    raw = re.sub(r"\.(pdf|docx?|txt)$", "", raw, flags=re.IGNORECASE).strip()
+    raw = re.sub(r'[\\/:*?"<>|\r\n\t]+', " ", raw)
+    cleaned = " ".join(raw.split()).strip(" .")[:100].strip()
+    if not cleaned or cleaned.lower() in ("etymos-report", "etymos report"):
+        return "Etymos Report.pdf"
+    return f"{cleaned} - Etymos Report.pdf"
 
 
 @app.post("/api/reports/{report_id}/export-pdf")
@@ -1242,6 +1257,7 @@ def export_report_pdf(
     body: ExportPdfRequest,
     user: AuthedUser = Depends(verify_supabase_jwt),
 ):
+    import unicodedata
     from pdf_export import build_export_context, generate_export_pdf
 
     report = get_report(report_id)
@@ -1259,7 +1275,7 @@ def export_report_pdf(
         or report.get("title")
         or report.get("file_name")
         or input_meta.get("name")
-        or "Etymos-Report"
+        or "Etymos Report"
     )
     orig_bytes = load_original_pdf_bytes(report_id, report.get("user_id"))
     orig_text = original_text(report_id, report.get("input_text") or "")
@@ -1291,7 +1307,9 @@ def export_report_pdf(
         edited_html=edited_html,
     )
     filename = _safe_export_filename(title)
-    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "Etymos-Report.pdf"
+    ascii_stem = unicodedata.normalize("NFKD", filename[:-4]).encode("ascii", "ignore").decode("ascii")
+    ascii_stem = " ".join(ascii_stem.split()).lstrip(" -")
+    ascii_name = f"{ascii_stem}.pdf" if ascii_stem else "Etymos Report.pdf"
     disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
     return Response(
         content=pdf_bytes,
@@ -1394,6 +1412,144 @@ def rewrite_text_with_ai(request: Request, body: RewriteRequest,
         "fallback_used": result["fallback_used"],
         # Quick-check verdict of the returned rewrite, when it was checked.
         "check": result.get("check"),
+    }
+
+
+_EXPLAIN_CACHE_MAX = 1024
+_EXPLAIN_CACHE: OrderedDict[tuple[str, str, str], dict] = OrderedDict()
+_EXPLAIN_CACHE_LOCK = threading.Lock()
+
+
+def clear_explain_cache() -> None:
+    """Reset the in-memory on-demand explanation cache (for tests)."""
+    with _EXPLAIN_CACHE_LOCK:
+        _EXPLAIN_CACHE.clear()
+
+
+def _explain_cache_get(key: tuple[str, str, str]) -> Optional[dict]:
+    with _EXPLAIN_CACHE_LOCK:
+        val = _EXPLAIN_CACHE.get(key)
+        if val is not None:
+            _EXPLAIN_CACHE.move_to_end(key)
+            return dict(val)
+    return None
+
+
+def _explain_cache_put(key: tuple[str, str, str], entry: dict) -> None:
+    with _EXPLAIN_CACHE_LOCK:
+        _EXPLAIN_CACHE[key] = dict(entry)
+        _EXPLAIN_CACHE.move_to_end(key)
+        while len(_EXPLAIN_CACHE) > _EXPLAIN_CACHE_MAX:
+            _EXPLAIN_CACHE.popitem(last=False)
+
+
+def _check_explanation_plan_allowed(user: AuthedUser, report: dict) -> None:
+    if user.is_admin:
+        return
+    if report.get("unlocked_tier") in ("student", "professional"):
+        return
+    client = get_client()
+    if client is None:
+        return
+    try:
+        resp = (
+            client.table("profiles")
+            .select("plan_tier")
+            .eq("id", user.user_id)
+            .maybe_single()
+            .execute()
+        )
+        data = resp.data if resp else None
+        if not data:
+            return
+        tier = (data.get("plan_tier") or "free").lower()
+    except Exception:
+        logger.exception("Failed checking plan_tier for user_id=%s", user.user_id)
+        return
+    if tier not in ("student", "professional"):
+        raise HTTPException(status_code=403, detail="Explanation available on paid plans.")
+
+
+class ExplainMatchRequest(BaseModel):
+    language: Literal["en", "vi"] = "en"
+
+
+@app.post("/api/reports/{report_id}/matches/{match_id}/explain")
+def explain_report_match(
+    report_id: str,
+    match_id: str,
+    body: ExplainMatchRequest,
+    user: AuthedUser = Depends(verify_supabase_jwt),
+):
+    """
+    On-demand, passage-specific "Why this is flagged" explanation using the
+    dedicated `GEMINI_EXPLAIN_API_KEY` credential. Cached per (report, match,
+    language) in process memory and `document_matches.ai_explanations`; falls
+    back seamlessly to upgraded deterministic facts on error or rate limit.
+    """
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    require_owner_or_admin(report.get("user_id"), user)
+    _check_explanation_plan_allowed(user, report)
+
+    match, persisted_row_id = load_match_for_explain(report_id, match_id)
+    if match is None:
+        raise HTTPException(status_code=404, detail="Match not found.")
+
+    lang = body.language
+    cache_id = persisted_row_id or match_id
+    cache_key = (report_id, cache_id, lang)
+
+    cached_entry = _explain_cache_get(cache_key)
+    if cached_entry and cached_entry.get("text"):
+        return {
+            "match_id": match_id,
+            "language": lang,
+            "explanation": cached_entry["text"],
+            "source": cached_entry.get("source") or "llm:gemini",
+            "model": cached_entry.get("model"),
+            "cached": True,
+        }
+
+    stored_map = match.get("ai_explanations")
+    if isinstance(stored_map, dict):
+        persisted = stored_map.get(lang)
+        if isinstance(persisted, dict) and isinstance(persisted.get("text"), str) and persisted["text"].strip():
+            entry = {
+                "text": persisted["text"],
+                "source": persisted.get("source") or "llm:gemini",
+                "model": persisted.get("model"),
+                "generated_at": persisted.get("generated_at") or "",
+            }
+            _explain_cache_put(cache_key, entry)
+            return {
+                "match_id": match_id,
+                "language": lang,
+                "explanation": entry["text"],
+                "source": entry["source"],
+                "model": entry["model"],
+                "cached": True,
+            }
+
+    result = explain_single_match(match, language=lang)
+    if result.get("source") == "llm:gemini" and result.get("explanation"):
+        entry = {
+            "text": result["explanation"],
+            "source": "llm:gemini",
+            "model": result.get("model"),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _explain_cache_put(cache_key, entry)
+        save_match_ai_explanation(report_id, persisted_row_id, match_id, lang, entry)
+
+    return {
+        "match_id": match_id,
+        "language": lang,
+        "explanation": result["explanation"],
+        "source": result["source"],
+        "model": result.get("model"),
+        "cached": False,
     }
 
 
