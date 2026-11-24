@@ -132,6 +132,7 @@ def api(tmp_path, monkeypatch):
     ("get", "/api/admin/logs/files/deploy"),
     ("get", "/api/admin/server"),
     ("post", "/api/admin/server/actions/dump-threads"),
+    ("post", "/api/admin/server/actions/shutdown-api"),
 ])
 def test_everything_is_admin_only(api, method, path):
     client, current = api
@@ -296,3 +297,225 @@ def test_default_supervisorctl_prefers_env_then_venv_then_path(tmp_path, monkeyp
     assert missing == venv_bin
     monkeypatch.setattr(admin_ops, "SUPERVISORCTL", missing)
     assert admin_ops._supervised() is False
+
+
+def test_shutdown_refuses_when_checks_running_and_audits_before_stopping(api, monkeypatch):
+    client, _ = api
+    events: list[tuple] = []
+
+    monkeypatch.setattr(admin_ops, "_shutdown_api", lambda supervised: events.append(("shutdown", supervised)))
+    monkeypatch.setattr(
+        admin_ops,
+        "record_admin_action",
+        lambda actor_id, action, **kw: events.append(("audit", actor_id, action, kw)),
+    )
+
+    # Refused without force when checks are active.
+    monkeypatch.setattr(admin_ops, "_supervised", lambda: True)
+    monkeypatch.setattr(admin_ops, "active_count", lambda: 2)
+    refused = client.post("/api/admin/server/actions/shutdown-api")
+    assert refused.status_code == 409
+    assert "2 check(s)" in refused.json()["detail"]
+    assert events == []
+
+    # Forced shutdown while supervised records audit first, then shuts down.
+    forced = client.post("/api/admin/server/actions/shutdown-api", json={"force": True})
+    assert forced.status_code == 200
+    body = forced.json()
+    assert body["action"] == "shutdown-api"
+    assert body["shutting_down"] is True
+    assert body["lost_checks"] == 2
+    assert body["supervised"] is True
+    assert events[0][0] == "audit" and events[0][2] == "server.shutdown_api"
+    assert events[1] == ("shutdown", True)
+
+    # Standalone (not supervised) shutdown also works cleanly when forced or idle.
+    events.clear()
+    monkeypatch.setattr(admin_ops, "_supervised", lambda: False)
+    monkeypatch.setattr(admin_ops, "active_count", lambda: 0)
+    standalone = client.post("/api/admin/server/actions/shutdown-api", json={"force": False})
+    assert standalone.status_code == 200
+    s_body = standalone.json()
+    assert s_body["shutting_down"] is True
+    assert s_body["lost_checks"] == 0
+    assert s_body["supervised"] is False
+    assert events[0][0] == "audit" and events[0][2] == "server.shutdown_api"
+    assert events[1] == ("shutdown", False)
+
+
+def test_ws_live_logs_rejects_unauthorized_and_non_admin(api, monkeypatch):
+    import time
+    from fastapi import HTTPException
+    from starlette.websockets import WebSocketDisconnect
+
+    client, _ = api
+
+    def fake_verify(token: str):
+        if token == "bad":
+            raise HTTPException(status_code=401, detail="Invalid token.")
+        if token == "non-admin":
+            return USER, time.time() + 60
+        return ADMIN, time.time() + 60
+
+    monkeypatch.setattr(admin_ops, "verify_jwt_token", fake_verify)
+
+    with client.websocket_connect("/api/admin/logs/ws") as ws:
+        ws.send_json({"type": "auth", "token": "bad"})
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "unauthorized"
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            ws.receive_json()
+        assert exc_info.value.code == admin_ops.WS_CLOSE_UNAUTHORIZED
+
+    with client.websocket_connect("/api/admin/logs/ws") as ws:
+        ws.send_json({"type": "auth", "token": "non-admin"})
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "forbidden"
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            ws.receive_json()
+        assert exc_info.value.code == admin_ops.WS_CLOSE_FORBIDDEN
+
+
+def test_ws_live_logs_streams_filters_pause_resume_and_expiry(api, monkeypatch):
+    import time
+    from starlette.websockets import WebSocketDisconnect
+
+    client, _ = api
+    exp_box = {"exp": time.time() + 60}
+
+    def fake_verify(token: str):
+        if token == "expiring":
+            return ADMIN, time.time() + 0.08
+        return ADMIN, exp_box["exp"]
+
+    monkeypatch.setattr(admin_ops, "verify_jwt_token", fake_verify)
+
+    log = logging.getLogger("api.ws_test")
+    log.setLevel(logging.DEBUG)
+    log.addHandler(log_setup.LOG_BUFFER)
+    log.propagate = False
+    try:
+        log.info("ws-before-connect")
+        with client.websocket_connect("/api/admin/logs/ws") as ws:
+            ws.send_json({"type": "auth", "token": "good", "after": 0, "limit": 50, "filters": {"q": "ws-"}})
+            auth_ok = ws.receive_json()
+            assert auth_ok["type"] == "auth_ok"
+            snap = ws.receive_json()
+            assert snap["type"] == "snapshot"
+            assert any(r["message"] == "ws-before-connect" for r in snap["rows"])
+            last_seq = snap["last_seq"]
+
+            # Live row arrives immediately.
+            log.info("ws-live-line")
+            msg = ws.receive_json()
+            assert msg["type"] == "rows"
+            assert [r["message"] for r in msg["rows"]] == ["ws-live-line"]
+            last_seq = msg["last_seq"]
+
+            # Live filter switch resets snapshot to matching lines only.
+            ws.send_json({"type": "subscribe", "after": 0, "limit": 50, "filters": {"level": "WARNING", "q": "ws-"}})
+            filtered_snap = ws.receive_json()
+            assert filtered_snap["type"] == "snapshot"
+            assert filtered_snap["rows"] == []
+
+            log.warning("ws-warn-one")
+            warn_msg = ws.receive_json()
+            assert [r["message"] for r in warn_msg["rows"]] == ["ws-warn-one"]
+            paused_seq = warn_msg["last_seq"]
+
+            # Pause suppresses live delivery; resume delivers missed lines without duplicates.
+            ws.send_json({"type": "pause"})
+            log.warning("ws-while-paused")
+            ws.send_json({"type": "resume", "after": paused_seq})
+            resumed = ws.receive_json()
+            assert resumed["type"] == "snapshot"
+            assert [r["message"] for r in resumed["rows"]] == ["ws-while-paused"]
+
+            # Refresh auth updates session token cleanly.
+            ws.send_json({"type": "refresh_auth", "token": "good"})
+            ws.send_json({"type": "ping"})
+            assert ws.receive_json() == {"type": "pong"}
+
+        # Expiring token triggers server-side closure with 4401.
+        with client.websocket_connect("/api/admin/logs/ws") as ws:
+            ws.send_json({"type": "auth", "token": "expiring", "after": last_seq, "limit": 10})
+            assert ws.receive_json()["type"] == "auth_ok"
+            assert ws.receive_json()["type"] == "snapshot"
+            err = ws.receive_json()
+            assert err["type"] == "error" and err["code"] == "unauthorized"
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                ws.receive_json()
+            assert exc_info.value.code == admin_ops.WS_CLOSE_UNAUTHORIZED
+    finally:
+        log.removeHandler(log_setup.LOG_BUFFER)
+        log.propagate = True
+
+
+def test_log_buffer_subscriber_sets_dropped_flag_on_overflow():
+    import asyncio
+
+    async def _run():
+        buf = LogBuffer(capacity=20)
+        sub = buf.subscribe(asyncio.get_running_loop(), maxsize=2)
+        sub.enqueue({"seq": 1})
+        sub.enqueue({"seq": 2})
+        sub.enqueue({"seq": 3})
+        assert sub.dropped is True
+        items = [await sub.queue.get(), await sub.queue.get()]
+        assert [i["seq"] for i in items] == [2, 3]
+        buf.unsubscribe(sub)
+
+    asyncio.run(_run())
+
+
+def test_ws_server_status_streams_refreshes_and_enforces_expiry(api, monkeypatch):
+    import time
+    from fastapi import HTTPException
+    from starlette.websockets import WebSocketDisconnect
+
+    client, _ = api
+
+    def fake_verify(token: str):
+        if token == "non-admin":
+            return USER, time.time() + 60
+        if token == "expiring":
+            return ADMIN, time.time() + 0.08
+        if token == "good":
+            return ADMIN, time.time() + 60
+        raise HTTPException(status_code=401, detail="Invalid token.")
+
+    monkeypatch.setattr(admin_ops, "verify_jwt_token", fake_verify)
+
+    with client.websocket_connect("/api/admin/server/ws") as ws:
+        ws.send_json({"type": "auth", "token": "non-admin"})
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "forbidden"
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            ws.receive_json()
+        assert exc_info.value.code == admin_ops.WS_CLOSE_FORBIDDEN
+
+    with client.websocket_connect("/api/admin/server/ws") as ws:
+        ws.send_json({"type": "auth", "token": "good"})
+        assert ws.receive_json()["type"] == "auth_ok"
+        first = ws.receive_json()
+        assert first["type"] == "status"
+        assert first["data"]["process"]["pid"] > 0
+
+        ws.send_json({"type": "refresh"})
+        refreshed = ws.receive_json()
+        assert refreshed["type"] == "status"
+        assert set(refreshed["data"]["jobs"]) == {"active", "recent", "counts"}
+
+        ws.send_json({"type": "refresh_auth", "token": "good"})
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+    with client.websocket_connect("/api/admin/server/ws") as ws:
+        ws.send_json({"type": "auth", "token": "expiring"})
+        assert ws.receive_json()["type"] == "auth_ok"
+        assert ws.receive_json()["type"] == "status"
+        err = ws.receive_json()
+        assert err["type"] == "error" and err["code"] == "unauthorized"
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            ws.receive_json()
+        assert exc_info.value.code == admin_ops.WS_CLOSE_UNAUTHORIZED

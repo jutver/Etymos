@@ -1,12 +1,12 @@
 // Server tab: the API process, the machine, the GPU and the checks running
-// now, refreshed every ten seconds, plus the fixed list of server actions.
-// There is no free-form command box on purpose (see backend/api/admin_ops.py).
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+// now, streamed live over a direct WebSocket connection, plus the fixed list
+// of server actions (including restart and shutdown). There is no free-form
+// command box on purpose (see backend/api/admin_ops.py).
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import {
-  fetchServerStatus,
   LOG_LEVELS,
   runServerAction,
   type ActionResult,
@@ -14,7 +14,9 @@ import {
   type LogLevel,
   type ServerAction,
   type ServerStatus,
+  type ServerStatusMessage,
 } from "../../lib/opsApi";
+import { createAdminWsClient, type AdminWsClient, type WsConnectionState } from "../../lib/opsWs";
 import { Skeleton } from "../../components/Skeleton";
 import { ApiError } from "../../lib/api";
 import { friendlyError } from "../../lib/errors";
@@ -22,8 +24,6 @@ import { pushToast } from "../../lib/toast";
 import { currentLocale, t, tn, tr } from "../../lib/i18n";
 import { formatSeconds, shortJob } from "./format";
 import { ServerStatusSkeleton } from "./Skeletons";
-
-const REFRESH_MS = 10_000;
 
 function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
@@ -169,11 +169,13 @@ function describeResult(result: ActionResult): string {
     }
     case "restart-api":
       return t("The API is restarting. It's usually back within a minute.");
+    case "shutdown-api":
+      return t("The API is shutting down. It will stay offline until started manually on the server.");
   }
 }
 
 interface ActionDef {
-  action: Exclude<ServerAction, "log-level" | "restart-api">;
+  action: Exclude<ServerAction, "log-level" | "restart-api" | "shutdown-api">;
   label: string;
   description: string;
 }
@@ -205,40 +207,79 @@ export default function ServerPage() {
   const [status, setStatus] = useState<ServerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [wsState, setWsState] = useState<WsConnectionState>("connecting");
   const [busy, setBusy] = useState<ServerAction | null>(null);
   const [level, setLevel] = useState<LogLevel>("INFO");
-  const [confirmRestart, setConfirmRestart] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"restart" | "shutdown" | null>(null);
+  const [shuttingDown, setShuttingDown] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const next = await fetchServerStatus();
-      setStatus(next);
-      setError(null);
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const wsRef = useRef<AdminWsClient | null>(null);
 
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(), REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    const client = createAdminWsClient({
+      path: "/api/admin/server/ws",
+      buildAuthFrame: (token) => ({ type: "auth", token }),
+      onStateChange: (nextState) => {
+        setWsState(nextState);
+        if (nextState === "disconnected") {
+          setRefreshing(false);
+        }
+      },
+      onError: (msg, fatal) => {
+        if (fatal) {
+          setError(msg || t("Not connected"));
+          setLoading(false);
+          setRefreshing(false);
+        }
+      },
+      onMessage: (raw) => {
+        if (raw.type === "error") {
+          setError(typeof raw.detail === "string" ? raw.detail : t("Not connected"));
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+        if (raw.type !== "status") return;
+        const msg = raw as unknown as ServerStatusMessage;
+        setStatus(msg.data);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+        setShuttingDown(false);
+      },
+    });
+    wsRef.current = client;
+    client.start();
+    return () => {
+      client.stop();
+      wsRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (status) setLevel(status.process.log_level);
   }, [status?.process.log_level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function refreshNow() {
+    setRefreshing(true);
+    const sent = wsRef.current?.send({ type: "refresh" });
+    if (!sent) {
+      wsRef.current?.reconnectNow();
+    }
+  }
 
   async function run(action: ServerAction, body: { level?: LogLevel; force?: boolean } = {}) {
     setBusy(action);
     try {
       const result = await runServerAction(action, body);
       pushToast({ kind: "success", title: t("Done"), description: describeResult(result) });
-      setConfirmRestart(false);
-      if (action !== "restart-api") void load();
+      setConfirmAction(null);
+      if (action === "shutdown-api") {
+        setShuttingDown(true);
+      } else if (action !== "restart-api") {
+        wsRef.current?.send({ type: "refresh" });
+      }
     } catch (err) {
       pushToast({
         kind: err instanceof ApiError && err.status === 409 ? "warning" : "error",
@@ -257,25 +298,51 @@ export default function ServerPage() {
   const actionButton =
     "cursor-pointer rounded-control border border-border px-3 py-1.5 text-caption font-medium text-fg transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50";
 
+  const statusTime = s ? new Date(s.checked_at).toLocaleTimeString(currentLocale()) : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-caption text-fg-subtle">
-          {s ? (
-            t("Updated {{time}} · refreshes every 10 seconds", { time: new Date(s.checked_at).toLocaleTimeString(currentLocale()) })
+        <div className="flex items-center gap-2 text-caption text-fg-subtle">
+          {shuttingDown ? (
+            <>
+              <span className="size-2 rounded-full bg-destructive" />
+              <span className="text-destructive">
+                {t("Shutting down — start the API manually on the server to bring it back online.")}
+              </span>
+            </>
+          ) : error || wsState === "disconnected" ? (
+            <>
+              <span className="size-2 rounded-full bg-destructive" />
+              <span>{t("Not connected")}</span>
+            </>
+          ) : wsState === "reconnecting" ? (
+            <>
+              <span className="size-2 animate-pulse rounded-full bg-warning" />
+              <span>
+                {statusTime
+                  ? t("Reconnecting… · last updated {{time}}", { time: statusTime })
+                  : t("Reconnecting…")}
+              </span>
+            </>
+          ) : s && wsState === "connected" ? (
+            <>
+              <span className="size-2 animate-pulse rounded-full bg-success" />
+              <span>{t("Live · updated {{time}}", { time: statusTime! })}</span>
+            </>
           ) : loading ? (
             <Skeleton className="h-3.5 w-56" />
           ) : (
-            ""
+            <span>{t("Connecting…")}</span>
           )}
         </div>
         <button
           type="button"
-          onClick={() => void load()}
-          disabled={loading}
+          onClick={refreshNow}
+          disabled={loading || refreshing}
           className="flex cursor-pointer items-center gap-1.5 rounded-control border border-border px-3 py-1.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised disabled:opacity-60"
         >
-          <ArrowClockwise size={14} weight="bold" className={cn(loading && "animate-spin")} />
+          <ArrowClockwise size={14} weight="bold" className={cn((loading || refreshing) && "animate-spin")} />
           {t("Refresh")}
         </button>
       </div>
@@ -286,115 +353,121 @@ export default function ServerPage() {
         </p>
       )}
 
+      {shuttingDown && (
+        <p className="rounded-card border border-warning/40 bg-warning-bg px-3 py-2 text-caption text-warning">
+          {t("The API is shutting down. It will stay offline until started manually on the server.")}
+        </p>
+      )}
+
       {!s && loading ? (
         <ServerStatusSkeleton />
       ) : (
         s && (
           <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card title={t("API process")}>
-              <Item label={t("Up for")}>{s.process.uptime}</Item>
-              <Item label={t("Started")}>{new Date(s.process.started_at).toLocaleString(currentLocale())}</Item>
-              <Item label={t("Version")}>
-                <span title={s.process.commit}>{s.process.commit}</span>
-              </Item>
-              <Item label={t("Process")}>
-                {s.process.pid} · {tn(s.process.threads, "{{count}} thread", "{{count}} threads")}
-              </Item>
-              <Item label={t("Log level")}>{s.process.log_level}</Item>
-              <Item label={t("Python")}>{s.process.python}</Item>
-            </Card>
-
-            <Card title={t("Machine")}>
-              <Item label={t("Host")}>{s.host.name}</Item>
-              <Item label={t("Load (1/5/15 min)")}>
-                {s.host.load ? s.host.load.join(" / ") : "—"}
-                {s.host.cpus ? ` · ${tn(s.host.cpus, "{{count}} CPU", "{{count}} CPUs")}` : ""}
-              </Item>
-              <div>
-                <Item label={t("Memory free")} tone={memFree !== null && memTotal && memFree / memTotal < 0.1 ? "error" : undefined}>
-                  {memFree !== null && memTotal ? `${(memFree / 1024).toFixed(1)} / ${(memTotal / 1024).toFixed(1)} GB` : "—"}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Card title={t("API process")}>
+                <Item label={t("Up for")}>{s.process.uptime}</Item>
+                <Item label={t("Started")}>{new Date(s.process.started_at).toLocaleString(currentLocale())}</Item>
+                <Item label={t("Version")}>
+                  <span title={s.process.commit}>{s.process.commit}</span>
                 </Item>
-                {memFree !== null && memTotal ? <Meter used={memTotal - memFree} total={memTotal} /> : null}
-              </div>
-              <Item label={t("API memory")}>
-                {s.memory.rss_mb !== null ? `${Math.round(s.memory.rss_mb)} MB` : "—"} ·{" "}
-                {t("peak {{mb}} MB", { mb: Math.round(s.memory.peak_mb) })}
-              </Item>
-              {s.host.disk && (
+                <Item label={t("Process")}>
+                  {s.process.pid} · {tn(s.process.threads, "{{count}} thread", "{{count}} threads")}
+                </Item>
+                <Item label={t("Log level")}>{s.process.log_level}</Item>
+                <Item label={t("Python")}>{s.process.python}</Item>
+              </Card>
+
+              <Card title={t("Machine")}>
+                <Item label={t("Host")}>{s.host.name}</Item>
+                <Item label={t("Load (1/5/15 min)")}>
+                  {s.host.load ? s.host.load.join(" / ") : "—"}
+                  {s.host.cpus ? ` · ${tn(s.host.cpus, "{{count}} CPU", "{{count}} CPUs")}` : ""}
+                </Item>
                 <div>
-                  <Item label={t("Disk free")} tone={s.host.disk.used_percent > 90 ? "error" : undefined}>
-                    {s.host.disk.free_gb} / {s.host.disk.total_gb} GB
+                  <Item label={t("Memory free")} tone={memFree !== null && memTotal && memFree / memTotal < 0.1 ? "error" : undefined}>
+                    {memFree !== null && memTotal ? `${(memFree / 1024).toFixed(1)} / ${(memTotal / 1024).toFixed(1)} GB` : "—"}
                   </Item>
-                  <Meter used={s.host.disk.total_gb - s.host.disk.free_gb} total={s.host.disk.total_gb} />
+                  {memFree !== null && memTotal ? <Meter used={memTotal - memFree} total={memTotal} /> : null}
                 </div>
-              )}
-            </Card>
-
-            <Card title={t("GPU")}>
-              {s.gpu.available ? (
-                <>
-                  <Item label={t("Card")}>{s.gpu.name}</Item>
-                  {s.gpu.free_gb !== undefined && s.gpu.total_gb !== undefined && (
-                    <div>
-                      <Item label={t("Memory free")}>
-                        {s.gpu.free_gb} / {s.gpu.total_gb} GB
-                      </Item>
-                      <Meter used={s.gpu.total_gb - s.gpu.free_gb} total={s.gpu.total_gb} />
-                    </div>
-                  )}
-                  {s.gpu.allocated_gb !== undefined && (
-                    <Item label={t("Used by models")}>
-                      {s.gpu.allocated_gb} GB · {t("peak {{gb}} GB", { gb: s.gpu.peak_gb ?? "?" })}
+                <Item label={t("API memory")}>
+                  {s.memory.rss_mb !== null ? `${Math.round(s.memory.rss_mb)} MB` : "—"} ·{" "}
+                  {t("peak {{mb}} MB", { mb: Math.round(s.memory.peak_mb) })}
+                </Item>
+                {s.host.disk && (
+                  <div>
+                    <Item label={t("Disk free")} tone={s.host.disk.used_percent > 90 ? "error" : undefined}>
+                      {s.host.disk.free_gb} / {s.host.disk.total_gb} GB
                     </Item>
-                  )}
-                </>
-              ) : (
-                <Item label={t("Card")}>{s.gpu.error ?? t("None (running on CPU)")}</Item>
-              )}
-              <Item label={t("Check slots")} tone={s.gpu.queue.waiting > 0 ? "warning" : undefined}>
-                {t("{{running}}/{{slots}} busy · {{waiting}} waiting", {
-                  running: s.gpu.queue.running,
-                  slots: s.gpu.queue.slots,
-                  waiting: s.gpu.queue.waiting,
-                })}
-              </Item>
-              <Item label={t("Models loaded")}>
-                {s.gpu.models.length
-                  ? s.gpu.models.map((m) => `${m.name}${m.in_use ? "*" : ""}`).join(", ")
-                  : t("none")}
-              </Item>
-            </Card>
+                    <Meter used={s.host.disk.total_gb - s.host.disk.free_gb} total={s.host.disk.total_gb} />
+                  </div>
+                )}
+              </Card>
 
-            <Card title={t("Background work")}>
-              <Item label={t("Notifications")} tone={s.background.notifications ? undefined : "warning"}>
-                {s.background.notifications ? t("Running") : t("Not running")}
-              </Item>
-              <Item label={t("Support inbox")} tone={s.background.support_inbox ? undefined : "warning"}>
-                {s.background.support_inbox ? t("Running") : t("Not running")}
-              </Item>
-              <Item label={t("Checks since start")}>
-                {Object.values(s.jobs.counts).reduce((a, b) => a + b, 0)}
-              </Item>
-              <Item label={t("Failed since start")} tone={s.jobs.counts.failed ? "error" : undefined}>
-                {s.jobs.counts.failed ?? 0}
-              </Item>
-              <Item label={t("Auto-restart")}>{s.process.supervised ? t("Supervisor") : t("Not supervised")}</Item>
-            </Card>
-          </div>
+              <Card title={t("GPU")}>
+                {s.gpu.available ? (
+                  <>
+                    <Item label={t("Card")}>{s.gpu.name}</Item>
+                    {s.gpu.free_gb !== undefined && s.gpu.total_gb !== undefined && (
+                      <div>
+                        <Item label={t("Memory free")}>
+                          {s.gpu.free_gb} / {s.gpu.total_gb} GB
+                        </Item>
+                        <Meter used={s.gpu.total_gb - s.gpu.free_gb} total={s.gpu.total_gb} />
+                      </div>
+                    )}
+                    {s.gpu.allocated_gb !== undefined && (
+                      <Item label={t("Used by models")}>
+                        {s.gpu.allocated_gb} GB · {t("peak {{gb}} GB", { gb: s.gpu.peak_gb ?? "?" })}
+                      </Item>
+                    )}
+                  </>
+                ) : (
+                  <Item label={t("Card")}>{s.gpu.error ?? t("None (running on CPU)")}</Item>
+                )}
+                <Item label={t("Check slots")} tone={s.gpu.queue.waiting > 0 ? "warning" : undefined}>
+                  {t("{{running}}/{{slots}} busy · {{waiting}} waiting", {
+                    running: s.gpu.queue.running,
+                    slots: s.gpu.queue.slots,
+                    waiting: s.gpu.queue.waiting,
+                  })}
+                </Item>
+                <Item label={t("Models loaded")}>
+                  {s.gpu.models.length
+                    ? s.gpu.models.map((m) => `${m.name}${m.in_use ? "*" : ""}`).join(", ")
+                    : t("none")}
+                </Item>
+              </Card>
 
-          <section className="rounded-card border border-border bg-surface p-4 shadow-card">
-            <h2 className="text-caption font-medium text-fg-muted">
-              {t("Checks running now")} {activeJobs > 0 && <span className="text-fg">({activeJobs})</span>}
-            </h2>
-            <JobsTable jobs={s.jobs.active} empty={t("No checks are running.")} />
-          </section>
+              <Card title={t("Background work")}>
+                <Item label={t("Notifications")} tone={s.background.notifications ? undefined : "warning"}>
+                  {s.background.notifications ? t("Running") : t("Not running")}
+                </Item>
+                <Item label={t("Support inbox")} tone={s.background.support_inbox ? undefined : "warning"}>
+                  {s.background.support_inbox ? t("Running") : t("Not running")}
+                </Item>
+                <Item label={t("Checks since start")}>
+                  {Object.values(s.jobs.counts).reduce((a, b) => a + b, 0)}
+                </Item>
+                <Item label={t("Failed since start")} tone={s.jobs.counts.failed ? "error" : undefined}>
+                  {s.jobs.counts.failed ?? 0}
+                </Item>
+                <Item label={t("Auto-restart")}>{s.process.supervised ? t("Supervisor") : t("Not supervised")}</Item>
+              </Card>
+            </div>
 
-          <section className="rounded-card border border-border bg-surface p-4 shadow-card">
-            <h2 className="text-caption font-medium text-fg-muted">{t("Recently finished checks")}</h2>
-            <JobsTable jobs={s.jobs.recent} empty={t("No checks have finished since the API started.")} />
-          </section>
-        </>
+            <section className="rounded-card border border-border bg-surface p-4 shadow-card">
+              <h2 className="text-caption font-medium text-fg-muted">
+                {t("Checks running now")} {activeJobs > 0 && <span className="text-fg">({activeJobs})</span>}
+              </h2>
+              <JobsTable jobs={s.jobs.active} empty={t("No checks are running.")} />
+            </section>
+
+            <section className="rounded-card border border-border bg-surface p-4 shadow-card">
+              <h2 className="text-caption font-medium text-fg-muted">{t("Recently finished checks")}</h2>
+              <JobsTable jobs={s.jobs.recent} empty={t("No checks have finished since the API started.")} />
+            </section>
+          </>
         )
       )}
 
@@ -428,7 +501,7 @@ export default function ServerPage() {
               <button
                 type="button"
                 className={actionButton}
-                disabled={busy !== null || !s || level === s.process.log_level}
+                disabled={busy !== null || !s || shuttingDown || level === s.process.log_level}
                 onClick={() => void run("log-level", { level })}
               >
                 {busy === "log-level" ? t("Applying…") : t("Apply")}
@@ -442,7 +515,12 @@ export default function ServerPage() {
                 <p className="text-body font-medium text-fg">{t(a.label)}</p>
                 <p className="text-caption text-fg-muted">{t(a.description)}</p>
               </div>
-              <button type="button" className={actionButton} disabled={busy !== null} onClick={() => void run(a.action)}>
+              <button
+                type="button"
+                className={actionButton}
+                disabled={busy !== null || shuttingDown}
+                onClick={() => void run(a.action)}
+              >
                 {busy === a.action ? t("Running…") : t("Run")}
               </button>
             </div>
@@ -459,9 +537,9 @@ export default function ServerPage() {
                   : t("Stops and starts the API process. Pages show an error for up to a minute.")}
               </p>
             </div>
-            {confirmRestart ? (
+            {confirmAction === "restart" ? (
               <div className="flex items-center gap-2">
-                <button type="button" className={actionButton} onClick={() => setConfirmRestart(false)} disabled={busy !== null}>
+                <button type="button" className={actionButton} onClick={() => setConfirmAction(null)} disabled={busy !== null}>
                   {t("Cancel")}
                 </button>
                 <button
@@ -481,11 +559,52 @@ export default function ServerPage() {
               <button
                 type="button"
                 className={cn(actionButton, "border-destructive/40 text-destructive hover:bg-destructive-bg")}
-                disabled={busy !== null || !s?.process.supervised}
+                disabled={busy !== null || shuttingDown || !s?.process.supervised}
                 title={s && !s.process.supervised ? t("This API isn't running under supervisor, so it can't restart itself.") : undefined}
-                onClick={() => setConfirmRestart(true)}
+                onClick={() => setConfirmAction("restart")}
               >
                 {t("Restart")}
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="text-body font-medium text-fg">{t("Shut down the API")}</p>
+              <p className="text-caption text-fg-muted">
+                {activeJobs > 0
+                  ? t("{{count}} check(s) are running and would be lost. The API will stay offline until started manually on the server.", {
+                      count: activeJobs,
+                    })
+                  : t("Stops the API completely without restarting. You will need to start it manually on the server to bring it back online.")}
+              </p>
+            </div>
+            {confirmAction === "shutdown" ? (
+              <div className="flex items-center gap-2">
+                <button type="button" className={actionButton} onClick={() => setConfirmAction(null)} disabled={busy !== null}>
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void run("shutdown-api", { force: activeJobs > 0 })}
+                  className="cursor-pointer rounded-control bg-destructive px-3 py-1.5 text-caption font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {busy === "shutdown-api"
+                    ? t("Shutting down…")
+                    : activeJobs > 0
+                      ? t("Shut down and lose {{count}} check(s)", { count: activeJobs })
+                      : t("Yes, shut down")}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={cn(actionButton, "border-destructive/40 text-destructive hover:bg-destructive-bg")}
+                disabled={busy !== null || shuttingDown || !s}
+                onClick={() => setConfirmAction("shutdown")}
+              >
+                {t("Shut down")}
               </button>
             )}
           </div>

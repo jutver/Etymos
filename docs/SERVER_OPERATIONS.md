@@ -311,8 +311,8 @@ see `GPU_MEMORY.md`.
 
 Admin portal → **Logs → Server logs** shows the API's logs without SSH (backend/api/admin_ops.py). **Logs → Admin actions** lists everything admins did (`admin_action_log`, written by database triggers and by `backend/api/admin_log.py`).
 
-- **Live log**: the last `LOG_BUFFER_SIZE` lines (default 5000) kept in the API's memory, refreshed every
-  2 s. Every request logs a `->` line when it arrives and a `<-` line when it ends (status, time, sizes,
+- **Live log**: the last `LOG_BUFFER_SIZE` lines (default 5000) kept in the API's memory, streamed over a
+  direct authenticated WebSocket (`/api/admin/logs/ws`). Every request logs a `->` line when it arrives and a `<-` line when it ends (status, time, sizes,
   user, and the reason on errors), tagged `[r:<id>]`; the same id comes back in the `X-Request-ID`
   response header. Lines logged while a check runs are tagged `[job_<id>]`. Click a tag to see only that
   request, check or user.
@@ -320,9 +320,12 @@ Admin portal → **Logs → Server logs** shows the API's logs without SSH (back
   and `supervisord.log` (from `LOG_DIR`, default `backend/logs`). It's a fixed list; nothing else on disk
   can be read.
 - **Server**: uptime, commit, memory, disk, GPU, the check queue, running and recently finished checks,
+  streamed over a direct authenticated WebSocket (`/api/admin/server/ws`),
   plus a fixed list of actions: change the log level until restart, write thread stacks to the log,
-  unload idle GPU models, send due notifications, poll the support inbox, and restart the API (through
-  `supervisorctl`; refused while checks run unless confirmed). Each action is logged and written to
+  unload idle GPU models, send due notifications, poll the support inbox, restart the API (through
+  `supervisorctl restart`; refused while checks run unless confirmed), and shut down the API (through
+  `supervisorctl stop` when supervised or graceful `SIGTERM` when standalone, leaving it offline until
+  started manually on the host; refused while checks run unless confirmed). Each action is logged and written to
   `admin_action_log` (Logs → Admin actions).
 
 There is intentionally no way to run arbitrary commands from the portal.

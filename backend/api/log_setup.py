@@ -28,6 +28,7 @@ set_level() changes it while the API runs, until the next restart.
 """
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import faulthandler
 import io
@@ -42,6 +43,7 @@ import time
 import traceback
 from collections import deque
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Iterator
 
 PROCESS_STARTED = time.time()
@@ -122,6 +124,27 @@ class _JobFilter(logging.Filter):
 
 # --- In-memory buffer for the admin Logs screen ----------------------------------
 
+@dataclass(eq=False)
+class LogSubscriber:
+    """Bounded per-WebSocket subscriber fed asynchronously by LogBuffer.emit()."""
+
+    loop: asyncio.AbstractEventLoop
+    queue: asyncio.Queue[dict[str, Any]]
+    dropped: bool = False
+
+    def enqueue(self, row: dict[str, Any]) -> None:
+        if self.queue.full():
+            try:
+                self.queue.get_nowait()
+                self.dropped = True
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            self.queue.put_nowait(row)
+        except asyncio.QueueFull:
+            self.dropped = True
+
+
 class LogBuffer(logging.Handler):
     """Keeps the newest `capacity` records as dicts with increasing `seq`, so
     a viewer can ask for everything after the last one it has."""
@@ -132,6 +155,17 @@ class LogBuffer(logging.Handler):
         self._rows: deque[dict[str, Any]] = deque(maxlen=capacity)
         self._seq = itertools.count(1)
         self._rows_lock = threading.Lock()
+        self._subscribers: set[LogSubscriber] = set()
+
+    def subscribe(self, loop: asyncio.AbstractEventLoop, maxsize: int = 1000) -> LogSubscriber:
+        sub = LogSubscriber(loop=loop, queue=asyncio.Queue(maxsize=maxsize))
+        with self._rows_lock:
+            self._subscribers.add(sub)
+        return sub
+
+    def unsubscribe(self, sub: LogSubscriber) -> None:
+        with self._rows_lock:
+            self._subscribers.discard(sub)
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -160,10 +194,49 @@ class LogBuffer(logging.Handler):
         with self._rows_lock:
             row["seq"] = next(self._seq)
             self._rows.append(row)
+            subs = tuple(self._subscribers)
+        stale: list[LogSubscriber] = []
+        for sub in subs:
+            try:
+                sub.loop.call_soon_threadsafe(sub.enqueue, row)
+            except RuntimeError:
+                stale.append(sub)
+        if stale:
+            with self._rows_lock:
+                for sub in stale:
+                    self._subscribers.discard(sub)
 
     def last_seq(self) -> int:
         with self._rows_lock:
             return self._rows[-1]["seq"] if self._rows else 0
+
+    @staticmethod
+    def matches(
+        row: dict[str, Any],
+        *,
+        min_level: int = logging.NOTSET,
+        text: str | None = None,
+        job: str | None = None,
+        request: str | None = None,
+        user: str | None = None,
+    ) -> bool:
+        if row["levelno"] < min_level:
+            return False
+        if job and not (row["job"] or "").startswith(job):
+            return False
+        if request and row["request"] != request:
+            return False
+        if user and not (row["user"] or "").startswith(user):
+            return False
+        if text:
+            needle = text.lower()
+            if (
+                needle not in row["message"].lower()
+                and needle not in (row["exc"] or "").lower()
+                and needle not in row["logger"].lower()
+            ):
+                return False
+        return True
 
     def query(self, *, after: int = 0, limit: int = 500, min_level: int = logging.NOTSET,
               text: str | None = None, job: str | None = None, request: str | None = None,
@@ -173,21 +246,12 @@ class LogBuffer(logging.Handler):
         `truncated` is true (the viewer fell behind, or a first load)."""
         with self._rows_lock:
             rows = list(self._rows)
-        needle = text.lower() if text else None
-        matched = []
-        for row in rows:
-            if row["seq"] <= after or row["levelno"] < min_level:
-                continue
-            if job and not (row["job"] or "").startswith(job):
-                continue
-            if request and row["request"] != request:
-                continue
-            if user and not (row["user"] or "").startswith(user):
-                continue
-            if needle and needle not in row["message"].lower() and needle not in (row["exc"] or "").lower() \
-                    and needle not in row["logger"].lower():
-                continue
-            matched.append(row)
+        matched = [
+            row
+            for row in rows
+            if row["seq"] > after
+            and self.matches(row, min_level=min_level, text=text, job=job, request=request, user=user)
+        ]
         truncated = len(matched) > limit
         return {
             "rows": matched[-limit:] if limit > 0 else [],

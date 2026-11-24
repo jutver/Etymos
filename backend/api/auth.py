@@ -99,24 +99,16 @@ def _fetch_profile_role(user_id: str) -> str:
         return "user"
 
 
-async def verify_supabase_jwt(
-    request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
-) -> AuthedUser:
+def verify_jwt_token(token: str) -> tuple[AuthedUser, float]:
     """
-    FastAPI dependency. Verifies the `Authorization: Bearer <token>` header
-    as a Supabase-issued JWT, entirely locally (PyJWT signature/exp/aud
-    checks against SUPABASE_JWT_SECRET — no call out to Supabase Auth).
+    Verify a Supabase-issued JWT string locally (signature, exp, aud) and look
+    up `profiles.role` to compute `AuthedUser`. Returns `(user, expires_at)`.
 
-    Raises 401 on any missing/invalid/expired token. On success, attaches
-    the resulting AuthedUser to `request.state.user` and returns it, so
-    route handlers can either take it as a dependency return value or read
-    `request.state.user`.
+    Shared by HTTP routes (`verify_supabase_jwt`) and admin WebSocket streams.
+    Raises HTTPException 401/500 on missing, invalid, or expired tokens.
     """
-    if credentials is None or not credentials.credentials:
+    if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token.")
-
-    token = credentials.credentials
 
     try:
         header = jwt.get_unverified_header(token)
@@ -171,7 +163,8 @@ async def verify_supabase_jwt(
         raise HTTPException(status_code=401, detail="Invalid token.")
 
     user_id = payload.get("sub")
-    if not user_id:
+    exp = payload.get("exp")
+    if not user_id or exp is None:
         raise HTTPException(status_code=401, detail="Invalid token payload.")
 
     role = _fetch_profile_role(user_id)
@@ -187,11 +180,32 @@ async def verify_supabase_jwt(
         is_admin=role == "admin" and payload.get("aal") == "aal2",
     )
 
-    request.state.user = user
-    set_request_user(user_id)
     if role == "admin" and not user.is_admin:
         logger.info("Admin %s signed in without an authenticator code (aal=%s); treated as a normal user",
                     user_id[:8], payload.get("aal"))
+    return user, float(exp)
+
+
+async def verify_supabase_jwt(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+) -> AuthedUser:
+    """
+    FastAPI dependency. Verifies the `Authorization: Bearer <token>` header
+    as a Supabase-issued JWT, entirely locally (PyJWT signature/exp/aud
+    checks — no call out to Supabase Auth).
+
+    Raises 401 on any missing/invalid/expired token. On success, attaches
+    the resulting AuthedUser to `request.state.user` and returns it, so
+    route handlers can either take it as a dependency return value or read
+    `request.state.user`.
+    """
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="Missing bearer token.")
+
+    user, _ = verify_jwt_token(credentials.credentials)
+    request.state.user = user
+    set_request_user(user.user_id)
     return user
 
 

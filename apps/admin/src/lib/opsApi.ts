@@ -130,7 +130,8 @@ export type ServerAction =
   | "free-gpu"
   | "run-notifications"
   | "poll-support-inbox"
-  | "restart-api";
+  | "restart-api"
+  | "shutdown-api";
 
 export interface ActionResult {
   action: ServerAction;
@@ -141,7 +142,41 @@ export interface ActionResult {
   freed?: string[];
   counts?: Record<string, number>;
   restarting?: boolean;
+  shutting_down?: boolean;
+  supervised?: boolean;
   lost_checks?: number;
+}
+
+export interface LiveLogSnapshotMessage {
+  type: "snapshot";
+  rows: LogRow[];
+  truncated: boolean;
+  last_seq: number;
+  oldest_seq: number;
+  capacity: number;
+  level: LogLevel;
+  started_at: string;
+  pid: number;
+}
+
+export interface LiveLogRowsMessage {
+  type: "rows";
+  rows: LogRow[];
+  truncated: boolean;
+  last_seq: number;
+  capacity: number;
+  level: LogLevel;
+  pid: number;
+}
+
+export interface ServerStatusMessage {
+  type: "status";
+  data: ServerStatus;
+}
+
+export function wsUrl(path: string): string {
+  const base = API_BASE_URL.replace(/\/+$/, "").replace(/^http/, "ws");
+  return `${base}${path}`;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

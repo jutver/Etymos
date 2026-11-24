@@ -19,11 +19,13 @@ is a 404, so no path from the request ever reaches the filesystem.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
 import platform
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -34,12 +36,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import anyio
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 import gpu_queue
-from auth import AuthedUser, verify_supabase_jwt
+from auth import AuthedUser, verify_jwt_token, verify_supabase_jwt
 from job_manager import active_count, job_overview
 from log_setup import (LEVELS, LOG_BUFFER, PROCESS_STARTED, current_level, memory_numbers, set_level,
                        uptime_text)
@@ -300,7 +303,31 @@ def _restart_api() -> None:
     )
 
 
-ACTIONS = ("log-level", "dump-threads", "free-gpu", "run-notifications", "poll-support-inbox", "restart-api")
+def _shutdown_api(supervised: bool) -> None:
+    # Stop only the API service cleanly after letting the response flush:
+    # under supervisord, `supervisorctl stop` prevents autorestart=true from
+    # respawning it; standalone processes exit cleanly via SIGTERM.
+    if supervised:
+        subprocess.Popen(
+            ["/bin/sh", "-c", f'sleep 2; exec "{SUPERVISORCTL}" -c "{SUPERVISOR_CONF}" stop {API_PROGRAM}'],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True, cwd=BACKEND_DIR,
+        )
+    else:
+        timer = threading.Timer(2.0, lambda: os.kill(os.getpid(), signal.SIGTERM))
+        timer.daemon = True
+        timer.start()
+
+
+ACTIONS = (
+    "log-level",
+    "dump-threads",
+    "free-gpu",
+    "run-notifications",
+    "poll-support-inbox",
+    "restart-api",
+    "shutdown-api",
+)
 
 
 @router.post("/api/admin/server/actions/{action}")
@@ -312,6 +339,7 @@ async def run_action(action: str, body: ActionIn | None = None, admin: AuthedUse
     logger.warning("Admin %s ran server action %r%s", who, action,
                    f" level={body.level}" if body.level else (" (forced)" if body.force else ""))
     started = time.perf_counter()
+    deferred_lifecycle: Optional[tuple[str, bool]] = None
 
     if action == "log-level":
         if not body.level:
@@ -346,22 +374,380 @@ async def run_action(action: str, body: ActionIn | None = None, admin: AuthedUse
         logger.warning("Support inbox polled by hand: %s", counts or "no new email")
         result = {"counts": counts}
 
-    else:  # restart-api
+    elif action == "restart-api":
         if not _supervised():
             raise HTTPException(status_code=409, detail="This API isn't running under supervisor, so it can't restart itself.")
         running = active_count()
         if running and not body.force:
             raise HTTPException(status_code=409, detail=f"{running} check(s) are running and would be lost.")
         logger.warning("API restart requested by admin %s (%d check(s) running)", who, running)
-        _restart_api()
+        deferred_lifecycle = ("restart", True)
         result = {"restarting": True, "lost_checks": running}
+
+    else:  # shutdown-api
+        running = active_count()
+        if running and not body.force:
+            raise HTTPException(status_code=409, detail=f"{running} check(s) are running and would be lost.")
+        supervised = _supervised()
+        logger.warning("API shutdown requested by admin %s (%d check(s) running, supervised=%s)", who, running, supervised)
+        deferred_lifecycle = ("shutdown", supervised)
+        result = {"shutting_down": True, "lost_checks": running, "supervised": supervised}
 
     took = round((time.perf_counter() - started) * 1000)
     await run_in_threadpool(
         lambda: record_admin_action(
             admin.user_id, f"server.{action.replace('-', '_')}", target_table="server",
             metadata={**result, "level": body.level, "force": body.force, "ms": took}))
+    if deferred_lifecycle is not None:
+        kind, supervised_flag = deferred_lifecycle
+        if kind == "restart":
+            _restart_api()
+        else:
+            _shutdown_api(supervised_flag)
     return {"action": action, "ms": took, **result}
+
+
+# --- WebSocket streams ------------------------------------------------------------------
+
+WS_AUTH_TIMEOUT_SECONDS = 10.0
+WS_KEEPALIVE_SECONDS = 25.0
+WS_BATCH_LIMIT = 200
+SERVER_WS_INTERVAL_SECONDS = max(1.0, float(os.getenv("ADMIN_SERVER_WS_INTERVAL", "5.0") or 5.0))
+WS_CLOSE_UNAUTHORIZED = 4401
+WS_CLOSE_FORBIDDEN = 4403
+WS_CLOSE_TIMEOUT = 4408
+
+
+def _authenticate_ws_token(token: str) -> tuple[AuthedUser, float]:
+    user, expires_at = verify_jwt_token(token)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admins only.")
+    return user, expires_at
+
+
+async def _ws_send_error_and_close(websocket: WebSocket, code: int, err_code: str, detail: str) -> None:
+    try:
+        await websocket.send_json({"type": "error", "code": err_code, "detail": detail})
+    except Exception:
+        pass
+    try:
+        await websocket.close(code=code)
+    except Exception:
+        pass
+
+
+async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser, float, dict[str, Any]]]:
+    await websocket.accept()
+    try:
+        msg = await asyncio.wait_for(websocket.receive_json(), timeout=WS_AUTH_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        await _ws_send_error_and_close(websocket, WS_CLOSE_TIMEOUT, "timeout", "Authentication timed out.")
+        return None
+    except WebSocketDisconnect:
+        return None
+    except Exception:
+        await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Invalid auth frame.")
+        return None
+
+    if not isinstance(msg, dict) or msg.get("type") != "auth" or not isinstance(msg.get("token"), str):
+        await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Expected auth frame.")
+        return None
+
+    try:
+        user, expires_at = await run_in_threadpool(_authenticate_ws_token, msg["token"])
+    except HTTPException as exc:
+        close_code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+        err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+        await _ws_send_error_and_close(websocket, close_code, err_code, str(exc.detail))
+        return None
+
+    await websocket.send_json({"type": "auth_ok", "pid": os.getpid(), "started_at": _iso(PROCESS_STARTED)})
+    return user, expires_at, msg
+
+
+def _parse_log_filters(msg: dict[str, Any]) -> tuple[int, int, dict[str, Any]]:
+    raw_after = msg.get("after", 0)
+    raw_limit = msg.get("limit", 500)
+    try:
+        after = max(0, int(raw_after))
+    except (TypeError, ValueError):
+        after = 0
+    try:
+        limit = min(2000, max(1, int(raw_limit)))
+    except (TypeError, ValueError):
+        limit = 500
+
+    raw = msg.get("filters") if isinstance(msg.get("filters"), dict) else {}
+    raw_level = str(raw.get("level") or "DEBUG").strip().upper()
+    if raw_level not in LEVELS:
+        raw_level = "DEBUG"
+
+    def _clean(key: str, max_len: int) -> Optional[str]:
+        val = raw.get(key)
+        if not isinstance(val, str):
+            return None
+        trimmed = val.strip()[:max_len]
+        return trimmed or None
+
+    user_val = _clean("user_id", 40) or _clean("userId", 40)
+    return after, limit, {
+        "min_level": getattr(logging, raw_level),
+        "text": _clean("q", 200),
+        "job": _clean("job", 40),
+        "request": _clean("request", 16),
+        "user": user_val,
+    }
+
+
+def _snapshot_payload(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "snapshot",
+        **result,
+        "capacity": LOG_BUFFER.capacity,
+        "level": current_level(),
+        "started_at": _iso(PROCESS_STARTED),
+        "pid": os.getpid(),
+    }
+
+
+@router.websocket("/api/admin/logs/ws")
+async def stream_live_logs(websocket: WebSocket):
+    auth_info = await _ws_handshake_auth(websocket)
+    if auth_info is None:
+        return
+    _, expires_at, first_msg = auth_info
+
+    after, limit, filters = _parse_log_filters(first_msg)
+    sub = LOG_BUFFER.subscribe(asyncio.get_running_loop())
+    state = {"expires_at": expires_at, "filters": filters, "limit": limit, "sent_seq": after, "paused": False}
+    send_lock = asyncio.Lock()
+
+    try:
+        # Subscribe BEFORE querying so lines emitted during snapshot serialization remain queued
+        # and deduplicated by `seq > sent_seq`.
+        initial = LOG_BUFFER.query(after=after, limit=limit, **filters)
+        state["sent_seq"] = max(after, initial["last_seq"])
+        async with send_lock:
+            await websocket.send_json(_snapshot_payload(initial))
+
+        async with anyio.create_task_group() as tg:
+            async def _reader() -> None:
+                try:
+                    while True:
+                        msg = await websocket.receive_json()
+                        if not isinstance(msg, dict):
+                            continue
+                        mtype = msg.get("type")
+                        if mtype == "ping":
+                            async with send_lock:
+                                await websocket.send_json({"type": "pong"})
+                        elif mtype == "pong":
+                            continue
+                        elif mtype == "pause":
+                            state["paused"] = True
+                        elif mtype in ("subscribe", "resume"):
+                            if mtype == "subscribe":
+                                new_after, new_limit, new_filters = _parse_log_filters(msg)
+                                state["limit"] = new_limit
+                                state["filters"] = new_filters
+                            else:
+                                try:
+                                    new_after = max(0, int(msg.get("after", state["sent_seq"])))
+                                except (TypeError, ValueError):
+                                    new_after = state["sent_seq"]
+                            state["paused"] = False
+                            # Drain stale queued entries before emitting fresh snapshot.
+                            while not sub.queue.empty():
+                                try:
+                                    sub.queue.get_nowait()
+                                except asyncio.QueueEmpty:
+                                    break
+                            sub.dropped = False
+                            snap = LOG_BUFFER.query(after=new_after, limit=state["limit"], **state["filters"])
+                            state["sent_seq"] = max(new_after, snap["last_seq"])
+                            async with send_lock:
+                                await websocket.send_json(_snapshot_payload(snap))
+                        elif mtype == "refresh_auth":
+                            token = msg.get("token")
+                            if not isinstance(token, str):
+                                await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Invalid token.")
+                                return
+                            try:
+                                _, next_exp = await run_in_threadpool(_authenticate_ws_token, token)
+                                state["expires_at"] = next_exp
+                            except HTTPException as exc:
+                                code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+                                err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+                                await _ws_send_error_and_close(websocket, code, err_code, str(exc.detail))
+                                return
+                except WebSocketDisconnect:
+                    pass
+                finally:
+                    tg.cancel_scope.cancel()
+
+            async def _writer() -> None:
+                last_ping = time.monotonic()
+                try:
+                    while True:
+                        remaining = state["expires_at"] - time.time()
+                        if remaining <= 0:
+                            async with send_lock:
+                                await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Token has expired.")
+                            return
+
+                        wait_for = min(WS_KEEPALIVE_SECONDS, max(0.05, remaining))
+                        try:
+                            first_row = await asyncio.wait_for(sub.queue.get(), timeout=wait_for)
+                        except asyncio.TimeoutError:
+                            if time.monotonic() - last_ping >= WS_KEEPALIVE_SECONDS:
+                                async with send_lock:
+                                    await websocket.send_json({"type": "ping"})
+                                last_ping = time.monotonic()
+                            continue
+
+                        batch = [first_row]
+                        while len(batch) < WS_BATCH_LIMIT:
+                            try:
+                                batch.append(sub.queue.get_nowait())
+                            except asyncio.QueueEmpty:
+                                break
+
+                        if state["paused"]:
+                            continue
+
+                        was_dropped = sub.dropped
+                        sub.dropped = False
+                        max_seq = state["sent_seq"]
+                        matched = []
+                        cur_filters = state["filters"]
+                        for row in batch:
+                            if row["seq"] <= state["sent_seq"]:
+                                continue
+                            max_seq = max(max_seq, row["seq"])
+                            if LOG_BUFFER.matches(row, **cur_filters):
+                                matched.append(row)
+                        state["sent_seq"] = max_seq
+
+                        if matched or was_dropped:
+                            async with send_lock:
+                                await websocket.send_json({
+                                    "type": "rows",
+                                    "rows": matched,
+                                    "truncated": was_dropped,
+                                    "last_seq": state["sent_seq"],
+                                    "capacity": LOG_BUFFER.capacity,
+                                    "level": current_level(),
+                                    "pid": os.getpid(),
+                                })
+                            last_ping = time.monotonic()
+                except WebSocketDisconnect:
+                    pass
+                finally:
+                    tg.cancel_scope.cancel()
+
+            tg.start_soon(_reader)
+            tg.start_soon(_writer)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        LOG_BUFFER.unsubscribe(sub)
+
+
+@router.websocket("/api/admin/server/ws")
+async def stream_server_status(websocket: WebSocket):
+    auth_info = await _ws_handshake_auth(websocket)
+    if auth_info is None:
+        return
+    _, expires_at, _ = auth_info
+
+    state = {"expires_at": expires_at}
+    refresh_event = asyncio.Event()
+    send_lock = asyncio.Lock()
+
+    try:
+        initial = await run_in_threadpool(server_status)
+        async with send_lock:
+            await websocket.send_json({"type": "status", "data": initial})
+
+        async with anyio.create_task_group() as tg:
+            async def _reader() -> None:
+                try:
+                    while True:
+                        msg = await websocket.receive_json()
+                        if not isinstance(msg, dict):
+                            continue
+                        mtype = msg.get("type")
+                        if mtype == "ping":
+                            async with send_lock:
+                                await websocket.send_json({"type": "pong"})
+                        elif mtype == "pong":
+                            continue
+                        elif mtype == "refresh":
+                            refresh_event.set()
+                        elif mtype == "refresh_auth":
+                            token = msg.get("token")
+                            if not isinstance(token, str):
+                                await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Invalid token.")
+                                return
+                            try:
+                                _, next_exp = await run_in_threadpool(_authenticate_ws_token, token)
+                                state["expires_at"] = next_exp
+                            except HTTPException as exc:
+                                code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+                                err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+                                await _ws_send_error_and_close(websocket, code, err_code, str(exc.detail))
+                                return
+                except WebSocketDisconnect:
+                    pass
+                finally:
+                    tg.cancel_scope.cancel()
+
+            async def _writer() -> None:
+                last_push = time.monotonic()
+                last_ping = time.monotonic()
+                try:
+                    while True:
+                        remaining = state["expires_at"] - time.time()
+                        if remaining <= 0:
+                            async with send_lock:
+                                await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Token has expired.")
+                            return
+
+                        until_push = max(0.05, SERVER_WS_INTERVAL_SECONDS - (time.monotonic() - last_push))
+                        wait_for = min(until_push, WS_KEEPALIVE_SECONDS, max(0.05, remaining))
+                        forced_refresh = False
+                        try:
+                            await asyncio.wait_for(refresh_event.wait(), timeout=wait_for)
+                            refresh_event.clear()
+                            forced_refresh = True
+                        except asyncio.TimeoutError:
+                            pass
+
+                        if state["expires_at"] <= time.time():
+                            async with send_lock:
+                                await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Token has expired.")
+                            return
+
+                        now = time.monotonic()
+                        if forced_refresh or (now - last_push >= SERVER_WS_INTERVAL_SECONDS):
+                            snapshot = await run_in_threadpool(server_status)
+                            async with send_lock:
+                                await websocket.send_json({"type": "status", "data": snapshot})
+                            last_push = time.monotonic()
+                            last_ping = last_push
+                        elif now - last_ping >= WS_KEEPALIVE_SECONDS:
+                            async with send_lock:
+                                await websocket.send_json({"type": "ping"})
+                            last_ping = time.monotonic()
+                except WebSocketDisconnect:
+                    pass
+                finally:
+                    tg.cancel_scope.cancel()
+
+            tg.start_soon(_reader)
+            tg.start_soon(_writer)
+    except WebSocketDisconnect:
+        pass
 
 
 def _iso(ts: float) -> str:
