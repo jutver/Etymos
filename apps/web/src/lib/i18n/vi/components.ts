@@ -150,4 +150,11 @@ export const components: Record<string, string> = {
   "Confirm & check": "Xác nhận & kiểm tra",
   "{{count}} check left after this one.": "Còn {{count}} lượt kiểm tra sau lượt này.",
   "{{count}} checks left after this one.": "Còn {{count}} lượt kiểm tra sau lượt này.",
+  // ConnectivityIndicator
+  "Online": "Trực tuyến",
+  "Offline": "Ngoại tuyến",
+  "Server connected": "Máy chủ đã kết nối",
+  "Connecting…": "Đang kết nối…",
+  "Reconnecting…": "Đang kết nối lại…",
+  "Server offline": "Máy chủ ngoại tuyến",
 };

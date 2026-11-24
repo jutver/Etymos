@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeSlash, LockKey, Trash, User, WarningCircle } from "@phosphor-icons/react";
+import { EnvelopeSimple, Eye, EyeSlash, LockKey, Moon, SlidersHorizontal, Trash, User, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../../components/ui/Button";
+import { Toggle } from "../../components/ui/Toggle";
 import { UserAvatar } from "../../components/ui/UserAvatar";
 import { useAuth, displayNameFor } from "../../lib/auth";
 import { supabase } from "@etymos/shared";
 import { useAppStore } from "../../lib/store";
+import { applyTheme } from "../../lib/theme";
 import { RecoveryCodeDialog } from "./RecoveryCodeDialog";
 import { t, tr } from "../../lib/i18n";
 import {
   ApiError,
+  getPreferences,
   getRecoveryEmail,
   notifyPasswordChanged,
   removeRecoveryEmail,
   setRecoveryEmail as saveRecoveryEmailApi,
+  updatePreferences,
   type RecoveryEmailStatus,
 } from "../../lib/api";
 
@@ -21,6 +25,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000
 export default function AccountProfilePage() {
   const { user } = useAuth();
   const pushToast = useAppStore((s) => s.pushToast);
+  const themePreference = useAppStore((s) => s.themePreference);
+  const emailOnCheckDone = useAppStore((s) => s.emailOnCheckDone);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [savingEmailPref, setSavingEmailPref] = useState(false);
+  const [prefsLoading, setPrefsLoading] = useState(true);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -63,6 +74,80 @@ export default function AccountProfilePage() {
       })
       .catch(() => setRecoveryLoadFailed(true));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        const nextTheme = prefs.theme_preference === "dark" ? "dark" : "light";
+        setPreferences({
+          themePreference: nextTheme,
+          emailOnCheckDone: Boolean(prefs.email_on_check_done),
+        });
+        applyTheme(nextTheme);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setPrefsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setPreferences]);
+
+  async function handleThemeToggle(nextDark: boolean) {
+    if (savingTheme) return;
+    const prev = themePreference;
+    const next: "light" | "dark" = nextDark ? "dark" : "light";
+    setSavingTheme(true);
+    setPreferences({ themePreference: next });
+    applyTheme(next);
+    try {
+      const saved = await updatePreferences({ theme_preference: next });
+      const resolved = saved.theme_preference === "dark" ? "dark" : "light";
+      setPreferences({ themePreference: resolved });
+      applyTheme(resolved);
+      pushToast({
+        kind: "success",
+        title: resolved === "dark" ? tr("Dark mode enabled") : tr("Light mode enabled"),
+      });
+    } catch (err) {
+      setPreferences({ themePreference: prev });
+      applyTheme(prev);
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't save preference"),
+        description: err instanceof Error ? err.message : tr("Something went wrong."),
+      });
+    } finally {
+      setSavingTheme(false);
+    }
+  }
+
+  async function handleEmailPrefToggle(nextEnabled: boolean) {
+    if (savingEmailPref) return;
+    const prev = emailOnCheckDone;
+    setSavingEmailPref(true);
+    setPreferences({ emailOnCheckDone: nextEnabled });
+    try {
+      const saved = await updatePreferences({ email_on_check_done: nextEnabled });
+      setPreferences({ emailOnCheckDone: Boolean(saved.email_on_check_done) });
+      pushToast({
+        kind: "success",
+        title: saved.email_on_check_done ? tr("Completion emails enabled") : tr("Completion emails disabled"),
+      });
+    } catch (err) {
+      setPreferences({ emailOnCheckDone: prev });
+      pushToast({
+        kind: "error",
+        title: tr("Couldn't save preference"),
+        description: err instanceof Error ? err.message : tr("Something went wrong."),
+      });
+    } finally {
+      setSavingEmailPref(false);
+    }
+  }
 
   function recoveryErrorMessage(err: unknown): string {
     if (err instanceof ApiError) {
@@ -368,6 +453,34 @@ export default function AccountProfilePage() {
           >
             {googleIdentity ? t("Linked") : t("Not linked")}
           </span>
+        </div>
+      </section>
+
+      <section className="studio-card mt-6 rounded-[var(--radius-card-lg)] border border-line bg-white p-6">
+        <div className="flex items-center gap-2 text-ink-900">
+          <SlidersHorizontal size={18} weight="bold" />
+          <h2 className="text-sm font-bold uppercase tracking-wide">{t("Preferences")}</h2>
+        </div>
+        <p className="mt-1 text-xs text-ink-500">
+          {t("Customize appearance and check notification settings.")}
+        </p>
+        <div className="mt-4 flex flex-col gap-3">
+          <Toggle
+            checked={themePreference === "dark"}
+            disabled={savingTheme || prefsLoading}
+            onChange={handleThemeToggle}
+            icon={<Moon size={18} weight="bold" />}
+            label={tr("Dark mode")}
+            description={tr("Use a dark color theme across the site.")}
+          />
+          <Toggle
+            checked={emailOnCheckDone}
+            disabled={savingEmailPref || prefsLoading}
+            onChange={handleEmailPrefToggle}
+            icon={<EnvelopeSimple size={18} weight="bold" />}
+            label={tr("Email me when a document check is done")}
+            description={tr("Send a summary to your account email whenever a check finishes.")}
+          />
         </div>
       </section>
 

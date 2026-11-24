@@ -347,6 +347,18 @@ def test_every_notification_template_renders():
         email_templates.account_deleted_email(account_email="a@x.com"),
         email_templates.admin_transfer_alert_email(amount="1 đ", status_label="x", note="", content="", reference="",
                                                    received_at="now", admin_url=None),
+        email_templates.check_completed_email(
+            document_title="Paper.pdf", similarity_percent="24%", ai_percent="12%",
+            report_url="https://www.etymos.site/report/rep-1",
+        ),
+        email_templates.check_completed_email(
+            document_title="Paper.pdf", similarity_percent="24%", ai_percent=None,
+            report_url="https://www.etymos.site/report/rep-1",
+        ),
+        email_templates.check_failed_email(
+            document_title="Paper.pdf", reason="Unreadable PDF",
+            documents_url="https://www.etymos.site/documents",
+        ),
     ]
     for c in contents:
         html_out, text = email_templates.render_email(c), email_templates.render_text(c)
@@ -357,3 +369,61 @@ def test_vietnam_time_and_money_formatting():
     assert notifications.vn_datetime("2026-10-03T15:32:00Z") == "03 Oct 2026, 22:32 (Vietnam time)"
     assert notifications.vn_date("2026-10-03T18:00:00+00:00") == "04 Oct 2026"
     assert notifications.vnd(1790000) == "1.790.000 đ"
+
+
+def test_notify_check_done_opt_in_and_idempotency(env):
+    uid_on = add_user(env, email="on@hcmut.edu.vn", email_on_check_done=True)
+    uid_off = add_user(env, email="off@hcmut.edu.vn", email_on_check_done=False)
+
+    assert not notifications.notify_check_done(
+        user_id=uid_off, job_id="job-off", document_title="Doc.pdf",
+        status="completed", report_id="rep-off", similarity_score=18.2, ai_score=5.0,
+    )
+    assert len(env.sent) == 0
+
+    assert notifications.notify_check_done(
+        user_id=uid_on, job_id="job-1", document_title="Thesis.pdf",
+        status="completed", report_id="rep-1", similarity_score=24.4, ai_score=11.0,
+    )
+    assert len(env.sent) == 1
+    assert env.sent[0][0] == "on@hcmut.edu.vn"
+    html_out = email_templates.render_email(env.sent[0][1])
+    assert "Thesis.pdf" in html_out
+    assert "24.4%" in html_out
+    assert "11%" in html_out
+    assert "https://www.etymos.site/report/rep-1" in html_out
+
+    # Duplicate trigger for the same job_id is ignored by notification_log claim.
+    assert not notifications.notify_check_done(
+        user_id=uid_on, job_id="job-1", document_title="Thesis.pdf",
+        status="completed", report_id="rep-1", similarity_score=24.4, ai_score=11.0,
+    )
+    assert len(env.sent) == 1
+
+    # Failed checks also notify opted-in users cleanly.
+    assert notifications.notify_check_done(
+        user_id=uid_on, job_id="job-2", document_title="Broken.pdf",
+        status="failed", error="Password protected",
+    )
+    assert len(env.sent) == 2
+    assert "Broken.pdf" in env.sent[1][1].subject
+    assert "https://www.etymos.site/documents" in email_templates.render_text(env.sent[1][1])
+
+
+def test_notify_check_done_isolates_smtp_and_db_errors(env):
+    uid = add_user(env, email="err@hcmut.edu.vn", email_on_check_done=True)
+    env.fail["next"] = 1
+    assert not notifications.notify_check_done(
+        user_id=uid, job_id="job-err", document_title="Retry.pdf",
+        status="completed", report_id="rep-err", similarity_score=10.0,
+    )
+    # Claim released after SMTP failure, so a subsequent retry can succeed.
+    assert notifications.notify_check_done(
+        user_id=uid, job_id="job-err", document_title="Retry.pdf",
+        status="completed", report_id="rep-err", similarity_score=10.0,
+    )
+    env.db.broken.add("profiles")
+    assert not notifications.notify_check_done(
+        user_id=uid, job_id="job-broken-db", document_title="DbDown.pdf",
+        status="completed", report_id="rep-db", similarity_score=10.0,
+    )

@@ -4,7 +4,7 @@ import { FileMagnifyingGlass, Sparkle, WarningCircle, X } from "@phosphor-icons/
 import { supabase, cn } from "@etymos/shared";
 import { MotionConfig, m } from "motion/react";
 import { useAppStore, planWordLimit, type BalanceSource } from "../../lib/store";
-import { changedRecheckQuote, exportReportPdf, pollJob, quoteRecheck, restoreCheck, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
+import { changedRecheckQuote, exportReportPdf, quoteRecheck, restoreCheck, streamJob, submitRecheck, type RecheckBlock, type RecheckQuote } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { trackEvent } from "../../lib/analytics";
 import {
@@ -993,7 +993,7 @@ export default function ReportPage() {
     setRecheckProgress(0);
     setRecheckRunning(true);
     try {
-      const job = await pollJob(jobId, (j) => setRecheckProgress(j.progress ?? 0));
+      const job = await streamJob(jobId, (j) => setRecheckProgress(j.progress ?? 0));
       if (job.status !== "completed") throw new Error(job.error || tr("The re-check failed. You weren't charged."));
       // The server has charged a paid re-check by now; show its balances.
       if (quote.cost === "check") void refreshBalances();

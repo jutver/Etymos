@@ -4,6 +4,7 @@ import { DocumentsSkeleton } from "./DocumentsSkeleton";
 import { MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import type { HistoryEntry } from "@etymos/shared";
 import { useAppStore, PROJECTS } from "../../lib/store";
+import { useCheckingJobsStream } from "../../lib/useCheckingJobsStream";
 import { useAuth } from "../../lib/auth";
 import { Button } from "../../components/ui/Button";
 import {
@@ -40,7 +41,6 @@ export default function DocumentsPage() {
   const historyLoading = useAppStore((s) => s.historyLoading);
   const historyError = useAppStore((s) => s.historyError);
   const fetchHistory = useAppStore((s) => s.fetchHistory);
-  const reconcileCheckingDocuments = useAppStore((s) => s.reconcileCheckingDocuments);
   const knownProjects = useAppStore((s) => s.knownProjects);
   const addKnownProject = useAppStore((s) => s.addKnownProject);
   const removeKnownProject = useAppStore((s) => s.removeKnownProject);
@@ -83,14 +83,9 @@ export default function DocumentsPage() {
 
   const showSkeleton = history.length === 0 && !historyError && (!fetched || historyLoading);
 
-  // While anything is still checking, keep asking the backend how it's going so
-  // the row settles without the user having to navigate away and back.
+  // Keep any in-progress check rows updated in real time over SSE.
   const hasCheckingDocs = history.some((h) => h.checkState === "checking");
-  useEffect(() => {
-    if (!hasCheckingDocs) return;
-    const timer = window.setInterval(() => void reconcileCheckingDocuments(), 5000);
-    return () => window.clearInterval(timer);
-  }, [hasCheckingDocs, reconcileCheckingDocuments]);
+  useCheckingJobsStream(hasCheckingDocs);
 
   const groups = useMemo<ProjectGroup[]>(() => {
     const q = query.trim().toLowerCase();

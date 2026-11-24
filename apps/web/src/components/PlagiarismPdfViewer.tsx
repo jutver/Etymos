@@ -1324,6 +1324,7 @@ export function PlagiarismPdfViewer({
                         else pageSlotRefs.current.delete(pageNumber);
                       }}
                       data-page-number={pageNumber}
+                      data-keep-light=""
                       className="relative shrink-0 bg-white shadow-[var(--shadow-card)]"
                       style={{ width: slotW, height: slotH }}
                     >

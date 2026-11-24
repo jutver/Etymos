@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CaretRight, ClockCounterClockwise, MagnifyingGlass, Trash } from "@phosphor-icons/react";
 import { useAppStore, historyRetentionLabel, planLabel, PROJECTS } from "../../lib/store";
+import { useCheckingJobsStream } from "../../lib/useCheckingJobsStream";
 import { useAuth } from "../../lib/auth";
 import { formatDate, formatDateTime } from "../../lib/format";
 import { StatusPill, statusFromScore } from "../../components/Severity";
@@ -63,7 +64,6 @@ export default function HistoryPage() {
   const historyLoading = useAppStore((s) => s.historyLoading);
   const historyError = useAppStore((s) => s.historyError);
   const fetchHistory = useAppStore((s) => s.fetchHistory);
-  const reconcileCheckingDocuments = useAppStore((s) => s.reconcileCheckingDocuments);
   const moveToTrash = useAppStore((s) => s.moveToTrash);
   const pushToast = useAppStore((s) => s.pushToast);
   const [query, setQuery] = useState("");
@@ -87,14 +87,9 @@ export default function HistoryPage() {
   }, [user?.id, fetchHistory]);
 
 
-  // While anything is still checking, keep asking the backend how it's going so
-  // the row settles without the user having to navigate away and back.
+  // Keep any in-progress check rows updated in real time over SSE.
   const hasCheckingDocs = history.some((h) => h.checkState === "checking");
-  useEffect(() => {
-    if (!hasCheckingDocs) return;
-    const timer = window.setInterval(() => void reconcileCheckingDocuments(), 5000);
-    return () => window.clearInterval(timer);
-  }, [hasCheckingDocs, reconcileCheckingDocuments]);
+  useCheckingJobsStream(hasCheckingDocs);
 
   const retentionDays = credits > 0 ? CREDIT_RETENTION_DAYS : RETENTION_DAYS[plan];
   const { visible, expiredCount } = useMemo(() => {

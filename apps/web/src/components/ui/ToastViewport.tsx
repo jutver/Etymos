@@ -55,7 +55,7 @@ export function ToastViewport() {
   const toasts = useAppStore((s) => s.toasts);
 
   return createPortal(
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[100] flex flex-col gap-3">
+    <div className="pointer-events-none fixed bottom-16 right-4 z-[100] flex flex-col gap-3 sm:right-5">
       <AnimatePresence>
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} />

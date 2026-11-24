@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +16,40 @@ logger = logging.getLogger("jobs")
 
 _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
+_SUBSCRIBERS: set["JobSubscriber"] = set()
+_TERMINAL_STATUSES = ("completed", "failed")
+
+
+@dataclass(eq=False)
+class JobSubscriber:
+    """Thread-safe SSE listener scoped to a user's active or specific job(s)."""
+
+    loop: asyncio.AbstractEventLoop
+    user_id: str
+    job_ids: set[str] | None = None
+    queue: asyncio.Queue[dict[str, Any]] = field(default_factory=lambda: asyncio.Queue(maxsize=128))
+
+    def matches(self, job: dict[str, Any]) -> bool:
+        if job.get("user_id") != self.user_id:
+            return False
+        if self.job_ids is not None and job.get("job_id") not in self.job_ids:
+            return False
+        return True
+
+    def enqueue(self, snapshot: dict[str, Any]) -> None:
+        if not self.queue.full():
+            self.queue.put_nowait(snapshot)
+            return
+        # Never drop a terminal completion/failure update under progress-tick load.
+        if snapshot.get("status") in _TERMINAL_STATUSES:
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                self.queue.put_nowait(snapshot)
+            except asyncio.QueueFull:
+                pass
 
 # NOTE on durability: job records (queued/processing/failed) are
 # intentionally in-memory only. Making in-flight job progress durable
@@ -110,14 +146,75 @@ def update_job(job_id: str, *, status: str | None = None, progress: int | None =
             created, last = _TIMES.get(job_id, (now, now))
             _TIMES[job_id] = (created, now)
             transition = (dict(before), dict(job), now - last, now - created)
+        snapshot = deepcopy(job)
+        subscribers = [sub for sub in _SUBSCRIBERS if sub.matches(snapshot)]
     if changed:
         _log_transition(job_id, *transition)
+    for sub in subscribers:
+        try:
+            sub.loop.call_soon_threadsafe(sub.enqueue, deepcopy(snapshot))
+        except RuntimeError:
+            # Subscriber's event loop is already closed; unsubscribe lazily next pass.
+            pass
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
     with _LOCK:
         job = _JOBS.get(job_id)
         return deepcopy(job) if job else None
+
+
+def subscribe_job(
+    job_id: str,
+    user_id: str,
+    loop: asyncio.AbstractEventLoop,
+) -> tuple[JobSubscriber | None, dict[str, Any] | None]:
+    """Atomically registers a single-job subscriber and reads its current snapshot."""
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return None, None
+        sub = JobSubscriber(loop=loop, user_id=user_id, job_ids={job_id})
+        _SUBSCRIBERS.add(sub)
+        return sub, deepcopy(job)
+
+
+def subscribe_jobs(
+    user_id: str,
+    loop: asyncio.AbstractEventLoop,
+    job_ids: list[str] | None = None,
+) -> tuple[JobSubscriber, list[dict[str, Any]], list[str]]:
+    """Atomically registers a multi-job subscriber scoped to `user_id`.
+    Returns `(subscriber, owned_jobs, missing_or_foreign_job_ids)`."""
+    filter_ids = set(job_ids) if job_ids is not None else None
+    sub = JobSubscriber(loop=loop, user_id=user_id, job_ids=filter_ids)
+    owned: list[dict[str, Any]] = []
+    missing: list[str] = []
+    with _LOCK:
+        _SUBSCRIBERS.add(sub)
+        if job_ids is not None:
+            seen: set[str] = set()
+            for jid in job_ids:
+                if jid in seen:
+                    continue
+                seen.add(jid)
+                job = _JOBS.get(jid)
+                if job is not None and job.get("user_id") == user_id:
+                    owned.append(deepcopy(job))
+                else:
+                    missing.append(jid)
+        else:
+            for job in _JOBS.values():
+                if job.get("user_id") == user_id:
+                    owned.append(deepcopy(job))
+    return sub, owned, missing
+
+
+def unsubscribe(sub: JobSubscriber | None) -> None:
+    if sub is None:
+        return
+    with _LOCK:
+        _SUBSCRIBERS.discard(sub)
 
 
 def describe_active() -> list[str]:

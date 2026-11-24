@@ -7,16 +7,21 @@ interface ToggleProps {
   label: string;
   description?: string;
   icon?: React.ReactNode;
+  disabled?: boolean;
 }
 
-export function Toggle({ checked, onChange, label, description, icon }: ToggleProps) {
+export function Toggle({ checked, onChange, label, description, icon, disabled }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-control)] border border-line bg-white px-4 py-3 text-left transition-colors hover:border-brand-300"
+      className={cn(
+        "flex w-full items-center justify-between gap-3 rounded-[var(--radius-control)] border border-line bg-white px-4 py-3 text-left transition-colors hover:border-brand-300",
+        disabled && "opacity-60 pointer-events-none",
+      )}
     >
       <div className="flex items-center gap-3">
         {icon && <span className="text-ink-500">{icon}</span>}
@@ -32,6 +37,7 @@ export function Toggle({ checked, onChange, label, description, icon }: TogglePr
         )}
       >
         <span
+          data-keep-light=""
           className={cn(
             "inline-block size-4.5 transform rounded-full bg-white shadow transition-transform",
             checked ? "translate-x-[1.375rem]" : "translate-x-1",

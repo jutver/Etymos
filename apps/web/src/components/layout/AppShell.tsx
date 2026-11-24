@@ -5,6 +5,8 @@ import { ToastViewport } from "../ui/ToastViewport";
 import { PageLoader } from "../ui/PageLoader";
 import { useShowSplash, useSplashOnEnter } from "../BootSplash";
 import { AppTour } from "../tour/AppTour";
+import { ConnectivityProvider } from "../../lib/connectivity";
+import { ConnectivityIndicator } from "./ConnectivityIndicator";
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -24,22 +26,25 @@ export function AppShell() {
   }, [pathname, showSplash]);
 
   return (
-    <div className="workspace-shell lg:pl-60 min-h-dvh bg-surface-tint">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
-      <AppNav />
-      {/* Boundary sits inside the shell so the nav stays mounted while a
-          lazily-loaded route chunk is in flight. Anything a page lets
-          spill past its right edge is clipped so a phone can't scroll sideways
-          (clip, unlike hidden, keeps position: sticky working inside). */}
-      <main id="main-content" tabIndex={-1} className="overflow-x-clip">
-        <Suspense fallback={<PageLoader />}>
-          <Outlet />
-        </Suspense>
-      </main>
-      <ToastViewport />
-      <AppTour />
-    </div>
+    <ConnectivityProvider>
+      <div className="workspace-shell lg:pl-60 min-h-dvh bg-surface-tint">
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
+        <AppNav />
+        {/* Boundary sits inside the shell so the nav stays mounted while a
+            lazily-loaded route chunk is in flight. Anything a page lets
+            spill past its right edge is clipped so a phone can't scroll sideways
+            (clip, unlike hidden, keeps position: sticky working inside). */}
+        <main id="main-content" tabIndex={-1} className="overflow-x-clip">
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
+        </main>
+        <ToastViewport />
+        <ConnectivityIndicator />
+        <AppTour />
+      </div>
+    </ConnectivityProvider>
   );
 }

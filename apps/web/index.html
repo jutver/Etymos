@@ -13,10 +13,24 @@
       html[data-boot] body {
         background: #f8fafc;
       }
+      html.dark[data-boot],
+      html.dark[data-boot] body {
+        background: #0b1220;
+      }
       html[data-boot] [data-prerender] {
         display: none;
       }
     </style>
+    <script>
+      try {
+        if (localStorage.getItem("etymos_theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+          var metaTheme = document.querySelector('meta[name="theme-color"]');
+          if (metaTheme) metaTheme.setAttribute("content", "#0B1220");
+        }
+      } catch (e) {}
+    </script>
     <script>
       if ("noModule" in HTMLScriptElement.prototype) {
         var d = document.documentElement.dataset;

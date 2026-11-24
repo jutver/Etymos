@@ -262,3 +262,148 @@
   .history-shell > .studio-card > div:first-child::after { display: none; }
   .trash-shell > .studio-card { overflow-x: auto; }
 }
+
+/* Dark mode overrides for editorial landing, auth, and workspace framing */
+html.dark .editorial-site {
+  background: var(--color-surface-tint);
+  color: var(--color-ink-900);
+}
+
+html.dark .editorial-site em,
+html.dark .auth-editorial-story em {
+  color: var(--color-brand-400);
+}
+
+html.dark .editorial-lead,
+html.dark .editorial-note,
+html.dark .editorial-section-heading > p:last-child:not(:first-child),
+html.dark .editorial-feature-list article p:last-child,
+html.dark .editorial-language p,
+html.dark .editorial-steps p,
+html.dark .editorial-outcomes > div p,
+html.dark .editorial-spotlight > div > p:not(.editorial-kicker),
+html.dark .editorial-annotation small,
+html.dark .auth-editorial-story > p:not(.editorial-kicker) {
+  color: var(--color-ink-500);
+}
+
+html.dark .editorial-art,
+html.dark .editorial-report-demo,
+html.dark .editorial-process,
+html.dark .editorial-final,
+html.dark .pricing-editorial {
+  background: var(--color-surface-tint);
+}
+
+html.dark .editorial-art-caption,
+html.dark .editorial-art-label,
+html.dark .product-stage,
+html.dark .product-stage-image p,
+html.dark .editorial-facts,
+html.dark .editorial-feature-list article,
+html.dark .editorial-steps article,
+html.dark .editorial-annotation,
+html.dark .auth-editorial-art {
+  background: var(--color-surface);
+  color: var(--color-ink-900);
+  border-color: var(--color-line);
+}
+
+html.dark .editorial-facts {
+  border-color: var(--color-line);
+}
+
+html.dark .editorial-facts span,
+html.dark .product-stage-heading {
+  color: var(--color-ink-500);
+}
+
+html.dark .editorial-outcomes strong {
+  color: var(--color-ink-900);
+}
+
+html.dark .editorial-language {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: var(--color-line);
+}
+
+html.dark .editorial-compare-grid .is-etymos {
+  background: #172554;
+  color: #e2e8f0;
+}
+
+html.dark .editorial-match {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.16);
+}
+
+html.dark .pricing-editorial > section:first-child {
+  background: linear-gradient(90deg, rgba(11, 18, 32, 0.96), rgba(17, 26, 46, 0.92)), url('/assets/design/research-still-life.webp') center / cover;
+  border-bottom-color: var(--color-line);
+}
+
+html.dark .studio-report {
+  background-image: none;
+  background-color: var(--color-surface-tint);
+}
+
+html.dark .studio-report-bar {
+  background-color: rgba(17, 26, 46, 0.96);
+  border-bottom-color: var(--color-line);
+}
+
+html.dark .studio-sources {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+}
+
+html.dark .studio-sources > div:first-child {
+  background: var(--color-surface-muted);
+}
+
+html.dark .upload-editorial > div:first-child,
+html.dark .library-shell > div:first-child,
+html.dark .history-shell > div:first-child,
+html.dark .trash-shell > div:first-child {
+  border-bottom-color: var(--color-line);
+}
+
+html.dark .upload-editorial > div:nth-child(2) > .studio-card:first-child,
+html.dark .upload-editorial > div:nth-child(2) > div:last-child > .studio-card,
+html.dark .history-shell > .studio-card,
+html.dark .trash-shell > .studio-card {
+  border-color: var(--color-line);
+}
+
+html.dark .upload-editorial [role="tablist"] {
+  border-color: var(--color-line);
+  background: var(--color-surface-muted);
+}
+
+html.dark .upload-editorial .studio-dropzone {
+  background: linear-gradient(135deg, #13213e, #111a2e);
+  border-color: #2c4370;
+}
+
+html.dark .upload-editorial .studio-dropzone::before,
+html.dark .upload-editorial .studio-dropzone::after {
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+html.dark .upload-editorial .upload-document-icon {
+  background: var(--color-surface-muted);
+  border-color: #2c4370;
+}
+
+html.dark .history-shell > .studio-card > div:first-child {
+  background: linear-gradient(90deg, #15213a, #111a2e);
+}
+
+html.dark .trash-shell thead {
+  background: var(--color-surface-muted);
+}
+
+html.dark .trash-shell td:first-child button::before {
+  background: #172554;
+  color: var(--color-brand-400);
+}
