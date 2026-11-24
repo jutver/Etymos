@@ -519,3 +519,28 @@ def test_ws_server_status_streams_refreshes_and_enforces_expiry(api, monkeypatch
         with pytest.raises(WebSocketDisconnect) as exc_info:
             ws.receive_json()
         assert exc_info.value.code == admin_ops.WS_CLOSE_UNAUTHORIZED
+
+
+def test_ws_handshake_ignores_disconnect_during_accept_or_auth_ok(monkeypatch):
+    import asyncio
+    from starlette.websockets import WebSocketDisconnect
+
+    monkeypatch.setattr(admin_ops, "_authenticate_ws_token", lambda _tok: (ADMIN, 9999999999.0))
+
+    class DisconnectOnAccept:
+        async def accept(self):
+            raise WebSocketDisconnect(code=1000)
+
+    assert asyncio.run(admin_ops._ws_handshake_auth(DisconnectOnAccept())) is None
+
+    class DisconnectOnAuthOk:
+        async def accept(self):
+            return None
+
+        async def receive_json(self):
+            return {"type": "auth", "token": "good"}
+
+        async def send_json(self, _payload):
+            raise WebSocketDisconnect(code=1006)
+
+    assert asyncio.run(admin_ops._ws_handshake_auth(DisconnectOnAuthOk())) is None
