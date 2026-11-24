@@ -320,10 +320,16 @@ export default function DocumentsPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {manageMode && selectionCount > 0 && (
-            <div className="flex items-center gap-3 rounded-full border border-line bg-white py-1.5 pl-4 pr-1.5 text-sm">
+            <div className="flex items-center gap-3 rounded-full border border-line bg-white p-1 pl-4 text-sm">
               <span className="font-medium text-ink-700">{selectionCount}{" "}{t("selected")}</span>
-              <Button variant="danger" size="sm" iconLeft={<Trash size={14} />} onClick={() => setConfirm({ kind: "bulk-delete" })}>
-                {t("Delete")}</Button>
+              <button
+                type="button"
+                onClick={() => setConfirm({ kind: "bulk-delete" })}
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-severity-high px-3.5 py-1.5 text-sm font-semibold text-white select-none transition-all duration-200 ease-out hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-severity-high/40 focus-visible:ring-offset-1"
+              >
+                <Trash size={14} />
+                {t("Delete")}
+              </button>
             </div>
           )}
           <ViewModeToggle

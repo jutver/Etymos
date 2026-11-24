@@ -28,6 +28,7 @@ import { friendlyError } from "../../lib/errors";
 import { useAdminAuth } from "../../lib/auth";
 import { getLanguage, t } from "../../lib/i18n";
 import { AnnouncementPreview } from "../Announcements/Preview";
+import { AnnouncementIdBadge } from "../Announcements/shared";
 import { PersonalMessageList } from "../Announcements/PersonalMessageList";
 import { fromLocalInput, toLocalInput } from "../Announcements/shared";
 import { useUserDetail } from "./userDetailContext";
@@ -258,7 +259,10 @@ export default function MessagesTab() {
         <div className="rounded-card border border-border bg-surface p-5 shadow-card sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-h2 font-semibold text-fg">{editing ? t("Edit message") : t("New message")}</h2>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="text-h2 font-semibold text-fg">{editing ? t("Edit message") : t("New message")}</h2>
+                {editing && <AnnouncementIdBadge id={editing.announcement.id} />}
+              </div>
               <p className="mt-1 text-caption text-fg-muted">
                 {t("Opens as a pop-up for {{email}} on their home page, once. Only they see it.", { email: profile.email })}
               </p>

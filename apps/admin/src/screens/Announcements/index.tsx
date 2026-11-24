@@ -12,7 +12,7 @@ import { planLabel } from "../../lib/plans";
 import { AnnouncementEditor } from "./Editor";
 import { PersonalMessages } from "./PersonalMessages";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
-import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
+import { AnnouncementIdBadge, DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, STATE_LABELS, STATE_TONES, useNow } from "./shared";
 
 type Filter = "all" | AnnouncementKind;
 
@@ -277,6 +277,7 @@ function GlobalAnnouncements() {
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge label={KIND_LABELS[a.kind]} tone={a.kind === "maintenance" ? "warning" : "accent"} capitalize={false} />
                       <StatusBadge label={STATE_LABELS[state]} tone={STATE_TONES[state]} capitalize={false} />
+                      <AnnouncementIdBadge id={a.id} />
                       {a.kind === "banner" && a.countdown_to && <Timer size={15} className="text-fg-subtle" aria-label={t("Has a countdown")} />}
                       {a.kind === "popup" && a.image_path && <ImageIcon size={15} className="text-fg-subtle" aria-label={t("Has an image")} />}
                     </div>

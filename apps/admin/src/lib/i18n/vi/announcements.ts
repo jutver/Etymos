@@ -149,4 +149,7 @@ export const announcements: Record<string, string> = {
   "on the landing page": "ở trang giới thiệu",
   "on the home and landing pages": "ở trang chủ và trang giới thiệu",
   "button opens {{link}}": "nút mở {{link}}",
+  "Copy ID": "Sao chép ID",
+  "Copied ID": "Đã sao chép ID",
+  "Copy announcement ID {{id}}": "Sao chép ID thông báo {{id}}",
 };

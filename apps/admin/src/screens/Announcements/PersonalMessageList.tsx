@@ -11,7 +11,7 @@ import { MESSAGE_STATUS_LABELS, personalMessageStatus, type PersonalMessage } fr
 import { friendlyError } from "../../lib/errors";
 import { currentLocale, getLanguage, t } from "../../lib/i18n";
 import { useAdminAuth } from "../../lib/auth";
-import { useNow } from "./shared";
+import { AnnouncementIdBadge, useNow } from "./shared";
 
 
 const STATUS_TONES = {
@@ -79,6 +79,7 @@ export function PersonalMessageList({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge label={MESSAGE_STATUS_LABELS[status]} tone={STATUS_TONES[status]} capitalize={false} />
+                  <AnnouncementIdBadge id={a.id} />
                   {a.image_path && <ImageIcon size={15} className="text-fg-subtle" aria-label={t("Has an image")} />}
                   {showRecipient && recipient && (
                     m.recipient ? (

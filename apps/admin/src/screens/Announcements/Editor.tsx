@@ -33,7 +33,7 @@ import { planLabel } from "../../lib/plans";
 import type { PlanTier } from "../../lib/types";
 import { ANNOUNCEMENT_ICON_COMPONENTS } from "./icons";
 import { AnnouncementPreview } from "./Preview";
-import { DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, SEVERITY_BAR, SEVERITY_LABELS, fromLocalInput, toLocalInput } from "./shared";
+import { AnnouncementIdBadge, DEFAULT_MAINTENANCE_TEXT, KIND_LABELS, SEVERITY_BAR, SEVERITY_LABELS, fromLocalInput, toLocalInput } from "./shared";
 
 const KINDS: { kind: AnnouncementKind; icon: typeof Rows; hint: string }[] = [
   { kind: "banner", icon: Rows, hint: tr("A bar across the top of every page") },
@@ -268,6 +268,17 @@ function emailsFor(d: Draft): string[] {
   return d.audience === "emails" ? d.audienceEmails : [];
 }
 
+function sameEmailSet(a: string[], b: string[]): boolean {
+  const norm = (list: string[]) => new Set(list.map((e) => e.trim().toLowerCase()).filter(Boolean));
+  const sa = norm(a);
+  const sb = norm(b);
+  if (sa.size !== sb.size) return false;
+  for (const item of sa) {
+    if (!sb.has(item)) return false;
+  }
+  return true;
+}
+
 /**
  * Create or edit one announcement, with a live preview. New announcements go
  * live on save (or at their start time). Starting maintenance right away asks
@@ -343,7 +354,9 @@ export function AnnouncementEditor({
       const emails = emailsFor(d);
       if (editing) {
         await updateAnnouncement(editing.id, input);
-        await setAnnouncementEmails(editing.id, emails);
+        if (!sameEmailSet(editingEmails, emails)) {
+          await setAnnouncementEmails(editing.id, emails);
+        }
       } else {
         const id = await createAnnouncement(input, user.id);
         if (emails.length) await setAnnouncementEmails(id, emails);
@@ -373,7 +386,10 @@ export function AnnouncementEditor({
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="rounded-card border border-border bg-surface p-5 shadow-card sm:p-6">
-        <h2 className="text-h2 font-semibold text-fg">{editing ? t("Edit announcement") : t("New announcement")}</h2>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 className="text-h2 font-semibold text-fg">{editing ? t("Edit announcement") : t("New announcement")}</h2>
+          {editing && <AnnouncementIdBadge id={editing.id} />}
+        </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={t("Type")}>
           {KINDS.map(({ kind, icon: Icon, hint }) => (
