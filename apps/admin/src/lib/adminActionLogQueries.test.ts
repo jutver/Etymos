@@ -30,6 +30,7 @@ describe("admin action descriptions", () => {
 
   it("names backend actions and old audit_log rows", () => {
     expect(describeAction(entry({ source: "backend", action: "support.replied" }))).toBe("Replied to a support ticket");
+    expect(describeAction(entry({ source: "backend", action: "server.shutdown_api" }))).toBe("Stopped the API");
     expect(describeAction(entry({ action: "audit.plan_changed" }))).toBe("Account action: plan changed");
     expect(describeAction(entry({ action: "something.new" }))).toBe("something.new");
   });
@@ -37,6 +38,7 @@ describe("admin action descriptions", () => {
   it("colours creates, changes and deletes", () => {
     expect(actionTone(entry({ action: "credit_packs.insert" }))).toBe("create");
     expect(actionTone(entry({ action: "user.force_deleted" }))).toBe("delete");
+    expect(actionTone(entry({ action: "server.shutdown_api" }))).toBe("delete");
     expect(actionTone(entry({ action: "auth.sign_in" }))).toBe("neutral");
   });
 

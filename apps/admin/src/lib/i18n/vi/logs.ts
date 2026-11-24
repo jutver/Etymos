@@ -18,6 +18,7 @@ export const logs: Record<string, string> = {
   "{{count}} lines": "{{count}} dòng",
   "API process {{pid}}": "Tiến trình API {{pid}}",
   "Clear screen": "Xóa màn hình",
+  "Connecting…": "Đang kết nối…",
   "Errors only": "Chỉ lỗi",
   Everything: "Tất cả",
   "Info and up": "Info trở lên",
@@ -31,6 +32,7 @@ export const logs: Record<string, string> = {
   "Not connected": "Mất kết nối",
   Pause: "Tạm dừng",
   Paused: "Đã tạm dừng",
+  "Reconnecting…": "Đang kết nối lại…",
   Resume: "Tiếp tục",
   "Remove filter": "Bỏ bộ lọc",
   "Search the log": "Tìm trong nhật ký",
@@ -72,6 +74,8 @@ export const logs: Record<string, string> = {
   // Server
   '{{count}} check(s) are running and would be lost; their users would see "interrupted".':
     '{{count}} lượt kiểm tra đang chạy sẽ bị mất; người dùng sẽ thấy "bị gián đoạn".',
+  "{{count}} check(s) are running and would be lost. The API will stay offline until started manually on the server.":
+    "{{count}} lượt kiểm tra đang chạy sẽ bị mất. API sẽ ngoại tuyến cho đến khi được khởi động lại thủ công trên máy chủ.",
   "{{count}} CPU": "{{count}} CPU",
   "{{count}} CPUs": "{{count}} CPU",
   "{{count}} thread": "{{count}} luồng",
@@ -106,6 +110,7 @@ export const logs: Record<string, string> = {
     "Giải phóng bộ nhớ GPU của các mô hình không được dùng. Chúng sẽ được tải lại khi cần.",
   GPU: "GPU",
   Host: "Máy",
+  "Live · updated {{time}}": "Trực tiếp · cập nhật lúc {{time}}",
   "Load (1/5/15 min)": "Tải (1/5/15 phút)",
   "Log level is now {{level}} (was {{previous}}) until the API restarts.":
     "Mức nhật ký hiện là {{level}} (trước đó {{previous}}) cho đến khi API khởi động lại.",
@@ -131,6 +136,7 @@ export const logs: Record<string, string> = {
   "Receipts, plan reminders and verification results normally sent every 5 minutes.":
     "Biên nhận, nhắc gia hạn và kết quả xác minh, bình thường được gửi mỗi 5 phút.",
   "Recently finished checks": "Lượt kiểm tra vừa kết thúc",
+  "Reconnecting… · last updated {{time}}": "Đang kết nối lại… · cập nhật lần cuối {{time}}",
   Refresh: "Làm mới",
   "Restart and lose {{count}} check(s)": "Khởi động lại và mất {{count}} lượt kiểm tra",
   "Restart the API": "Khởi động lại API",
@@ -140,12 +146,22 @@ export const logs: Record<string, string> = {
   "Running…": "Đang chạy…",
   "See this check's log lines": "Xem nhật ký của lượt kiểm tra này",
   "Send due notifications now": "Gửi các thông báo đến hạn ngay",
+  "Shut down": "Tắt",
+  "Shut down and lose {{count}} check(s)": "Tắt và mất {{count}} lượt kiểm tra",
+  "Shut down the API": "Tắt API",
+  "Shutting down — start the API manually on the server to bring it back online.":
+    "Đang tắt — hãy khởi động lại API thủ công trên máy chủ để hoạt động trở lại.",
+  "Shutting down…": "Đang tắt…",
   Started: "Khởi động lúc",
   Step: "Bước",
   "Stops and starts the API process. Pages show an error for up to a minute.":
     "Dừng rồi chạy lại tiến trình API. Các trang có thể báo lỗi trong tối đa một phút.",
+  "Stops the API completely without restarting. You will need to start it manually on the server to bring it back online.":
+    "Dừng hoàn toàn API và không tự khởi động lại. Bạn sẽ cần bật lại thủ công trên máy chủ.",
   "Support inbox": "Hộp thư hỗ trợ",
   "The API is restarting. It's usually back within a minute.": "API đang khởi động lại, thường mất chưa đến một phút.",
+  "The API is shutting down. It will stay offline until started manually on the server.":
+    "API đang tắt. Hệ thống sẽ giữ trạng thái ngoại tuyến cho đến khi được khởi động lại thủ công trên máy chủ.",
   "This API isn't running under supervisor, so it can't restart itself.":
     "API này không chạy dưới supervisor nên không thể tự khởi động lại.",
   Time: "Thời gian",
@@ -154,13 +170,13 @@ export const logs: Record<string, string> = {
   "Unload idle GPU models": "Giải phóng mô hình GPU đang rảnh",
   "Unloaded: {{models}}.": "Đã giải phóng: {{models}}.",
   "Up for": "Đã chạy",
-  "Updated {{time}} · refreshes every 10 seconds": "Cập nhật lúc {{time}} · tự làm mới mỗi 10 giây",
   "Used by models": "Mô hình đang dùng",
   Version: "Phiên bản",
   "Write thread stacks to the log": "Ghi trạng thái các luồng vào nhật ký",
   'Wrote the stacks of {{count}} threads to the log. Open Live log and search for "stack".':
     'Đã ghi trạng thái của {{count}} luồng vào nhật ký. Mở tab Nhật ký trực tiếp và tìm "stack".',
   "Yes, restart": "Có, khởi động lại",
+  "Yes, shut down": "Có, tắt API",
 
   // Grouping
   "Server logs": "Nhật ký máy chủ",
@@ -209,6 +225,7 @@ export const logs: Record<string, string> = {
   "Sent due notifications": "Đã gửi các thông báo đến hạn",
   "Checked the support inbox": "Đã kiểm tra hộp thư hỗ trợ",
   "Restarted the API": "Đã khởi động lại API",
+  "Stopped the API": "Đã tắt API",
   "Account action: {{action}}": "Thao tác tài khoản: {{action}}",
   empty: "trống",
   yes: "có",

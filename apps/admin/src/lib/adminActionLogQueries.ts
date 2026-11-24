@@ -134,6 +134,7 @@ const BACKEND_ACTIONS: Record<string, string> = {
   "server.run_notifications": tr("Sent due notifications"),
   "server.poll_support_inbox": tr("Checked the support inbox"),
   "server.restart_api": tr("Restarted the API"),
+  "server.shutdown_api": tr("Stopped the API"),
 };
 
 /** "Changed account", "Replied to a support ticket"... in the current language. */
@@ -155,7 +156,9 @@ export type ActionTone = "create" | "change" | "delete" | "neutral";
 
 export function actionTone(entry: AdminActionEntry): ActionTone {
   if (entry.action.endsWith(".insert")) return "create";
-  if (entry.action.endsWith(".delete") || entry.action === "user.force_deleted") return "delete";
+  if (entry.action.endsWith(".delete") || entry.action === "user.force_deleted" || entry.action === "server.shutdown_api") {
+    return "delete";
+  }
   if (entry.action.endsWith(".update") || entry.action.startsWith("support.") || entry.action.startsWith("server.")) {
     return "change";
   }

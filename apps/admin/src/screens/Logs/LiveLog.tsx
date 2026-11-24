@@ -1,19 +1,26 @@
-// Live tab: the backend's log as it happens, polled every two seconds from
-// the API's in-memory buffer (the last few thousand lines since it started).
-// Clicking a check, request or user tag narrows the view to it.
-import { useCallback, useEffect, useRef, useState } from "react";
+// Live tab: the backend's log as it happens, streamed over a direct WebSocket
+// connection from the API's in-memory buffer (the last few thousand lines
+// since it started). Clicking a check, request or user tag narrows the view.
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ArrowDown, DownloadSimple, MagnifyingGlass, Pause, Play, Trash, X } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
-import { fetchLiveLog, LOG_LEVELS, type LiveLogFilters, type LogLevel, type LogRow } from "../../lib/opsApi";
-import { friendlyError } from "../../lib/errors";
+import {
+  LOG_LEVELS,
+  type LiveLogFilters,
+  type LiveLogRowsMessage,
+  type LiveLogSnapshotMessage,
+  type LogLevel,
+  type LogRow,
+} from "../../lib/opsApi";
+import { createAdminWsClient, type AdminWsClient, type WsConnectionState } from "../../lib/opsWs";
 import { t, tn, tr } from "../../lib/i18n";
 import { download, levelTone, logTime, rowAsText, shortJob, TONE_CLASS } from "./format";
 import { LiveLogMetaSkeleton, LiveLogRowsSkeleton } from "./Skeletons";
 
-const POLL_MS = 2000;
 /** Rows kept on screen; older ones scroll away. */
 const MAX_ROWS = 3000;
+const INITIAL_LIMIT = 500;
 
 const LEVEL_LABELS: Record<LogLevel, string> = {
   DEBUG: tr("Everything"),
@@ -34,6 +41,16 @@ const EMPTY_FILTERS: LiveLogFilters = { level: "DEBUG", q: "", job: "", request:
 
 const control =
   "flex h-8 cursor-pointer items-center gap-1.5 rounded-control border border-border bg-surface px-2.5 text-caption font-medium text-fg-muted transition hover:bg-surface-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-50";
+
+function toWireFilters(f: LiveLogFilters) {
+  return {
+    level: f.level,
+    q: f.q.trim(),
+    job: f.job.trim(),
+    request: f.request.trim(),
+    user_id: f.userId.trim(),
+  };
+}
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -146,6 +163,7 @@ export default function LiveLogPage() {
   const [rows, setRows] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [paused, setPaused] = useState(false);
+  const [wsState, setWsState] = useState<WsConnectionState>("connecting");
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -154,66 +172,139 @@ export default function LiveLogPage() {
 
   const afterRef = useRef(0);
   const pidRef = useRef<number | null>(null);
+  const filtersRef = useRef<LiveLogFilters>(active);
+  filtersRef.current = active;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const pendingResubscribeRef = useRef(false);
+  const firstFilterRunRef = useRef(true);
+  const wsRef = useRef<AdminWsClient | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const poll = useCallback(
-    async (signal: { cancelled: boolean }) => {
-      try {
-        const page = await fetchLiveLog(afterRef.current, JSON.parse(filterKey) as LiveLogFilters);
-        if (signal.cancelled) return;
-        setError(null);
-        setMeta({ level: page.level, pid: page.pid, capacity: page.capacity });
-        // A restarted API numbers its lines from 1 again.
-        if (pidRef.current !== null && page.pid !== pidRef.current) {
-          pidRef.current = page.pid;
-          afterRef.current = 0;
-          setNotice(t("The API restarted (new process {{pid}}). Lines from before the restart are in Log files.", { pid: page.pid }));
-          setRows([]);
+  useEffect(() => {
+    const client = createAdminWsClient({
+      path: "/api/admin/logs/ws",
+      buildAuthFrame: (token) => ({
+        type: "auth",
+        token,
+        after: afterRef.current,
+        limit: INITIAL_LIMIT,
+        filters: toWireFilters(filtersRef.current),
+      }),
+      onStateChange: (nextState) => {
+        setWsState(nextState);
+        if (nextState === "connected" && pausedRef.current) {
+          wsRef.current?.send({ type: "pause" });
+        }
+      },
+      onError: (msg, fatal) => {
+        if (fatal) {
+          setError(msg || t("Not connected"));
+          setLoading(false);
+        } else if (msg) {
+          setError(msg);
+        }
+      },
+      onMessage: (raw) => {
+        if (raw.type === "error") {
+          setError(typeof raw.detail === "string" ? raw.detail : t("Not connected"));
+          setLoading(false);
           return;
         }
-        pidRef.current = page.pid;
-        if (afterRef.current === 0 && page.truncated) {
-          setNotice(t("Showing the newest {{count}} matching lines.", { count: page.rows.length }));
-        } else if (afterRef.current > 0 && page.truncated) {
+        if (raw.type !== "snapshot" && raw.type !== "rows") return;
+
+        const msg = raw as unknown as LiveLogSnapshotMessage | LiveLogRowsMessage;
+        setError(null);
+        setLoading(false);
+        setMeta({ level: msg.level, pid: msg.pid, capacity: msg.capacity });
+
+        // A restarted API numbers its lines from 1 again.
+        if (pidRef.current !== null && msg.pid !== pidRef.current) {
+          pidRef.current = msg.pid;
+          afterRef.current = msg.last_seq;
+          setNotice(t("The API restarted (new process {{pid}}). Lines from before the restart are in Log files.", { pid: msg.pid }));
+          setRows(msg.rows.slice(-MAX_ROWS));
+          return;
+        }
+        pidRef.current = msg.pid;
+
+        if (msg.type === "snapshot") {
+          if (afterRef.current === 0 && msg.truncated) {
+            setNotice(t("Showing the newest {{count}} matching lines.", { count: msg.rows.length }));
+          } else if (afterRef.current > 0 && msg.truncated) {
+            setNotice(t("Lines came in faster than the screen could show; some were skipped. Narrow the filters to see them all."));
+          }
+        } else if (msg.truncated) {
           setNotice(t("Lines came in faster than the screen could show; some were skipped. Narrow the filters to see them all."));
         }
-        afterRef.current = Math.max(afterRef.current, page.last_seq);
-        if (page.rows.length) setRows((prev) => [...prev, ...page.rows].slice(-MAX_ROWS));
-      } catch (err) {
-        if (!signal.cancelled) setError(friendlyError(err));
-      } finally {
-        if (!signal.cancelled) setLoading(false);
-      }
-    },
-    [filterKey],
-  );
 
-  // New filters: start over from the newest matching lines.
+        const prevSeq = afterRef.current;
+        const fresh = msg.rows.filter((r) => r.seq > prevSeq);
+        afterRef.current = Math.max(prevSeq, msg.last_seq);
+        if (fresh.length) {
+          setRows((prev) => [...prev, ...fresh].slice(-MAX_ROWS));
+        }
+      },
+    });
+    wsRef.current = client;
+    client.start();
+    return () => {
+      client.stop();
+      wsRef.current = null;
+    };
+  }, []);
+
+  // New filters: start over from the newest matching lines over the open stream.
   useEffect(() => {
+    if (firstFilterRunRef.current) {
+      firstFilterRunRef.current = false;
+      return;
+    }
+    const parsed = JSON.parse(filterKey) as LiveLogFilters;
     afterRef.current = 0;
     setRows([]);
     setOpen(new Set());
     setNotice(null);
+    if (pausedRef.current) {
+      pendingResubscribeRef.current = true;
+      return;
+    }
+    pendingResubscribeRef.current = false;
+    setLoading(true);
+    const sent = wsRef.current?.send({
+      type: "subscribe",
+      after: 0,
+      limit: INITIAL_LIMIT,
+      filters: toWireFilters(parsed),
+    });
+    if (!sent) {
+      wsRef.current?.reconnectNow();
+    }
   }, [filterKey]);
 
-  useEffect(() => {
-    if (paused) {
+  function togglePaused() {
+    const next = !paused;
+    setPaused(next);
+    if (next) {
+      wsRef.current?.send({ type: "pause" });
       setLoading(false);
       return;
     }
-    if (afterRef.current === 0) setLoading(true);
-    const signal = { cancelled: false };
-    let timer = 0;
-    const loop = async () => {
-      await poll(signal);
-      if (!signal.cancelled) timer = window.setTimeout(loop, POLL_MS);
-    };
-    void loop();
-    return () => {
-      signal.cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [poll, paused]);
+    if (pendingResubscribeRef.current) {
+      pendingResubscribeRef.current = false;
+      setLoading(true);
+      const sent = wsRef.current?.send({
+        type: "subscribe",
+        after: 0,
+        limit: INITIAL_LIMIT,
+        filters: toWireFilters(filtersRef.current),
+      });
+      if (!sent) wsRef.current?.reconnectNow();
+      return;
+    }
+    const sent = wsRef.current?.send({ type: "resume", after: afterRef.current });
+    if (!sent) wsRef.current?.reconnectNow();
+  }
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -232,6 +323,26 @@ export default function LiveLogPage() {
   }
 
   const hasFilters = filters.job || filters.request || filters.userId || search || filters.level !== "DEBUG";
+
+  const statusDot = error || (wsState === "disconnected" && !paused)
+    ? "bg-destructive"
+    : paused
+      ? "bg-fg-subtle"
+      : wsState === "reconnecting"
+        ? "animate-pulse bg-warning"
+        : wsState === "connecting" || (loading && !meta)
+          ? "animate-pulse bg-accent"
+          : "animate-pulse bg-success";
+
+  const statusText = error || (wsState === "disconnected" && !paused)
+    ? t("Not connected")
+    : paused
+      ? t("Paused")
+      : wsState === "reconnecting"
+        ? t("Reconnecting…")
+        : wsState === "connecting" || (loading && !meta)
+          ? t("Connecting…")
+          : t("Streaming");
 
   return (
     <div className="space-y-3">
@@ -280,7 +391,7 @@ export default function LiveLogPage() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <button type="button" className={control} onClick={() => setPaused((p) => !p)}>
+          <button type="button" className={control} onClick={togglePaused}>
             {paused ? <Play size={14} weight="bold" /> : <Pause size={14} weight="bold" />}
             {paused ? t("Resume") : t("Pause")}
           </button>
@@ -307,19 +418,8 @@ export default function LiveLogPage() {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-fg-muted">
         <span className="inline-flex items-center gap-1.5">
-          <span
-            className={cn(
-              "size-2 rounded-full",
-              error
-                ? "bg-destructive"
-                : paused
-                  ? "bg-fg-subtle"
-                  : loading && !meta
-                    ? "animate-pulse bg-accent"
-                    : "animate-pulse bg-success",
-            )}
-          />
-          {error ? t("Not connected") : paused ? t("Paused") : loading && !meta ? t("Loading…") : t("Streaming")}
+          <span className={cn("size-2 rounded-full", statusDot)} />
+          {statusText}
         </span>
         <span>{tn(rows.length, "{{count}} line", "{{count}} lines")}</span>
         {!meta && loading && !error ? (
