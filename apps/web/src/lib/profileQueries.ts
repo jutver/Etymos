@@ -42,6 +42,10 @@ export interface MyProfile {
   trialStartedAt: string | null;
   /** When the first-run tour was finished or skipped; null = show it. */
   tourCompletedAt: string | null;
+  /** Preferred site theme ("light" default). */
+  themePreference: "light" | "dark";
+  /** Whether to email the user when a document check finishes. */
+  emailOnCheckDone: boolean;
 }
 
 interface ProfileRow {
@@ -65,20 +69,31 @@ interface ProfileRow {
   // Added by supabase/migrations/20261110000000_onboarding_trial_sample.sql.
   trial_started_at?: string | null;
   tour_completed_at?: string | null;
+  // Added by supabase/migrations/20261124000000_user_preferences.sql.
+  theme_preference?: "light" | "dark" | null;
+  email_on_check_done?: boolean | null;
 }
 
 const PROFILE_COLUMNS =
   "plan_tier, billing_cycle, plan_expires_at, standard_credits, premium_credits, checks_used_this_period, plan_period_start, student_verified, access_status, access_requested_at, access_reviewed_at, access_note, role, banned_permanent, banned_until, ban_reason, deletion_requested_at";
 const ONBOARDING_COLUMNS = "trial_started_at, tour_completed_at";
+const PREFERENCE_COLUMNS = "theme_preference, email_on_check_done";
 
 export async function fetchMyProfile(userId: string): Promise<MyProfile> {
   let { data, error } = await supabase
     .from("profiles")
-    .select(`${PROFILE_COLUMNS}, ${ONBOARDING_COLUMNS}`)
+    .select(`${PROFILE_COLUMNS}, ${ONBOARDING_COLUMNS}, ${PREFERENCE_COLUMNS}`)
     .eq("id", userId)
     .single();
-  // 42703: the onboarding columns aren't there yet (web deployed before the
-  // migration). Read the rest rather than locking everyone out.
+  // 42703: newer preference/onboarding columns aren't migrated yet — fall back
+  // gracefully rather than locking existing sessions out.
+  if (error?.code === "42703") {
+    ({ data, error } = await supabase
+      .from("profiles")
+      .select(`${PROFILE_COLUMNS}, ${ONBOARDING_COLUMNS}`)
+      .eq("id", userId)
+      .single());
+  }
   if (error?.code === "42703") {
     ({ data, error } = await supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", userId).single());
   }
@@ -111,5 +126,7 @@ export async function fetchMyProfile(userId: string): Promise<MyProfile> {
     // Until the migration is applied the column is absent: treat the tour as
     // done rather than showing it to everyone.
     tourCompletedAt: row.tour_completed_at === undefined ? "unknown" : row.tour_completed_at,
+    themePreference: row.theme_preference === "dark" ? "dark" : "light",
+    emailOnCheckDone: Boolean(row.email_on_check_done),
   };
 }

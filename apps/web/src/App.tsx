@@ -10,6 +10,8 @@ import { MaintenanceGate } from "./components/announcements/MaintenanceGate";
 import { AnnouncementsProvider } from "./lib/announcements";
 import { PageLoader } from "./components/ui/PageLoader";
 import { useAuth } from "./lib/auth";
+import { useAppStore } from "./lib/store";
+import { applyTheme, subscribeThemeStorage } from "./lib/theme";
 import { trackPageView } from "./lib/analytics";
 import { useLanguage } from "./lib/i18n";
 // Screens are lazy-loaded so each route is its own chunk — this roughly halves
@@ -146,12 +148,33 @@ function PageViewTracker() {
   return null;
 }
 
+function ThemeSync() {
+  const themePreference = useAppStore((s) => s.themePreference);
+  const profileLoaded = useAppStore((s) => s.profileLoaded);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+
+  useEffect(() => {
+    if (profileLoaded) {
+      applyTheme(themePreference);
+    }
+  }, [profileLoaded, themePreference]);
+
+  useEffect(() => {
+    return subscribeThemeStorage((next) => {
+      setPreferences({ themePreference: next });
+    });
+  }, [setPreferences]);
+
+  return null;
+}
+
 function App() {
   // Re-render the whole route tree when the UI language changes: `t()` reads the
   // current language at call time, so every screen has to render again.
   useLanguage();
   return (
     <AnnouncementsProvider>
+      <ThemeSync />
       <ScrollToTop />
       <PageViewTracker />
       <SeoManager />

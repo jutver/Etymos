@@ -1,5 +1,7 @@
 
 
+import asyncio
+import json
 import logging
 import os
 import shutil
@@ -8,6 +10,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from uuid import UUID, uuid4
@@ -17,7 +20,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 from slowapi import _rate_limit_exceeded_handler
@@ -36,7 +39,18 @@ sys.path.append(str(Path(__file__).parent))
 from log_setup import (bind_job, bind_request, configure_logging, memory_summary, short_job, unbind_request,
                        uptime_text)
 configure_logging()
-from job_manager import active_count, describe_active, create_job, get_job, make_progress_callback, make_queue_callback, update_job
+from job_manager import (
+    active_count,
+    create_job,
+    describe_active,
+    get_job,
+    make_progress_callback,
+    make_queue_callback,
+    subscribe_job,
+    subscribe_jobs,
+    unsubscribe,
+    update_job,
+)
 from gpu_queue import gpu_slot
 import gpu_models
 from report_store import delete_report, get_report, list_reports, save_report, set_cached_unlocked_tier
@@ -83,11 +97,59 @@ from marker_preview_store import (
 
 logger = logging.getLogger(__name__)
 
+SSE_HEARTBEAT_SECONDS = max(1.0, float(os.getenv("SSE_HEARTBEAT_SECONDS", "20")))
+_SSE_SHUTDOWN = threading.Event()
+_SSE_WAITERS_LOCK = threading.Lock()
+_SSE_WAITERS: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()
+
+
+def reset_sse_shutdown() -> None:
+    _SSE_SHUTDOWN.clear()
+
+
+def signal_sse_shutdown() -> None:
+    """Wake all active SSE generators immediately during server shutdown."""
+    _SSE_SHUTDOWN.set()
+    with _SSE_WAITERS_LOCK:
+        waiters = list(_SSE_WAITERS)
+    for loop, evt in waiters:
+        try:
+            loop.call_soon_threadsafe(evt.set)
+        except RuntimeError:
+            pass
+
+
+def _register_sse_stop_event(loop: asyncio.AbstractEventLoop) -> asyncio.Event:
+    evt = asyncio.Event()
+    with _SSE_WAITERS_LOCK:
+        _SSE_WAITERS.add((loop, evt))
+    if _SSE_SHUTDOWN.is_set():
+        evt.set()
+    return evt
+
+
+def _unregister_sse_stop_event(loop: asyncio.AbstractEventLoop, evt: asyncio.Event) -> None:
+    with _SSE_WAITERS_LOCK:
+        _SSE_WAITERS.discard((loop, evt))
+
+
+def _format_sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Register backend-owned feature flags so they appear in the admin
     portal's Config → Feature Flags screen. Idempotent, never overwrites
     an admin's chosen value, and a no-op when Supabase isn't configured."""
+    reset_sse_shutdown()
     _log_startup()
     try:
         register_rewrite_flag()
@@ -103,6 +165,7 @@ async def lifespan(_: FastAPI):
     # Support inbox (email replies -> tickets) and auto-closing tickets.
     support_inbound.start()
     yield
+    signal_sse_shutdown()
     # Jobs live in memory: any check still running now is lost, and its user
     # will see "interrupted". Name them so the log shows which.
     active = describe_active()
@@ -186,7 +249,8 @@ SLOW_REQUEST_SECONDS = float(os.getenv("LOG_SLOW_REQUEST_SECONDS", "5"))
 def _routine(method: str, path: str) -> bool:
     """Requests made every few seconds by open pages: only logged at DEBUG
     (or when they fail)."""
-    return (method == "OPTIONS" or path == "/api/health" or path.startswith("/api/jobs/")
+    return (method == "OPTIONS" or path == "/api/health" or path == "/api/status/stream"
+            or path.startswith("/api/jobs/") or path == "/api/jobs/stream"
             or (method == "GET" and path == "/api/admin/server"))
 
 
@@ -504,6 +568,37 @@ def health():
     return {"status": "ok", "service": "plagiarism-checker", "active_jobs": active_count(), "pid": os.getpid()}
 
 
+@app.get("/api/status/stream")
+async def stream_server_status(request: Request):
+    """Lightweight public SSE endpoint proving server reachability with periodic heartbeats."""
+
+    async def events():
+        loop = asyncio.get_running_loop()
+        stop_evt = _register_sse_stop_event(loop)
+        try:
+            yield _format_sse(
+                "status",
+                {"status": "ok", "server_time": datetime.now(timezone.utc).isoformat()},
+            )
+            while not stop_evt.is_set():
+                if await request.is_disconnected():
+                    break
+                try:
+                    await asyncio.wait_for(stop_evt.wait(), timeout=SSE_HEARTBEAT_SECONDS)
+                    break
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        break
+                    yield _format_sse(
+                        "ping",
+                        {"server_time": datetime.now(timezone.utc).isoformat()},
+                    )
+        finally:
+            _unregister_sse_stop_event(loop, stop_evt)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
 def run_marker_preview_job(*, report_id: str, pdf_path: Path) -> None:
     """
     Best-effort and fully separate from run_pdf_job: converts the
@@ -572,6 +667,16 @@ def _upload_docx_rendering(user_id: str, report_id: str, docx_path: Path) -> Non
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def _extract_ai_score(report: Optional[dict]) -> Optional[float]:
+    if not isinstance(report, dict):
+        return None
+    ai = report.get("ai_detection")
+    if not isinstance(ai, dict) or not ai.get("available"):
+        return None
+    score = ai.get("overall_score")
+    return float(score) if isinstance(score, (int, float)) else None
+
+
 def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str | None,
                  balance_source: BalanceSource, input_type: Literal["pdf", "docx"] = "pdf") -> None:
     """
@@ -628,10 +733,27 @@ def run_pdf_job(*, job_id: str, pdf_path: str, original_name: str, user_id: str 
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=original_name,
+            status="completed",
+            report_id=report_id,
+            similarity_score=report.get("overall_score"),
+            ai_score=_extract_ai_score(report),
+        )
     except Exception as exc:
         logger.exception("%s check of %r failed", input_type.upper(), original_name)
+        err_msg = user_error_message(exc)
         update_job(job_id, status="failed", current_step="failed",
-                   message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=user_error_message(exc))
+                   message=f"{'DOCX' if input_type == 'docx' else 'PDF'} analysis failed", error=err_msg)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=original_name,
+            status="failed",
+            error=err_msg,
+        )
     finally:
         try:
             Path(pdf_path).unlink(missing_ok=True)
@@ -660,10 +782,27 @@ def run_text_job(*, job_id: str, user_text: str, user_id: str | None,
         update_job(job_id, status="completed", progress=100,
                    current_step="completed", message="Analysis complete",
                    report_id=report_id)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title="Pasted text",
+            status="completed",
+            report_id=report_id,
+            similarity_score=report.get("overall_score"),
+            ai_score=_extract_ai_score(report),
+        )
     except Exception as exc:
         logger.exception("Text check failed (%d chars)", len(user_text))
+        err_msg = user_error_message(exc)
         update_job(job_id, status="failed", current_step="failed",
-                   message="Text analysis failed", error=user_error_message(exc))
+                   message="Text analysis failed", error=err_msg)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title="Pasted text",
+            status="failed",
+            error=err_msg,
+        )
 
 
 # Largest PDF/DOCX a check accepts. Cloudflare already caps request bodies,
@@ -790,8 +929,16 @@ def run_stored_file_job(*, job_id: str, storage_path: str, original_name: str, u
         local_path.write_bytes(data)
     except Exception as exc:
         logger.exception("Could not fetch upload %s for job %s", storage_path, job_id)
+        err_msg = user_error_message(exc)
         update_job(job_id, status="failed", current_step="failed",
-                   message="Couldn't receive your file", error=user_error_message(exc))
+                   message="Couldn't receive your file", error=err_msg)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=original_name,
+            status="failed",
+            error=err_msg,
+        )
         _remove_upload(storage_path)
         return
 
@@ -851,6 +998,127 @@ def create_text_check(request: Request, body: TextCheckRequest,
         daemon=True,
     ).start()
     return {"job_id": job_id, "status": "queued", "input_type": "text"}
+
+
+_SSE_TERMINAL = ("completed", "failed")
+
+
+# IMPORTANT: Registered BEFORE /api/jobs/{job_id} so FastAPI does not match "stream" as a job_id.
+@app.get("/api/jobs/stream")
+async def stream_user_jobs(
+    request: Request,
+    job_ids: Optional[str] = None,
+    user: AuthedUser = Depends(verify_supabase_jwt),
+):
+    """Authenticated multi-job SSE stream for Documents & History active checks."""
+    requested: list[str] | None = None
+    if job_ids is not None:
+        requested = [part.strip() for part in job_ids.split(",") if part.strip()][:50]
+
+    loop = asyncio.get_running_loop()
+    sub, initial_jobs, missing_ids = subscribe_jobs(user.user_id, loop, requested)
+
+    async def events():
+        stop_evt = _register_sse_stop_event(loop)
+        active_ids = {j["job_id"] for j in initial_jobs if j.get("status") not in _SSE_TERMINAL}
+        try:
+            yield _format_sse("snapshot", {"jobs": initial_jobs, "missing_job_ids": missing_ids})
+            if not active_ids:
+                return
+            while active_ids and not stop_evt.is_set():
+                if await request.is_disconnected():
+                    break
+                get_task = asyncio.create_task(sub.queue.get())
+                stop_task = asyncio.create_task(stop_evt.wait())
+                try:
+                    done, pending = await asyncio.wait(
+                        {get_task, stop_task},
+                        timeout=SSE_HEARTBEAT_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for task in pending:
+                        task.cancel()
+                    if stop_evt.is_set():
+                        break
+                    if not done:
+                        if await request.is_disconnected():
+                            break
+                        yield _format_sse("ping", {"server_time": datetime.now(timezone.utc).isoformat()})
+                        continue
+                    if get_task in done:
+                        payload = get_task.result()
+                        yield _format_sse("job", payload)
+                        if payload.get("status") in _SSE_TERMINAL:
+                            active_ids.discard(payload.get("job_id"))
+                finally:
+                    for task in (get_task, stop_task):
+                        if not task.done():
+                            task.cancel()
+        finally:
+            unsubscribe(sub)
+            _unregister_sse_stop_event(loop, stop_evt)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_single_job(
+    request: Request,
+    job_id: str,
+    user: AuthedUser = Depends(verify_supabase_jwt),
+):
+    """Authenticated single-job SSE stream for Analyzing and Report re-check progress."""
+    existing = get_job(job_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    require_owner_or_admin(existing.get("user_id"), user)
+
+    owner_id = existing.get("user_id") or user.user_id
+    loop = asyncio.get_running_loop()
+    sub, snapshot = subscribe_job(job_id, owner_id, loop)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    async def events():
+        stop_evt = _register_sse_stop_event(loop)
+        try:
+            yield _format_sse("job", snapshot)
+            if snapshot.get("status") in _SSE_TERMINAL:
+                return
+            while not stop_evt.is_set():
+                if await request.is_disconnected():
+                    break
+                get_task = asyncio.create_task(sub.queue.get())
+                stop_task = asyncio.create_task(stop_evt.wait())
+                try:
+                    done, pending = await asyncio.wait(
+                        {get_task, stop_task},
+                        timeout=SSE_HEARTBEAT_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for task in pending:
+                        task.cancel()
+                    if stop_evt.is_set():
+                        break
+                    if not done:
+                        if await request.is_disconnected():
+                            break
+                        yield _format_sse("ping", {"server_time": datetime.now(timezone.utc).isoformat()})
+                        continue
+                    if get_task in done:
+                        payload = get_task.result()
+                        yield _format_sse("job", payload)
+                        if payload.get("status") in _SSE_TERMINAL:
+                            break
+                finally:
+                    for task in (get_task, stop_task):
+                        if not task.done():
+                            task.cancel()
+        finally:
+            unsubscribe(sub)
+            _unregister_sse_stop_event(loop, stop_evt)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @app.get("/api/jobs/{job_id}")
@@ -1295,14 +1563,44 @@ def run_recheck_job(job_id: str, report_id: str, report: dict, blocks: list[dict
             record_check_used(user_id, balance_source)
         update_job(job_id, status="completed", progress=100, current_step="completed",
                    message="Re-check complete", report_id=report_id)
+        recheck_title = (
+            (previous.get("input") or {}).get("name")
+            or (report.get("input") or {}).get("name")
+            or "Document"
+        )
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=recheck_title,
+            status="completed",
+            report_id=report_id,
+            similarity_score=result.get("overall_score"),
+            ai_score=_extract_ai_score(result),
+        )
     except RecheckStoreError as exc:
         logger.exception("Re-check of report %s couldn't be stored", report_id)
+        err_msg = str(exc)
         update_job(job_id, status="failed", current_step="failed",
-                   message="Re-check failed", error=str(exc))
+                   message="Re-check failed", error=err_msg)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=(report.get("input") or {}).get("name") or "Document",
+            status="failed",
+            error=err_msg,
+        )
     except Exception as exc:
         logger.exception("Re-check of report %s failed", report_id)
+        err_msg = user_error_message(exc)
         update_job(job_id, status="failed", current_step="failed",
-                   message="Re-check failed", error=user_error_message(exc))
+                   message="Re-check failed", error=err_msg)
+        notifications.notify_check_done_async(
+            user_id=user_id,
+            job_id=job_id,
+            document_title=(report.get("input") or {}).get("name") or "Document",
+            status="failed",
+            error=err_msg,
+        )
     finally:
         with _RECHECKS_LOCK:
             _RECHECKS_RUNNING.discard(report_id)
@@ -1448,6 +1746,97 @@ def remove_report(report_id: str, user: AuthedUser = Depends(verify_supabase_jwt
 
 
 RATE_LIMIT_PASSWORD_NOTICE = os.getenv("RATE_LIMIT_PASSWORD_NOTICE", "5/hour")
+
+
+class PreferencesUpdateRequest(BaseModel):
+    theme_preference: Optional[Literal["light", "dark"]] = None
+    email_on_check_done: Optional[bool] = None
+
+
+def _is_missing_column_error(exc: Exception) -> bool:
+    text = str(exc)
+    return "42703" in text or "does not exist" in text or "PGRST204" in text
+
+
+@app.get("/api/account/preferences")
+def read_account_preferences(user: AuthedUser = Depends(verify_supabase_jwt)):
+    client = get_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Database is not configured on this server.")
+    try:
+        rows = (
+            client.table("profiles")
+            .select("theme_preference, email_on_check_done")
+            .eq("id", user.user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:
+        if _is_missing_column_error(exc):
+            return {"theme_preference": "light", "email_on_check_done": False}
+        logger.exception("Failed to read preferences for user_id=%s", user.user_id)
+        raise HTTPException(status_code=500, detail="Couldn't load your preferences.")
+    row = rows[0] if rows else {}
+    theme = row.get("theme_preference")
+    return {
+        "theme_preference": theme if theme in ("light", "dark") else "light",
+        "email_on_check_done": bool(row.get("email_on_check_done", False)),
+    }
+
+
+@app.put("/api/account/preferences")
+def update_account_preferences(
+    body: PreferencesUpdateRequest,
+    user: AuthedUser = Depends(verify_supabase_jwt),
+):
+    patch: dict[str, object] = {}
+    if body.theme_preference is not None:
+        patch["theme_preference"] = body.theme_preference
+    if body.email_on_check_done is not None:
+        patch["email_on_check_done"] = body.email_on_check_done
+    if not patch:
+        raise HTTPException(status_code=400, detail="At least one preference must be supplied.")
+
+    client = get_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Database is not configured on this server.")
+    try:
+        rows = (
+            client.table("profiles")
+            .update(patch)
+            .eq("id", user.user_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:
+        if _is_missing_column_error(exc):
+            raise HTTPException(status_code=503, detail="Preferences migration has not been applied yet.")
+        logger.exception("Failed to save preferences for user_id=%s", user.user_id)
+        raise HTTPException(status_code=500, detail="Couldn't save your preferences.")
+
+    if not rows:
+        # Read back in case client update didn't echo representation rows
+        try:
+            rows = (
+                client.table("profiles")
+                .select("theme_preference, email_on_check_done")
+                .eq("id", user.user_id)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            rows = [patch]
+    row = {**patch, **(rows[0] if rows else {})}
+    theme = row.get("theme_preference")
+    return {
+        "theme_preference": theme if theme in ("light", "dark") else "light",
+        "email_on_check_done": bool(row.get("email_on_check_done", False)),
+    }
 
 
 @app.post("/api/account/password-changed")

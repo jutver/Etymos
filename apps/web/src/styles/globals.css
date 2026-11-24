@@ -391,3 +391,163 @@ mark[data-edited]::after {
     vertical-align: middle;
     padding: 0 0.125rem;
   }
+
+  /* Site-wide Dark mode (enabled on <html class="dark"> from My Profile -> Preferences).
+     PDF viewer page wrappers marked [data-keep-light] and toggle knobs retain light surfaces. */
+  html.dark {
+    color-scheme: dark;
+    --color-surface: #111a2e;
+    --color-surface-tint: #0b1220;
+    --color-surface-muted: #182338;
+    --color-ink-900: #f1f5f9;
+    --color-ink-700: #cbd5e1;
+    --color-ink-600: #b0becf;
+    --color-ink-500: #94a3b8;
+    --color-ink-400: #7f91a8;
+    --color-ink-300: #64748b;
+    --color-line: #26344d;
+    --color-brand-100: #172554;
+    --color-brand-200: #1e3a8a;
+    --color-severity-high: #f87171;
+    --color-severity-high-bg: rgba(239, 68, 68, 0.14);
+    --color-severity-high-line: rgba(248, 113, 113, 0.35);
+    --color-severity-moderate: #fbbf24;
+    --color-severity-moderate-bg: rgba(245, 158, 11, 0.14);
+    --color-severity-moderate-line: rgba(251, 191, 36, 0.35);
+    --color-severity-low: #facc15;
+    --color-severity-low-bg: rgba(234, 179, 8, 0.14);
+    --color-severity-low-line: rgba(250, 204, 21, 0.35);
+    --color-ai-flag: #c4b5fd;
+    --color-ai-flag-bg: rgba(139, 92, 246, 0.16);
+    --color-ai-flag-line: rgba(196, 181, 253, 0.38);
+    --color-success: #34d399;
+    --color-success-bg: rgba(16, 185, 129, 0.14);
+    --shadow-card: 0 1px 2px rgba(2, 6, 23, 0.35), 0 8px 24px -12px rgba(2, 6, 23, 0.55);
+    --shadow-card-hover: 0 2px 6px rgba(2, 6, 23, 0.45), 0 16px 32px -12px rgba(2, 6, 23, 0.65);
+    --shadow-pop: 0 12px 40px -8px rgba(2, 6, 23, 0.72);
+  }
+
+  html.dark body {
+    background-color: var(--color-surface-tint);
+    color: var(--color-ink-900);
+  }
+
+  html.dark .bg-white:not([data-keep-light]):not([data-keep-light] *),
+  html.dark .bg-white\/95:not([data-keep-light]):not([data-keep-light] *),
+  html.dark .bg-white\/90:not([data-keep-light]):not([data-keep-light] *) {
+    background-color: var(--color-surface);
+  }
+
+  html.dark .bg-ink-50,
+  html.dark .bg-slate-50 {
+    background-color: var(--color-surface-muted);
+  }
+
+  html.dark .text-navy-900,
+  html.dark .text-navy-800 {
+    color: #e2e8f0;
+  }
+
+  html.dark .text-ink-800 {
+    color: #e2e8f0;
+  }
+
+  html.dark .workspace-shell,
+  html.dark .public-shell {
+    background-color: #0b1220;
+    background-image: linear-gradient(180deg, #101b33 68px, #0b1220 390px);
+  }
+
+  html.dark .studio-nav {
+    background-image: linear-gradient(100deg, #091224, #0f1c33);
+    border-color: #1e2d4a;
+  }
+
+  html.dark .public-nav {
+    background-color: rgba(11, 18, 32, 0.92);
+    border-bottom-color: var(--color-line);
+    box-shadow: 0 2px 16px rgba(2, 6, 23, 0.4);
+  }
+
+  html.dark .studio-card {
+    box-shadow: 0 2px 4px rgba(2, 6, 23, 0.3), 0 12px 32px -18px rgba(2, 6, 23, 0.65);
+  }
+
+  html.dark .studio-auth {
+    background: radial-gradient(ellipse at 15% 25%, #162447, transparent 55%), #0b1220;
+  }
+
+  html.dark .studio-auth-card > .studio-card {
+    background: rgba(17, 26, 46, 0.95);
+    border-color: var(--color-line);
+  }
+
+  html.dark .studio-dropzone {
+    background-image: linear-gradient(145deg, #13213e, #111a2e);
+  }
+
+  html.dark .studio-report {
+    background-color: #0b1220;
+  }
+
+  html.dark .studio-report-bar {
+    background-color: rgba(17, 26, 46, 0.96);
+    border-bottom-color: var(--color-line);
+  }
+
+  html.dark .studio-sources {
+    background-color: var(--color-surface);
+    border-color: var(--color-line);
+  }
+
+  html.dark .studio-sources > div:first-child {
+    background: #15213a;
+  }
+
+  html.dark .studio-page thead {
+    background: #15213a;
+  }
+
+  html.dark .studio-page tbody tr:hover {
+    background-color: #192642;
+  }
+
+  html.dark .studio-page input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  html.dark .studio-auth input:not([type=checkbox]):not([type=radio]),
+  html.dark .studio-page textarea,
+  html.dark .studio-page select {
+    background-color: var(--color-surface-muted);
+    color: var(--color-ink-900);
+    border-color: var(--color-line);
+  }
+
+  html.dark .marker-document-preview {
+    color: var(--color-ink-900);
+  }
+
+  html.dark .marker-document-preview h1,
+  html.dark .marker-document-preview h2,
+  html.dark .marker-document-preview h3,
+  html.dark .marker-document-preview h4 {
+    color: #e2e8f0;
+  }
+
+  html.dark .marker-document-preview a {
+    color: var(--color-brand-400);
+  }
+
+  html.dark .bg-green-100 {
+    background-color: rgba(16, 185, 129, 0.18);
+  }
+
+  html.dark .text-green-700 {
+    color: #6ee7b7;
+  }
+
+  html.dark .bg-amber-100 {
+    background-color: rgba(245, 158, 11, 0.18);
+  }
+
+  html.dark .text-amber-800 {
+    color: #fcd34d;
+  }

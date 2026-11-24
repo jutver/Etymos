@@ -12,7 +12,7 @@ import {
   getReport,
   isJobMissingError,
   isTransientApiError,
-  pollJob,
+  streamJob,
   type BackendDocumentBlock,
 } from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
@@ -284,7 +284,7 @@ export default function AnalyzingPage() {
 
       async function runBackendAnalysis() {
         try {
-          const job = await pollJob(
+          const job = await streamJob(
             state.jobId!,
             (next) => {
               if (cancelled) return;

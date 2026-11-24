@@ -1,5 +1,6 @@
 import { supabase } from "@etymos/shared";
 import { tr, t } from "./i18n";
+import { SseHttpError, openSseStream } from "./sse";
 
 export interface BackendJob {
   job_id: string;
@@ -174,10 +175,15 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
   return new ApiError(text || t("Request failed with {{status}}", { status: response.status }), response.status);
 }
 
-async function getAuthHeader(): Promise<Record<string, string>> {
+export async function getAccessToken(): Promise<string | null> {
   const { data, error } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
-  if (error || !accessToken) {
+  if (error) return null;
+  return data.session?.access_token ?? null;
+}
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
     throw new Error(tr("Your session has expired. Please sign in again and retry."));
   }
   return { Authorization: `Bearer ${accessToken}` };
@@ -582,6 +588,206 @@ export async function pollJob(
     }
     if (Date.now() > deadline) throw new JobDeadlineError();
   }
+}
+
+const STREAM_RETRY_DELAYS_MS = [1000, 2000, 4000, 5000];
+
+function isTerminalJobStatus(status: string | undefined): boolean {
+  return status === "completed" || status === "failed";
+}
+
+function normalizeStreamError(error: unknown): unknown {
+  if (error instanceof SseHttpError) {
+    return new ApiError(error.message, error.status);
+  }
+  return error;
+}
+
+function isNonRetryableStreamError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403 || error.status === 404);
+}
+
+function waitForOnlineOrDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) globalThis.clearTimeout(timer);
+      if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const onOnline = () => finish();
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) globalThis.clearTimeout(timer);
+      if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
+      reject(signal?.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (typeof window !== "undefined" && typeof navigator !== "undefined" && !navigator.onLine) {
+      window.addEventListener("online", onOnline, { once: true });
+      timer = globalThis.setTimeout(finish, Math.max(delayMs, 30_000));
+      return;
+    }
+    timer = globalThis.setTimeout(finish, delayMs);
+  });
+}
+
+export interface StreamJobExtras extends PollJobOptions {
+  fetchImpl?: typeof fetch;
+  getToken?: () => Promise<string | null>;
+}
+
+/**
+ * Streams a single document-check job over SSE (`GET /api/jobs/{jobId}/stream`)
+ * until it completes or fails. Reconnects automatically with progressive backoff
+ * and fresh tokens on transient drops, while halting immediately on 401/403/404
+ * or missing auth session.
+ */
+export async function streamJob(
+  jobId: string,
+  onProgress?: (job: BackendJob) => void,
+  { deadline = Infinity, onUnreachable, signal, fetchImpl, getToken = getAccessToken }: StreamJobExtras = {},
+): Promise<BackendJob> {
+  let attempts = 0;
+  let latest: BackendJob | null = null;
+
+  for (;;) {
+    signal?.throwIfAborted();
+    if (Date.now() > deadline) throw new JobDeadlineError();
+
+    try {
+      await openSseStream({
+        url: buildUrl(`/api/jobs/${encodeURIComponent(jobId)}/stream`),
+        getToken,
+        requireAuth: true,
+        heartbeatTimeoutMs: 55_000,
+        signal,
+        fetchImpl,
+        onEvent: (evt) => {
+          if (evt.event !== "job" && evt.event !== "message") return;
+          const job = JSON.parse(evt.data) as BackendJob;
+          attempts = 0;
+          latest = job;
+          onProgress?.(job);
+        },
+      });
+      if (latest && isTerminalJobStatus((latest as BackendJob).status)) {
+        return latest;
+      }
+      throw new TypeError("SSE stream closed before completion");
+    } catch (rawErr) {
+      if (signal?.aborted) throw rawErr;
+      const err = normalizeStreamError(rawErr);
+      if (isNonRetryableStreamError(err)) throw err;
+      if (Date.now() > deadline) throw new JobDeadlineError();
+      onUnreachable?.(err);
+      const delay = STREAM_RETRY_DELAYS_MS[Math.min(attempts, STREAM_RETRY_DELAYS_MS.length - 1)]!;
+      attempts += 1;
+      await waitForOnlineOrDelay(delay, signal);
+    }
+  }
+}
+
+export interface JobsSnapshotPayload {
+  jobs: BackendJob[];
+  missing_job_ids: string[];
+}
+
+export interface StreamJobsHandlers {
+  onSnapshot?: (snapshot: JobsSnapshotPayload) => void;
+  onJob?: (job: BackendJob) => void;
+  onUnreachable?: (error: unknown) => void;
+}
+
+/**
+ * Streams status updates for multiple in-progress jobs owned by the signed-in user
+ * via `GET /api/jobs/stream`. Returns cleanly once the server closes the stream after
+ * all tracked jobs finish or when `signal` aborts.
+ */
+export async function streamJobs(
+  jobIds: string[],
+  handlers: StreamJobsHandlers,
+  { signal, fetchImpl, getToken = getAccessToken }: {
+    signal?: AbortSignal;
+    fetchImpl?: typeof fetch;
+    getToken?: () => Promise<string | null>;
+  } = {},
+): Promise<void> {
+  const uniqueIds = Array.from(new Set(jobIds.filter(Boolean))).slice(0, 50);
+  if (uniqueIds.length === 0) return;
+
+  const activeIds = new Set(uniqueIds);
+  const query = `?job_ids=${encodeURIComponent(uniqueIds.join(","))}`;
+  let attempts = 0;
+
+  for (;;) {
+    if (signal?.aborted || activeIds.size === 0) return;
+    let streamComplete = false;
+
+    try {
+      await openSseStream({
+        url: buildUrl(`/api/jobs/stream${query}`),
+        getToken,
+        requireAuth: true,
+        heartbeatTimeoutMs: 55_000,
+        signal,
+        fetchImpl,
+        onEvent: (evt) => {
+          if (evt.event === "snapshot") {
+            attempts = 0;
+            const snapshot = JSON.parse(evt.data) as JobsSnapshotPayload;
+            for (const missing of snapshot.missing_job_ids ?? []) activeIds.delete(missing);
+            for (const job of snapshot.jobs ?? []) {
+              if (isTerminalJobStatus(job.status)) activeIds.delete(job.job_id);
+            }
+            handlers.onSnapshot?.(snapshot);
+            if (activeIds.size === 0) streamComplete = true;
+          } else if (evt.event === "job") {
+            attempts = 0;
+            const job = JSON.parse(evt.data) as BackendJob;
+            if (isTerminalJobStatus(job.status)) activeIds.delete(job.job_id);
+            handlers.onJob?.(job);
+            if (activeIds.size === 0) streamComplete = true;
+          }
+        },
+      });
+      if (streamComplete || activeIds.size === 0) return;
+      throw new TypeError("Jobs SSE stream closed while checks remain active");
+    } catch (rawErr) {
+      if (signal?.aborted) return;
+      const err = normalizeStreamError(rawErr);
+      if (isNonRetryableStreamError(err)) throw err;
+      handlers.onUnreachable?.(err);
+      const delay = STREAM_RETRY_DELAYS_MS[Math.min(attempts, STREAM_RETRY_DELAYS_MS.length - 1)]!;
+      attempts += 1;
+      await waitForOnlineOrDelay(delay, signal);
+    }
+  }
+}
+
+export interface UserPreferencesPayload {
+  theme_preference: "light" | "dark";
+  email_on_check_done: boolean;
+}
+
+export function getPreferences(): Promise<UserPreferencesPayload> {
+  return requestJson<UserPreferencesPayload>("/api/account/preferences");
+}
+
+export function updatePreferences(patch: Partial<UserPreferencesPayload>): Promise<UserPreferencesPayload> {
+  return requestJson<UserPreferencesPayload>("/api/account/preferences", {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
 }
 
 // --- Recovery email (backend/api/recovery_email.py) ------------------------

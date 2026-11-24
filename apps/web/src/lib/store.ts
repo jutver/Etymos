@@ -10,7 +10,7 @@ import {
   permanentlyDeleteDocument,
 } from "./documentsQueries";
 import type { CheckState, HistoryEntryWithCheck } from "./documentsQueries";
-import { getJob, getReport, isJobMissingError } from "./api";
+import { getJob, getReport, isJobMissingError, type BackendJob } from "./api";
 import { supabase } from "@etymos/shared";
 import { fetchMyProfile } from "./profileQueries";
 import { statusFromScore } from "../components/Severity";
@@ -125,6 +125,10 @@ interface AppState {
   /** True once this session has read the profile from Supabase, so the
    * onboarding pieces don't act on the defaults above. Not persisted. */
   profileLoaded: boolean;
+  /** Account-persisted theme preference ("light" default). */
+  themePreference: "light" | "dark";
+  /** Account-persisted completion email opt-in (false default). */
+  emailOnCheckDone: boolean;
   toasts: Toast[];
 
   /** All three balances at once, for UI that lists them (UsageMeter, the
@@ -133,6 +137,7 @@ interface AppState {
   /** Remaining amount for one balance; defaults to `selectedBalance`. */
   remaining: (source?: BalanceSource) => number;
   setSelectedBalance: (source: BalanceSource) => void;
+  setPreferences: (patch: { themePreference?: "light" | "dark"; emailOnCheckDone?: boolean }) => void;
   syncFromProfile: (profile: {
     plan: PlanTier;
     billingCycle: BillingCycle | null;
@@ -144,6 +149,8 @@ interface AppState {
     studentVerified: boolean;
     trialStartedAt?: string | null;
     tourCompletedAt?: string | null;
+    themePreference?: "light" | "dark";
+    emailOnCheckDone?: boolean;
   }) => void;
   /** The tour was finished or skipped just now (Supabase is written separately). */
   markTourCompleted: (at: string | null) => void;
@@ -173,6 +180,8 @@ interface AppState {
    * each one. Runs after fetchHistory, i.e. on every Documents/History mount
    * and after a full page reload. */
   reconcileCheckingDocuments: () => Promise<void>;
+  settleCheckingJob: (job: BackendJob) => Promise<void>;
+  markMissingCheckingJobs: (missingJobIds: string[], message?: string) => Promise<void>;
   recordCheckedDocument: (doc: CheckedDocument) => void;
   /** After a credit unlocked a document: new tier on the cached copy (if any)
    * and the balances the server returned. */
@@ -257,6 +266,8 @@ export const useAppStore = create<AppState>()(
       trialStartedAt: null,
       tourCompletedAt: null,
       profileLoaded: false,
+      themePreference: "light",
+      emailOnCheckDone: false,
       toasts: [],
 
       balances: () => {
@@ -290,8 +301,14 @@ export const useAppStore = create<AppState>()(
 
       setSelectedBalance: (source) => set({ selectedBalance: source }),
 
+      setPreferences: (patch) =>
+        set((s) => ({
+          themePreference: patch.themePreference ?? s.themePreference,
+          emailOnCheckDone: patch.emailOnCheckDone ?? s.emailOnCheckDone,
+        })),
+
       syncFromProfile: (profile) =>
-        set({
+        set((s) => ({
           plan: profile.plan,
           billingCycle: profile.billingCycle ?? "monthly",
           standardCredits: profile.standardCredits,
@@ -300,10 +317,12 @@ export const useAppStore = create<AppState>()(
           planPeriodStart: profile.planPeriodStart,
           planExpiresAt: profile.planExpiresAt,
           studentVerified: profile.studentVerified,
+          themePreference: profile.themePreference ?? s.themePreference,
+          emailOnCheckDone: profile.emailOnCheckDone ?? s.emailOnCheckDone,
           ...(profile.trialStartedAt !== undefined && profile.tourCompletedAt !== undefined
             ? { trialStartedAt: profile.trialStartedAt, tourCompletedAt: profile.tourCompletedAt, profileLoaded: true }
             : {}),
-        }),
+        })),
 
       markTourCompleted: (at) => set({ tourCompletedAt: at }),
 
@@ -422,6 +441,87 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
+      settleCheckingJob: async (job) => {
+        const entries = get().history.filter(
+          (h) => h.checkState === "checking" && h.checkJobId === job.job_id,
+        );
+        if (entries.length === 0) return;
+
+        if (job.status === "failed") {
+          const message = job.error ?? tr("Analysis failed.");
+          for (const entry of entries) {
+            try {
+              await markCheckFailed(entry.id, message);
+            } catch {
+              // retried on next mount
+            }
+            get().updateHistoryEntry(entry.id, { checkState: "failed", checkError: message });
+          }
+          void get().refreshBalances();
+          return;
+        }
+
+        if (job.status !== "completed") return;
+
+        let results: Parameters<typeof finalizeCheckingDocument>[0]["results"];
+        if (job.report_id) {
+          try {
+            const report = await getReport(job.report_id);
+            results = {
+              status: statusFromScore(report.overall_score),
+              similarityScore: report.overall_score,
+              wordCount: Math.max(1, Math.round((report.total_input_chunks || 1) * 900)),
+              webSourcesScanned: (report.coverage?.total_candidate_papers as number) ?? 0,
+              academicSourcesScanned: (report.coverage?.checked_papers as number) ?? 0,
+            };
+          } catch {
+            // Keep server-persisted values if report fetch failed transiently.
+          }
+        }
+
+        for (const entry of entries) {
+          const resolvedId = await finalizeCheckingDocument({
+            placeholderId: entry.id,
+            reportId: job.report_id ?? null,
+            results,
+          });
+          if (resolvedId === entry.id) {
+            get().updateHistoryEntry(entry.id, {
+              checkState: "completed",
+              checkError: undefined,
+              ...(results
+                ? {
+                    status: results.status,
+                    similarityScore: results.similarityScore,
+                    wordCount: results.wordCount,
+                  }
+                : {}),
+            });
+          } else {
+            get().replaceHistoryEntryId(entry.id, resolvedId);
+          }
+        }
+        void get().refreshBalances();
+      },
+
+      markMissingCheckingJobs: async (missingJobIds, message = INTERRUPTED_MESSAGE) => {
+        if (missingJobIds.length === 0) return;
+        const missingSet = new Set(missingJobIds);
+        const entries = get().history.filter(
+          (h) => h.checkState === "checking" && h.checkJobId && missingSet.has(h.checkJobId),
+        );
+        if (entries.length === 0) return;
+        for (const entry of entries) {
+          try {
+            await markCheckFailed(entry.id, message);
+          } catch {
+            // retried on next mount
+          }
+          get().updateHistoryEntry(entry.id, { checkState: "failed", checkError: message });
+        }
+        void get().refreshBalances();
+      },
+
       reconcileCheckingDocuments: async () => {
         const pending = get().history.filter((h) => h.checkState === "checking");
         if (pending.length === 0) return;
@@ -440,8 +540,6 @@ export const useAppStore = create<AppState>()(
           const startedAt = new Date(entry.startedAt).getTime();
           const stale = Number.isFinite(startedAt) && Date.now() - startedAt > CHECK_STALE_MS;
 
-          // The tab closed between inserting the placeholder and receiving a
-          // job id — there is nothing to poll, so only the age-out applies.
           if (!entry.checkJobId) {
             if (stale) await fail(entry.id, INTERRUPTED_MESSAGE);
             continue;
@@ -449,70 +547,17 @@ export const useAppStore = create<AppState>()(
 
           try {
             const job = await getJob(entry.checkJobId);
-
-            if (job.status === "failed") {
-              await fail(entry.id, job.error ?? tr("Analysis failed."));
-              continue;
-            }
-
-            if (job.status !== "completed") {
-              // Genuinely still running: leave it as "Checking" unless it has
-              // outlived any plausible run.
-              if (stale) await fail(entry.id, INTERRUPTED_MESSAGE);
-              continue;
-            }
-
-            let results: Parameters<typeof finalizeCheckingDocument>[0]["results"];
-            if (job.report_id) {
-              try {
-                const report = await getReport(job.report_id);
-                results = {
-                  status: statusFromScore(report.overall_score),
-                  similarityScore: report.overall_score,
-                  wordCount: Math.max(1, Math.round((report.total_input_chunks || 1) * 900)),
-                  webSourcesScanned: (report.coverage?.total_candidate_papers as number) ?? 0,
-                  academicSourcesScanned: (report.coverage?.checked_papers as number) ?? 0,
-                };
-              } catch {
-                // Report body unavailable; still settle the row so it can't
-                // spin forever. Whatever the backend persisted is kept.
-              }
-            }
-
-            const resolvedId = await finalizeCheckingDocument({
-              placeholderId: entry.id,
-              reportId: job.report_id ?? null,
-              results,
-            });
-
-            if (resolvedId === entry.id) {
-              get().updateHistoryEntry(entry.id, {
-                checkState: "completed",
-                checkError: undefined,
-                ...(results
-                  ? {
-                      status: results.status,
-                      similarityScore: results.similarityScore,
-                      wordCount: results.wordCount,
-                    }
-                  : {}),
-              });
-            } else {
-              get().replaceHistoryEntryId(entry.id, resolvedId);
+            if (job.status === "completed" || job.status === "failed") {
+              await get().settleCheckingJob(job);
+            } else if (stale) {
+              await fail(entry.id, INTERRUPTED_MESSAGE);
             }
           } catch (err) {
-            // A 404 is the backend positively saying it has no record of this
-            // job — the API process restarted mid-check and lost its in-memory
-            // job table. That job is never coming back, so settle it now
-            // instead of leaving a row spinning forever.
             if (isJobMissingError(err) || stale) {
               await fail(entry.id, INTERRUPTED_MESSAGE);
             }
-            // Any other error (backend temporarily unreachable) leaves the row
-            // as "Checking"; the next mount retries.
           }
         }
-        // Whatever these settled to, show the balances the server has.
         void get().refreshBalances();
       },
 

@@ -41,9 +41,12 @@ from typing import Callable, Optional
 
 import mailer
 from email_templates import (
+    APP_URL,
     EmailContent,
     account_deleted_email,
     admin_transfer_alert_email,
+    check_completed_email,
+    check_failed_email,
     password_changed_email,
     payment_receipt_email,
     plan_ended_email,
@@ -476,3 +479,82 @@ def start_scheduler() -> None:
     _scheduler = threading.Thread(target=loop, name="notifications", daemon=True)
     _scheduler.start()
     logger.info("Notification scheduler started (every %ss)", interval)
+
+
+def _format_score(value: Optional[float]) -> str:
+    if value is None:
+        return "0%"
+    pct = max(0.0, min(100.0, float(value)))
+    rounded = round(pct)
+    return f"{rounded}%" if abs(pct - rounded) < 0.05 else f"{pct:.1f}%"
+
+
+def notify_check_done(
+    *,
+    user_id: Optional[str],
+    job_id: str,
+    document_title: str,
+    status: str,
+    report_id: Optional[str] = None,
+    similarity_score: Optional[float] = None,
+    ai_score: Optional[float] = None,
+    error: Optional[str] = None,
+    client=None,
+) -> bool:
+    """Send an opt-in, idempotent email when a user's document check settles."""
+    if not user_id or not job_id or status not in ("completed", "failed"):
+        return False
+    client = client or get_client()
+    if client is None:
+        return False
+    try:
+        rows = (
+            client.table("profiles")
+            .select("id, email, email_on_check_done")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        logger.debug("Couldn't read email_on_check_done for user_id=%s", user_id, exc_info=True)
+        return False
+
+    if not rows:
+        return False
+    profile = rows[0]
+    if not bool(profile.get("email_on_check_done")):
+        return False
+    recipient = profile.get("email")
+    if not recipient:
+        return False
+
+    site_url = (os.getenv("SITE_URL") or APP_URL).strip().rstrip("/") or APP_URL
+    if status == "completed" and report_id:
+        report_url = f"{site_url}/report/{report_id}"
+        sim_text = _format_score(similarity_score)
+        ai_text = _format_score(ai_score) if ai_score is not None else None
+        build = lambda: check_completed_email(
+            document_title=document_title,
+            similarity_percent=sim_text,
+            ai_percent=ai_text,
+            report_url=report_url,
+        )
+    else:
+        docs_url = f"{site_url}/documents"
+        build = lambda: check_failed_email(
+            document_title=document_title,
+            reason=error,
+            documents_url=docs_url,
+        )
+
+    return deliver("check_done", job_id, recipient, build, user_id=user_id, client=client)
+
+
+def notify_check_done_async(**kwargs) -> None:
+    """Fire-and-forget wrapper so completion emails never delay check settlement."""
+    try:
+        threading.Thread(target=notify_check_done, kwargs=kwargs, daemon=True).start()
+    except Exception:
+        logger.exception("Couldn't launch check-done notification thread")

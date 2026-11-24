@@ -562,3 +562,54 @@ def support_agent_alert_email(
         button_label="Open in admin" if admin_url else None,
         button_url=f"{admin_url.rstrip('/')}/support/{number}" if admin_url else None,
     )
+
+
+def check_completed_email(
+    *,
+    document_title: str,
+    similarity_percent: str,
+    ai_percent: Optional[str],
+    report_url: str,
+) -> EmailContent:
+    title = document_title.strip() or "Untitled document"
+    details: list[tuple[str, str]] = [
+        ("Document", esc(title)),
+        ("Similarity score", esc(similarity_percent)),
+    ]
+    if ai_percent is not None:
+        details.append(("AI content", esc(ai_percent)))
+    return EmailContent(
+        subject=f"Your document check is ready — {title}",
+        preheader=f"{title}: {similarity_percent} similarity detected. Open your report on Etymos.",
+        heading="Your document check is ready",
+        paragraphs=[
+            f"We finished checking <strong>{esc(title)}</strong>. Here is a summary of your results:",
+        ],
+        details=details,
+        button_label="Open report",
+        button_url=report_url,
+    )
+
+
+def check_failed_email(
+    *,
+    document_title: str,
+    reason: Optional[str],
+    documents_url: str,
+) -> EmailContent:
+    title = document_title.strip() or "Untitled document"
+    summary = (reason or "").strip() or "An unexpected error occurred while processing this check."
+    return EmailContent(
+        subject=f"Document check could not be completed — {title}",
+        preheader=f"The check for {title} could not be completed.",
+        heading="Document check could not be completed",
+        paragraphs=[
+            f"We couldn't finish checking <strong>{esc(title)}</strong>, and you were not charged for this run.",
+        ],
+        details=[
+            ("Document", esc(title)),
+            ("Details", esc(summary)),
+        ],
+        button_label="View my documents",
+        button_url=documents_url,
+    )
