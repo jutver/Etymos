@@ -1,6 +1,41 @@
 import { useEffect, useState } from "react";
+import { Check, Copy } from "@phosphor-icons/react";
 import { cn, type AnnouncementKind, type AnnouncementLanguage, type AnnouncementSeverity, type AnnouncementState } from "@etymos/shared";
 import { t, tr } from "../../lib/i18n";
+
+/** Full announcement ID in a subtle monospace chip with one-click copy. */
+export function AnnouncementIdBadge({ id, className }: { id: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  function copy() {
+    void navigator.clipboard?.writeText(id).then(() => setCopied(true));
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={copied ? t("Copied ID") : t("Copy ID")}
+      aria-label={copied ? t("Copied ID") : t("Copy announcement ID {{id}}", { id })}
+      className={cn(
+        "inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-0.5 font-mono text-micro text-fg-muted transition-colors hover:border-border-strong hover:text-fg",
+        className,
+      )}
+    >
+      <span className="truncate">{id}</span>
+      {copied ? (
+        <Check size={12} weight="bold" className="shrink-0 text-success" />
+      ) : (
+        <Copy size={12} className="shrink-0 opacity-70" />
+      )}
+    </button>
+  );
+}
 
 export const KIND_LABELS: Record<AnnouncementKind, string> = {
   banner: tr("Top bar"),
