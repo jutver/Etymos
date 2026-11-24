@@ -12,9 +12,10 @@ import { statusFromScore } from "../components/Severity";
 import type { DocumentVersion, VersionCheck } from "../screens/Report/VersionHistoryMenu";
 import { parseAiDetection } from "./aiDetection";
 import { parseExtractionMeta, parseInlineFormulas } from "./extractionMeta";
-import { parseExplanationFacts } from "./matchExplanation";
+import { parseAiExplanations, parseExplanationFacts } from "./matchExplanation";
 import { parsePdfRects } from "./pdfRects";
 import { parsePublishedPaperMatch } from "./publishedPaperMatch";
+import { sanitizeSourceTitle } from "./sourceTitle";
 import { tr } from "./i18n";
 
 interface DocumentRow {
@@ -88,6 +89,11 @@ interface DocumentMatchRow {
   source_doi?: string | null;
   // Added by supabase/migrations/20261023010000_document_match_pdf_rects.sql.
   pdf_rects?: unknown;
+  // Added by supabase/migrations/20261124120000_document_match_order_and_ai_explanations.sql.
+  sort_order?: number | null;
+  start_offset?: number | null;
+  end_offset?: number | null;
+  ai_explanations?: unknown;
 }
 
 interface DocumentPassageRow {
@@ -187,25 +193,34 @@ export async function fetchCheckedDocument(id: string): Promise<CheckedDocument 
   const passageRows = (passagesRes.data ?? []) as DocumentPassageRow[];
   const docRow = doc as DocumentRow;
 
-  const matches: MatchedSource[] = matchRows.map((m) => ({
-    id: m.id,
-    severity: m.severity ?? "low",
-    detectionType: m.detection_type ?? "traditional",
-    matchPercent: m.match_percent != null ? Number(m.match_percent) : 0,
-    sourceTitle: m.source_title ?? "",
-    sourceAuthor: m.source_author ?? "",
-    sourceKind: m.source_kind ?? "web",
-    citation: m.citation ?? "",
-    userSnippet: m.user_snippet ?? "",
-    sourceSnippet: m.source_snippet ?? "",
-    explanation: m.explanation ?? "",
-    rewriteSuggestions: m.rewrite_suggestions ?? [],
-    explanationFacts: parseExplanationFacts(m.explanation_facts),
-    sourceUrl: m.source_url || undefined,
-    sourceYear: m.source_year || undefined,
-    sourceDoi: m.source_doi || undefined,
-    pdfRects: parsePdfRects(m.pdf_rects),
-  }));
+  const matches: MatchedSource[] = matchRows.map((m) => {
+    const sourceKind = m.source_kind ?? "web";
+    const isAcademic = sourceKind === "academic";
+    const aiExplanations = parseAiExplanations(m.ai_explanations);
+    return {
+      id: m.id,
+      severity: m.severity ?? "low",
+      detectionType: m.detection_type ?? "traditional",
+      matchPercent: m.match_percent != null ? Number(m.match_percent) : 0,
+      sourceTitle: sanitizeSourceTitle(m.source_title ?? "", { isAcademic }),
+      sourceAuthor: m.source_author ?? "",
+      sourceKind,
+      citation: m.citation ?? "",
+      userSnippet: m.user_snippet ?? "",
+      sourceSnippet: m.source_snippet ?? "",
+      explanation: m.explanation ?? "",
+      rewriteSuggestions: m.rewrite_suggestions ?? [],
+      explanationFacts: parseExplanationFacts(m.explanation_facts),
+      sourceUrl: m.source_url || undefined,
+      sourceYear: m.source_year || undefined,
+      sourceDoi: m.source_doi || undefined,
+      pdfRects: parsePdfRects(m.pdf_rects),
+      ...(typeof m.sort_order === "number" ? { sortOrder: m.sort_order } : {}),
+      ...(typeof m.start_offset === "number" ? { startOffset: m.start_offset } : {}),
+      ...(typeof m.end_offset === "number" ? { endOffset: m.end_offset } : {}),
+      ...(aiExplanations ? { aiExplanations } : {}),
+    };
+  });
 
   const passages: DocPassage[] = passageRows.map((p) => {
     const passageText = p.text ?? "";

@@ -121,6 +121,7 @@ export const components: Record<string, string> = {
   "Fit page": "Vừa trang",
   "Fit width": "Vừa chiều rộng",
   "Zoom out": "Thu nhỏ",
+  "Analyzing why this passage was flagged…": "Đang phân tích lý do đoạn này bị đánh dấu…",
   "instead of confirming.": "thay vì xác nhận.",
   "{{plan}} plan": "Gói {{plan}}",
   "© 2026 Etymos. Made for Vietnamese students and researchers.": "© 2026 Etymos. Dành cho sinh viên và nhà nghiên cứu Việt Nam.",

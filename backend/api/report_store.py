@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import uuid
 from copy import deepcopy
@@ -278,9 +279,11 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             )
 
     try:
+        from source_title import sanitize_source_title
+
         matches = report.get("matches") or []
         rows = []
-        for m in matches[:_MAX_PERSISTED_MATCHES]:
+        for sort_order_idx, m in enumerate(matches[:_MAX_PERSISTED_MATCHES]):
             semantic_similarity = float(m.get("semantic_similarity", 0.0) or 0.0)
             match_percent = round(semantic_similarity * 100, 2)
             source_authors = m.get("source_authors") or []
@@ -294,12 +297,19 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             # so this is never actually None in practice, but the fallback
             # keeps this insert valid for any pre-existing report shape.
             source_kind = m.get("source_kind") or "academic"
+            clean_title = sanitize_source_title(
+                m.get("source_title") or "",
+                is_academic=(source_kind == "academic"),
+            ) or None
+            input_offset = m.get("input_offset") or {}
+            start_offset = input_offset.get("start")
+            end_offset = input_offset.get("end")
             rows.append({
                 "document_id": report_id,
                 "severity": _severity_from_percent(match_percent),
                 "detection_type": "semantic",
                 "match_percent": match_percent,
-                "source_title": m.get("source_title") or None,
+                "source_title": clean_title,
                 "source_author": source_author,
                 "source_kind": source_kind,
                 "citation": None,
@@ -327,6 +337,11 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
                 # where the match sits on the PDF's pages (pdf_geometry.py),
                 # so the Original view highlights it exactly after a reload.
                 "pdf_rects": m.get("pdf_rects") or None,
+                # supabase/migrations/20261124120000_document_match_order_and_ai_explanations.sql
+                "sort_order": sort_order_idx,
+                "start_offset": int(start_offset) if start_offset is not None else None,
+                "end_offset": int(end_offset) if end_offset is not None else None,
+                "ai_explanations": m.get("ai_explanations") or None,
             })
         # Idempotent re-save: clear any previous match rows for this
         # document before inserting the current set.
@@ -337,8 +352,9 @@ def _persist_to_supabase(report_id: str, report: dict[str, Any], *,
             # without what the database can't store.
             attempts = [
                 set(),
-                {"pdf_rects"},
-                {"pdf_rects", "explanation_facts", "source_url", "source_year", "source_doi"},
+                {"sort_order", "start_offset", "end_offset", "ai_explanations"},
+                {"sort_order", "start_offset", "end_offset", "ai_explanations", "pdf_rects"},
+                {"sort_order", "start_offset", "end_offset", "ai_explanations", "pdf_rects", "explanation_facts", "source_url", "source_year", "source_doi"},
             ]
             for number, dropped in enumerate(attempts):
                 try:
@@ -517,12 +533,21 @@ def _fetch_from_supabase(report_id: str) -> Optional[dict[str, Any]]:
         doc = doc_resp.data if doc_resp else None
         if not doc:
             return None
-        matches_resp = (
-            client.table("document_matches")
-            .select("*")
-            .eq("document_id", report_id)
-            .execute()
-        )
+        try:
+            matches_resp = (
+                client.table("document_matches")
+                .select("*")
+                .eq("document_id", report_id)
+                .order("sort_order")
+                .execute()
+            )
+        except Exception:
+            matches_resp = (
+                client.table("document_matches")
+                .select("*")
+                .eq("document_id", report_id)
+                .execute()
+            )
         matches = matches_resp.data or []
         return {
             "report_id": report_id,
@@ -726,6 +751,168 @@ def list_reports(user_id: str | None = None, is_admin: bool = False) -> list[dic
         except (OSError, json.JSONDecodeError):
             continue
     return reports
+
+
+def _extract_match_index(match_id: str) -> Optional[int]:
+    """Parse trailing integer index from client synthetic match IDs (`<doc>-match-3` or `m-3`)."""
+    m = re.search(r"(?:-match-|^m-)(\d+)$", match_id or "")
+    return int(m.group(1)) if m else None
+
+
+def _row_to_explain_match(row: dict[str, Any]) -> dict[str, Any]:
+    from source_title import sanitize_source_title
+
+    facts = row.get("explanation_facts") if isinstance(row.get("explanation_facts"), dict) else None
+    source_kind = row.get("source_kind") or "academic"
+    match_percent = float(row.get("match_percent") or 0.0)
+    severity = row.get("severity") or _severity_from_percent(match_percent)
+    inferred_label = (
+        (facts or {}).get("label")
+        or ("likely_plagiarism" if severity == "high" else "suspicious" if severity == "moderate" else "")
+    )
+    raw_title = row.get("source_title") or ""
+    clean_title = sanitize_source_title(raw_title, is_academic=(source_kind == "academic")) or raw_title
+    return {
+        "id": str(row.get("id") or ""),
+        "label": inferred_label,
+        "input_sentence": row.get("user_snippet") or "",
+        "source_sentence": row.get("source_snippet") or "",
+        "source_title": clean_title,
+        "source_kind": source_kind,
+        "semantic_similarity": max(0.0, min(1.0, match_percent / 100.0)),
+        "word_overlap": None,
+        "explanation": row.get("explanation") or "",
+        "explanation_facts": facts,
+        "ai_explanations": row.get("ai_explanations") if isinstance(row.get("ai_explanations"), dict) else None,
+    }
+
+
+def _report_match_to_explain_match(m: dict[str, Any]) -> dict[str, Any]:
+    from source_title import sanitize_source_title
+
+    source_kind = m.get("source_kind") or "academic"
+    raw_title = m.get("source_title") or m.get("source_paper_id") or ""
+    clean_title = sanitize_source_title(raw_title, is_academic=(source_kind == "academic")) or raw_title
+    return {
+        **m,
+        "source_title": clean_title,
+        "source_kind": source_kind,
+    }
+
+
+def load_match_for_explain(report_id: str, match_id: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    """Resolve one match for on-demand explanation.
+
+    Supports both persisted `document_matches.id` UUIDs and synthetic client IDs
+    (`<docId>-match-<idx>` or `m-<idx>`), returning `(normalized_match, persisted_row_id)`.
+    """
+    idx = _extract_match_index(match_id)
+
+    client = get_client()
+    if client is not None:
+        try:
+            try:
+                resp = (
+                    client.table("document_matches")
+                    .select("*")
+                    .eq("document_id", report_id)
+                    .order("sort_order")
+                    .execute()
+                )
+            except Exception:
+                resp = (
+                    client.table("document_matches")
+                    .select("*")
+                    .eq("document_id", report_id)
+                    .execute()
+                )
+            rows = resp.data or []
+            for row in rows:
+                if str(row.get("id") or "") == match_id:
+                    return _row_to_explain_match(row), str(row.get("id"))
+            if idx is not None and 0 <= idx < len(rows):
+                row = rows[idx]
+                row_id = str(row.get("id") or "") or None
+                return _row_to_explain_match(row), row_id
+        except Exception:
+            logger.exception("Failed loading document_matches for explain report_id=%s", report_id)
+
+    report = get_report(report_id)
+    if report:
+        matches = report.get("matches") or []
+        for candidate in matches:
+            cid = candidate.get("id")
+            if cid is not None and str(cid) == match_id:
+                row_id = str(cid) if idx is None else None
+                return _report_match_to_explain_match(candidate), row_id
+        if idx is not None and 0 <= idx < len(matches):
+            candidate = matches[idx]
+            cid = candidate.get("id")
+            return _report_match_to_explain_match(candidate), (str(cid) if cid and _extract_match_index(str(cid)) is None else None)
+
+    return None, None
+
+
+def save_match_ai_explanation(
+    report_id: str,
+    persisted_row_id: Optional[str],
+    match_id: str,
+    language: str,
+    entry: dict[str, Any],
+) -> None:
+    """Persist one cached Gemini explanation to in-memory report and Supabase `ai_explanations`."""
+    idx = _extract_match_index(match_id)
+    with _LOCK:
+        cached = _REPORTS.get(report_id)
+        if cached:
+            matches = cached.get("matches") or []
+            target = None
+            for m in matches:
+                if persisted_row_id and str(m.get("id") or "") == persisted_row_id:
+                    target = m
+                    break
+                if str(m.get("id") or "") == match_id:
+                    target = m
+                    break
+            if target is None and idx is not None and 0 <= idx < len(matches):
+                target = matches[idx]
+            if target is not None:
+                existing = target.get("ai_explanations")
+                merged = dict(existing) if isinstance(existing, dict) else {}
+                merged[language] = dict(entry)
+                target["ai_explanations"] = merged
+
+    client = get_client()
+    if client is None or not persisted_row_id:
+        return
+    try:
+        cur_resp = (
+            client.table("document_matches")
+            .select("ai_explanations")
+            .eq("id", persisted_row_id)
+            .eq("document_id", report_id)
+            .maybe_single()
+            .execute()
+        )
+        cur_data = (cur_resp.data or {}) if cur_resp else {}
+        existing = cur_data.get("ai_explanations")
+        merged = dict(existing) if isinstance(existing, dict) else {}
+        merged[language] = dict(entry)
+        (
+            client.table("document_matches")
+            .update({"ai_explanations": merged})
+            .eq("id", persisted_row_id)
+            .eq("document_id", report_id)
+            .execute()
+        )
+    except Exception:
+        # Column might not exist yet in an un-migrated DB; in-memory cache still holds it.
+        logger.warning(
+            "Could not persist ai_explanations for report_id=%s match_id=%s",
+            report_id,
+            persisted_row_id,
+            exc_info=True,
+        )
 
 
 def delete_report(report_id: str) -> bool:

@@ -515,7 +515,8 @@ def test_export_pdf_endpoint_returns_attachment_supports_document_title_and_supa
         )
         assert resp_ok.status_code == 200
         assert resp_ok.headers["content-type"] == "application/pdf"
-        assert "Thesis_Draft_pdf-report.pdf" in resp_ok.headers["content-disposition"]
+        assert "Thesis Draft - Etymos Report.pdf" in resp_ok.headers["content-disposition"]
+        assert "Thesis%20Draft%20-%20Etymos%20Report.pdf" in resp_ok.headers["content-disposition"]
         doc = pymupdf.open(stream=resp_ok.content, filetype="pdf")
         assert len(doc) >= 2
         assert len(_collect_highlight_fills(doc[0])) >= 1
@@ -528,3 +529,12 @@ def test_export_pdf_endpoint_returns_attachment_supports_document_title_and_supa
         doc.close()
     finally:
         api_app.app.dependency_overrides.clear()
+
+
+def test_safe_export_filename_format():
+    import app as api_app
+
+    assert api_app._safe_export_filename("Climate Paper.pdf") == "Climate Paper - Etymos Report.pdf"
+    assert api_app._safe_export_filename("Draft/2026:v1.docx") == "Draft 2026 v1 - Etymos Report.pdf"
+    assert api_app._safe_export_filename("") == "Etymos Report.pdf"
+    assert api_app._safe_export_filename("Etymos Report") == "Etymos Report.pdf"

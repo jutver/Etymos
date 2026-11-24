@@ -216,3 +216,33 @@ def test_does_not_trigger_published_paper_match_on_low_overlap_draft():
     )
 
     assert "published_paper_match" not in report
+
+
+def test_sort_matches_orders_canonically_top_to_bottom():
+    from final_report_builder import sort_matches
+
+    late = {
+        "label": "likely_plagiarism",
+        "semantic_similarity": 0.99,
+        "input_offset": {"start": 320, "end": 400},
+    }
+    early = {
+        "label": "suspicious",
+        "semantic_similarity": 0.81,
+        "input_offset": {"start": 20, "end": 90},
+    }
+    pdf_only_p1 = {
+        "label": "likely_plagiarism",
+        "semantic_similarity": 0.95,
+        "pdf_rects": [{"page": 1, "x0": 40.0, "y0": 150.0, "x1": 200.0, "y1": 170.0}],
+    }
+    pdf_only_p2 = {
+        "label": "likely_plagiarism",
+        "semantic_similarity": 0.99,
+        "pdf_rects": [{"page": 2, "x0": 40.0, "y0": 80.0, "x1": 200.0, "y1": 100.0}],
+    }
+    unlocated_low = {"label": "suspicious", "semantic_similarity": 0.72}
+    unlocated_high = {"label": "likely_plagiarism", "semantic_similarity": 0.92}
+
+    ordered = sort_matches([unlocated_low, late, pdf_only_p2, early, unlocated_high, pdf_only_p1])
+    assert ordered == [early, late, pdf_only_p1, pdf_only_p2, unlocated_high, unlocated_low]

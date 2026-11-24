@@ -255,3 +255,58 @@ def test_an_llm_explanation_drops_the_facts_so_the_ui_shows_the_llm_text():
     explain_matches(matches, providers={"local": _ok}, order=["local"], limit=1)
     assert "explanation_facts" not in matches[0]
     assert "explanation_facts" in matches[1]
+
+
+def test_dedicated_gemini_explain_key_takes_precedence_over_global_key(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "global-key")
+    monkeypatch.setenv("GEMINI_EXPLAIN_API_KEY", "dedicated-explain-key")
+    captured = {}
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "Đoạn này trùng nguyên văn với nguồn."}]}}]}
+
+    class _FakeHttp:
+        def post(self, url, headers=None, json=None, timeout=None):
+            captured["headers"] = headers
+            captured["prompt"] = json["contents"][0]["parts"][0]["text"]
+            return _FakeResp()
+
+    m = _match(input_sentence=STUDENT, source_sentence=STUDENT)
+    out = ai_explain.explain_single_match(m, language="vi", http_client=_FakeHttp())
+    assert out["source"] == "llm:gemini"
+    assert captured["headers"]["x-goog-api-key"] == "dedicated-explain-key"
+    assert "in Vietnamese" in captured["prompt"]
+
+
+def test_validate_llm_text_accepts_quoted_clean_source_title():
+    m = _match(
+        input_sentence=STUDENT,
+        source_sentence=STUDENT,
+        source_title="(PDF) ViHateT5: Enhancing Hate Speech Detection ... · Hugging FaceViHateT5",
+        source_kind="academic",
+    )
+    facts = compute_facts(m)
+    assert validate_llm_text(
+        'This sentence matches "ViHateT5: Enhancing Hate Speech Detection" identically.',
+        m,
+        facts,
+    ) is None
+
+
+def test_two_identical_sentences_from_same_source_produce_distinct_fact_explanations():
+    m1 = _match(
+        input_sentence="First distinct experimental evaluation setup sentence with ten words total.",
+        source_sentence="First distinct experimental evaluation setup sentence with ten words total.",
+    )
+    m2 = _match(
+        input_sentence="Second completely unrelated ablation dataset description sentence covering nine words.",
+        source_sentence="Second completely unrelated ablation dataset description sentence covering nine words.",
+    )
+    e1 = facts_explanation(m1)
+    e2 = facts_explanation(m2)
+    assert e1 != e2
+    assert "First distinct experimental" in e1
+    assert "Second completely unrelated" in e2

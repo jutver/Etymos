@@ -5,8 +5,9 @@
 // values it filled in. Rebuilding the sentence here with t() means switching
 // VI/EN changes the explanation instantly. Templates mirror ai_explain._TEXT.
 // Without facts (LLM-written text, older reports) the stored text is shown.
-import type { MatchedSource, MatchExplanationFacts } from "@etymos/shared";
+import type { AiExplanationCacheEntry, MatchedSource, MatchExplanationFacts } from "@etymos/shared";
 import { t } from "./i18n";
+import { sanitizeSourceTitle } from "./sourceTitle";
 
 const KINDS: readonly MatchExplanationFacts["kind"][] = ["identical", "definition_only", "whole", "verbatim", "phrase", "reworded"];
 
@@ -15,19 +16,54 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function passageExcerpt(snippet: string | undefined, limit = 75): string {
+  const normalized = (snippet ?? "").trim().replace(/\s+/g, " ");
+  if (!normalized) return "";
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function countSnippetWords(text: string | undefined): number {
+  const matches = (text ?? "").trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
+/** Tolerant parse of cached per-language Gemini explanations from JSONB/API. */
+export function parseAiExplanations(raw: unknown): Partial<Record<"en" | "vi", AiExplanationCacheEntry>> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: Partial<Record<"en" | "vi", AiExplanationCacheEntry>> = {};
+  for (const lang of ["en", "vi"] as const) {
+    const val = src[lang];
+    if (!val || typeof val !== "object") continue;
+    const rec = val as Record<string, unknown>;
+    if (typeof rec.text === "string" && rec.text.trim()) {
+      out[lang] = {
+        text: rec.text,
+        source: "llm:gemini",
+        model: typeof rec.model === "string" ? rec.model : "gemini-flash-latest",
+        generated_at: typeof rec.generated_at === "string" ? rec.generated_at : "",
+      };
+    }
+  }
+  return out.en || out.vi ? out : undefined;
+}
+
 /** Tolerant parse of the backend's `explanation_facts` JSON; anything unexpected -> undefined. */
 export function parseExplanationFacts(raw: unknown): MatchExplanationFacts | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const r = raw as Record<string, unknown>;
   if (!KINDS.includes(r.kind as MatchExplanationFacts["kind"])) return undefined;
+  const rawTitle = typeof r.title === "string" ? r.title : "";
   return {
     kind: r.kind as MatchExplanationFacts["kind"],
     label: typeof r.label === "string" ? r.label : "",
-    title: typeof r.title === "string" ? r.title : "",
+    title: sanitizeSourceTitle(rawTitle, { maxLength: 110 }) || rawTitle,
     shared: num(r.shared),
     total: num(r.total),
     phrase: typeof r.phrase === "string" ? r.phrase : "",
     semantic: num(r.semantic),
+    ...(typeof r.excerpt === "string" && r.excerpt.trim() ? { excerpt: r.excerpt.trim() } : {}),
   };
 }
 
@@ -41,10 +77,21 @@ function suffix(label: string): string {
 }
 
 function body(f: MatchExplanationFacts): string {
-  const title = f.title ? ` "${f.title}"` : "";
-  const values = { title, shared: f.shared, total: f.total, phrase: f.phrase, semantic: f.semantic };
+  const cleanTitle = sanitizeSourceTitle(f.title, { maxLength: 110 }) || f.title;
+  const title = cleanTitle ? ` "${cleanTitle}"` : "";
+  const values = {
+    title,
+    shared: f.shared,
+    total: f.total,
+    phrase: f.phrase,
+    semantic: f.semantic,
+    excerpt: f.excerpt ?? "",
+  };
   switch (f.kind) {
     case "identical":
+      if (f.excerpt && f.total > 0) {
+        return t("This {{total}}-word sentence (\"{{excerpt}}\") is identical to the source{{title}} ({{semantic}}% similarity): every word matches, so it reads as copied word for word. If you want to keep it, put it in quotation marks and cite the source; otherwise say the idea in your own words and structure.", values);
+      }
       return t("This sentence is identical to the source{{title}}: every word matches, so it reads as copied word for word. If you want to keep it, put it in quotation marks and cite the source; otherwise say the idea in your own words and structure.", values);
     case "whole":
       return t("Almost this whole sentence appears in the source{{title}} in the same words ({{shared}} of your {{total}} words in a row). That reads as direct copying. Quote and cite it, or restate the idea in your own words.", values);
@@ -151,8 +198,26 @@ export function factsFromStoredText(text: string | undefined): MatchExplanationF
 
 /** The explanation to show for `match`, in the current UI language when possible. */
 export function explainMatch(match: MatchedSource): string {
-  const f = match.explanationFacts ?? factsFromStoredText(match.explanation);
-  if (!f) return match.explanation;
-  if (f.kind === "definition_only") return `${suffix("common_academic_definition")} ${body(f)}`;
-  return [body(f), suffix(f.label)].filter(Boolean).join(" ");
+  const parsed = match.explanationFacts ?? factsFromStoredText(match.explanation);
+  if (!parsed) return match.explanation;
+
+  const isAcademic = match.sourceKind === "academic";
+  const cleanedMatchTitle = sanitizeSourceTitle(match.sourceTitle || "", { isAcademic, maxLength: 110 });
+  const cleanedFactTitle = sanitizeSourceTitle(parsed.title || "", { isAcademic, maxLength: 110 });
+  const effectiveTitle = cleanedMatchTitle || cleanedFactTitle;
+  const excerpt = parsed.excerpt || passageExcerpt(match.userSnippet);
+  const total = parsed.total > 0 ? parsed.total : countSnippetWords(match.userSnippet);
+  const semantic = parsed.semantic > 0 ? parsed.semantic : Math.round(match.matchPercent);
+  const enriched: MatchExplanationFacts = {
+    ...parsed,
+    title: effectiveTitle,
+    total,
+    semantic,
+    ...(excerpt ? { excerpt } : {}),
+  };
+
+  if (enriched.kind === "definition_only") {
+    return `${suffix("common_academic_definition")} ${body(enriched)}`;
+  }
+  return [body(enriched), suffix(enriched.label)].filter(Boolean).join(" ");
 }

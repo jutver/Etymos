@@ -12,6 +12,7 @@ import {
 import { cn } from "@etymos/shared";
 import { LogoMark } from "../../components/layout/Logo";
 import { Button } from "../../components/ui/Button";
+import { Spinner } from "../../components/ui/Spinner";
 import { VersionHistoryMenu, type DocumentVersion } from "./VersionHistoryMenu";
 import { t } from "../../lib/i18n";
 
@@ -262,14 +263,16 @@ export function ReportTopBar({
           )}
 
           <BarIconButton
-            label={exportLocked ? t("Export PDF — upgrade to unlock") : t("Export PDF")}
+            label={exporting ? t("Exporting PDF…") : exportLocked ? t("Export PDF — upgrade to unlock") : t("Export PDF")}
+            disabled={exporting}
             onClick={onExport}
           >
-            <span className="relative inline-flex">
-              <DownloadSimple
-                size={18}
-                className={cn(exporting && "animate-pulse motion-reduce:animate-none")}
-              />
+            <span className="relative inline-flex items-center justify-center">
+              {exporting ? (
+                <Spinner size="sm" label={null} />
+              ) : (
+                <DownloadSimple size={18} />
+              )}
               {/* Deliberately not a lock icon: the editing-lock toggle two
                   buttons over already owns that glyph in this bar, and two
                   lock icons back to back reads as "which lock is this?" —

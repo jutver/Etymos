@@ -1,4 +1,5 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, m } from "motion/react";
 import {
   ArrowsLeftRight,
   CaretDown,
@@ -15,9 +16,16 @@ import { cn } from "@etymos/shared";
 import { severityConfig } from "./Severity";
 import { colorForMatch } from "../screens/Report/highlights";
 import { Button } from "./ui/Button";
-import { t } from "../lib/i18n";
+import { Spinner } from "./ui/Spinner";
+import { t, useLanguage } from "../lib/i18n";
 import { explainMatch } from "../lib/matchExplanation";
 import { formatCitationText } from "../lib/citation";
+import { sanitizeSourceTitle } from "../lib/sourceTitle";
+
+const EXPLANATION_DRAWER_TRANSITION = {
+  duration: 0.22,
+  ease: [0.22, 1, 0.36, 1] as const,
+};
 
 interface MatchCardProps {
   match: MatchedSource;
@@ -33,6 +41,11 @@ interface MatchCardProps {
   /** True when this match has no highlight anywhere in the document view, so
    * selecting it can't jump to a place. Surfaced instead of a silent no-op. */
   notLocated?: boolean;
+  /** Cached or freshly fetched AI explanation text in active UI language. */
+  aiExplanation?: string;
+  /** True while generating an on-demand AI explanation for the open drawer. */
+  explanationLoading?: boolean;
+  onRequestExplanation?: (match: MatchedSource) => void;
   onSelect?: (matchId: string) => void;
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
@@ -43,9 +56,8 @@ interface MatchCardProps {
  * A single matched source in the report sidebar.
  *
  * Kept deliberately quiet: identity (colour swatch + number) and the essential
- * facts are always visible, while the AI explanation is one tap away behind a
- * disclosure so a document with a dozen matches still scans as a list rather
- * than a wall.
+ * facts are always visible, while the AI explanation is one tap away behind an
+ * animated disclosure so a document with hundreds of matches scans cleanly.
  */
 export const MatchCard = memo(function MatchCard({
   match,
@@ -56,15 +68,40 @@ export const MatchCard = memo(function MatchCard({
   resolved = false,
   stillFlaggedBy,
   notLocated = false,
+  aiExplanation,
+  explanationLoading = false,
+  onRequestExplanation,
   onSelect,
   onViewComparison,
   onRewrite,
   onCite,
 }: MatchCardProps) {
   const [explanationOpen, setExplanationOpen] = useState(false);
+  const language = useLanguage();
   const severity = severityConfig[match.severity];
   const color = colorForMatch(match, index);
   const explanationId = `match-explanation-${match.id}`;
+
+  const cleanTitle = useMemo(
+    () =>
+      sanitizeSourceTitle(match.sourceTitle, { isAcademic: match.sourceKind === "academic" }) ||
+      match.sourceTitle,
+    [match.sourceTitle, match.sourceKind],
+  );
+
+  const fallbackExplanation = useMemo(() => {
+    void language;
+    return explainMatch(match);
+  }, [match, language]);
+
+  const citationText = useMemo(() => formatCitationText(match), [match]);
+
+  useEffect(() => {
+    if (!explanationOpen || locked) return;
+    onRequestExplanation?.(match);
+  }, [explanationOpen, locked, match, language, onRequestExplanation]);
+
+  const displayedExplanation = aiExplanation?.trim() ? aiExplanation : fallbackExplanation;
 
   return (
     <article
@@ -102,7 +139,7 @@ export const MatchCard = memo(function MatchCard({
             <span>{match.matchPercent}{t("% match")}</span>
           </span>
           <span className="mt-1 block truncate text-sm font-semibold leading-snug text-ink-900">
-            {match.sourceTitle}
+            {cleanTitle}
           </span>
           <span className="mt-0.5 block truncate text-xs text-ink-500">{match.sourceAuthor}</span>
         </span>
@@ -158,30 +195,48 @@ export const MatchCard = memo(function MatchCard({
             >
               {t("Why this is flagged")}<CaretDown
                 size={13}
-                className={cn("transition-transform", explanationOpen && "rotate-180")}
+                className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", explanationOpen && "rotate-180")}
               />
             </button>
-            {explanationOpen && (
-              <div id={explanationId} className="rounded-lg bg-brand-100/50 px-3 py-2.5 text-xs leading-relaxed text-ink-700">
-                {/* In the UI language when the backend sent explanation facts; the stored text otherwise. */}
-                <p>{explainMatch(match)}</p>
-                <p className="mt-2 border-t border-brand-200/60 pt-2 text-[11px] text-ink-500">
-                  <span className="font-semibold text-ink-700">{t("Source:")}</span>{" "}
-                  {match.sourceUrl ? (
-                    <a
-                      href={match.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-words text-brand-600 hover:underline"
-                    >
-                      {formatCitationText(match)}</a>
-                  ) : (
-                    <span className="break-words">{formatCitationText(match)}</span>
-                  )}
-                  {match.sourceDoi && <span className="break-words"> · DOI: {match.sourceDoi}</span>}
-                </p>
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {explanationOpen && (
+                <m.div
+                  key="explanation"
+                  id={explanationId}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={EXPLANATION_DRAWER_TRANSITION}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-1 rounded-lg bg-brand-100/50 px-3 py-2.5 text-xs leading-relaxed text-ink-700">
+                    {explanationLoading && !aiExplanation ? (
+                      <div role="status" className="flex items-center gap-2 py-0.5 text-brand-700">
+                        <Spinner size="sm" label={null} />
+                        <span>{t("Analyzing why this passage was flagged…")}</span>
+                      </div>
+                    ) : (
+                      <p>{displayedExplanation}</p>
+                    )}
+                    <p className="mt-2 border-t border-brand-200/60 pt-2 text-[11px] text-ink-500">
+                      <span className="font-semibold text-ink-700">{t("Source:")}</span>{" "}
+                      {match.sourceUrl ? (
+                        <a
+                          href={match.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="break-words text-brand-600 hover:underline"
+                        >
+                          {citationText}</a>
+                      ) : (
+                        <span className="break-words">{citationText}</span>
+                      )}
+                      {match.sourceDoi && <span className="break-words"> · DOI: {match.sourceDoi}</span>}
+                    </p>
+                  </div>
+                </m.div>
+              )}
+            </AnimatePresence>
           </>
         )}
 

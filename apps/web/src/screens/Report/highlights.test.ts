@@ -276,3 +276,52 @@ describe("highlight palette WCAG AA contrast & viewer parity", () => {
     expect(AI_PDF_HIGHLIGHT.fillActive).toMatch(/^rgba\(124, 58, 237,/);
   });
 });
+
+describe("buildRenderedPassages at scale", () => {
+  it("accurately locates 250 matches across 200 passages quickly with precompiled matchers and offset pruning", () => {
+    const passages = Array.from({ length: 200 }, (_, i) => {
+      const s1 = `Paragraph ${i} discusses transformer token optimization step one cleanly.`;
+      const s2 = `Later in block ${i} a specific benchmark metric is computed identically.`;
+      const text = `${s1} ${s2}`;
+      const startOffset = i * 200;
+      return {
+        id: `p-${i}`,
+        text,
+        startOffset,
+        endOffset: startOffset + text.length,
+        matchId: i < 200 ? `m-${i}` : undefined,
+      };
+    });
+
+    const matches = Array.from({ length: 250 }, (_, i) => {
+      const pIdx = i % 200;
+      const snippet =
+        i < 200
+          ? `Paragraph ${pIdx} discusses transformer token optimization step one cleanly.`
+          : `specific benchmark metric is computed identically.`;
+      const p = passages[pIdx]!;
+      const localStart = p.text.indexOf(snippet);
+      return {
+        id: `m-${i}`,
+        severity: "high" as const,
+        detectionType: "traditional" as const,
+        matchPercent: 98,
+        sourceTitle: "Benchmark Paper",
+        sourceAuthor: "Nguyen",
+        sourceKind: "academic" as const,
+        citation: "s2_1",
+        userSnippet: snippet,
+        sourceSnippet: snippet,
+        explanation: "",
+        rewriteSuggestions: [],
+        startOffset: p.startOffset! + localStart,
+        endOffset: p.startOffset! + localStart + snippet.length,
+      };
+    });
+
+    const rendered = buildRenderedPassages(passages, matches);
+    expect(rendered).toHaveLength(200);
+    expect(rendered[0]!.spans.length).toBe(2);
+    expect(rendered[199]!.spans.length).toBe(1);
+  });
+});

@@ -1,11 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
 import { cn } from "@etymos/shared";
 import type { PdfProxy } from "./PlagiarismPdfViewer";
+import { PillIndicator, usePill } from "./ui/PillIndicator";
 import { t } from "../lib/i18n";
 
 const THUMB_WIDTH = 112;
+const RAIL_WIDTH = 160;
 const MAX_THUMB_CACHE = 40;
 const EMPTY_DOTS: string[] = [];
+const OPEN_EASE = [0.22, 1, 0.36, 1] as const;
+const CLOSE_EASE = [0.4, 0, 0.2, 1] as const;
+const THUMB_REVEAL_TRANSITION = { duration: 0.22, ease: OPEN_EASE } as const;
 
 export interface PdfThumbnailRailProps {
   pdf: PdfProxy | null;
@@ -29,6 +35,7 @@ const ThumbnailTile = memo(function ThumbnailTile({
   thumbUrl,
   dots,
   hasAi,
+  enterDelay,
   onSelectPage,
   setTileRef,
 }: {
@@ -38,47 +45,67 @@ const ThumbnailTile = memo(function ThumbnailTile({
   thumbUrl: string | undefined;
   dots: string[];
   hasAi: boolean;
+  enterDelay: number;
   onSelectPage: (page: number) => void;
   setTileRef: (page: number, el: HTMLButtonElement | null) => void;
 }) {
   const thumbHeight = Math.round(THUMB_WIDTH * aspect);
   return (
-    <button
+    <m.button
       ref={(el) => setTileRef(pageNumber, el)}
       data-thumb-page={pageNumber}
+      data-pill-active={isActive ? "true" : undefined}
       type="button"
       onClick={() => onSelectPage(pageNumber)}
       aria-current={isActive ? "page" : undefined}
       aria-label={t("Page {{page}}", { page: pageNumber })}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: enterDelay, ease: OPEN_EASE }}
       className={cn(
-        "group flex w-full flex-col items-center gap-1.5 rounded-[var(--radius-control)] p-1.5 transition-colors",
-        isActive ? "bg-brand-100/70" : "hover:bg-surface-muted/80",
+        "group relative z-10 flex w-full flex-col items-center gap-1.5 rounded-[var(--radius-control)] p-1.5 transition-colors duration-200",
+        !isActive && "hover:bg-surface-muted/80",
       )}
     >
       <div
         className={cn(
-          "relative overflow-hidden rounded-[3px] border bg-white shadow-xs transition-all",
+          "relative overflow-hidden rounded-[3px] border bg-white shadow-xs transition-[transform,border-color,box-shadow] duration-200 ease-out group-hover:-translate-y-0.5 group-hover:shadow-sm group-active:scale-[0.97] motion-reduce:transition-none motion-reduce:transform-none",
           isActive
-            ? "border-brand-500 ring-2 ring-brand-500/30"
+            ? "border-brand-500 ring-2 ring-brand-500/30 shadow-sm"
             : "border-line group-hover:border-ink-300",
         )}
         style={{ width: THUMB_WIDTH, height: thumbHeight }}
       >
-        {thumbUrl && (
-          <img
+        {thumbUrl ? (
+          <m.img
+            key={thumbUrl}
             src={thumbUrl}
             alt=""
             width={THUMB_WIDTH}
             height={thumbHeight}
             decoding="async"
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={THUMB_REVEAL_TRANSITION}
             className="block size-full object-contain"
           />
+        ) : (
+          <div
+            aria-hidden="true"
+            data-thumb-skeleton=""
+            className="flex size-full flex-col gap-1.5 bg-surface-muted/70 p-2.5 animate-pulse motion-reduce:animate-none"
+          >
+            <div className="h-2 w-3/4 rounded-xs bg-line/70" />
+            <div className="h-1.5 w-full rounded-xs bg-line/70" />
+            <div className="h-1.5 w-5/6 rounded-xs bg-line/70" />
+            <div className="mt-1 h-1.5 w-2/3 rounded-xs bg-line/70" />
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1.5">
         <span
           className={cn(
-            "text-[11px] font-medium tabular-nums",
+            "text-[11px] font-medium tabular-nums transition-colors duration-200",
             isActive ? "font-semibold text-brand-700" : "text-ink-500",
           )}
         >
@@ -95,7 +122,7 @@ const ThumbnailTile = memo(function ThumbnailTile({
           </span>
         )}
       </div>
-    </button>
+    </m.button>
   );
 });
 
@@ -121,6 +148,11 @@ export const PdfThumbnailRail = memo(function PdfThumbnailRail({
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
+  const openedAtPageRef = useRef(currentPage);
+  if (!open) {
+    openedAtPageRef.current = currentPage;
+  }
+  const activePill = usePill<HTMLDivElement>(`${currentPage}-${numPages}`);
 
   const [visibleThumbs, setVisibleThumbs] = useState<Set<number>>(() => new Set([1, 2, 3, 4]));
   const [thumbUrls, setThumbUrls] = useState<Map<number, string>>(() => new Map());
@@ -280,36 +312,74 @@ export const PdfThumbnailRail = memo(function PdfThumbnailRail({
     };
   }, [open, pdf, numPages, visibleThumbs]);
 
-  if (!open || numPages <= 1) return null;
-
   return (
-    <aside
-      aria-label={t("Page thumbnails")}
-      className="flex h-full w-40 shrink-0 flex-col border-r border-line bg-white"
-    >
-      <div ref={railRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-4 scrollbar-thin">
-        {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => {
-          const isActive = pageNumber === currentPage;
-          const size = pageSizes?.get(pageNumber);
-          const aspect = size && size.width > 0 ? size.height / size.width : defaultPageAspect;
-          const dots = pageIndicatorClasses?.get(pageNumber) ?? EMPTY_DOTS;
-          const hasAi = aiPages?.has(pageNumber) ?? false;
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence initial={false}>
+        {open && numPages > 1 && (
+          <m.aside
+            key="pdf-thumbnail-rail"
+            aria-label={t("Page thumbnails")}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{
+              width: RAIL_WIDTH,
+              opacity: 1,
+              transition: {
+                width: { duration: 0.3, ease: OPEN_EASE },
+                opacity: { duration: 0.2, delay: 0.04 },
+              },
+            }}
+            exit={{
+              width: 0,
+              opacity: 0,
+              transition: {
+                width: { duration: 0.24, ease: CLOSE_EASE },
+                opacity: { duration: 0.14 },
+              },
+            }}
+            className="flex h-full shrink-0 flex-col overflow-hidden border-r border-line bg-white"
+          >
+            <m.div
+              initial={{ x: -12 }}
+              animate={{ x: 0, transition: { duration: 0.26, ease: OPEN_EASE } }}
+              exit={{ x: -12, transition: { duration: 0.2, ease: CLOSE_EASE } }}
+              className="flex h-full w-40 flex-col"
+            >
+              <div ref={railRef} className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">
+                <div ref={activePill.ref} className="relative space-y-3">
+                  <PillIndicator
+                    box={activePill.box}
+                    rounded="rounded-[var(--radius-control)]"
+                    className="bg-brand-100/70"
+                  />
+                  {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => {
+                    const isActive = pageNumber === currentPage;
+                    const size = pageSizes?.get(pageNumber);
+                    const aspect = size && size.width > 0 ? size.height / size.width : defaultPageAspect;
+                    const dots = pageIndicatorClasses?.get(pageNumber) ?? EMPTY_DOTS;
+                    const hasAi = aiPages?.has(pageNumber) ?? false;
+                    const enterDelay = Math.min(Math.abs(pageNumber - openedAtPageRef.current), 5) * 0.022;
 
-          return (
-            <ThumbnailTile
-              key={pageNumber}
-              pageNumber={pageNumber}
-              aspect={aspect}
-              isActive={isActive}
-              thumbUrl={thumbUrls.get(pageNumber)}
-              dots={dots}
-              hasAi={hasAi}
-              onSelectPage={onSelectPage}
-              setTileRef={setTileRef}
-            />
-          );
-        })}
-      </div>
-    </aside>
+                    return (
+                      <ThumbnailTile
+                        key={pageNumber}
+                        pageNumber={pageNumber}
+                        aspect={aspect}
+                        isActive={isActive}
+                        thumbUrl={thumbUrls.get(pageNumber)}
+                        dots={dots}
+                        hasAi={hasAi}
+                        enterDelay={enterDelay}
+                        onSelectPage={onSelectPage}
+                        setTileRef={setTileRef}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </m.div>
+          </m.aside>
+        )}
+      </AnimatePresence>
+    </MotionConfig>
   );
 });

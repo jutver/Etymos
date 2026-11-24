@@ -219,7 +219,7 @@ interface AppState {
   planResetInfo: () => { daysLeft: number; resetDate: Date };
   rolloverPlanPeriodIfNeeded: () => void;
   completeStudentVerification: () => void;
-  pushToast: (toast: Omit<Toast, "id">) => void;
+  pushToast: (toast: Omit<Toast, "id">) => string;
   dismissToast: (id: string) => void;
 }
 
@@ -679,10 +679,13 @@ export const useAppStore = create<AppState>()(
 
       completeStudentVerification: () => set({ studentVerified: true }),
 
-      pushToast: (toast) =>
+      pushToast: (toast) => {
+        const id = Math.random().toString(36).slice(2);
         set((s) => ({
-          toasts: [...s.toasts, { ...toast, id: Math.random().toString(36).slice(2) }],
-        })),
+          toasts: [...s.toasts, { ...toast, id }],
+        }));
+        return id;
+      },
 
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     }),

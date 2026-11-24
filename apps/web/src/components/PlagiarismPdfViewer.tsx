@@ -500,6 +500,7 @@ export function PlagiarismPdfViewer({
   useEffect(() => {
     if (!viewerEl) return;
     let raf = 0;
+    let timer = 0;
     const updateSize = (w: number, h: number) => {
       const width = Math.max(0, Math.floor(w) - 32);
       const height = Math.max(0, Math.floor(h) - 32);
@@ -509,13 +510,17 @@ export function PlagiarismPdfViewer({
     if (rect.width > 0 || rect.height > 0) updateSize(rect.width, rect.height);
 
     const observer = new ResizeObserver(([entry]) => {
+      window.clearTimeout(timer);
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        updateSize(entry.contentRect.width, entry.contentRect.height);
-      });
+      timer = window.setTimeout(() => {
+        raf = requestAnimationFrame(() => {
+          updateSize(entry.contentRect.width, entry.contentRect.height);
+        });
+      }, 100);
     });
     observer.observe(viewerEl);
     return () => {
+      window.clearTimeout(timer);
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
@@ -1244,7 +1249,7 @@ export function PlagiarismPdfViewer({
 
   const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
   const pillBtn =
-    "flex size-7 items-center justify-center rounded-full text-ink-600 transition-colors hover:bg-surface-muted hover:text-ink-900 disabled:pointer-events-none disabled:opacity-40";
+    "flex size-7 items-center justify-center rounded-full text-ink-600 transition-[background-color,color,transform] duration-150 hover:bg-surface-muted hover:text-ink-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40";
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 bg-surface-muted/60">

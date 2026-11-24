@@ -110,6 +110,8 @@ export const lib: Record<string, string> = {
     "Cần xem xét kỹ hơn.",
   "This sentence is identical to the source{{title}}: every word matches, so it reads as copied word for word. If you want to keep it, put it in quotation marks and cite the source; otherwise say the idea in your own words and structure.":
     "Câu này giống hệt nguồn{{title}}: từng từ đều trùng, nên đọc lên như sao chép nguyên văn. Nếu muốn giữ, hãy đặt trong dấu ngoặc kép và trích dẫn nguồn; nếu không, hãy diễn đạt lại ý bằng lời và cấu trúc của bạn.",
+  "This {{total}}-word sentence (\"{{excerpt}}\") is identical to the source{{title}} ({{semantic}}% similarity): every word matches, so it reads as copied word for word. If you want to keep it, put it in quotation marks and cite the source; otherwise say the idea in your own words and structure.":
+    "Câu dài {{total}} từ này (\"{{excerpt}}\") giống hệt nguồn{{title}} (tương đồng {{semantic}}%): từng từ đều trùng, nên đọc lên như sao chép nguyên văn. Nếu muốn giữ, hãy đặt trong dấu ngoặc kép và trích dẫn nguồn; nếu không, hãy diễn đạt lại ý bằng lời và cấu trúc của bạn.",
   "Almost this whole sentence appears in the source{{title}} in the same words ({{shared}} of your {{total}} words in a row). That reads as direct copying. Quote and cite it, or restate the idea in your own words.":
     "Gần như cả câu này xuất hiện trong nguồn{{title}} với đúng từ ngữ ({{shared}}/{{total}} từ liên tiếp trùng nhau). Đây là dấu hiệu sao chép trực tiếp. Hãy trích dẫn nguyên văn kèm nguồn, hoặc diễn đạt lại ý bằng lời của bạn.",
   "Your text shares a {{shared}}-word run with the source{{title}}: \"{{phrase}}\". Reusing that many words in a row is a strong sign of direct copying, so quote and cite it or reword it.":

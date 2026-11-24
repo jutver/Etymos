@@ -1,14 +1,17 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, MotionConfig, m, type TargetAndTransition } from "motion/react";
 import { CaretDown, CaretRight, CaretUp, GraduationCap, MagnifyingGlass, Robot, ShieldCheck, Sidebar, X } from "@phosphor-icons/react";
-import type { AiDetection, MatchedSource, PublishedPaperMatch } from "@etymos/shared";
+import type { AiDetection, MatchedSource, MatchSortMode, PublishedPaperMatch } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { MatchCard } from "../../components/MatchCard";
 import { Button } from "../../components/ui/Button";
 import { PillIndicator, usePill } from "../../components/ui/PillIndicator";
 import { AiDetectionSection } from "./AiDetectionSection";
 import { PublishedPaperNotice } from "./PublishedPaperNotice";
+import { sortMatchIndexes } from "./matchOrdering";
 import { buildSearchIndex, filterMatchIndexes } from "./sourceSearch";
+import type { MatchExplanationState } from "./useMatchExplanations";
+import { useSidebarVirtualWindow } from "./useSidebarVirtualWindow";
 import { t, tn } from "../../lib/i18n";
 
 export type SidebarTab = "sources" | "ai";
@@ -77,6 +80,8 @@ export interface SourcesSidebarProps {
   onViewComparison: (match: MatchedSource) => void;
   onRewrite: (match: MatchedSource) => void;
   onCite: (match: MatchedSource) => void;
+  onRequestExplanation?: (match: MatchedSource) => void;
+  getExplanationState?: (matchId: string) => MatchExplanationState;
   /** Which locked section the user clicked, so the paywall can say what it unlocks. */
   onUpgrade: (reason: "semantic" | "ai-detection") => void;
   /** Similarity score pill, shown in the folded bar on phones (the top bar
@@ -105,13 +110,18 @@ export const SourcesSidebar = memo(function SourcesSidebar({
   onViewComparison,
   onRewrite,
   onCite,
+  onRequestExplanation,
+  getExplanationState,
   onUpgrade,
   scoreBadge,
   open,
   onToggle,
 }: SourcesSidebarProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [sortMode, setSortMode] = useState<MatchSortMode>("document");
   // Two tabs: matched sources and AI-content detection. The AI tab only
   // exists when a detection result is there to show (same rule as
   // AiDetectionSection, which renders nothing otherwise).
@@ -132,9 +142,20 @@ export const SourcesSidebar = memo(function SourcesSidebar({
   // handful of `includes` calls, which matters with hundreds of matches.
   const searchIndex = useMemo(() => buildSearchIndex(matches), [matches]);
   // Positions in `matches`, not copies: a card's position is also its badge
-  // number and highlight colour, which must not change while filtering.
-  const shownIndexes = useMemo(() => filterMatchIndexes(searchIndex, query), [searchIndex, query]);
-  const isFiltering = query.trim().length > 0;
+  // number and highlight colour, which must not change while filtering or re-sorting.
+  const filteredIndexes = useMemo(() => filterMatchIndexes(searchIndex, deferredQuery), [searchIndex, deferredQuery]);
+  const shownIndexes = useMemo(
+    () => sortMatchIndexes(filteredIndexes, matches, sortMode),
+    [filteredIndexes, matches, sortMode],
+  );
+  const isFiltering = deferredQuery.trim().length > 0;
+  const virtualKeys = useMemo(() => shownIndexes.map((i) => matches[i]?.id ?? String(i)), [shownIndexes, matches]);
+  const isVirtualized = shownIndexes.length > 40;
+  const virtualWindow = useSidebarVirtualWindow({
+    scrollRef: scrollContainerRef,
+    itemKeys: virtualKeys,
+    enabled: open && activeTab === "sources" && isVirtualized,
+  });
 
   // Clicking a highlight on the document/PDF sets activeMatchId, but the
   // matching card can be scrolled off-screen in this panel — without this,
@@ -150,8 +171,15 @@ export const SourcesSidebar = memo(function SourcesSidebar({
 
   useEffect(() => {
     if (!activeMatchId) return;
+    if (isVirtualized) {
+      const pos = shownIndexes.findIndex((i) => matches[i]?.id === activeMatchId);
+      if (pos !== -1) {
+        virtualWindow.scrollToIndex(pos);
+        return;
+      }
+    }
     cardRefs.current.get(activeMatchId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [activeMatchId]);
+  }, [activeMatchId, isVirtualized, shownIndexes, matches, virtualWindow.scrollToIndex]);
 
   const wide = useIsWide();
   const panel = PANEL[wide ? "wide" : "narrow"];
@@ -353,10 +381,42 @@ export const SourcesSidebar = memo(function SourcesSidebar({
                   </button>
                 )}
               </label>
+              {matches.length > 1 && (
+                <div
+                  role="group"
+                  aria-label={t("Sort matched sources")}
+                  className="mt-2 flex items-center gap-1 rounded-lg bg-surface-muted/80 p-1 text-[11px] font-semibold"
+                >
+                  {(
+                    [
+                      { id: "document" as const, label: t("Document order") },
+                      { id: "similarity" as const, label: t("Highest similarity") },
+                    ]
+                  ).map((option) => {
+                    const active = sortMode === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setSortMode(option.id)}
+                        className={cn(
+                          "flex-1 rounded-md px-2 py-1 transition-colors",
+                          active
+                            ? "bg-white text-ink-900 shadow-xs"
+                            : "text-ink-500 hover:text-ink-900",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
+          <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
             <PublishedPaperNotice match={publishedPaperMatch} />
             {matches.length === 0 ? (
               <div className="flex flex-col items-center px-4 py-14 text-center">
@@ -376,34 +436,51 @@ export const SourcesSidebar = memo(function SourcesSidebar({
               </div>
             ) : (
               <div className="flex flex-col gap-2.5">
-                {shownIndexes.map((i) => {
-                  const m = matches[i];
-                  return (
-                    <div
-                      key={m.id}
-                      ref={(el) => {
-                        if (el) cardRefs.current.set(m.id, el);
-                        else cardRefs.current.delete(m.id);
-                      }}
-                      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 240px" }}
-                    >
-                      <MatchCard
-                        match={m}
-                        index={i}
-                        locked={explanationLocked}
-                        rewriteLocked={rewriteLocked}
-                        selected={activeMatchId === m.id}
-                        resolved={resolvedIds.has(m.id)}
-                        stillFlaggedBy={stillFlaggedNotes?.get(m.id)}
-                        notLocated={locatedIds ? !locatedIds.has(m.id) : false}
-                        onSelect={onSelect}
-                        onViewComparison={onViewComparison}
-                        onRewrite={onRewrite}
-                        onCite={onCite}
-                      />
-                    </div>
-                  );
-                })}
+                {virtualWindow.topSpacer > 0 && (
+                  <div aria-hidden="true" style={{ height: virtualWindow.topSpacer }} />
+                )}
+                {shownIndexes
+                  .slice(virtualWindow.startIndex, virtualWindow.endIndex)
+                  .map((i) => {
+                    const m = matches[i];
+                    const expState = getExplanationState?.(m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        ref={(el) => {
+                          if (el) cardRefs.current.set(m.id, el);
+                          else cardRefs.current.delete(m.id);
+                          if (isVirtualized) virtualWindow.measureItem(m.id, el);
+                        }}
+                        style={
+                          isVirtualized
+                            ? undefined
+                            : { contentVisibility: "auto", containIntrinsicSize: "auto 240px" }
+                        }
+                      >
+                        <MatchCard
+                          match={m}
+                          index={i}
+                          locked={explanationLocked}
+                          rewriteLocked={rewriteLocked}
+                          selected={activeMatchId === m.id}
+                          resolved={resolvedIds.has(m.id)}
+                          stillFlaggedBy={stillFlaggedNotes?.get(m.id)}
+                          notLocated={locatedIds ? !locatedIds.has(m.id) : false}
+                          aiExplanation={expState?.aiText}
+                          explanationLoading={expState?.loading}
+                          onRequestExplanation={onRequestExplanation}
+                          onSelect={onSelect}
+                          onViewComparison={onViewComparison}
+                          onRewrite={onRewrite}
+                          onCite={onCite}
+                        />
+                      </div>
+                    );
+                  })}
+                {virtualWindow.bottomSpacer > 0 && (
+                  <div aria-hidden="true" style={{ height: virtualWindow.bottomSpacer }} />
+                )}
               </div>
             )}
 

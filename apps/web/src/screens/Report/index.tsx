@@ -31,6 +31,8 @@ import { WordCountPill } from "./WordCountPill";
 import { AiContentChip } from "./AiContentChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { aiFlaggedPassageIds, buildMatchFocusMap, buildRenderedPassages, countWords, mapAiSegmentsToPassages } from "./highlights";
+import { orderMatchesByDocumentPosition } from "./matchOrdering";
+import { useMatchExplanations } from "./useMatchExplanations";
 import { isOverLimit } from "./renderPassageText";
 import { computeWordLimitOffset } from "./wordLimit";
 import { applySavedVersion, withoutLegacyBadges } from "./applySavedVersion";
@@ -108,6 +110,7 @@ export default function ReportPage() {
   const navigate = useNavigate();
   const plan = useAppStore((s) => s.plan);
   const pushToast = useAppStore((s) => s.pushToast);
+  const dismissToast = useAppStore((s) => s.dismissToast);
   const renameDocumentInHistory = useAppStore((s) => s.renameDocumentInHistory);
 
   const checkedDocuments = useAppStore((s) => s.checkedDocuments);
@@ -473,7 +476,7 @@ export default function ReportPage() {
     setDirty(false);
   }, [showsText, latestSavedHtml, doc?.id, resetKey, refreshEditedSinceCheck]);
 
-  const visibleMatches = useMemo(
+  const rawVisibleMatches = useMemo(
     () =>
       doc ? (isFree ? doc.matches.filter((m) => m.detectionType === "traditional") : doc.matches) : [],
     [isFree, doc],
@@ -484,8 +487,13 @@ export default function ReportPage() {
   );
 
   const rendered = useMemo(
-    () => buildRenderedPassages(doc?.passages ?? [], visibleMatches),
-    [doc?.passages, visibleMatches],
+    () => buildRenderedPassages(doc?.passages ?? [], rawVisibleMatches),
+    [doc?.passages, rawVisibleMatches],
+  );
+
+  const visibleMatches = useMemo(
+    () => orderMatchesByDocumentPosition(rawVisibleMatches, rendered),
+    [rawVisibleMatches, rendered],
   );
 
   // AI-detection segments worth pointing at — same score threshold
@@ -1018,11 +1026,30 @@ export default function ReportPage() {
     }
   }
 
-  function handleCite(match: MatchedSource) {
+  const handleCite = useCallback((match: MatchedSource) => {
     setCitingMatch(match);
-  }
+  }, []);
+
+  const { requestExplanation, getExplanationState } = useMatchExplanations({
+    reportId: id,
+    matches: visibleMatches,
+    language,
+    isSample: Boolean(doc?.isSample),
+    locked: isFree,
+  });
 
   const docAiScore = doc?.aiDetection?.available ? doc.aiDetection.overallScore : null;
+  const compactScoreBadge = useMemo(
+    () => (
+      <ScoreChip
+        compact
+        score={displayScore}
+        estimated={scoreEstimate.estimated || editedSinceCheck}
+        checking={scoreEstimate.checking}
+      />
+    ),
+    [displayScore, scoreEstimate.estimated, editedSinceCheck, scoreEstimate.checking],
+  );
   const exportOptions = useMemo<ExportVersionOption[]>(() => {
     void language;
     const opts: ExportVersionOption[] = [];
@@ -1071,6 +1098,11 @@ export default function ReportPage() {
     if (!id || exporting) return;
     trackEvent("report_exported");
     setExporting(true);
+    const exportingToastId = pushToast({
+      kind: "info",
+      title: tr("Exporting PDF…"),
+      description: tr("Preparing your document and report for download."),
+    });
     try {
       const { blob, filename } = await exportReportPdf(id, {
         version_kind: option.kind,
@@ -1094,18 +1126,21 @@ export default function ReportPage() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setExportModalOpen(false);
+      dismissToast(exportingToastId);
       pushToast({
         kind: "success",
         title: tr("Report exported"),
         description: tl("{{filename}} is ready.", { filename }),
       });
     } catch (err) {
+      dismissToast(exportingToastId);
       pushToast({
         kind: "error",
         title: tr("Couldn't export PDF"),
         description: err instanceof Error ? err.message : tr("Please try again."),
       });
     } finally {
+      dismissToast(exportingToastId);
       setExporting(false);
     }
   }
@@ -1355,15 +1390,10 @@ export default function ReportPage() {
           onViewComparison={handleViewComparison}
           onRewrite={handleRewriteMatch}
           onCite={handleCite}
+          onRequestExplanation={requestExplanation}
+          getExplanationState={getExplanationState}
           onUpgrade={handleUpgrade}
-          scoreBadge={
-            <ScoreChip
-              compact
-              score={displayScore}
-              estimated={scoreEstimate.estimated || editedSinceCheck}
-              checking={scoreEstimate.checking}
-            />
-          }
+          scoreBadge={compactScoreBadge}
           open={sidebarOpen}
           onToggle={handleToggleSidebar}
         />

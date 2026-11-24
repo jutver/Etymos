@@ -17,11 +17,12 @@ import {
 } from "../../lib/api";
 import { finalizeCheckingDocument, markCheckFailed } from "../../lib/documentsQueries";
 import { trackEvent } from "../../lib/analytics";
-import { parseExplanationFacts } from "../../lib/matchExplanation";
+import { parseExplanationFacts, parseAiExplanations } from "../../lib/matchExplanation";
 import { parseAiDetection } from "../../lib/aiDetection";
 import { parsePublishedPaperMatch } from "../../lib/publishedPaperMatch";
 import { parseExtractionMeta, parseInlineFormulas } from "../../lib/extractionMeta";
 import { parsePdfRects } from "../../lib/pdfRects";
+import { sanitizeSourceTitle } from "../../lib/sourceTitle";
 import type { CheckedDocument, HistoryEntry, MatchedSource, Severity } from "../../lib/types";
 import { t as tl, tr } from "../../lib/i18n";
 
@@ -366,6 +367,9 @@ export default function AnalyzingPage() {
             const matchPercent = Math.round(Math.max(0, Math.min(100, match.semantic_similarity * 100)));
             const sourceAuthors: string[] = Array.isArray(match.source_authors) ? match.source_authors : [];
 
+            const sourceKind = match.source_kind === "web" ? "web" : "academic";
+            const aiExplanations = parseAiExplanations(match.ai_explanations);
+
             return {
               id: `${docId}-match-${index}`,
               // Severity is now purely a function of matchPercent (Low <20,
@@ -376,12 +380,14 @@ export default function AnalyzingPage() {
               severity: severityFromMatchPercent(matchPercent),
               detectionType: "traditional",
               matchPercent,
-              sourceTitle: match.source_title ?? match.source_paper_id,
+              sourceTitle: sanitizeSourceTitle(match.source_title ?? match.source_paper_id ?? "", {
+                isAcademic: sourceKind === "academic",
+              }),
               sourceAuthor: sourceAuthors.filter((a) => a && a.trim()).join(", "),
               // Backend now tags every candidate "web" or "academic" (see
               // backend/search_paper/search_sources.py) instead of this
               // always being hardcoded "academic".
-              sourceKind: match.source_kind === "web" ? "web" : "academic",
+              sourceKind,
               citation: match.source_paper_id,
               sourceYear: match.source_year || undefined,
               sourceUrl: match.source_url || match.source_pdf_url || undefined,
@@ -400,6 +406,8 @@ export default function AnalyzingPage() {
               explanationFacts: parseExplanationFacts(match.explanation_facts),
               pdfRects: parsePdfRects(match.pdf_rects),
               rewriteSuggestions: [],
+              sortOrder: index,
+              ...(aiExplanations ? { aiExplanations } : {}),
               // `input_offset` is omitted (never zeroed) when the backend could
               // not localise the sentence, so its presence is the capability
               // check. Spreading conditionally keeps the fields genuinely
