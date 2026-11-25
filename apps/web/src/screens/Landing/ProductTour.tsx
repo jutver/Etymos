@@ -1,6 +1,8 @@
 // "See it in action": a few screens of a report, with example data, behind
-// tabs. Nothing here is live; the window badge says it's an example.
-import { useId, useState, type ReactElement } from "react";
+// tabs. Auto-cycles every 4s (pausing on hover, focus, or off-screen) while
+// remaining interactive when clicked. Nothing here is live; the window badge says it's an example.
+import { useEffect, useId, useRef, useState, type ReactElement } from "react";
+import { AnimatePresence, MotionConfig, m } from "motion/react";
 import { ChartPieSlice, Lightbulb, Robot, PencilLine, ArrowRight, BookOpen, Globe } from "@phosphor-icons/react";
 import { cn } from "@etymos/shared";
 import { WindowFrame } from "../../components/marketing/Marketing";
@@ -14,7 +16,22 @@ const TABS = [
   { key: "rewrite", label: tr("AI Rewrite"), icon: PencilLine },
 ] as const;
 
-type TabKey = (typeof TABS)[number]["key"];
+export type TabKey = (typeof TABS)[number]["key"];
+
+export const AUTO_ADVANCE_MS = 4000;
+
+export function nextTabKey(current: TabKey): TabKey {
+  const idx = TABS.findIndex((item) => item.key === current);
+  return TABS[(idx + 1) % TABS.length]!.key;
+}
+
+export function tabDirection(from: TabKey, to: TabKey): 1 | -1 {
+  const fromIdx = TABS.findIndex((item) => item.key === from);
+  const toIdx = TABS.findIndex((item) => item.key === to);
+  if (fromIdx === TABS.length - 1 && toIdx === 0) return 1;
+  if (fromIdx === 0 && toIdx === TABS.length - 1) return -1;
+  return toIdx >= fromIdx ? 1 : -1;
+}
 
 const SOURCES = [
   { title: "Tạp chí Khoa học Thủy lợi, 2021", kind: tr("Academic paper"), share: 18, icon: BookOpen },
@@ -154,37 +171,147 @@ const SCREENS: Record<TabKey, () => ReactElement> = {
 
 export function ProductTour() {
   const [tab, setTab] = useState<TabKey>("report");
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [cycleId, setCycleId] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [inView, setInView] = useState(true);
+  const [docHidden, setDocHidden] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const remainingRef = useRef(AUTO_ADVANCE_MS);
+  const startedAtRef = useRef<number | null>(null);
   const id = useId();
   const Screen = SCREENS[tab];
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (mq) {
+      setReducedMotion(mq.matches);
+      const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+      mq.addEventListener?.("change", onChange);
+      return () => mq.removeEventListener?.("change", onChange);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setDocHidden(document.hidden);
+    const onVisibility = () => setDocHidden(document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry) setInView(entry.isIntersecting);
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const isRunning = inView && !paused && !docHidden && !reducedMotion;
+
+  useEffect(() => {
+    if (!isRunning) return;
+    startedAtRef.current = performance.now();
+    const waitMs = Math.max(50, remainingRef.current);
+    const timer = window.setTimeout(() => {
+      startedAtRef.current = null;
+      remainingRef.current = AUTO_ADVANCE_MS;
+      setDirection(1);
+      setTab((prev) => nextTabKey(prev));
+      setCycleId((c) => c + 1);
+    }, waitMs);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (startedAtRef.current !== null) {
+        const elapsed = performance.now() - startedAtRef.current;
+        remainingRef.current = Math.max(50, remainingRef.current - elapsed);
+        startedAtRef.current = null;
+      }
+    };
+  }, [tab, cycleId, isRunning]);
+
+  function selectTab(next: TabKey) {
+    setDirection(tabDirection(tab, next));
+    setTab(next);
+    remainingRef.current = AUTO_ADVANCE_MS;
+    startedAtRef.current = null;
+    setCycleId((c) => c + 1);
+  }
+
   return (
-    <div className="mk-reveal mt-10">
-      <div role="tablist" aria-label={t("Parts of a report")} className="flex flex-wrap justify-center gap-2">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            id={`${id}-${key}`}
-            aria-selected={tab === key}
-            aria-controls={`${id}-panel`}
-            onClick={() => setTab(key)}
-            className="mk-tab"
-          >
-            <Icon size={16} weight="bold" aria-hidden="true" />
-            {t(label)}
-          </button>
-        ))}
-      </div>
-      <WindowFrame
-        title={t("etymos.site · Originality report · Bien-doi-khi-hau-DBSCL.docx")}
-        badge={t("Example")}
-        className="mx-auto mt-6 max-w-5xl"
+    <MotionConfig reducedMotion="user">
+      <div
+        ref={rootRef}
+        className="mk-reveal mt-10"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onFocusCapture={() => setPaused(true)}
+        onBlurCapture={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false);
+        }}
       >
-        <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="min-h-[260px]">
-          <Screen />
+        <div role="tablist" aria-label={t("Parts of a report")} className="flex flex-wrap justify-center gap-2">
+          {TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              id={`${id}-${key}`}
+              aria-selected={tab === key}
+              aria-controls={`${id}-panel`}
+              onClick={() => selectTab(key)}
+              className="mk-tab"
+            >
+              <Icon size={16} weight="bold" aria-hidden="true" />
+              {t(label)}
+              {tab === key && !reducedMotion && (
+                <span
+                  key={`${key}-${cycleId}`}
+                  aria-hidden="true"
+                  className="mk-tab-progress"
+                  style={{ animationPlayState: isRunning ? "running" : "paused" }}
+                />
+              )}
+            </button>
+          ))}
         </div>
-      </WindowFrame>
-    </div>
+        <WindowFrame
+          title={t("etymos.site · Originality report · Bien-doi-khi-hau-DBSCL.docx")}
+          badge={t("Example")}
+          className="mx-auto mt-6 max-w-5xl"
+        >
+          <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="mk-tour-panel min-h-[272px] overflow-hidden">
+            <AnimatePresence mode="wait" initial={false}>
+              <m.div
+                key={tab}
+                initial={{ opacity: 0, x: direction * 18 }}
+                animate={{
+                  opacity: 1,
+                  x: 0,
+                  transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+                }}
+                exit={{
+                  opacity: 0,
+                  x: direction * -18,
+                  transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] },
+                }}
+              >
+                <Screen />
+              </m.div>
+            </AnimatePresence>
+          </div>
+        </WindowFrame>
+      </div>
+    </MotionConfig>
   );
 }
