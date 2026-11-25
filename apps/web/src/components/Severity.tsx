@@ -54,14 +54,15 @@ export function statusFromScore(score: number): DocStatus {
   return "high";
 }
 
-const statusConfig: Record<DocStatus, { label: string; shortLabel: string; text: string; bg: string; line: string }> = {
-  clean: { label: tr("Clean"), shortLabel: tr("Clean"), text: "text-success", bg: "bg-success-bg", line: "border-success/20" },
+export const statusConfig: Record<DocStatus, { label: string; shortLabel: string; text: string; bg: string; line: string; bar: string }> = {
+  clean: { label: tr("Clean"), shortLabel: tr("Clean"), text: "text-success", bg: "bg-success-bg", line: "border-success/20", bar: "bg-success" },
   low: {
     label: tr("Low similarity"),
     shortLabel: tr("Low"),
     text: "text-severity-low",
     bg: "bg-severity-low-bg",
     line: "border-severity-low-line",
+    bar: "bg-severity-low",
   },
   moderate: {
     label: tr("Moderate similarity"),
@@ -69,6 +70,7 @@ const statusConfig: Record<DocStatus, { label: string; shortLabel: string; text:
     text: "text-severity-moderate",
     bg: "bg-severity-moderate-bg",
     line: "border-severity-moderate-line",
+    bar: "bg-severity-moderate",
   },
   high: {
     label: tr("High similarity"),
@@ -76,6 +78,7 @@ const statusConfig: Record<DocStatus, { label: string; shortLabel: string; text:
     text: "text-severity-high",
     bg: "bg-severity-high-bg",
     line: "border-severity-high-line",
+    bar: "bg-severity-high",
   },
 };
 

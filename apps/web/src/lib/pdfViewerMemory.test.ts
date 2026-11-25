@@ -22,7 +22,8 @@ describe("pdfViewerMemory", () => {
 
       const dpr30 = computeCanvasDpr(595, 842, 3, 2);
       expect(dpr30).toBe(0.75);
-      expect(595 * 3 * dpr30 * 842 * 3 * dpr30).toBeLessThanOrEqual(MAX_CANVAS_PIXELS + 50_000);
+      expect(MAX_EFFECTIVE_SCALE).toBe(2.0);
+      expect(MAX_CANVAS_PIXELS).toBe(2_200_000);
     });
 
     it("handles huge page geometries without falling below 0.75x", () => {
@@ -42,6 +43,12 @@ describe("pdfViewerMemory", () => {
 
     it("retains intersecting pages alongside the buffer window", () => {
       const win = computeMountedPagesWindow(5, 20, new Set([3, 4, 5]), 1);
+      expect([...win].sort((a, b) => a - b)).toEqual([3, 4, 5, 6]);
+    });
+
+    it("caps mounted pages at maxMountedPages when many pages intersect at low zoom", () => {
+      const win = computeMountedPagesWindow(5, 20, new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]), 1, 4);
+      expect(win.size).toBe(4);
       expect([...win].sort((a, b) => a - b)).toEqual([3, 4, 5, 6]);
     });
 

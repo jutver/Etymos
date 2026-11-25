@@ -10,11 +10,12 @@ import { ConnectivityIndicator } from "./ConnectivityIndicator";
 
 export function AppShell() {
   const { pathname } = useLocation();
+  const isReportRoute = pathname.startsWith("/report/");
   // Opening a report gets the splash. It's triggered here rather than in the
   // report screen so it also covers that screen's chunk download (the
   // Suspense fallback below holds it); the screen then holds it until the
   // document has loaded. Moving between reports doesn't re-trigger it.
-  useSplashOnEnter(pathname.startsWith("/report/"));
+  useSplashOnEnter(isReportRoute);
 
   // Going home from a report gets it too. Only that hop — leaving a report
   // for the paywall, say, doesn't.
@@ -42,7 +43,7 @@ export function AppShell() {
           </Suspense>
         </main>
         <ToastViewport />
-        <ConnectivityIndicator />
+        {!isReportRoute && <ConnectivityIndicator />}
         <AppTour />
       </div>
     </ConnectivityProvider>

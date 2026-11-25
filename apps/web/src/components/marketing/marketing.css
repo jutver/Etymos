@@ -170,6 +170,14 @@
 /* Meter bar inside stat cards */
 .mk-meter { height: 6px; border-radius: 999px; background: var(--color-surface-muted); overflow: hidden; }
 .mk-meter > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--color-brand-500), var(--mk-indigo)); }
+.mk-tour-panel .mk-meter > span {
+  transform-origin: left center;
+  animation: mk-meter-grow 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes mk-meter-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
 
 /* Timeline (How it works) */
 .mk-timeline { position: relative; }
@@ -231,6 +239,8 @@
 
 /* Product tour tabs */
 .mk-tab {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -249,6 +259,25 @@
   border-color: transparent;
   background: linear-gradient(115deg, var(--color-brand-500), var(--mk-indigo));
   box-shadow: 0 8px 20px -10px #2563ebaa;
+}
+.mk-tab-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #ffffff99;
+  transform-origin: left center;
+  pointer-events: none;
+  animation: mk-tab-progress 4s linear forwards;
+}
+@keyframes mk-tab-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-tab-progress { display: none; }
+  .mk-tour-panel .mk-meter > span { animation: none; }
 }
 
 /* Floating badges around the hero mock-up */

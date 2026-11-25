@@ -531,6 +531,13 @@ export default function LineWaves({
         gl.deleteVertexArray(vao);
         gl.deleteProgram(shader.program);
       }
+      canvas.width = 0;
+      canvas.height = 0;
+      queueMicrotask(() => {
+        if (!canvas.isConnected && !gl.isContextLost()) {
+          gl.getExtension("WEBGL_lose_context")?.loseContext();
+        }
+      });
     };
   }, [generation]);
 

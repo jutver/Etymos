@@ -229,6 +229,12 @@ interface AppState {
 // useSyncExternalStore re-render in an infinite loop (React error #185).
 let balancesCache: { key: string; value: BalanceOption[] } | null = null;
 
+function revokeBlobUrl(url: string | undefined) {
+  if (url?.startsWith("blob:") && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Entries added by screens that already have their results (the legacy
  * local-only path) are settled by definition. */
 function withCheckDefaults(entry: HistoryEntry): HistoryEntryWithCheck {
@@ -563,13 +569,12 @@ export const useAppStore = create<AppState>()(
 
       recordCheckedDocument: (doc) =>
         set((s) => {
-          const retained: Record<string, CheckedDocument> = {};
-          const olderEntries = Object.entries(s.checkedDocuments).filter(([key]) => key !== doc.id).slice(-2);
-          for (const [key, prev] of olderEntries) {
-            retained[key] = prev.pdfUrl ? { ...prev, pdfUrl: undefined } : prev;
+          for (const prev of Object.values(s.checkedDocuments)) {
+            if (prev.pdfUrl && prev.pdfUrl !== doc.pdfUrl) {
+              revokeBlobUrl(prev.pdfUrl);
+            }
           }
-          retained[doc.id] = doc;
-          return { checkedDocuments: retained };
+          return { checkedDocuments: { [doc.id]: doc } };
         }),
 
       applyDocumentUnlock: (id, { unlockedTier, standardCredits, premiumCredits }) =>

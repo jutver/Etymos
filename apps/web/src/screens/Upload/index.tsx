@@ -236,18 +236,9 @@ export default function UploadPage() {
           throw new Error(tr("Please choose a PDF file to upload."));
         }
 
-        // Đọc file thành base64 data URL để lưu được vào localStorage
-        // (blob URL sẽ chết sau khi refresh trang, data URL thì không)
-        const pdfDataUrl = await new Promise<string | null>((resolve) => {
-          if (file.type !== "application/pdf") {
-            resolve(null); // không phải PDF thì không preview được, bỏ qua
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(file);
-        });
+        // Object URL keeps the local File without duplicating it as a huge Base64 string in JS heap.
+        // Page reloads fall back to Supabase Storage signed URLs on the Report screen.
+        const pdfDataUrl = file.type === "application/pdf" ? URL.createObjectURL(file) : null;
 
         const job = await submitPdfCheck(file, source);
         await trackJob(job.job_id);

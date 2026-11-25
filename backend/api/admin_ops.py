@@ -437,7 +437,10 @@ async def _ws_send_error_and_close(websocket: WebSocket, code: int, err_code: st
 
 
 async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser, float, dict[str, Any]]]:
-    await websocket.accept()
+    try:
+        await websocket.accept()
+    except (WebSocketDisconnect, RuntimeError):
+        return None
     try:
         msg = await asyncio.wait_for(websocket.receive_json(), timeout=WS_AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
@@ -461,7 +464,10 @@ async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser,
         await _ws_send_error_and_close(websocket, close_code, err_code, str(exc.detail))
         return None
 
-    await websocket.send_json({"type": "auth_ok", "pid": os.getpid(), "started_at": _iso(PROCESS_STARTED)})
+    try:
+        await websocket.send_json({"type": "auth_ok", "pid": os.getpid(), "started_at": _iso(PROCESS_STARTED)})
+    except (WebSocketDisconnect, RuntimeError):
+        return None
     return user, expires_at, msg
 
 

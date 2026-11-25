@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FileMagnifyingGlass, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
 import { supabase, cn } from "@etymos/shared";
@@ -17,27 +17,25 @@ import {
 import { loadLocalDocumentVersions, saveLocalDocumentVersion, uploadLocalDocumentVersions } from "../../lib/localDocumentVersions";
 import { statusFromScore } from "../../components/Severity";
 import { Button } from "../../components/ui/Button";
+import { ConnectivityIndicator } from "../../components/layout/ConnectivityIndicator";
 import { useSplashHold } from "../../components/BootSplash";
 import { PlagiarismPdfViewer } from "../../components/PlagiarismPdfViewer";
-import { SourceComparisonModal } from "./SourceComparisonModal";
-import { ExportVersionModal, type ExportVersionOption } from "./ExportVersionModal";
-import { CitationDialog } from "../../components/CitationDialog";
-import { RewritePanel } from "./RewritePanel";
+import type { ExportVersionOption } from "./ExportVersionModal";
 import { ReportTopBar } from "./ReportTopBar";
 import { FormatToolbar, type ReportView } from "./FormatToolbar";
-import { DocumentCanvas, type DocumentCanvasHandle, type MatchColorIndex } from "./DocumentCanvas";
+import type { DocumentCanvasHandle } from "./DocumentCanvas";
+import type { MatchColorIndex } from "./blocks";
 import { SourcesSidebar, type SidebarTab } from "./SourcesSidebar";
 import { WordCountPill } from "./WordCountPill";
 import { AiContentChip } from "./AiContentChip";
+import { SimilaritySummaryChip } from "./SimilaritySummaryChip";
 import type { DocumentVersion } from "./VersionHistoryMenu";
 import { aiFlaggedPassageIds, buildMatchFocusMap, buildRenderedPassages, countWords, mapAiSegmentsToPassages } from "./highlights";
 import { orderMatchesByDocumentPosition } from "./matchOrdering";
 import { useMatchExplanations } from "./useMatchExplanations";
-import { isOverLimit } from "./renderPassageText";
-import { computeWordLimitOffset } from "./wordLimit";
+import { computeWordLimitOffset, isOverLimit } from "./wordLimit";
 import { applySavedVersion, withoutLegacyBadges } from "./applySavedVersion";
 import { useQuickCheck } from "./useQuickCheck";
-import { RecheckDialog } from "./RecheckDialog";
 import { DesktopHintDialog } from "./DesktopHintDialog";
 import { collectEditorBlocks } from "./recheck";
 import { changedRatio, htmlToText } from "../../lib/textChange";
@@ -46,6 +44,25 @@ import type { CheckedDocument, DocStatus, MatchedSource } from "../../lib/types"
 import { t as tl, tr, useLanguage } from "../../lib/i18n";
 import { effectiveTier, paywallPath } from "../../lib/paywall";
 import { PDF_SIGNED_URL_TTL_SECONDS, computeSignedUrlExpiresAt, isSignedUrlStale } from "../../lib/pdfSignedUrl";
+
+const DocumentCanvas = lazy(() =>
+  import("./DocumentCanvas").then((mod) => ({ default: mod.DocumentCanvas })),
+);
+const ExportVersionModal = lazy(() =>
+  import("./ExportVersionModal").then((mod) => ({ default: mod.ExportVersionModal })),
+);
+const SourceComparisonModal = lazy(() =>
+  import("./SourceComparisonModal").then((mod) => ({ default: mod.SourceComparisonModal })),
+);
+const RecheckDialog = lazy(() =>
+  import("./RecheckDialog").then((mod) => ({ default: mod.RecheckDialog })),
+);
+const CitationDialog = lazy(() =>
+  import("../../components/CitationDialog").then((mod) => ({ default: mod.CitationDialog })),
+);
+const RewritePanel = lazy(() =>
+  import("./RewritePanel").then((mod) => ({ default: mod.RewritePanel })),
+);
 
 // Private Storage bucket the backend uploads original PDFs into (see
 // backend/api/app.py's DOCUMENTS_BUCKET / _storage_path: `{user_id}/{report_id}.pdf`).
@@ -322,10 +339,14 @@ export default function ReportPage() {
   const [scanWarningDismissed, setScanWarningDismissed] = useState(false);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [comparisonMatch, setComparisonMatch] = useState<MatchedSource | null>(null);
+  const [comparisonMounted, setComparisonMounted] = useState(false);
   const [citingMatch, setCitingMatch] = useState<MatchedSource | null>(null);
+  const [citingMounted, setCitingMounted] = useState(false);
   const [rewriteMatch, setRewriteMatch] = useState<MatchedSource | null>(null);
+  const [rewriteMounted, setRewriteMounted] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalMounted, setExportModalMounted] = useState(false);
   const [exportSelectedKey, setExportSelectedKey] = useState("original");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -770,6 +791,7 @@ export default function ReportPage() {
   const handleToggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const handleViewComparison = useCallback((match: MatchedSource) => {
     trackEvent("source_comparison_opened");
+    setComparisonMounted(true);
     setComparisonMatch(match);
   }, []);
   const handleRewriteMatch = useCallback(
@@ -783,6 +805,7 @@ export default function ReportPage() {
         return;
       }
       trackEvent("rewrite_opened");
+      setRewriteMounted(true);
       setRewriteMatch(match);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -917,6 +940,7 @@ export default function ReportPage() {
   const refreshBalances = useAppStore((s) => s.refreshBalances);
   const availableBalances = useMemo(() => balances.filter((b) => b.remaining > 0), [balances]);
   const [recheckOpen, setRecheckOpen] = useState(false);
+  const [recheckMounted, setRecheckMounted] = useState(false);
   const [recheckQuote, setRecheckQuote] = useState<RecheckQuote | null>(null);
   const [recheckSubmitting, setRecheckSubmitting] = useState(false);
   /** Progress of a running re-check (0-100), null when none is running. */
@@ -929,6 +953,7 @@ export default function ReportPage() {
     if (blocks.every((b) => !b.text)) return;
     recheckBlocksRef.current = blocks;
     setRecheckQuote(null);
+    setRecheckMounted(true);
     setRecheckOpen(true);
     try {
       setRecheckQuote(await quoteRecheck(id, blocks));
@@ -1027,6 +1052,7 @@ export default function ReportPage() {
   }
 
   const handleCite = useCallback((match: MatchedSource) => {
+    setCitingMounted(true);
     setCitingMatch(match);
   }, []);
 
@@ -1156,6 +1182,7 @@ export default function ReportPage() {
       return;
     }
     setExportSelectedKey(exportOptions[0]?.key ?? "original");
+    setExportModalMounted(true);
     setExportModalOpen(true);
   }
 
@@ -1229,12 +1256,20 @@ export default function ReportPage() {
         exportLocked={isFree}
         scoreSlot={
           <>
+            <ConnectivityIndicator variant="compact" />
             <span data-tour="report-score" className="inline-flex">
-              <ScoreChip
+              <SimilaritySummaryChip
                 score={displayScore}
                 // Edits since the last check make the score an estimate until re-checked.
                 estimated={scoreEstimate.estimated || editedSinceCheck}
                 checking={scoreEstimate.checking}
+                wordCount={showsText ? stats.words : originalStats.words}
+                matches={visibleMatches}
+                resolvedIds={sidebarResolvedIds}
+                lockedCount={lockedMatches.length}
+                publishedPaperMatch={doc.publishedPaperMatch}
+                onSelectMatch={handleSelectMatch}
+                onUpgrade={() => navigate(paywallPath("semantic", id))}
               />
             </span>
             <span data-tour="report-ai" className="inline-flex">
@@ -1328,24 +1363,32 @@ export default function ReportPage() {
                 transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
                 className="relative flex min-h-0 flex-1 flex-col"
               >
-                <DocumentCanvas
-                  ref={canvasRef}
-                  rendered={rendered}
-                  colorIndexByMatch={colorIndexByMatch}
-                  activeMatchId={focusMatchId}
-                  focusTick={focusTick}
-                  showHighlights={showSourceHighlights}
-                  onSelectMatch={handleSelectMatch}
-                  onClearSelection={clearSelection}
-                  locked={locked}
-                  onInput={handleInput}
-                  onPageChange={handlePageChange}
-                  resetKey={resetKey}
-                  editorRef={editorRef}
-                  overLimitOffset={overLimitOffset}
-                  aiFlaggedPassageIds={shownAiFlaggedIds}
-                  activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
-                />
+                <Suspense
+                  fallback={
+                    <div className="flex flex-1 items-center justify-center px-4 py-12">
+                      <div className="h-full w-full max-w-[816px] animate-pulse motion-reduce:animate-none rounded-[2px] bg-white" />
+                    </div>
+                  }
+                >
+                  <DocumentCanvas
+                    ref={canvasRef}
+                    rendered={rendered}
+                    colorIndexByMatch={colorIndexByMatch}
+                    activeMatchId={focusMatchId}
+                    focusTick={focusTick}
+                    showHighlights={showSourceHighlights}
+                    onSelectMatch={handleSelectMatch}
+                    onClearSelection={clearSelection}
+                    locked={locked}
+                    onInput={handleInput}
+                    onPageChange={handlePageChange}
+                    resetKey={resetKey}
+                    editorRef={editorRef}
+                    overLimitOffset={overLimitOffset}
+                    aiFlaggedPassageIds={shownAiFlaggedIds}
+                    activeAiBlockId={activeAiSegmentId ? (aiSegmentToPassage.get(activeAiSegmentId) ?? null) : null}
+                  />
+                </Suspense>
               </m.div>
             )}
           </MotionConfig>
@@ -1400,48 +1443,68 @@ export default function ReportPage() {
       </div>
 
       <DesktopHintDialog />
-      <ExportVersionModal
-        open={exportModalOpen}
-        options={exportOptions}
-        selectedKey={exportSelectedKey}
-        exporting={exporting}
-        onSelect={setExportSelectedKey}
-        onConfirm={() => {
-          const chosen = exportOptions.find((o) => o.key === exportSelectedKey) ?? exportOptions[0];
-          if (chosen) void executeExport(chosen);
-        }}
-        onClose={() => {
-          if (!exporting) setExportModalOpen(false);
-        }}
-      />
-      <SourceComparisonModal
-        match={comparisonMatch}
-        open={comparisonMatch !== null}
-        onClose={() => setComparisonMatch(null)}
-      />
-      <RecheckDialog
-        open={recheckOpen}
-        onClose={() => {
-          if (!recheckSubmitting) setRecheckOpen(false);
-        }}
-        quote={recheckQuote}
-        balances={availableBalances}
-        busy={recheckSubmitting}
-        onConfirm={(source) => void handleConfirmRecheck(source)}
-      />
-      <CitationDialog
-        match={citingMatch}
-        open={citingMatch !== null}
-        onClose={() => setCitingMatch(null)}
-      />
-      <RewritePanel
-        match={rewriteMatch}
-        open={rewriteMatch !== null}
-        onClose={() => setRewriteMatch(null)}
-        onAccept={handleAcceptRewrite}
-        precheck={quickCheck.runCheck}
-        reportId={id}
-      />
+      {(exportModalMounted || exportModalOpen) && (
+        <Suspense fallback={null}>
+          <ExportVersionModal
+            open={exportModalOpen}
+            options={exportOptions}
+            selectedKey={exportSelectedKey}
+            exporting={exporting}
+            onSelect={setExportSelectedKey}
+            onConfirm={() => {
+              const chosen = exportOptions.find((o) => o.key === exportSelectedKey) ?? exportOptions[0];
+              if (chosen) void executeExport(chosen);
+            }}
+            onClose={() => {
+              if (!exporting) setExportModalOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
+      {(comparisonMounted || comparisonMatch !== null) && (
+        <Suspense fallback={null}>
+          <SourceComparisonModal
+            match={comparisonMatch}
+            open={comparisonMatch !== null}
+            onClose={() => setComparisonMatch(null)}
+          />
+        </Suspense>
+      )}
+      {(recheckMounted || recheckOpen) && (
+        <Suspense fallback={null}>
+          <RecheckDialog
+            open={recheckOpen}
+            onClose={() => {
+              if (!recheckSubmitting) setRecheckOpen(false);
+            }}
+            quote={recheckQuote}
+            balances={availableBalances}
+            busy={recheckSubmitting}
+            onConfirm={(source) => void handleConfirmRecheck(source)}
+          />
+        </Suspense>
+      )}
+      {(citingMounted || citingMatch !== null) && (
+        <Suspense fallback={null}>
+          <CitationDialog
+            match={citingMatch}
+            open={citingMatch !== null}
+            onClose={() => setCitingMatch(null)}
+          />
+        </Suspense>
+      )}
+      {(rewriteMounted || rewriteMatch !== null) && (
+        <Suspense fallback={null}>
+          <RewritePanel
+            match={rewriteMatch}
+            open={rewriteMatch !== null}
+            onClose={() => setRewriteMatch(null)}
+            onAccept={handleAcceptRewrite}
+            precheck={quickCheck.runCheck}
+            reportId={id}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

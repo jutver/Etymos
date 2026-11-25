@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { DocPassage, InlineFormula, TextMark } from "@etymos/shared";
+import type { InlineFormula, TextMark } from "@etymos/shared";
 import { cn } from "@etymos/shared";
 import { FormulaBlock, renderSafeKatex } from "./FormulaBlock";
 import { chunkPassage, colorForIndex, LIGHT_HIGHLIGHT, type PassageSpan } from "./highlights";
@@ -128,15 +128,8 @@ export function renderChunks(
   });
 }
 
-/**
- * A passage is "over the limit" once its own start sits at/past the
- * document-wide boundary offset. Blocks with no backing passage (freshly
- * inserted by the user) are never muted.
- */
-export function isOverLimit(passage: DocPassage | undefined, overLimitOffset: number | undefined): boolean {
-  if (!passage || overLimitOffset == null || passage.startOffset == null) return false;
-  return passage.startOffset >= overLimitOffset;
-}
+import { isOverLimit } from "./wordLimit";
+export { isOverLimit };
 
 /** Renders passage text, muting it (and dropping its highlight spans/score
  * badge) once the passage has crossed the word-limit boundary. */
