@@ -126,11 +126,13 @@ def test_explain_match_requires_auth_and_enforces_owner_and_free_tier(monkeypatc
         c_free = _setup(monkeypatch, db, active_user=USER_A)
         assert c_free.post("/api/reports/rep-1/matches/11111111-1111-1111-1111-111111111111/explain", json={"language": "en"}).status_code == 403
 
-        # Unlocked doc allows access even for free-plan owner
+        # Unlocked doc allows access even for free-plan owner; ignores other tasks' Gemini keys
         db.tables["documents"][0]["unlocked_tier"] = "student"
         report_store.set_cached_unlocked_tier("rep-1", "student")
         monkeypatch.delenv("GEMINI_EXPLAIN_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.setenv("GEMINI_EXTRACTION_API_KEY", "extraction-key")
+        monkeypatch.setenv("GEMINI_REWRITE_API_KEY", "rewrite-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "legacy-global-key")
         res = c_free.post("/api/reports/rep-1/matches/11111111-1111-1111-1111-111111111111/explain", json={"language": "en"})
         assert res.status_code == 200
         assert res.json()["source"] == "facts"

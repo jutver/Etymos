@@ -81,6 +81,7 @@ from admin_log import record_admin_action
 import support_inbound
 import notifications
 from auth import AuthedUser, require_owner_or_admin, verify_supabase_jwt
+from storage_retry import PendingPdfUploadQueue, is_transient_storage_error, run_with_storage_retry
 from supabase_client import get_client
 from usage import credit_tier, ensure_quota_available, record_check_used, unlock_document_with_credit
 from recheck_quota import TIER_RANK, original_text, quote_recheck
@@ -173,7 +174,9 @@ async def lifespan(_: FastAPI):
     notifications.start_scheduler()
     # Support inbox (email replies -> tickets) and auto-closing tickets.
     support_inbound.start()
+    _pdf_upload_queue.start_worker()
     yield
+    _pdf_upload_queue.stop_worker()
     signal_sse_shutdown()
     # Jobs live in memory: any check still running now is lost, and its user
     # will see "interrupted". Name them so the log shows which.
@@ -380,18 +383,29 @@ RATE_LIMIT_RECHECK = os.getenv("RATE_LIMIT_RECHECK", "20/hour")
 
 # Cấu hình AI Gemini.
 #
-# Each Gemini-capable module configures the SDK itself at first use
-# (llm_metadata._ensure_genai_configured, ai_rewrite.rewrite_with_gemini),
-# so there is nothing to configure here — only a startup warning. Without
-# a key the backend still works entirely on the local Qwen2.5 model; only
-# the opt-in Gemini feature flags become unavailable.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
+# Each Gemini-capable task uses its own dedicated API key via per-request REST
+# calls (`gemini_client.py`) and automatically falls back to the local Qwen2.5
+# model (or fact-based explanations) when unset or unreachable:
+#   - GEMINI_EXTRACTION_API_KEY -> metadata extraction (`llm_metadata.py`)
+#   - GEMINI_REWRITE_API_KEY    -> AI rewrite (`ai_rewrite.py`)
+#   - GEMINI_EXPLAIN_API_KEY    -> match explanations (`ai_explain.py`)
+_GEMINI_TASK_KEYS = (
+    "GEMINI_EXTRACTION_API_KEY",
+    "GEMINI_REWRITE_API_KEY",
+    "GEMINI_EXPLAIN_API_KEY",
+)
+_missing_gemini_keys = [key for key in _GEMINI_TASK_KEYS if not (os.getenv(key) or "").strip()]
+if _missing_gemini_keys:
     logger.warning(
-        "GEMINI_API_KEY is not set; the Gemini feature flags "
-        "(gemini_metadata_extraction, gemini_ai_rewrite) cannot be used. "
-        "The local Qwen2.5 model handles both paths."
+        "Unset Gemini task key(s): %s. Those Gemini tasks will automatically fall back to "
+        "the local Qwen2.5 model or fact-based explanations.",
+        ", ".join(_missing_gemini_keys),
     )
+    if (os.getenv("GEMINI_API_KEY") or "").strip():
+        logger.warning(
+            "Legacy GEMINI_API_KEY is set, but tasks now use separate keys "
+            "(GEMINI_EXTRACTION_API_KEY, GEMINI_REWRITE_API_KEY, GEMINI_EXPLAIN_API_KEY)."
+        )
 
 # Supabase Storage bucket for uploaded/checked PDFs (see
 # supabase/migrations/20260716120000_student_verification_and_audit_log.sql
@@ -419,30 +433,73 @@ def _storage_path(user_id: str, report_id: str) -> str:
     return f"{user_id}/{report_id}.pdf"
 
 
+_pdf_upload_queue = PendingPdfUploadQueue(
+    fallback_dir_getter=lambda: LOCAL_PDF_FALLBACK_DIR,
+    client_getter=lambda: get_client(),
+    bucket_getter=lambda: DOCUMENTS_BUCKET,
+    storage_path_fn=_storage_path,
+)
+
+
 def _upload_pdf(user_id: str, report_id: str, local_path: Path) -> None:
-    """Upload the checked PDF into Supabase Storage. Falls back to a local
-    directory when Supabase isn't configured (local dev only)."""
+    """Upload the checked PDF into Supabase Storage with inline retries on
+    transient errors, queuing a durable background retry if Storage stays
+    unreachable. Falls back to local disk only when Supabase isn't configured
+    or the failure is permanent."""
+    try:
+        pdf_bytes = local_path.read_bytes()
+    except OSError:
+        logger.exception("Failed to read PDF for upload for report_id=%s", report_id)
+        return
+
     client = get_client()
     if client is not None:
+        storage_path = _storage_path(user_id, report_id)
         try:
-            with local_path.open("rb") as f:
-                client.storage.from_(DOCUMENTS_BUCKET).upload(
-                    _storage_path(user_id, report_id),
-                    f.read(),
+            run_with_storage_retry(
+                lambda: client.storage.from_(DOCUMENTS_BUCKET).upload(
+                    storage_path,
+                    pdf_bytes,
                     file_options={"content-type": "application/pdf", "upsert": "true"},
-                )
-            return
-        except Exception:
-            logger.exception(
-                "Failed to upload PDF to Supabase Storage for report_id=%s", report_id
+                ),
+                label=f"Upload PDF to Supabase Storage for report_id={report_id}",
             )
+            _pdf_upload_queue.cancel(report_id, remove_pdf=True)
+            return
+        except Exception as exc:
+            if is_transient_storage_error(exc):
+                logger.exception(
+                    "Failed to upload PDF to Supabase Storage for report_id=%s after retries; queuing background retry",
+                    report_id,
+                )
+                try:
+                    _pdf_upload_queue.enqueue(
+                        user_id,
+                        report_id,
+                        pdf_bytes,
+                        last_error=f"{type(exc).__name__}: {exc}",
+                    )
+                except OSError:
+                    logger.exception("Failed to queue background PDF upload for report_id=%s", report_id)
+            else:
+                logger.exception(
+                    "Failed to upload PDF to Supabase Storage for report_id=%s (non-retryable); saving local fallback only",
+                    report_id,
+                )
+                try:
+                    _pdf_upload_queue.save_local_fallback(report_id, pdf_bytes)
+                except OSError:
+                    logger.exception("Failed to write local PDF fallback for report_id=%s", report_id)
+            return
+
     try:
-        shutil.copy(str(local_path), str(LOCAL_PDF_FALLBACK_DIR / f"{report_id}.pdf"))
+        _pdf_upload_queue.save_local_fallback(report_id, pdf_bytes)
     except OSError:
         logger.exception("Failed to write local PDF fallback for report_id=%s", report_id)
 
 
 def _delete_pdf(user_id: str | None, report_id: str) -> None:
+    _pdf_upload_queue.cancel(report_id, remove_pdf=True)
     client = get_client()
     if client is not None and user_id is not None:
         try:
@@ -468,6 +525,7 @@ def _purge_user_storage(client, user_id: str) -> None:
     committed to should not be left half-done because Storage listing/remove
     hit a transient error.
     """
+    _pdf_upload_queue.cancel_for_user(user_id)
     for bucket in (DOCUMENTS_BUCKET, STUDENT_VERIFICATION_BUCKET):
         try:
             objects = client.storage.from_(bucket).list(user_id)
@@ -926,7 +984,14 @@ def run_stored_file_job(*, job_id: str, storage_path: str, original_name: str, u
         update_job(job_id, status="processing", progress=1, current_step="receiving_file",
                    message="Receiving your file")
         started = time.perf_counter()
-        data = client.storage.from_(DOCUMENTS_BUCKET).download(storage_path) if client else None
+        data = (
+            run_with_storage_retry(
+                lambda: client.storage.from_(DOCUMENTS_BUCKET).download(storage_path),
+                label=f"Download upload {storage_path} from Supabase Storage",
+            )
+            if client
+            else None
+        )
         logger.info("Downloaded %s from storage: %.0fKB in %.1fs", storage_path,
                     len(data or b"") / 1024, time.perf_counter() - started)
         if not data:
@@ -1187,8 +1252,14 @@ def get_source_pdf(report_id: str, user: AuthedUser = Depends(verify_supabase_jw
     client = get_client()
     if client is not None and owner_id is not None:
         try:
-            signed = client.storage.from_(DOCUMENTS_BUCKET).create_signed_url(
-                _storage_path(owner_id, report_id), 60
+            signed = run_with_storage_retry(
+                lambda: client.storage.from_(DOCUMENTS_BUCKET).create_signed_url(
+                    _storage_path(owner_id, report_id), 60
+                ),
+                label=f"Create signed PDF URL for report_id={report_id}",
+                max_attempts=3,
+                base_delay=0.5,
+                max_delay=2.0,
             )
             signed_url = (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
             if signed_url:
@@ -1210,7 +1281,13 @@ def load_original_pdf_bytes(report_id: str, owner_id: str | None) -> bytes | Non
     client = get_client()
     if client is not None and owner_id is not None:
         try:
-            data = client.storage.from_(DOCUMENTS_BUCKET).download(_storage_path(owner_id, report_id))
+            data = run_with_storage_retry(
+                lambda: client.storage.from_(DOCUMENTS_BUCKET).download(_storage_path(owner_id, report_id)),
+                label=f"Download PDF from Supabase Storage for report_id={report_id}",
+                max_attempts=3,
+                base_delay=0.5,
+                max_delay=2.0,
+            )
             if isinstance(data, (bytes, bytearray)) and len(data) > 0:
                 return bytes(data)
         except Exception:

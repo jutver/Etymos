@@ -257,8 +257,10 @@ def test_an_llm_explanation_drops_the_facts_so_the_ui_shows_the_llm_text():
     assert "explanation_facts" in matches[1]
 
 
-def test_dedicated_gemini_explain_key_takes_precedence_over_global_key(monkeypatch):
+def test_dedicated_gemini_explain_key_takes_precedence_and_stays_isolated(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "global-key")
+    monkeypatch.setenv("GEMINI_EXTRACTION_API_KEY", "extraction-key")
+    monkeypatch.setenv("GEMINI_REWRITE_API_KEY", "rewrite-key")
     monkeypatch.setenv("GEMINI_EXPLAIN_API_KEY", "dedicated-explain-key")
     captured = {}
 
@@ -279,6 +281,12 @@ def test_dedicated_gemini_explain_key_takes_precedence_over_global_key(monkeypat
     assert out["source"] == "llm:gemini"
     assert captured["headers"]["x-goog-api-key"] == "dedicated-explain-key"
     assert "in Vietnamese" in captured["prompt"]
+
+    # When GEMINI_EXPLAIN_API_KEY is unset, it must NOT fall back to GEMINI_API_KEY or other tasks' keys.
+    monkeypatch.delenv("GEMINI_EXPLAIN_API_KEY", raising=False)
+    assert ai_explain.get_gemini_explain_api_key() == ""
+    out_no_key = ai_explain.explain_single_match(m, language="en", http_client=_FakeHttp())
+    assert out_no_key["source"] == "facts"
 
 
 def test_validate_llm_text_accepts_quoted_clean_source_title():

@@ -21,8 +21,8 @@ An explanation that is fluent but wrong is worse than none, so:
      Vietnamese, following the student's or reader's language). It is always
      correct, needs no model, and is what every match gets by default.
   3. On-demand Gemini explanations (POST /api/reports/{id}/matches/{mid}/explain)
-     use the dedicated `GEMINI_EXPLAIN_API_KEY` (fallback `GEMINI_API_KEY`) via
-     per-request HTTP calls so global SDK credentials never race across threads.
+     use the dedicated `GEMINI_EXPLAIN_API_KEY` credential via per-request HTTP
+     calls so concurrent tasks never share credentials or race across threads.
      Answers are verified against grounded facts (`validate_llm_text`) before
      caching, and any error or invalid reply seamlessly falls back to step 2.
 """
@@ -39,6 +39,7 @@ import httpx
 
 from ai_rewrite import _clean_output, _looks_vietnamese
 from feature_flags import ensure_flag_registered, is_flag_enabled
+from gemini_client import GEMINI_GENERATE_URL, GeminiRequestError, extract_gemini_text, generate_content
 from source_title import sanitize_source_title
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,6 @@ EXPLAIN_FLAG_DESCRIPTION = (
 
 GEMINI_EXPLAIN_MODEL = os.getenv("GEMINI_EXPLAIN_MODEL", "gemini-flash-latest")
 GEMINI_EXPLAIN_TIMEOUT_SECONDS = float(os.getenv("GEMINI_EXPLAIN_TIMEOUT_SECONDS", "12.0"))
-GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 LOCAL_EXPLAIN_MAX_NEW_TOKENS = int(os.getenv("LOCAL_EXPLAIN_MAX_NEW_TOKENS", "160"))
 
 # Only the most serious matches get an LLM polish (when batch mode is enabled);
@@ -95,8 +95,8 @@ class ExplainUnavailable(RuntimeError):
 
 
 def get_gemini_explain_api_key() -> str:
-    """Dedicated credential for explanations; falls back to GEMINI_API_KEY only when unset."""
-    return (os.getenv("GEMINI_EXPLAIN_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
+    """Dedicated credential for match explanations (`GEMINI_EXPLAIN_API_KEY`)."""
+    return (os.getenv("GEMINI_EXPLAIN_API_KEY") or "").strip()
 
 
 def get_gemini_explain_model() -> str:
@@ -492,14 +492,7 @@ def select_for_llm(matches: list[dict], limit: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _extract_gemini_text(payload: dict[str, Any]) -> str:
-    candidates = payload.get("candidates")
-    if not isinstance(candidates, list) or not candidates:
-        return ""
-    first = candidates[0] if isinstance(candidates[0], dict) else {}
-    content = first.get("content") if isinstance(first.get("content"), dict) else {}
-    parts = content.get("parts") if isinstance(content.get("parts"), list) else []
-    texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict) and p.get("text")]
-    return clean_explanation(" ".join(texts))
+    return clean_explanation(extract_gemini_text(payload))
 
 
 def explain_with_gemini_http(
@@ -515,39 +508,26 @@ def explain_with_gemini_http(
     """Thread-safe Gemini REST call using dedicated `GEMINI_EXPLAIN_API_KEY` header."""
     resolved_key = (api_key if api_key is not None else get_gemini_explain_api_key()).strip()
     if not resolved_key:
-        raise ExplainUnavailable("GEMINI_EXPLAIN_API_KEY / GEMINI_API_KEY is not set.")
+        raise ExplainUnavailable("GEMINI_EXPLAIN_API_KEY is not set.")
 
     resolved_model = (model or get_gemini_explain_model()).strip()
     resolved_timeout = float(timeout if timeout is not None else get_gemini_explain_timeout())
     prompt = build_prompt(match, facts, language=language)
 
-    url = GEMINI_GENERATE_URL.format(model=resolved_model)
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": resolved_key,
-    }
-    body = {
-        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.25, "maxOutputTokens": 240},
-    }
-
-    caller = http_client.post if http_client is not None else httpx.post
     try:
-        resp = caller(url, headers=headers, json=body, timeout=resolved_timeout)
-    except Exception as exc:  # noqa: BLE001
-        raise ExplainUnavailable(f"Gemini explanation HTTP request failed: {exc}") from exc
+        raw_text = generate_content(
+            api_key=resolved_key,
+            model=resolved_model,
+            prompt=prompt,
+            system_instruction=SYSTEM_PROMPT,
+            generation_config={"temperature": 0.25, "maxOutputTokens": 240},
+            timeout=resolved_timeout,
+            http_client=http_client or httpx,
+        )
+    except GeminiRequestError as exc:
+        raise ExplainUnavailable(str(exc)) from exc
 
-    status_code = getattr(resp, "status_code", 500)
-    if status_code >= 400:
-        raise ExplainUnavailable(f"Gemini explanation HTTP {status_code}")
-
-    try:
-        payload = resp.json()
-    except Exception as exc:  # noqa: BLE001
-        raise ExplainUnavailable("Invalid JSON from Gemini explanation endpoint.") from exc
-
-    text = _extract_gemini_text(payload)
+    text = clean_explanation(raw_text)
     if not text:
         raise ExplainUnavailable("Gemini returned an empty explanation.")
     return text
