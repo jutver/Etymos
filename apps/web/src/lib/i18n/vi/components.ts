@@ -36,7 +36,6 @@ export const components: Record<string, string> = {
   "Copy to clipboard": "Sao chép vào bộ nhớ tạm",
   "Could not load the PDF. The file may be corrupted or unsupported.":
     "Không thể tải file PDF. File có thể bị lỗi cấu trúc hoặc không được hỗ trợ.",
-  "Could not read this file.": "Không thể đọc file này.",
   "Couldn't delete account": "Không thể xóa tài khoản",
   "Couldn't find this passage in the document text, so there's nothing to highlight.":
     "Không tìm thấy đoạn này trong nội dung tài liệu nên không có gì để tô sáng.",
@@ -84,7 +83,6 @@ export const components: Record<string, string> = {
   "Page {{page}}": "Trang {{page}}",
   "Plan": "Gói",
   "Premium": "Premium",
-  "Preparing file...": "Đang chuẩn bị file...",
   "Show page thumbnails": "Hiện ảnh thu nhỏ các trang",
   "Hide page thumbnails": "Ẩn ảnh thu nhỏ các trang",
   "Prices shown in VND": "Giá hiển thị bằng VND",
@@ -121,6 +119,8 @@ export const components: Record<string, string> = {
   "Fit page": "Vừa trang",
   "Fit width": "Vừa chiều rộng",
   "Zoom out": "Thu nhỏ",
+  "Zoom level": "Mức thu phóng",
+  "Zoom presets": "Các mức thu phóng có sẵn",
   "Analyzing why this passage was flagged…": "Đang phân tích lý do đoạn này bị đánh dấu…",
   "instead of confirming.": "thay vì xác nhận.",
   "{{plan}} plan": "Gói {{plan}}",
@@ -158,4 +158,7 @@ export const components: Record<string, string> = {
   "Connecting…": "Đang kết nối…",
   "Reconnecting…": "Đang kết nối lại…",
   "Server offline": "Máy chủ ngoại tuyến",
+  "Connection status": "Trạng thái kết nối",
+  "Network": "Mạng",
+  "Server": "Máy chủ",
 };

@@ -91,10 +91,13 @@ export const MatchCard = memo(function MatchCard({
 
   const fallbackExplanation = useMemo(() => {
     void language;
-    return explainMatch(match);
-  }, [match, language]);
+    return explanationOpen ? explainMatch(match) : "";
+  }, [explanationOpen, match, language]);
 
-  const citationText = useMemo(() => formatCitationText(match), [match]);
+  const citationText = useMemo(
+    () => (explanationOpen ? formatCitationText(match) : ""),
+    [explanationOpen, match],
+  );
 
   useEffect(() => {
     if (!explanationOpen || locked) return;

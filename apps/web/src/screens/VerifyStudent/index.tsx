@@ -41,6 +41,13 @@ export default function VerifyStudentPage() {
   const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
+    const previewUrl = file?.previewUrl;
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [file?.previewUrl]);
+
+  useEffect(() => {
     if (!user) {
       setCheckingExisting(false);
       return;

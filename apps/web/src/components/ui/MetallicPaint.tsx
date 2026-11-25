@@ -266,7 +266,12 @@ export const supportsMetallicPaint = (() => {
   return () => {
     if (cached !== null) return cached;
     try {
-      cached = !!document.createElement("canvas").getContext("webgl2");
+      const probe = document.createElement("canvas");
+      const gl = probe.getContext("webgl2");
+      cached = !!gl;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      probe.width = 0;
+      probe.height = 0;
     } catch {
       cached = false;
     }
@@ -819,6 +824,11 @@ export default function MetallicPaint({
       gl.deleteProgram(program);
       canvas.width = 0;
       canvas.height = 0;
+      queueMicrotask(() => {
+        if (!canvas.isConnected && !gl.isContextLost()) {
+          gl.getExtension("WEBGL_lose_context")?.loseContext();
+        }
+      });
     };
   }, []);
 

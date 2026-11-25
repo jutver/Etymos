@@ -1,11 +1,13 @@
 import type { PublishedPaperMatch } from "@etymos/shared";
+import { sanitizeSourceTitle } from "./sourceTitle";
 
 /** Parse backend/Supabase `published_paper_match` JSON into `PublishedPaperMatch`. */
 export function parsePublishedPaperMatch(raw: unknown): PublishedPaperMatch | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const obj = raw as Record<string, unknown>;
   if (obj.detected !== true) return undefined;
-  const sourceTitle = typeof obj.source_title === "string" ? obj.source_title.trim() : "";
+  const rawTitle = typeof obj.source_title === "string" ? obj.source_title.trim() : "";
+  const sourceTitle = sanitizeSourceTitle(rawTitle, { isAcademic: true }) || rawTitle;
   if (!sourceTitle) return undefined;
 
   const authors = Array.isArray(obj.source_authors)

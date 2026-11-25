@@ -7,7 +7,7 @@ import { t } from "../lib/i18n";
 
 const THUMB_WIDTH = 112;
 const RAIL_WIDTH = 160;
-const MAX_THUMB_CACHE = 40;
+const MAX_THUMB_CACHE = 24;
 const EMPTY_DOTS: string[] = [];
 const OPEN_EASE = [0.22, 1, 0.36, 1] as const;
 const CLOSE_EASE = [0.4, 0, 0.2, 1] as const;
@@ -168,6 +168,12 @@ export const PdfThumbnailRail = memo(function PdfThumbnailRail({
     setThumbUrls(new Map());
     setVisibleThumbs(new Set([1, 2, 3, 4]));
   }, [pdf]);
+
+  useEffect(() => {
+    if (!open) {
+      setThumbUrls((prev) => (prev.size > 0 ? new Map() : prev));
+    }
+  }, [open]);
 
   useEffect(() => {
     const root = railRef.current;

@@ -3,7 +3,7 @@ import { EnvelopeSimple, MapPin, Phone } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 import { t } from "../../lib/i18n";
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from "../support/labels";
-import { OWNER_ADDRESS, POLICIES } from "../legal/policies";
+import { OWNER_ADDRESS, POLICY_ROUTES } from "../legal/policies/meta";
 import { SOCIAL_LINKS } from "../../lib/social";
 
 export function Footer() {
@@ -80,7 +80,7 @@ export function Footer() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("Policies & terms")}</p>
           <ul className="mt-4 space-y-3 text-sm">
-            {POLICIES.map((p) => (
+            {POLICY_ROUTES.map((p) => (
               <li key={p.slug}>
                 <Link to={p.path} className="hover:text-white">
                   {t(p.title)}</Link>

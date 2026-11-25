@@ -246,3 +246,60 @@ def test_sort_matches_orders_canonically_top_to_bottom():
 
     ordered = sort_matches([unlocated_low, late, pdf_only_p2, early, unlocated_high, pdf_only_p1])
     assert ordered == [early, late, pdf_only_p1, pdf_only_p2, unlocated_high, unlocated_low]
+
+
+def test_published_paper_match_sanitizes_concatenated_source_title():
+    s1 = "ViHateT5: Enhancing Hate Speech Detection in Vietnamese."
+    s2 = "Recent advancements in hate speech detection in Vietnamese have made significant progress."
+    s3 = "We introduce a unified transformer model trained on curated datasets for Vietnamese."
+    input_text = f"{s1}\n{s2} {s3}"
+    document = {
+        "version": 1,
+        "text": input_text,
+        "total_chars": len(input_text),
+        "sections": [{"section": "title", "start": 0, "end": len(s1), "text": s1}],
+        "blocks": [],
+    }
+    dirty_title = (
+        "ViHateT5: Enhancing Hate Speech Detection in ...ViHateT5: Enhancing Hate Speech Detection in Vietnamese "
+        "...(PDF) ViHateT5: Enhancing Hate Speech Detection in Vietnamese ...tarudesu/ViHateT5-base-HSD · Hugging Face"
+    )
+    verified = [
+        _verified_item(
+            source_id="s2_456",
+            source_title=dirty_title,
+            chunk_id="c1",
+            sentence=s2,
+            start=input_text.index(s2),
+            end=input_text.index(s2) + len(s2),
+        ),
+        _verified_item(
+            source_id="s2_456",
+            source_title=dirty_title,
+            chunk_id="c2",
+            sentence=s3,
+            start=input_text.index(s3),
+            end=input_text.index(s3) + len(s3),
+        ),
+    ]
+    source_metadata = {
+        "s2_456": {
+            "source_url": "https://arxiv.org/abs/2405.14141",
+            "source_kind": "academic",
+            "source_authors": ["Luan Thanh Nguyen"],
+            "source_year": "2024",
+        }
+    }
+
+    report = build_final_report(
+        verified,
+        input_chunks=[{"chunk_id": "c1", "text": input_text}],
+        input_text=input_text,
+        document=document,
+        source_metadata=source_metadata,
+    )
+
+    ppm = report.get("published_paper_match")
+    assert ppm is not None
+    assert ppm["source_title"] == "ViHateT5: Enhancing Hate Speech Detection in Vietnamese"
+

@@ -136,6 +136,10 @@ export const SourcesSidebar = memo(function SourcesSidebar({
     [onTabChange],
   );
   const activeTab = hasAiTab ? tab : "sources";
+  const [aiTabVisited, setAiTabVisited] = useState(activeTab === "ai");
+  useEffect(() => {
+    if (activeTab === "ai") setAiTabVisited(true);
+  }, [activeTab]);
   const tabPill = usePill<HTMLDivElement>(activeTab);
 
   // Haystacks are built once per match list; each keystroke is then just a
@@ -150,11 +154,12 @@ export const SourcesSidebar = memo(function SourcesSidebar({
   );
   const isFiltering = deferredQuery.trim().length > 0;
   const virtualKeys = useMemo(() => shownIndexes.map((i) => matches[i]?.id ?? String(i)), [shownIndexes, matches]);
-  const isVirtualized = shownIndexes.length > 40;
+  const isVirtualized = shownIndexes.length > 15;
   const virtualWindow = useSidebarVirtualWindow({
     scrollRef: scrollContainerRef,
     itemKeys: virtualKeys,
     enabled: open && activeTab === "sources" && isVirtualized,
+    overscan: 5,
   });
 
   // Clicking a highlight on the document/PDF sets activeMatchId, but the
@@ -522,7 +527,7 @@ export const SourcesSidebar = memo(function SourcesSidebar({
             )}
           >
             <AiDetectionSection
-              detection={aiDetection}
+              detection={aiTabVisited ? aiDetection : undefined}
               locked={explanationLocked}
               onUpgrade={() => onUpgrade("ai-detection")}
               activeSegmentId={activeAiSegmentId}

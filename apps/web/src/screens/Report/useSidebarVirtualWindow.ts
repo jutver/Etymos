@@ -102,7 +102,7 @@ export interface UseSidebarVirtualWindowOptions {
 }
 
 /**
- * Lightweight ResizeObserver-measured virtual window for large source sidebars (>40 cards).
+ * Shared single-ResizeObserver virtual window for large source sidebars (>15 cards).
  */
 export function useSidebarVirtualWindow({
   scrollRef,
@@ -110,13 +110,39 @@ export function useSidebarVirtualWindow({
   enabled,
   defaultHeight = 230,
   gap = 10,
-  overscan = 8,
+  overscan = 5,
 }: UseSidebarVirtualWindowOptions) {
   const heightCacheRef = useRef<Map<string, number>>(new Map());
-  const observersRef = useRef<Map<string, ResizeObserver>>(new Map());
+  const elementsByKeyRef = useRef<Map<string, HTMLElement>>(new Map());
+  const elementToKeyRef = useRef<WeakMap<Element, string>>(new WeakMap());
+  const sharedObserverRef = useRef<ResizeObserver | null>(null);
   const [measureVersion, setMeasureVersion] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(720);
+
+  const recordHeight = useCallback((key: string, nextHeight: number) => {
+    const rounded = Math.round(nextHeight);
+    if (rounded <= 0) return;
+    const existing = heightCacheRef.current.get(key);
+    if (existing === undefined || Math.abs(existing - rounded) >= 2) {
+      heightCacheRef.current.set(key, rounded);
+      setMeasureVersion((v) => v + 1);
+    }
+  }, []);
+
+  const getSharedObserver = useCallback(() => {
+    if (sharedObserverRef.current || typeof ResizeObserver === "undefined") {
+      return sharedObserverRef.current;
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const key = elementToKeyRef.current.get(entry.target);
+        if (key) recordHeight(key, entry.contentRect.height);
+      }
+    });
+    sharedObserverRef.current = observer;
+    return observer;
+  }, [recordHeight]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -153,41 +179,42 @@ export function useSidebarVirtualWindow({
   }, [enabled, scrollRef]);
 
   useEffect(() => {
+    const elementsByKey = elementsByKeyRef.current;
+    const heightCache = heightCacheRef.current;
     return () => {
-      for (const observer of observersRef.current.values()) {
-        observer.disconnect();
-      }
-      observersRef.current.clear();
+      sharedObserverRef.current?.disconnect();
+      sharedObserverRef.current = null;
+      elementsByKey.clear();
+      heightCache.clear();
     };
   }, []);
 
-  const measureItem = useCallback((key: string, el: HTMLElement | null) => {
-    const prevObserver = observersRef.current.get(key);
-    if (prevObserver) {
-      prevObserver.disconnect();
-      observersRef.current.delete(key);
+  useEffect(() => {
+    if (heightCacheRef.current.size === 0) return;
+    const activeKeys = new Set(itemKeys);
+    for (const key of heightCacheRef.current.keys()) {
+      if (!activeKeys.has(key)) heightCacheRef.current.delete(key);
     }
-    if (!el || typeof ResizeObserver === "undefined") return;
+  }, [itemKeys]);
 
-    const recordHeight = (nextHeight: number) => {
-      const rounded = Math.round(nextHeight);
-      if (rounded <= 0) return;
-      const existing = heightCacheRef.current.get(key);
-      if (existing === undefined || Math.abs(existing - rounded) >= 2) {
-        heightCacheRef.current.set(key, rounded);
-        setMeasureVersion((v) => v + 1);
+  const measureItem = useCallback(
+    (key: string, el: HTMLElement | null) => {
+      const prevEl = elementsByKeyRef.current.get(key) ?? null;
+      if (prevEl === el) return;
+      const observer = getSharedObserver();
+      if (prevEl) {
+        observer?.unobserve(prevEl);
+        elementToKeyRef.current.delete(prevEl);
+        elementsByKeyRef.current.delete(key);
       }
-    };
-
-    recordHeight(el.getBoundingClientRect().height);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        recordHeight(entry.contentRect.height);
-      }
-    });
-    observer.observe(el);
-    observersRef.current.set(key, observer);
-  }, []);
+      if (!el) return;
+      elementsByKeyRef.current.set(key, el);
+      elementToKeyRef.current.set(el, key);
+      recordHeight(key, el.getBoundingClientRect().height);
+      observer?.observe(el);
+    },
+    [getSharedObserver, recordHeight],
+  );
 
   const heights = useMemo(() => {
     void measureVersion;

@@ -67,19 +67,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = session?.user?.id;
     if (!userId) return;
 
+    let lastBeatAt = 0;
+
     function heartbeat() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      lastBeatAt = Date.now();
       supabase
         .from("profiles")
-        .update({ last_seen_at: new Date().toISOString() })
+        .update({ last_seen_at: new Date(lastBeatAt).toISOString() })
         .eq("id", userId as string)
         .then(({ error }) => {
           if (error) console.warn("Presence heartbeat failed:", error.message);
         });
     }
 
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible" && Date.now() - lastBeatAt >= 60_000) {
+        heartbeat();
+      }
+    }
+
     heartbeat();
     const interval = window.setInterval(heartbeat, 60_000);
-    return () => window.clearInterval(interval);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [session?.user?.id]);
 
   return (

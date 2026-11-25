@@ -55,7 +55,7 @@ import {
 } from "./components/layout/lazyScreens";
 import { TermsGate } from "./components/legal/TermsGate";
 import { ReferralSurvey } from "./components/ReferralSurvey";
-import { POLICIES } from "./components/legal/policies";
+import { POLICY_ROUTES } from "./components/legal/policies/meta";
 import { SeoManager } from "./seo/SeoManager";
 
 /** A fresh Report screen per document: its editor holds the text as live,
@@ -191,7 +191,7 @@ function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<BlogPostPage />} />
-            {POLICIES.map((p) => (
+            {POLICY_ROUTES.map((p) => (
               <Route key={p.slug} path={p.path} element={<LegalPage slug={p.slug} />} />
             ))}
             <Route path="/support/t/:token" element={<GuestSupportTicketPage />} />

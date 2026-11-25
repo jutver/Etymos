@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { m, AnimatePresence } from "motion/react";
 import { X } from "@phosphor-icons/react";
@@ -14,8 +14,13 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, children, maxWidth = "max-w-2xl", labelledBy }: ModalProps) {
+  const [hasOpened, setHasOpened] = useState(open);
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (open && !hasOpened) setHasOpened(true);
+  }, [open, hasOpened]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,6 +67,8 @@ export function Modal({ open, onClose, children, maxWidth = "max-w-2xl", labelle
       returnFocusRef.current?.focus();
     };
   }, [open, onClose]);
+
+  if (!open && !hasOpened) return null;
 
   return createPortal(
     <AnimatePresence>

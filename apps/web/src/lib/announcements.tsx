@@ -64,7 +64,9 @@ export function AnnouncementsProvider({ children }: { children: ReactNode }) {
         });
     load();
     const giveUp = window.setTimeout(() => setLoaded(true), FIRST_LOAD_TIMEOUT_MS);
-    const timer = window.setInterval(load, REFRESH_MS);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, REFRESH_MS);
     const onVisible = () => document.visibilityState === "visible" && load();
     document.addEventListener("visibilitychange", onVisible);
     return () => {

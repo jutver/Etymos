@@ -598,7 +598,8 @@ def detect_published_paper_match(
 
     for source_matches in by_paper.values():
         rep = source_matches[0]
-        title = (rep.get("source_title") or "").strip()
+        raw_title = (rep.get("source_title") or "").strip()
+        title = sanitize_source_title(raw_title, is_academic=True) or raw_title
         if not title:
             continue
         cov = coverage_score(source_matches, document_total_chars, references)
@@ -609,18 +610,18 @@ def detect_published_paper_match(
             or (title_matched and raw_pct >= 25.0 and len(source_matches) >= 2)
         ):
             continue
-        candidate = (raw_pct, title_matched, len(source_matches), rep)
+        candidate = (raw_pct, title_matched, len(source_matches), title, rep)
         if best is None or candidate[:3] > best[:3]:
             best = candidate
 
     if best is None:
         return None
 
-    raw_pct, title_matched, _, rep = best
+    raw_pct, title_matched, _, title, rep = best
     return {
         "detected": True,
         "source_paper_id": rep.get("source_paper_id") or "",
-        "source_title": (rep.get("source_title") or "").strip(),
+        "source_title": title,
         "source_authors": list(rep.get("source_authors") or []),
         "source_year": str(rep.get("source_year") or ""),
         "source_url": rep.get("source_url") or rep.get("source_pdf_url") or "",

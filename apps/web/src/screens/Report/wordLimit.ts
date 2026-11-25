@@ -5,6 +5,16 @@ function wordCount(text: string): number {
 }
 
 /**
+ * A passage is "over the limit" once its own start sits at/past the
+ * document-wide boundary offset. Blocks with no backing passage (freshly
+ * inserted by the user) are never muted.
+ */
+export function isOverLimit(passage: DocPassage | undefined, overLimitOffset: number | undefined): boolean {
+  if (!passage || overLimitOffset == null || passage.startOffset == null) return false;
+  return passage.startOffset >= overLimitOffset;
+}
+
+/**
  * Walks `passages` in document order and returns the character offset (into
  * the concatenated document text) at which the running word count first
  * crosses `limit`. Used by the per-view "word limit" treatments to know

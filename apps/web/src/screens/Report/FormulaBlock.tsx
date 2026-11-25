@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import DOMPurify from "dompurify";
 import katex from "katex";
+import "katex/dist/katex.min.css";
 import { cn } from "@etymos/shared";
 import { t } from "../../lib/i18n";
 

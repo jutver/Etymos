@@ -457,10 +457,15 @@ const SpecularButton = ({
       gl.deleteBuffer(buffer);
       gl.deleteVertexArray(vao);
       gl.deleteProgram(program);
-      // The original also called WEBGL_lose_context here. That kills the
-      // canvas for good, so a remount (React's dev double-mount included)
-      // gets a dead context and Chrome draws a broken-canvas box. The browser
-      // frees the context with the canvas anyway.
+      canvas.width = 0;
+      canvas.height = 0;
+      // Only force-release the WebGL2 context if the canvas stays unmounted
+      // after this microtask (so React StrictMode double-mounts keep a live context).
+      queueMicrotask(() => {
+        if (!canvas.isConnected && !gl.isContextLost()) {
+          gl.getExtension("WEBGL_lose_context")?.loseContext();
+        }
+      });
     };
   }, []);
 

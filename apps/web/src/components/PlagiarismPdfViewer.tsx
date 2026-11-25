@@ -18,6 +18,13 @@ import { extractWordTokens, findFuzzyMatch, normalize, normalizeWithMap } from "
 import { AI_PDF_HIGHLIGHT, colorForMatch, matchTone } from "../screens/Report/highlights";
 import type { MatchColorIndex } from "../screens/Report/blocks";
 import { PdfThumbnailRail } from "./PdfThumbnailRail";
+import {
+  PdfZoomControl,
+  PDF_ZOOM_MAX_PERCENT,
+  PDF_ZOOM_MIN_PERCENT,
+  clampZoomPercent,
+  stepZoomPercent,
+} from "./PdfZoomControl";
 import { t, tr } from "../lib/i18n";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -43,6 +50,7 @@ export interface PdfPageProxyLike {
 export interface PdfProxy {
   numPages: number;
   getPage: (n: number) => Promise<PdfPageProxyLike>;
+  cleanup?: () => void;
 }
 
 export type PlagiarismPdfViewerProps = {
@@ -70,10 +78,8 @@ export type PlagiarismPdfViewerProps = {
 
 const NO_AI_SEGMENTS: NonNullable<PlagiarismPdfViewerProps["aiSegments"]> = [];
 const EMPTY_COLOR_INDEX: MatchColorIndex = new Map();
+const PDF_DOCUMENT_OPTIONS = { isEvalSupported: false, enableXfa: false } as const;
 
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3;
-const ZOOM_STEP = 0.15;
 const MAX_FIT_SCALE = 1.75;
 const PIXEL_RATIO = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
 const DEFAULT_PAGE_SIZE = { width: 595, height: 842 };
@@ -360,13 +366,11 @@ export function PlagiarismPdfViewer({
   const [numPages, setNumPages] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [fit, setFit] = useState<FitMode>(defaultFit);
-  const [zoom, setZoom] = useState(1);
+  const [customScale, setCustomScale] = useState<number | null>(null);
   const [pageSizes, setPageSizes] = useState<Map<number, { width: number; height: number }>>(() => new Map());
   const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryingRefresh, setRetryingRefresh] = useState(false);
-  const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
-  const [bufferError, setBufferError] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1280 && defaultFit !== "page",
   );
@@ -406,8 +410,13 @@ export function PlagiarismPdfViewer({
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
+    const slotRefs = pageSlotRefs.current;
     return () => {
       isMountedRef.current = false;
+      loadedPdfRef.current?.cleanup?.();
+      slotRefs.clear();
+      matchLocationsCache.current = {};
+      aiLocationsCache.current = {};
     };
   }, []);
   const onRefreshUrlRef = useRef(onRefreshUrl);
@@ -421,34 +430,7 @@ export function PlagiarismPdfViewer({
     return map;
   }, [matches]);
 
-  // --- Read File inputs into a clean ArrayBuffer ---
-  useEffect(() => {
-    if (typeof pdfUrl === "string") {
-      setFileBuffer(null);
-      setBufferError(null);
-      return;
-    }
-    let cancelled = false;
-    setFileBuffer(null);
-    setBufferError(null);
-    pdfUrl
-      .arrayBuffer()
-      .then((buf) => {
-        if (!cancelled) setFileBuffer(buf);
-      })
-      .catch((err) => {
-        console.error("Failed to read file as ArrayBuffer:", err);
-        if (!cancelled) setBufferError(tr("Could not read this file."));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfUrl]);
-
-  const fileSource = useMemo(() => {
-    if (typeof pdfUrl === "string") return pdfUrl;
-    return fileBuffer;
-  }, [pdfUrl, fileBuffer]);
+  const fileSource = pdfUrl || null;
 
   const readyFiredRef = useRef(false);
   const onReadyRef = useRef(onReady);
@@ -475,6 +457,7 @@ export function PlagiarismPdfViewer({
     setLoadedPdf(null);
     setNumPages(null);
     setCurrentPage(1);
+    setCustomScale(null);
     setLoadError(null);
     setRetryingRefresh(false);
     setPageSizes(new Map());
@@ -493,8 +476,8 @@ export function PlagiarismPdfViewer({
   }, [fileSource]);
 
   useEffect(() => {
-    if (bufferError || loadError) fireReadyOnce();
-  }, [bufferError, loadError, fireReadyOnce]);
+    if (loadError) fireReadyOnce();
+  }, [loadError, fireReadyOnce]);
 
   // Track inner viewport dimensions via ResizeObserver (callback ref ensures it attaches once <Document> loads).
   useEffect(() => {
@@ -529,14 +512,22 @@ export function PlagiarismPdfViewer({
   const primaryPageSize = pageSizes.get(1) ?? DEFAULT_PAGE_SIZE;
 
   const scale = useMemo(() => {
+    if (customScale !== null) {
+      return Math.max(PDF_ZOOM_MIN_PERCENT / 100, Math.min(PDF_ZOOM_MAX_PERCENT / 100, customScale));
+    }
     if (!viewport || viewport.width <= 0) return 1;
     const byWidth = viewport.width / primaryPageSize.width;
     const fitScale = Math.min(
       MAX_FIT_SCALE,
       fit === "width" ? byWidth : Math.min(byWidth, viewport.height / primaryPageSize.height),
     );
-    return Math.max(0.1, Math.floor(fitScale * zoom * 100) / 100);
-  }, [fit, zoom, primaryPageSize, viewport]);
+    return Math.max(0.1, Math.floor(fitScale * 100) / 100);
+  }, [customScale, fit, primaryPageSize, viewport]);
+
+  const zoomPercent = Math.round(scale * 100);
+  const handleChangeZoomPercent = useCallback((nextPercent: number) => {
+    setCustomScale(clampZoomPercent(nextPercent) / 100);
+  }, []);
 
   const canvasDpr = useMemo(
     () => computeCanvasDpr(primaryPageSize.width, primaryPageSize.height, scale, PIXEL_RATIO),
@@ -988,7 +979,7 @@ export function PlagiarismPdfViewer({
         setIntersectingPages((prev) => (sameNumberSet(prev, nextIntersecting) ? prev : nextIntersecting));
         syncMountedWindow(currentPageRef.current, numPages);
       },
-      { root: viewerEl, rootMargin: "160px 0px" },
+      { root: viewerEl, rootMargin: "40px 0px" },
     );
 
     pageSlotRefs.current.forEach((el) => observer.observe(el));
@@ -1247,7 +1238,6 @@ export function PlagiarismPdfViewer({
     else setPageInput(String(currentPage));
   }
 
-  const isPreparingFile = typeof pdfUrl !== "string" && !fileBuffer && !bufferError;
   const pillBtn =
     "flex size-7 items-center justify-center rounded-full text-ink-600 transition-[background-color,color,transform] duration-150 hover:bg-surface-muted hover:text-ink-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40";
 
@@ -1263,21 +1253,14 @@ export function PlagiarismPdfViewer({
             {unavailableMessage ?? t("No original PDF available to preview.")}
           </p>
         </div>
-      ) : bufferError ? (
-        <div className="flex flex-1 items-center justify-center px-6">
-          <p className="py-12 text-center text-sm font-medium text-severity-high">{t(bufferError)}</p>
-        </div>
       ) : loadError ? (
         <div className="flex flex-1 items-center justify-center px-6">
           <p className="py-12 text-center text-sm font-medium text-severity-high">{t(loadError)}</p>
         </div>
-      ) : isPreparingFile ? (
-        <div className="flex flex-1 items-center justify-center px-6">
-          <p className="py-12 text-center text-sm text-ink-400">{t("Preparing file...")}</p>
-        </div>
       ) : fileSource ? (
         <Document
           file={fileSource}
+          options={PDF_DOCUMENT_OPTIONS}
           onLoadSuccess={handleDocumentLoadSuccess as any}
           onLoadError={handleDocumentLoadError}
           loading={
@@ -1410,21 +1393,19 @@ export function PlagiarismPdfViewer({
 
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
-            disabled={zoom <= ZOOM_MIN}
+            onClick={() => handleChangeZoomPercent(stepZoomPercent(zoomPercent, "out"))}
+            disabled={zoomPercent <= PDF_ZOOM_MIN_PERCENT}
             className={pillBtn}
             aria-label={t("Zoom out")}
             title={t("Zoom out")}
           >
             <MagnifyingGlassMinus size={15} />
           </button>
-          <span className="w-10 text-center text-[11px] font-semibold tabular-nums text-ink-600">
-            {Math.round(scale * 100)}%
-          </span>
+          <PdfZoomControl percent={zoomPercent} onChangePercent={handleChangeZoomPercent} />
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
-            disabled={zoom >= ZOOM_MAX}
+            onClick={() => handleChangeZoomPercent(stepZoomPercent(zoomPercent, "in"))}
+            disabled={zoomPercent >= PDF_ZOOM_MAX_PERCENT}
             className={pillBtn}
             aria-label={t("Zoom in")}
             title={t("Zoom in")}
@@ -1436,7 +1417,7 @@ export function PlagiarismPdfViewer({
             type="button"
             onClick={() => {
               setFit((f) => (f === "width" ? "page" : "width"));
-              setZoom(1);
+              setCustomScale(null);
             }}
             className={pillBtn}
             aria-label={fit === "width" ? t("Fit page") : t("Fit width")}
