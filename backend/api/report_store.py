@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from storage_retry import run_with_storage_retry
 from supabase_client import get_client
 
 logger = logging.getLogger(__name__)
@@ -118,12 +119,25 @@ def _extract_and_upload_images(report_id: str, report: dict[str, Any], user_id: 
             try:
                 path = _image_storage_path(user_id, report_id, index, ext)
                 content_type = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
-                client.storage.from_(_IMAGES_BUCKET).upload(
-                    path, image_bytes,
-                    file_options={"content-type": content_type, "upsert": "true"},
+                run_with_storage_retry(
+                    lambda: client.storage.from_(_IMAGES_BUCKET).upload(
+                        path,
+                        image_bytes,
+                        file_options={"content-type": content_type, "upsert": "true"},
+                    ),
+                    label=f"Upload extracted image {index} for report_id={report_id}",
+                    max_attempts=3,
+                    base_delay=0.5,
+                    max_delay=2.0,
                 )
-                signed = client.storage.from_(_IMAGES_BUCKET).create_signed_url(
-                    path, _IMAGE_SIGNED_URL_SECONDS
+                signed = run_with_storage_retry(
+                    lambda: client.storage.from_(_IMAGES_BUCKET).create_signed_url(
+                        path, _IMAGE_SIGNED_URL_SECONDS
+                    ),
+                    label=f"Sign extracted image {index} for report_id={report_id}",
+                    max_attempts=3,
+                    base_delay=0.5,
+                    max_delay=2.0,
                 )
                 signed_url = (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
                 if signed_url:

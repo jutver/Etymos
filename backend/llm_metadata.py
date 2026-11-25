@@ -2,13 +2,13 @@ import json
 import logging
 import os
 import re
-import threading
 
-import google.generativeai as genai
+import httpx
 
 import gpu_models
 from config import LLM_MODEL_NAME
 from feature_flags import is_flag_enabled
+from gemini_client import GeminiRequestError, generate_content
 
 logger = logging.getLogger(__name__)
 
@@ -499,61 +499,113 @@ EXPERIMENT:
 # `gemini_metadata_extraction` feature flag — see
 # is_gemini_metadata_extraction_enabled() below.
 
+GEMINI_EXTRACTION_API_KEY_ENV = "GEMINI_EXTRACTION_API_KEY"
 GEMINI_METADATA_MODEL = os.getenv("GEMINI_METADATA_MODEL", "gemini-flash-latest")
-_genai_configured = False
-_genai_configure_lock = threading.Lock()
+GEMINI_EXTRACTION_TIMEOUT_SECONDS = float(os.getenv("GEMINI_EXTRACTION_TIMEOUT_SECONDS", "20.0"))
+MAX_CONSECUTIVE_GEMINI_FAILURES = 2
 
 
-def _ensure_genai_configured():
-    global _genai_configured
-    if _genai_configured:
-        return
-    with _genai_configure_lock:
-        if _genai_configured:
-            return
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "GEMINI_API_KEY is not set; cannot use Gemini metadata extraction."
-            )
-        genai.configure(api_key=api_key)
-        _genai_configured = True
+def get_gemini_extraction_api_key() -> str:
+    """Dedicated credential for metadata extraction (`GEMINI_EXTRACTION_API_KEY`)."""
+    return (os.getenv(GEMINI_EXTRACTION_API_KEY_ENV) or "").strip()
 
 
-def extract_section_metadata_with_gemini(section_name, section_text):
-    """
-    Gemini-API equivalent of extract_section_metadata_with_llm: same
-    schema, same rules, same normalized return shape — routed through the
-    Gemini API instead of the local Qwen model.
-    """
-    if not section_text or len(section_text.strip()) < 50:
-        return normalize_metadata({})
+def get_gemini_metadata_model() -> str:
+    return (os.getenv("GEMINI_METADATA_MODEL") or GEMINI_METADATA_MODEL or "gemini-flash-latest").strip()
 
-    prompt = _build_section_metadata_prompt(section_name, section_text)
 
-    try:
-        _ensure_genai_configured()
-        gemini_model = genai.GenerativeModel(GEMINI_METADATA_MODEL)
-        response = gemini_model.generate_content(prompt)
-        decoded = (getattr(response, "text", None) or "").strip()
-    except Exception:
-        logger.exception(
-            "Gemini metadata extraction failed for section=%s", section_name
-        )
-        return normalize_metadata({})
+def get_gemini_extraction_timeout() -> float:
+    raw = os.getenv("GEMINI_EXTRACTION_TIMEOUT_SECONDS")
+    if raw:
+        try:
+            val = float(raw)
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+    return GEMINI_EXTRACTION_TIMEOUT_SECONDS
+
+
+def _call_gemini_section_metadata(section_name, section_text, *, http_client=None):
+    api_key = get_gemini_extraction_api_key()
+    if not api_key:
+        raise GeminiRequestError(f"{GEMINI_EXTRACTION_API_KEY_ENV} is not set.")
+
+    decoded = generate_content(
+        api_key=api_key,
+        model=get_gemini_metadata_model(),
+        prompt=_build_section_metadata_prompt(section_name, section_text),
+        system_instruction="You extract academic metadata and return valid JSON only.",
+        generation_config={"temperature": 0.1, "maxOutputTokens": 512},
+        timeout=get_gemini_extraction_timeout(),
+        http_client=http_client or httpx,
+    )
 
     print(f"\n===== {section_name.upper()} METADATA RAW OUTPUT (Gemini) =====")
     print(decoded)
 
-    return normalize_metadata(extract_json(decoded))
+    parsed = extract_json(decoded)
+    if not parsed:
+        raise GeminiRequestError(
+            f"Gemini returned unparseable metadata JSON for section={section_name}"
+        )
+    return normalize_metadata(parsed)
 
 
-def extract_all_section_metadata_gemini(section_texts):
+def _extract_section_metadata_local_safe(section_name, section_text):
+    try:
+        return extract_section_metadata_with_llm(section_name, section_text)
+    except Exception:
+        logger.exception(
+            "Local metadata extraction fallback failed for section=%s",
+            section_name,
+        )
+        return normalize_metadata({})
+
+
+def extract_section_metadata_with_gemini(
+    section_name,
+    section_text,
+    *,
+    fallback_to_local: bool = True,
+    http_client=None,
+):
+    """
+    Gemini-API equivalent of extract_section_metadata_with_llm: same
+    schema, same rules, same normalized return shape — routed through the
+    Gemini API instead of the local Qwen model, falling back to local Qwen
+    whenever Gemini is unreachable or misconfigured.
+    """
+    if not section_text or len(section_text.strip()) < 50:
+        return normalize_metadata({})
+
+    try:
+        return _call_gemini_section_metadata(
+            section_name, section_text, http_client=http_client
+        )
+    except Exception as exc:
+        if fallback_to_local:
+            logger.warning(
+                "Gemini metadata extraction failed for section=%s (%s); falling back to local model.",
+                section_name,
+                exc,
+            )
+            return _extract_section_metadata_local_safe(section_name, section_text)
+        logger.warning(
+            "Gemini metadata extraction failed for section=%s (%s).",
+            section_name,
+            exc,
+        )
+        return normalize_metadata({})
+
+
+def extract_all_section_metadata_gemini(section_texts, *, http_client=None):
     """
     Gemini-API equivalent of extract_all_section_metadata. Same output
     shape: a dict keyed by section name, each value a normalized metadata
     dict. Also processes any extra section buckets beyond the standard
-    five, same as the local-model version above.
+    five, same as the local-model version above, and falls back cleanly to
+    the local model if Gemini is unavailable or repeatedly failing.
     """
     section_metadata = {}
 
@@ -566,11 +618,46 @@ def extract_all_section_metadata_gemini(section_texts):
     ]
     extra_sections = [s for s in section_texts if s not in target_sections]
 
+    gemini_disabled = not bool(get_gemini_extraction_api_key())
+    if gemini_disabled:
+        logger.warning(
+            "%s is not set; using local model for metadata extraction.",
+            GEMINI_EXTRACTION_API_KEY_ENV,
+        )
+    consecutive_failures = 0
+
     for section_name in target_sections + extra_sections:
         text = section_texts.get(section_name, "")
+        if not text or len(text.strip()) < 50:
+            section_metadata[section_name] = normalize_metadata({})
+            continue
 
-        print(f"\nExtracting metadata for section (Gemini): {section_name}")
-        metadata = extract_section_metadata_with_gemini(section_name, text)
+        metadata = None
+        if not gemini_disabled:
+            print(f"\nExtracting metadata for section (Gemini): {section_name}")
+            try:
+                metadata = _call_gemini_section_metadata(
+                    section_name, text, http_client=http_client
+                )
+                consecutive_failures = 0
+            except Exception as exc:
+                consecutive_failures += 1
+                auth_error = isinstance(exc, GeminiRequestError) and exc.status_code in (401, 403)
+                if auth_error or consecutive_failures >= MAX_CONSECUTIVE_GEMINI_FAILURES:
+                    gemini_disabled = True
+                    logger.warning(
+                        "Gemini metadata extraction unavailable (%s); falling back to local model for remaining sections.",
+                        exc,
+                    )
+                else:
+                    logger.warning(
+                        "Gemini metadata extraction failed for section=%s (%s); falling back to local model.",
+                        section_name,
+                        exc,
+                    )
+
+        if metadata is None:
+            metadata = _extract_section_metadata_local_safe(section_name, text)
 
         section_metadata[section_name] = metadata
 

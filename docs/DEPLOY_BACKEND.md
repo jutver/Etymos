@@ -92,7 +92,9 @@ covered by `.gitignore`'s `.env*` pattern — never commit it). Required keys:
 | `SUPABASE_URL` | Live Supabase project URL (e.g. `https://xxxx.supabase.co`). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key from Supabase project settings — server-only, never ship to any frontend. |
 | `SUPABASE_JWT_SECRET` | Supabase project's JWT secret, used by `backend/api/auth.py` to verify caller tokens locally without a network round-trip. |
-| `GEMINI_API_KEY` | A freshly rotated Gemini API key (Google AI Studio). Do not reuse the key formerly hardcoded in `backend/api/app.py`. |
+| `GEMINI_EXTRACTION_API_KEY` | Separate Gemini API key for academic metadata extraction (`gemini_metadata_extraction`). Falls back to local Qwen2.5 if unset or unreachable. |
+| `GEMINI_REWRITE_API_KEY` | Separate Gemini API key for AI rewrite (`gemini_ai_rewrite`). Falls back to local Qwen2.5 if unset or unreachable. |
+| `GEMINI_EXPLAIN_API_KEY` | Separate Gemini API key for match explanations (`gemini_ai_explanations` and on-demand `/explain`). Falls back to local Qwen2.5 / fact-based explanations if unset or unreachable. |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins for the production frontend(s), e.g. `https://app.yourdomain.com`. No `*` in production. |
 
 Optional CPU OCR and formula-extraction defaults (override only if tuning threads or pre-baking ONNX weights):
@@ -111,7 +113,9 @@ Optional CPU OCR and formula-extraction defaults (override only if tuning thread
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=replace-with-real-service-role-key
 SUPABASE_JWT_SECRET=replace-with-real-jwt-secret
-GEMINI_API_KEY=replace-with-real-rotated-key
+GEMINI_EXTRACTION_API_KEY=replace-with-extraction-gemini-key
+GEMINI_REWRITE_API_KEY=replace-with-rewrite-gemini-key
+GEMINI_EXPLAIN_API_KEY=replace-with-explain-gemini-key
 ALLOWED_ORIGINS=https://app.yourdomain.com
 ```
 

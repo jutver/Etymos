@@ -21,7 +21,10 @@ import os
 import re
 from typing import Any, Callable, Optional
 
+import httpx
+
 from feature_flags import ensure_flag_registered, is_flag_enabled
+from gemini_client import GeminiRequestError, generate_content
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,30 @@ AI_REWRITE_FLAG_DESCRIPTION = (
     "at no per-call cost. Mirrors the gemini_metadata_extraction flag."
 )
 
+GEMINI_REWRITE_API_KEY_ENV = "GEMINI_REWRITE_API_KEY"
 GEMINI_REWRITE_MODEL = os.getenv("GEMINI_REWRITE_MODEL", "gemini-flash-latest")
+GEMINI_REWRITE_TIMEOUT_SECONDS = float(os.getenv("GEMINI_REWRITE_TIMEOUT_SECONDS", "20.0"))
+
+
+def get_gemini_rewrite_api_key() -> str:
+    """Dedicated credential for AI rewrite (`GEMINI_REWRITE_API_KEY`)."""
+    return (os.getenv(GEMINI_REWRITE_API_KEY_ENV) or "").strip()
+
+
+def get_gemini_rewrite_model() -> str:
+    return (os.getenv("GEMINI_REWRITE_MODEL") or GEMINI_REWRITE_MODEL or "gemini-flash-latest").strip()
+
+
+def get_gemini_rewrite_timeout() -> float:
+    raw = os.getenv("GEMINI_REWRITE_TIMEOUT_SECONDS")
+    if raw:
+        try:
+            val = float(raw)
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+    return GEMINI_REWRITE_TIMEOUT_SECONDS
 
 # With a report to check against, a rewrite that still overlaps one of its
 # sources is generated again (with that overlap pointed out), up to this many
@@ -186,23 +212,31 @@ def _clean_output(text: str) -> str:
 
 
 def rewrite_with_gemini(
-    input_sentence: str, source_sentence: str, *, strict: bool = False, feedback: Optional[dict] = None
+    input_sentence: str,
+    source_sentence: str,
+    *,
+    strict: bool = False,
+    feedback: Optional[dict] = None,
+    http_client: Any = None,
 ) -> str:
-    import google.generativeai as genai
-
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = get_gemini_rewrite_api_key()
     if not api_key:
-        raise RewriteUnavailable("GEMINI_API_KEY is not set.")
+        raise RewriteUnavailable(f"{GEMINI_REWRITE_API_KEY_ENV} is not set.")
 
-    genai.configure(api_key=api_key)
-    # The system instruction carries the "always English" rule at the highest
-    # priority; the user turn repeats it next to the concrete rewriting rules.
-    model = genai.GenerativeModel(GEMINI_REWRITE_MODEL, system_instruction=REWRITE_SYSTEM_PROMPT)
-    response = model.generate_content(
-        build_rewrite_prompt(input_sentence, source_sentence, strict=strict, feedback=feedback)
-    )
+    try:
+        text = generate_content(
+            api_key=api_key,
+            model=get_gemini_rewrite_model(),
+            prompt=build_rewrite_prompt(input_sentence, source_sentence, strict=strict, feedback=feedback),
+            system_instruction=REWRITE_SYSTEM_PROMPT,
+            generation_config={"temperature": 0.4, "maxOutputTokens": 400},
+            timeout=get_gemini_rewrite_timeout(),
+            http_client=http_client or httpx,
+        )
+    except GeminiRequestError as exc:
+        raise RewriteUnavailable(str(exc)) from exc
 
-    return _clean_output(getattr(response, "text", "") or "")
+    return _clean_output(text)
 
 
 def rewrite_with_local_model(
@@ -331,7 +365,7 @@ def _rewrite_once(input_sentence: str, source_sentence: str, feedback: Optional[
         try:
             if provider == "gemini":
                 generate = rewrite_with_gemini
-                model_name = GEMINI_REWRITE_MODEL
+                model_name = get_gemini_rewrite_model()
             else:
                 generate = rewrite_with_local_model
                 from config import LLM_MODEL_NAME
