@@ -1,0 +1,71 @@
+name: Uptime Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "What triggered this check (e.g. supabase_pg_cron or manual)"
+        required: false
+        default: "manual"
+        type: string
+      service:
+        description: "Service key in server_availability_state"
+        required: false
+        default: "etymos-api"
+        type: string
+      dry_run:
+        description: "Probe health and evaluate state without writing DB or sending emails"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Off-peak fallback every 15 minutes in case Supabase pg_cron is not enabled.
+    - cron: "3,18,33,48 * * * *"
+
+concurrency:
+  group: uptime-monitor-${{ inputs.service || 'etymos-api' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      ADMIN_ALERT_EMAILS: ${{ secrets.ADMIN_ALERT_EMAILS }}
+      ADMIN_APP_URL: ${{ secrets.ADMIN_APP_URL }}
+      HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run external availability monitor
+        shell: bash
+        run: |
+          args=(
+            "--service" "${{ inputs.service || 'etymos-api' }}"
+            "--json"
+          )
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            args+=("--mode" "dispatch")
+          else
+            args+=("--mode" "poll")
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=("--dry-run")
+          fi
+          python3 backend/api/uptime_monitor.py "${args[@]}"

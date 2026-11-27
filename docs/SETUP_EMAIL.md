@@ -47,6 +47,7 @@ use the same layout as the auth emails.
 | Plan ended | Login email | When a term ends and the account drops to Free |
 | Student verification approved / rejected | Login email | An admin reviews the request |
 | Transfer needs attention | Admins | A SePay transfer is unmatched, underpaid, paid twice, or for a declined order |
+| Server down / back online | Admins | External availability monitor confirms the backend API is down (~2–3 min unreachable) or recovers (see [SERVER_UPTIME_ALERTS.md](SERVER_UPTIME_ALERTS.md)) |
 
 The time-based ones (expiry reminders, plan ended, verification results) and
 anything the immediate path missed are picked up by a scheduler thread inside

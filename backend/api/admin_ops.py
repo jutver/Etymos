@@ -78,6 +78,7 @@ LOG_FILES: dict[str, tuple[str, str]] = {
     "tests": ("deploy_tests.log", "The last backend test run before a deploy"),
     "tunnel": ("cloudflared.err.log", "Cloudflare tunnel"),
     "supervisor": ("supervisord.log", "Supervisor: process starts, exits and crashes"),
+    "autostart": ("autostart.log", "Auto-start: host boot recovery and supervisor launches"),
 }
 # The most read from the end of a file in one request.
 TAIL_BYTES = 4 * 1024 * 1024
