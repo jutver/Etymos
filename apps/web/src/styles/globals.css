@@ -336,7 +336,7 @@ mark[data-edited]::after {
   .studio-nav { background-image: linear-gradient(100deg, #142b4a, #1e3a5f); box-shadow: 0 3px 18px #142b4a1a; }
   .studio-nav nav a { border: 1px solid transparent; }
   .studio-nav nav a.bg-white\/10 { border-color: #ffffff26; background-color: #ffffff14; box-shadow: inset 0 1px #ffffff12; }
-  .public-nav { background-color: #fffffff2; box-shadow: 0 2px 16px #142b4a08; }
+  .public-nav { background-color: #ffffff; box-shadow: 0 2px 16px #142b4a08; }
   .studio-page > h1, .studio-page > div > h1, .studio-page > div > div > h1 {
     font-size: clamp(1.8rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2;
   }
@@ -462,7 +462,7 @@ mark[data-edited]::after {
   }
 
   html.dark .public-nav {
-    background-color: rgba(11, 18, 32, 0.92);
+    background-color: #0b1220;
     border-bottom-color: var(--color-line);
     box-shadow: 0 2px 16px rgba(2, 6, 23, 0.4);
   }

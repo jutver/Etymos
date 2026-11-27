@@ -113,19 +113,19 @@ bash error instead of uvicorn output. Check a file without restarting with
 
 ## After the machine restarts
 
-Supervisord does not come back by itself (no init system). Symptom:
-`$SV status` says `unix:///…/supervisor.sock no such file`, and
-`api.etymos.site` returns Cloudflare error 1033. Start it:
+`ensure_supervisord.sh` recovers `supervisord` automatically on host boot (clearing
+dead stale `supervisor.sock` / `supervisord.pid` files and restoring `/usr/local/bin/cloudflared`
+from `/workspace/bin/cloudflared` if a container image reset wiped `/usr/local/bin`).
+For one-time host boot registration (`check_autostart_host.sh`, `install_autostart.sh`)
+and external Down/Back Online email monitoring, see [SERVER_UPTIME_ALERTS.md](SERVER_UPTIME_ALERTS.md).
+
+If you ever need to bring the stack up manually:
 
 ```bash
-cd /workspace/Etymos/backend
-rm -f logs/supervisor.sock logs/supervisord.pid
-.venv/bin/supervisord -c supervisord.conf
+cd /workspace/Etymos
+bash backend/scripts/ensure_supervisord.sh
 sleep 40; $SV status
 ```
-
-If `/usr/local/bin/cloudflared` is gone (fresh machine image), reinstall it
-first — see "Setting up a new machine" step 2.
 
 ## Reading the API log
 
@@ -316,8 +316,8 @@ Admin portal → **Logs → Server logs** shows the API's logs without SSH (back
   user, and the reason on errors), tagged `[r:<id>]`; the same id comes back in the `X-Request-ID`
   response header. Lines logged while a check runs are tagged `[job_<id>]`. Click a tag to see only that
   request, check or user.
-- **Log files**: the end of `logs/api.err.log`, `deploy.log`, `deploy_tests.log`, `cloudflared.err.log`
-  and `supervisord.log` (from `LOG_DIR`, default `backend/logs`). It's a fixed list; nothing else on disk
+- **Log files**: the end of `logs/api.err.log`, `deploy.log`, `deploy_tests.log`, `cloudflared.err.log`,
+  `supervisord.log`, and `autostart.log` (from `LOG_DIR`, default `backend/logs`). It's a fixed list; nothing else on disk
   can be read.
 - **Server**: uptime, commit, memory, disk, GPU, the check queue, running and recently finished checks,
   streamed over a direct authenticated WebSocket (`/api/admin/server/ws`),

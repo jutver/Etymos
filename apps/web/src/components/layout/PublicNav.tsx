@@ -46,7 +46,7 @@ export function PublicNav() {
   const location = useLocation();
 
   return (
-    <header className="public-nav sticky top-[var(--banner-h,0px)] z-40 border-b border-line/70 bg-white/95">
+    <header className="public-nav sticky top-[var(--banner-h,0px)] z-40 border-b border-line bg-white">
       <div className="mx-auto flex h-[80px] max-w-[1480px] items-center justify-between px-5 sm:px-8">
         <Logo />
 

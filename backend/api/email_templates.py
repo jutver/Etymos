@@ -613,3 +613,73 @@ def check_failed_email(
         button_label="View my documents",
         button_url=documents_url,
     )
+
+
+def server_down_email(
+    *,
+    service_name: str,
+    health_url: str,
+    detected_at: str,
+    symptom: str,
+    consecutive_failures: int,
+    flapping_note: Optional[str] = None,
+    admin_url: Optional[str] = None,
+) -> EmailContent:
+    details: list[tuple[str, str]] = [
+        ("Service", esc(service_name)),
+        ("Endpoint", esc(health_url)),
+        ("Detected at", esc(detected_at)),
+        ("Observed issue", esc(symptom)),
+        ("Failed checks", esc(str(consecutive_failures))),
+    ]
+    if flapping_note:
+        details.append(("Stability notice", esc(flapping_note)))
+    status_url = f"{admin_url.rstrip('/')}/logs/server/status" if admin_url else None
+    return EmailContent(
+        subject=f"[ALERT] Etymos backend server is DOWN ({service_name})",
+        preheader=f"{service_name} failed {consecutive_failures} consecutive health checks: {symptom}",
+        heading="Backend server is down",
+        paragraphs=[
+            f"The Etymos backend service <strong>{esc(service_name)}</strong> has been unreachable across repeated external health checks.",
+            "If the host suffered a power outage or provider reboot, automatic startup hooks should bring services back online shortly. If an administrator intentionally stopped the API from the Admin Portal, restart it on the host when maintenance finishes.",
+        ],
+        details=details,
+        notes=[
+            "You will receive one confirmation email as soon as the public health check responds normally again.",
+        ],
+        button_label="Open Admin Server Status" if status_url else None,
+        button_url=status_url,
+    )
+
+
+def server_recovered_email(
+    *,
+    service_name: str,
+    health_url: str,
+    recovered_at: str,
+    downtime_duration: str,
+    down_since: str,
+    flapping_note: Optional[str] = None,
+    admin_url: Optional[str] = None,
+) -> EmailContent:
+    details: list[tuple[str, str]] = [
+        ("Service", esc(service_name)),
+        ("Endpoint", esc(health_url)),
+        ("Down since", esc(down_since)),
+        ("Recovered at", esc(recovered_at)),
+        ("Total downtime", esc(downtime_duration)),
+    ]
+    if flapping_note:
+        details.append(("Stability notice", esc(flapping_note)))
+    status_url = f"{admin_url.rstrip('/')}/logs/server/status" if admin_url else None
+    return EmailContent(
+        subject=f"[RECOVERED] Etymos backend server is back online ({service_name})",
+        preheader=f"{service_name} recovered after {downtime_duration} of downtime.",
+        heading="Backend server is back online",
+        paragraphs=[
+            f"The Etymos backend service <strong>{esc(service_name)}</strong> is healthy and responding normally again.",
+        ],
+        details=details,
+        button_label="Open Admin Server Status" if status_url else None,
+        button_url=status_url,
+    )
