@@ -77,6 +77,7 @@ from recovery_email import router as recovery_email_router
 from payments import router as payments_router
 from support import router as support_router
 from admin_ops import router as admin_ops_router
+from local_ops_auth import cleanup_local_ops_token, init_local_ops_token
 from admin_log import record_admin_action
 import support_inbound
 import notifications
@@ -175,7 +176,17 @@ async def lifespan(_: FastAPI):
     # Support inbox (email replies -> tickets) and auto-closing tickets.
     support_inbound.start()
     _pdf_upload_queue.start_worker()
+    try:
+        import admin_ops
+        init_local_ops_token(admin_ops.LOG_DIR)
+    except Exception:
+        logger.warning("Could not initialize local ops token file.", exc_info=True)
     yield
+    try:
+        import admin_ops
+        cleanup_local_ops_token(admin_ops.LOG_DIR)
+    except Exception:
+        pass
     _pdf_upload_queue.stop_worker()
     signal_sse_shutdown()
     # Jobs live in memory: any check still running now is lost, and its user

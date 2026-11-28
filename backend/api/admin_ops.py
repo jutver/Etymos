@@ -20,10 +20,12 @@ is a 404, so no path from the request ever reaches the filesystem.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import os
 import platform
+import re
 import shutil
 import signal
 import socket
@@ -37,13 +39,15 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 import gpu_queue
 from auth import AuthedUser, verify_jwt_token, verify_supabase_jwt
 from job_manager import active_count, job_overview
+from local_ops_auth import authenticate_local_ops_request, authenticate_local_ops_ws
 from log_setup import (LEVELS, LOG_BUFFER, PROCESS_STARTED, current_level, memory_numbers, set_level,
                        uptime_text)
 from admin_log import record_admin_action
@@ -69,6 +73,8 @@ def _default_supervisorctl() -> Path:
 
 SUPERVISORCTL = _default_supervisorctl()
 API_PROGRAM = os.getenv("SUPERVISOR_API_PROGRAM", "etymos-api")
+MANAGED_SERVICES = ("etymos-api", "cloudflared", "etymos-deploy")
+_LOCAL_BEARER = HTTPBearer(auto_error=False)
 
 # name -> (file in LOG_DIR, what it is). The order is the order shown.
 LOG_FILES: dict[str, tuple[str, str]] = {
@@ -84,7 +90,20 @@ LOG_FILES: dict[str, tuple[str, str]] = {
 TAIL_BYTES = 4 * 1024 * 1024
 
 
-def require_admin(user: AuthedUser = Depends(verify_supabase_jwt)) -> AuthedUser:
+async def require_admin(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_LOCAL_BEARER),
+) -> AuthedUser:
+    local_user = authenticate_local_ops_request(request)
+    if local_user is not None:
+        return local_user
+    override = request.app.dependency_overrides.get(verify_supabase_jwt)
+    if override is not None:
+        user = override()
+        if inspect.isawaitable(user):
+            user = await user
+    else:
+        user = await verify_supabase_jwt(request, credentials)
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admins only.")
     return user
@@ -228,6 +247,46 @@ def _disk(path: Path) -> Optional[dict[str, float]]:
             "used_percent": round(usage.used / usage.total * 100, 1) if usage.total else 0}
 
 
+_SUPERVISOR_STATUS_RE = re.compile(r"^([A-Za-z0-9_.:-]+)\s+([A-Z]+)(?:\s+(.*))?$")
+_SUPERVISOR_PID_RE = re.compile(r"\bpid\s+(\d+)\b")
+_SUPERVISOR_UPTIME_RE = re.compile(r"\buptime\s+([0-9:,\s\w-]+?)$")
+
+
+def _supervisor_services() -> list[dict[str, Any]]:
+    """Return managed supervisor program statuses when supervisor is available."""
+    if not _supervised():
+        return []
+    try:
+        proc = subprocess.run(
+            [str(SUPERVISORCTL), "-c", str(SUPERVISOR_CONF), "status"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        raw = proc.stdout or proc.stderr or ""
+    except Exception:
+        return []
+    services: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = _SUPERVISOR_STATUS_RE.match(stripped)
+        if not match:
+            continue
+        name, state, detail = match.group(1), match.group(2), (match.group(3) or "").strip()
+        pid_m = _SUPERVISOR_PID_RE.search(detail)
+        uptime_m = _SUPERVISOR_UPTIME_RE.search(detail)
+        services.append({
+            "name": name,
+            "state": state,
+            "pid": int(pid_m.group(1)) if pid_m else None,
+            "uptime": uptime_m.group(1).strip() if uptime_m else None,
+            "detail": detail,
+        })
+    return services
+
+
 def server_status() -> dict[str, Any]:
     threads = threading.enumerate()
     names = {t.name for t in threads}
@@ -262,6 +321,7 @@ def server_status() -> dict[str, Any]:
             "notifications": "notifications" in names,
             "support_inbox": "support-inbox" in names,
         },
+        "services": _supervisor_services(),
         "jobs": job_overview(),
     }
 
@@ -276,6 +336,7 @@ def read_server_status(_: AuthedUser = Depends(require_admin)):
 class ActionIn(BaseModel):
     level: Optional[Literal["DEBUG", "INFO", "WARNING", "ERROR"]] = None
     force: bool = False
+    service: Optional[Literal["etymos-api", "cloudflared", "etymos-deploy"]] = None
 
 
 def _supervised() -> bool:
@@ -320,6 +381,30 @@ def _shutdown_api(supervised: bool) -> None:
         timer.start()
 
 
+def _deferred_service_action(verb: str, service: str) -> None:
+    """Run supervisorctl after a 2s delay so HTTP responses flush before api/tunnel drops."""
+    if verb not in ("restart", "stop", "start") or service not in MANAGED_SERVICES:
+        raise ValueError("Unsupported deferred supervisor service action.")
+    subprocess.Popen(
+        ["/bin/sh", "-c", f'sleep 2; exec "{SUPERVISORCTL}" -c "{SUPERVISOR_CONF}" {verb} {service}'],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True, cwd=BACKEND_DIR,
+    )
+
+
+def _run_service_action(verb: str, service: str) -> str:
+    if verb not in ("restart", "stop", "start") or service not in MANAGED_SERVICES:
+        raise ValueError("Unsupported supervisor service action.")
+    proc = subprocess.run(
+        [str(SUPERVISORCTL), "-c", str(SUPERVISOR_CONF), verb, service],
+        capture_output=True, text=True, timeout=10, cwd=BACKEND_DIR,
+    )
+    out = (proc.stdout or proc.stderr or "").strip()
+    if proc.returncode != 0:
+        raise RuntimeError(out or f"{service}: {verb} exited with {proc.returncode}")
+    return out or f"{service}: {verb} ok"
+
+
 ACTIONS = (
     "log-level",
     "dump-threads",
@@ -328,6 +413,9 @@ ACTIONS = (
     "poll-support-inbox",
     "restart-api",
     "shutdown-api",
+    "restart-service",
+    "stop-service",
+    "start-service",
 )
 
 
@@ -385,6 +473,27 @@ async def run_action(action: str, body: ActionIn | None = None, admin: AuthedUse
         deferred_lifecycle = ("restart", True)
         result = {"restarting": True, "lost_checks": running}
 
+    elif action in ("restart-service", "stop-service", "start-service"):
+        if not body.service:
+            raise HTTPException(status_code=422, detail="Pick a managed service.")
+        if not _supervised():
+            raise HTTPException(status_code=409, detail="Supervisor is not configured on this server.")
+        verb = action.removesuffix("-service")
+        service = body.service
+        running = active_count() if (service == "etymos-api" and verb in ("restart", "stop")) else 0
+        if running and not body.force:
+            raise HTTPException(status_code=409, detail=f"{running} check(s) are running and would be lost.")
+        logger.warning("Service action %s on %s requested by admin %s (lost_checks=%d)", verb, service, who, running)
+        if service in ("etymos-api", "cloudflared") and verb in ("restart", "stop"):
+            deferred_lifecycle = (f"service:{verb}:{service}", True)
+            result = {"service": service, "verb": verb, "deferred": True, "lost_checks": running}
+        else:
+            try:
+                out = await run_in_threadpool(_run_service_action, verb, service)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
+            result = {"service": service, "verb": verb, "output": out, "lost_checks": running}
+
     else:  # shutdown-api
         running = active_count()
         if running and not body.force:
@@ -398,13 +507,17 @@ async def run_action(action: str, body: ActionIn | None = None, admin: AuthedUse
     await run_in_threadpool(
         lambda: record_admin_action(
             admin.user_id, f"server.{action.replace('-', '_')}", target_table="server",
+            target_id=body.service,
             metadata={**result, "level": body.level, "force": body.force, "ms": took}))
     if deferred_lifecycle is not None:
         kind, supervised_flag = deferred_lifecycle
         if kind == "restart":
             _restart_api()
-        else:
+        elif kind == "shutdown":
             _shutdown_api(supervised_flag)
+        elif kind.startswith("service:"):
+            _, verb, svc = kind.split(":", 2)
+            _deferred_service_action(verb, svc)
     return {"action": action, "ms": took, **result}
 
 
@@ -453,16 +566,31 @@ async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser,
         await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Invalid auth frame.")
         return None
 
-    if not isinstance(msg, dict) or msg.get("type") != "auth" or not isinstance(msg.get("token"), str):
+    if not isinstance(msg, dict) or msg.get("type") != "auth":
         await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Expected auth frame.")
         return None
 
-    try:
-        user, expires_at = await run_in_threadpool(_authenticate_ws_token, msg["token"])
-    except HTTPException as exc:
-        close_code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
-        err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
-        await _ws_send_error_and_close(websocket, close_code, err_code, str(exc.detail))
+    if isinstance(msg.get("local_token"), str):
+        try:
+            user = await run_in_threadpool(authenticate_local_ops_ws, websocket, msg["local_token"])
+            if user is None:
+                raise HTTPException(status_code=401, detail="Invalid local ops token.")
+            expires_at = time.time() + 86400 * 365
+        except HTTPException as exc:
+            close_code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+            err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+            await _ws_send_error_and_close(websocket, close_code, err_code, str(exc.detail))
+            return None
+    elif isinstance(msg.get("token"), str):
+        try:
+            user, expires_at = await run_in_threadpool(_authenticate_ws_token, msg["token"])
+        except HTTPException as exc:
+            close_code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+            err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+            await _ws_send_error_and_close(websocket, close_code, err_code, str(exc.detail))
+            return None
+    else:
+        await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Expected auth frame.")
         return None
 
     try:
@@ -660,14 +788,28 @@ async def stream_live_logs(websocket: WebSocket):
         LOG_BUFFER.unsubscribe(sub)
 
 
+def _parse_server_ws_interval(msg: dict[str, Any]) -> float:
+    raw = msg.get("interval")
+    if raw is None or isinstance(raw, bool):
+        return SERVER_WS_INTERVAL_SECONDS
+    try:
+        val = float(raw)
+        if not math.isfinite(val):
+            return SERVER_WS_INTERVAL_SECONDS
+        return max(1.0, min(30.0, val))
+    except (TypeError, ValueError):
+        return SERVER_WS_INTERVAL_SECONDS
+
+
 @router.websocket("/api/admin/server/ws")
 async def stream_server_status(websocket: WebSocket):
     auth_info = await _ws_handshake_auth(websocket)
     if auth_info is None:
         return
-    _, expires_at, _ = auth_info
+    _, expires_at, first_msg = auth_info
 
-    state = {"expires_at": expires_at}
+    push_interval = _parse_server_ws_interval(first_msg)
+    state = {"expires_at": expires_at, "interval": push_interval}
     refresh_event = asyncio.Event()
     send_lock = asyncio.Lock()
 
@@ -720,7 +862,8 @@ async def stream_server_status(websocket: WebSocket):
                                 await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Token has expired.")
                             return
 
-                        until_push = max(0.05, SERVER_WS_INTERVAL_SECONDS - (time.monotonic() - last_push))
+                        interval = state["interval"]
+                        until_push = max(0.05, interval - (time.monotonic() - last_push))
                         wait_for = min(until_push, WS_KEEPALIVE_SECONDS, max(0.05, remaining))
                         forced_refresh = False
                         try:
@@ -736,7 +879,7 @@ async def stream_server_status(websocket: WebSocket):
                             return
 
                         now = time.monotonic()
-                        if forced_refresh or (now - last_push >= SERVER_WS_INTERVAL_SECONDS):
+                        if forced_refresh or (now - last_push >= interval):
                             snapshot = await run_in_threadpool(server_status)
                             async with send_lock:
                                 await websocket.send_json({"type": "status", "data": snapshot})

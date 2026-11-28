@@ -15,12 +15,22 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from typing import Any, Optional
 
 from log_setup import current_request
 from supabase_client import get_client
 
 logger = logging.getLogger("api.admin_log")
+
+
+def _as_uuid_or_none(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def record_admin_action(
@@ -38,6 +48,12 @@ def record_admin_action(
     ctx = current_request()
     if ctx and ctx.get("id"):
         meta.setdefault("request_id", ctx["id"])  # matches [r:<id>] in the server log
+    actor_uuid = _as_uuid_or_none(admin_id)
+    effective_summary = summary
+    if actor_uuid is None and admin_id:
+        meta.setdefault("channel", admin_id)
+        if not effective_summary:
+            effective_summary = admin_id
     logger.info("Admin %s: %s %s%s", admin_id[:8], action, target_table or "",
                 f" {target_id}" if target_id else "")
     client = get_client()
@@ -45,13 +61,13 @@ def record_admin_action(
         return
     try:
         client.rpc("log_admin_action", {
-            "p_actor_id": admin_id,
+            "p_actor_id": actor_uuid,
             "p_source": "backend",
             "p_action": action,
             "p_target_table": target_table,
             "p_target_id": target_id,
-            "p_target_user_id": target_user_id,
-            "p_summary": summary,
+            "p_target_user_id": _as_uuid_or_none(target_user_id),
+            "p_summary": effective_summary,
             "p_changes": changes or {},
             "p_metadata": meta,
         }).execute()

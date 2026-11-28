@@ -29,6 +29,17 @@ The machine is a container with no init system (PID 1 is a shell), so
 Everything lives under `/workspace` because it survives a machine restart;
 `/root` may not.
 
+## Interactive Server TUI Dashboard
+
+For live server telemetry (API, machine, GPU, workers, supervisor services), active checks, and live/file log inspection right in the terminal:
+
+```bash
+cd /workspace/Etymos
+bash backend/scripts/tui.sh
+```
+
+See [SERVER_TUI_DASHBOARD.md](SERVER_TUI_DASHBOARD.md) for Remote Streaming Mode (`--remote https://api.etymos.site --login`), keybindings, pane zoom, and guarded actions.
+
 ## The one shortcut to set first
 
 Every command below uses `$SV`. Set it in each new shell (or add the line to
