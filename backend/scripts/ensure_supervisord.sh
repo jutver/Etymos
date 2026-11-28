@@ -77,6 +77,7 @@ release_lock() {
       rm -rf "$LOCK_DIR"
     fi
   elif [ "$LOCK_HELD_MODE" = "flock" ]; then
+    flock -u 9 2>/dev/null || true
     exec 9>&- 2>/dev/null || true
   fi
 }
@@ -114,7 +115,7 @@ acquire_lock() {
 read_live_supervisor_pid() {
   local ctl_pid file_pid cmdline
   if [ -x "$SUPERVISORCTL_BIN" ] && [ -f "$SUPERVISOR_CONF" ]; then
-    ctl_pid="$("$SUPERVISORCTL_BIN" -c "$SUPERVISOR_CONF" pid 2>/dev/null || true)"
+    ctl_pid="$("$SUPERVISORCTL_BIN" -c "$SUPERVISOR_CONF" pid 2>/dev/null 9>&- || true)"
     if [[ "$ctl_pid" =~ ^[0-9]+$ ]] && kill -0 "$ctl_pid" 2>/dev/null; then
       echo "$ctl_pid"
       return 0
@@ -165,7 +166,7 @@ sync_cloudflared() {
   if [ "$AUTO_DOWNLOAD_CLOUDFLARED" = "true" ] && command -v curl >/dev/null 2>&1; then
     local tmp_cf
     tmp_cf="$(mktemp "$LOG_DIR/cloudflared.XXXXXX" 2>/dev/null || true)"
-    if [ -n "$tmp_cf" ] && curl -fsSL --max-time 30 -o "$tmp_cf" "$CLOUDFLARED_DOWNLOAD_URL" 2>/dev/null; then
+    if [ -n "$tmp_cf" ] && curl -fsSL --max-time 30 -o "$tmp_cf" "$CLOUDFLARED_DOWNLOAD_URL" 2>/dev/null 9>&-; then
       chmod +x "$tmp_cf"
       if mkdir -p "$persist_dir" 2>/dev/null && cp "$tmp_cf" "$PERSISTENT_CLOUDFLARED" 2>/dev/null; then
         chmod +x "$PERSISTENT_CLOUDFLARED" 2>/dev/null || true
@@ -225,7 +226,7 @@ if [ "${#cleaned[@]}" -gt 0 ]; then
   log_line INFO "Removed stale runtime file(s) before startup: ${cleaned[*]}"
 fi
 
-if ! "$SUPERVISORD_BIN" -c "$SUPERVISOR_CONF"; then
+if ! "$SUPERVISORD_BIN" -c "$SUPERVISOR_CONF" 9>&-; then
   log_line ERROR "supervisord failed to start with config $SUPERVISOR_CONF"
   exit 1
 fi
@@ -243,7 +244,7 @@ while [ "$waited" -lt "$max_ticks" ]; do
 done
 
 if [ -n "$new_pid" ]; then
-  summary="$("$SUPERVISORCTL_BIN" -c "$SUPERVISOR_CONF" status 2>/dev/null | tr '\n' ';' | sed 's/;*$//' || true)"
+  summary="$("$SUPERVISORCTL_BIN" -c "$SUPERVISOR_CONF" status 2>/dev/null 9>&- | tr '\n' ';' | sed 's/;*$//' || true)"
   log_line INFO "Started supervisord (pid=$new_pid)${summary:+ | status: $summary}"
   exit 0
 fi

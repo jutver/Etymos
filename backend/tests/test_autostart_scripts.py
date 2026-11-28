@@ -14,6 +14,7 @@ import os
 import stat
 import subprocess
 import textwrap
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -62,7 +63,7 @@ s.bind(sock_name)
 s.listen(1)
 open(sys.argv[2], "w").write(str(os.getpid()))
 open(sys.argv[3], "w").write("running")
-time.sleep(8)
+time.sleep(30)
 ' "{sock_file}" "{pid_file}" "{state_file}" >/dev/null 2>&1 &
         sleep 0.3
         """,
@@ -153,7 +154,8 @@ def test_ensure_cleans_stale_files_and_boots_without_smtp_or_db(tmp_path: Path):
         assert "Started supervisord" in log_text
         assert "Backed up cloudflared" in log_text
 
-        # Second invocation while already running must be strictly idempotent (SC-002).
+        # Second invocation while already running must be strictly idempotent and fast (SC-002).
+        t0 = time.monotonic()
         res2 = subprocess.run(
             ["bash", str(ENSURE_SCRIPT), "--quiet"],
             env=clean_env,
@@ -163,6 +165,7 @@ def test_ensure_cleans_stale_files_and_boots_without_smtp_or_db(tmp_path: Path):
         )
         assert res2.returncode == 0
         assert res2.stdout == ""
+        assert (time.monotonic() - t0) < 5.0
         assert env_paths["launch_counter"].read_text().strip() == "1"
     finally:
         _kill_fake_supervisor(env_paths["pid_file"])
@@ -361,3 +364,45 @@ def test_install_autostart_modes_are_idempotent(tmp_path: Path):
     assert sysd.returncode == 0, sysd.stderr
     unit_text = systemd_unit.read_text(encoding="utf-8")
     assert "ExecStart=" in unit_text and "ensure_supervisord.sh" in unit_text
+
+
+def test_ensure_closes_flock_fd9_for_child_daemon(tmp_path: Path):
+    """Spawned supervisord must NOT inherit flock FD 9 on Linux (prevents blocking subsequent runs)."""
+    env_paths = _setup_fake_supervisor(tmp_path)
+    fd_probe = tmp_path / "fd9_open.txt"
+    flock_bin = _write_exe(tmp_path / "bin" / "flock", "#!/usr/bin/env bash\nexit 0\n")
+
+    # Wrap fake supervisord to check whether FD 9 is open in the child process before launching daemon.
+    orig_sv = env_paths["supervisord"].read_text(encoding="utf-8")
+    wrapped = orig_sv.replace(
+        "set -euo pipefail\n",
+        f"""set -euo pipefail
+python3 -c 'import errno, os, sys
+try:
+    os.fstat(9)
+    open(sys.argv[1], "w").write("OPEN")
+except OSError as e:
+    open(sys.argv[1], "w").write("CLOSED" if e.errno == errno.EBADF else str(e))
+' "{fd_probe}"
+""",
+    )
+    env_paths["supervisord"].write_text(wrapped, encoding="utf-8")
+
+    cloudflared = _write_exe(tmp_path / "usr_local_bin" / "cloudflared", "#!/usr/bin/env bash\nexit 0\n")
+    env = {
+        "PATH": f"{flock_bin.parent}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "BACKEND_DIR": str(env_paths["backend"]),
+        "SUPERVISOR_CONF": str(env_paths["conf"]),
+        "SUPERVISORD_BIN": str(env_paths["supervisord"]),
+        "SUPERVISORCTL_BIN": str(env_paths["supervisorctl"]),
+        "LOG_DIR": str(env_paths["log_dir"]),
+        "CLOUDFLARED_BIN": str(cloudflared),
+        "PERSISTENT_CLOUDFLARED": str(tmp_path / "workspace" / "bin" / "cloudflared"),
+        "AUTO_DOWNLOAD_CLOUDFLARED": "false",
+    }
+    try:
+        res = subprocess.run(["bash", str(ENSURE_SCRIPT)], env=env, capture_output=True, text=True, timeout=15)
+        assert res.returncode == 0, res.stderr + res.stdout
+        assert fd_probe.read_text(encoding="utf-8").strip() == "CLOSED"
+    finally:
+        _kill_fake_supervisor(env_paths["pid_file"])
