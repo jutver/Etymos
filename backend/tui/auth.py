@@ -34,20 +34,30 @@ def decode_jwt_claims_unverified(token: str) -> dict:
         return {}
 
 
+_PUBLIC_SUPABASE_URL_KEYS = ("SUPABASE_URL", "VITE_SUPABASE_URL")
+_PUBLIC_SUPABASE_KEY_KEYS = (
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+)
+
+
 def discover_supabase_config(
     *,
     supabase_url: Optional[str] = None,
     supabase_anon_key: Optional[str] = None,
     repo_root: Optional[Path] = None,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Resolve public Supabase URL and anon key from flags, env, or frontend public `.env` files.
+    """Resolve public Supabase URL and anon/publishable key from flags, env, or `.env*` files.
 
-    Never reads `backend/.env` or service-role keys.
+    Strictly ignores all non-public keys (never reads service-role keys or secrets).
     """
     url = supabase_url or os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
     anon = (
         supabase_anon_key
         or os.getenv("SUPABASE_ANON_KEY")
+        or os.getenv("SUPABASE_PUBLISHABLE_KEY")
         or os.getenv("VITE_SUPABASE_ANON_KEY")
         or os.getenv("VITE_SUPABASE_PUBLISHABLE_KEY")
     )
@@ -55,21 +65,41 @@ def discover_supabase_config(
         return url.rstrip("/"), anon
 
     root = repo_root or Path(__file__).resolve().parent.parent.parent
-    for rel in ("apps/admin/.env.local", "apps/admin/.env", "apps/web/.env.local", "apps/web/.env"):
+    candidates = (
+        ".env.local",
+        ".env",
+        "apps/admin/.env.local",
+        "apps/admin/.env",
+        "apps/web/.env.local",
+        "apps/web/.env",
+        "backend/.env.local",
+        "backend/.env",
+    )
+    for rel in candidates:
         candidate = root / rel
         if not candidate.is_file():
             continue
         try:
             for line in candidate.read_text(encoding="utf-8").splitlines():
                 stripped = line.strip()
-                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if stripped.startswith("export "):
+                    stripped = stripped[7:].strip()
+                if "=" not in stripped:
                     continue
                 k, v = stripped.split("=", 1)
-                v = v.strip().strip("'\"")
-                if k == "VITE_SUPABASE_URL" and not url:
-                    url = v
-                elif k in ("VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY") and not anon:
-                    anon = v
+                k = k.strip()
+                if k in _PUBLIC_SUPABASE_URL_KEYS and not url:
+                    cleaned = v.strip().strip("'\"")
+                    if cleaned:
+                        url = cleaned
+                elif k in _PUBLIC_SUPABASE_KEY_KEYS and not anon:
+                    cleaned = v.strip().strip("'\"")
+                    if cleaned:
+                        anon = cleaned
+            if url and anon:
+                break
         except OSError:
             continue
     return (url.rstrip("/") if url else None), anon
@@ -193,14 +223,17 @@ class RemoteAuthManager:
             claims = decode_jwt_claims_unverified(access_token)
 
             if claims.get("aal") != "aal2":
-                factors_resp = client.get(
-                    f"{sb_url}/auth/v1/factors",
-                    headers={"apikey": sb_anon, "Authorization": f"Bearer {access_token}"},
-                )
-                if factors_resp.status_code != 200:
-                    raise AuthError("Could not retrieve MFA factors for this admin account.")
+                raw_factors = (tok_data.get("user") or {}).get("factors")
+                if not raw_factors:
+                    user_resp = client.get(
+                        f"{sb_url}/auth/v1/user",
+                        headers={"apikey": sb_anon, "Authorization": f"Bearer {access_token}"},
+                    )
+                    if user_resp.status_code != 200:
+                        raise AuthError("Could not retrieve MFA factors for this admin account.")
+                    raw_factors = (user_resp.json() or {}).get("factors") or []
                 factors = [
-                    f for f in (factors_resp.json() or [])
+                    f for f in raw_factors
                     if f.get("factor_type") == "totp" and f.get("status") == "verified"
                 ]
                 if not factors:
