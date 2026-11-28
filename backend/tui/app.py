@@ -10,8 +10,10 @@ from textual.containers import Vertical
 from textual.events import Resize
 from textual.widgets import Input, Static
 
+from .command_safety import detect_destructive_command
 from .models import (
     ActionRequest,
+    CommandRequest,
     ConnectionState,
     LOG_SOURCE_ORDER,
     LogSourceId,
@@ -19,9 +21,13 @@ from .models import (
     ServerSnapshot,
     ViewportBreakpoint,
     compute_breakpoint,
+    make_run_id,
 )
 from .providers.base import (
     AuthErrorEvent,
+    CommandDoneEvent,
+    CommandOutputEvent,
+    CommandStartedEvent,
     ConnectionEvent,
     DashboardProvider,
     LogFilesEvent,
@@ -32,12 +38,13 @@ from .providers.base import (
     SnapshotEvent,
 )
 from .widgets.checks_pane import CheckSelected, ChecksPane
+from .widgets.command_pane import CommandCancelRequested, CommandPane, CommandSubmitted
 from .widgets.header_bar import HeaderBar
 from .widgets.logs_pane import LogFiltersChanged, LogPauseChanged, LogSourceChanged, LogsPane
-from .widgets.modals import ActionsModal, ConfirmActionModal, HelpModal, is_disruptive_action
+from .widgets.modals import ActionsModal, ConfirmActionModal, ConfirmCommandModal, HelpModal, is_disruptive_action
 from .widgets.stats_cards import StatsGrid
 
-PANE_ORDER: tuple[PaneId, ...] = ("stats", "checks", "logs")
+PANE_ORDER: tuple[PaneId, ...] = ("stats", "checks", "logs", "command")
 
 
 class EtymosTuiApp(App[int]):
@@ -71,6 +78,11 @@ class EtymosTuiApp(App[int]):
         Binding("r", "refresh_now", "Refresh"),
         Binding("a", "open_actions", "Actions"),
         Binding("ctrl+p", "open_actions", "Actions", show=False),
+        Binding("colon", "toggle_command_pane", "Cmd", show=False),
+        Binding("x", "toggle_command_pane", "Cmd", show=False),
+        Binding("ctrl+x", "cancel_command", "Cancel Cmd", priority=True, show=False),
+        Binding("ctrl+c", "smart_ctrl_c", "Quit/Cancel", priority=True, show=False),
+        Binding("ctrl+l", "clear_command_output", "Clear Cmd", priority=True, show=False),
         Binding("up", "cursor_up", "Up", show=False),
         Binding("down", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
@@ -120,6 +132,11 @@ class EtymosTuiApp(App[int]):
             no_color=self._no_color,
             id="logs-pane",
         )
+        self.command_pane = CommandPane(
+            mode=provider.mode,
+            no_color=self._no_color,
+            id="command-pane",
+        )
         self.resize_notice = Static("", id="resize-notice")
 
     def compose(self) -> ComposeResult:
@@ -129,6 +146,7 @@ class EtymosTuiApp(App[int]):
             yield self.stats_pane
             yield self.checks_pane
             yield self.logs_pane
+            yield self.command_pane
 
     async def on_mount(self) -> None:
         self._apply_breakpoint(self.size.width, self.size.height)
@@ -160,10 +178,19 @@ class EtymosTuiApp(App[int]):
                 "Please resize to at least 56x14 (80x24+ recommended)."
             )
 
+    def _active_pane_order(self) -> tuple[PaneId, ...]:
+        if self.command_pane.is_open:
+            return PANE_ORDER
+        return ("stats", "checks", "logs")
+
     def _apply_focus_classes(self) -> None:
         for pane in PANE_ORDER:
             self.screen.remove_class(f"-focus-{pane}")
             self.screen.remove_class(f"-zoom-{pane}")
+        if self.command_pane.is_open:
+            self.screen.add_class("-cmd-open")
+        else:
+            self.screen.remove_class("-cmd-open")
         self.screen.add_class(f"-focus-{self.focused_pane}")
         if self.zoomed_pane is not None:
             self.screen.add_class(f"-zoom-{self.zoomed_pane}")
@@ -196,6 +223,7 @@ class EtymosTuiApp(App[int]):
             )
             self.stats_pane.update_snapshot(event.snapshot)
             self.checks_pane.update_snapshot(event.snapshot)
+            self.command_pane.update_capability(event.snapshot.remote_exec)
 
         elif isinstance(event, ConnectionEvent):
             self.connection_state = event.state
@@ -231,6 +259,19 @@ class EtymosTuiApp(App[int]):
             self.header_bar.update_state(connection_state="auth_required")
             self.notify(event.detail, title="Authentication Error", severity="error")
 
+        elif isinstance(event, CommandStartedEvent):
+            self.command_pane.handle_started(event)
+
+        elif isinstance(event, CommandOutputEvent):
+            self.command_pane.append_output(event)
+
+        elif isinstance(event, CommandDoneEvent):
+            self.command_pane.finish_run(event)
+            if event.status == "denied" and event.error:
+                self.notify(event.error, title="Command Denied", severity="error")
+            elif event.status == "disabled" and event.error:
+                self.notify(event.error, title="Remote Exec Disabled", severity="warning")
+
     # --- Child Message Handlers -----------------------------------------------------------
 
     async def on_log_source_changed(self, event: LogSourceChanged) -> None:
@@ -249,6 +290,34 @@ class EtymosTuiApp(App[int]):
         self.logs_pane._list.focus()
         self.notify(f"Filtered logs by check {event.job_id[:12]}")
 
+    def on_command_submitted(self, event: CommandSubmitted) -> None:
+        cmd = event.command
+        match = detect_destructive_command(cmd, mode=self.provider.mode)
+        if match is not None:
+            self.push_screen(
+                ConfirmCommandModal(cmd, match, mode=self.provider.mode),
+                lambda ok: self._on_command_confirm_result(cmd, ok),
+            )
+            return
+        self._launch_command(cmd)
+
+    def _on_command_confirm_result(self, command: str, confirmed: Optional[bool]) -> None:
+        if confirmed:
+            self._launch_command(command)
+        elif self.command_pane.is_open:
+            self.command_pane.focus_prompt()
+
+    def _launch_command(self, command: str) -> None:
+        timeout_s = 60
+        if self.snapshot and self.snapshot.remote_exec:
+            timeout_s = self.snapshot.remote_exec.default_timeout_seconds
+        req = CommandRequest(run_id=make_run_id(), command=command, timeout_seconds=timeout_s)
+        self.command_pane.begin_run(req.run_id, req.command)
+        self.run_worker(self.provider.run_command(req))
+
+    async def on_command_cancel_requested(self, event: CommandCancelRequested) -> None:
+        await self.provider.cancel_command(event.run_id)
+
     # --- Interactive Actions & Keybindings ------------------------------------------------
 
     def _typing_in_input(self) -> bool:
@@ -260,14 +329,22 @@ class EtymosTuiApp(App[int]):
         self.exit(self.exit_code_result)
 
     def action_focus_next_pane(self) -> None:
-        idx = PANE_ORDER.index(self.focused_pane)
-        self.focused_pane = PANE_ORDER[(idx + 1) % len(PANE_ORDER)]
+        order = self._active_pane_order()
+        if self.focused_pane not in order:
+            self.focused_pane = order[0]
+        else:
+            idx = order.index(self.focused_pane)
+            self.focused_pane = order[(idx + 1) % len(order)]
         self._apply_focus_classes()
         self._focus_active_pane_widget()
 
     def action_focus_prev_pane(self) -> None:
-        idx = PANE_ORDER.index(self.focused_pane)
-        self.focused_pane = PANE_ORDER[(idx - 1) % len(PANE_ORDER)]
+        order = self._active_pane_order()
+        if self.focused_pane not in order:
+            self.focused_pane = order[0]
+        else:
+            idx = order.index(self.focused_pane)
+            self.focused_pane = order[(idx - 1) % len(order)]
         self._apply_focus_classes()
         self._focus_active_pane_widget()
 
@@ -276,6 +353,8 @@ class EtymosTuiApp(App[int]):
             self.logs_pane._list.focus()
         elif self.focused_pane == "checks":
             self.checks_pane._table.focus()
+        elif self.focused_pane == "command":
+            self.command_pane.focus_prompt()
         else:
             self.stats_pane.api_card.focus()
 
@@ -286,12 +365,46 @@ class EtymosTuiApp(App[int]):
         self._apply_focus_classes()
 
     def action_handle_escape(self) -> None:
+        if self.focused is self.command_pane._input:
+            self.command_pane.focus_transcript()
+            return
         if self._typing_in_input():
             self.logs_pane.close_search()
             return
         if self.zoomed_pane is not None:
             self.zoomed_pane = None
             self._apply_focus_classes()
+
+    def action_toggle_command_pane(self) -> None:
+        if self._typing_in_input():
+            return
+        next_open = not self.command_pane.is_open
+        self.command_pane.set_open(next_open)
+        if next_open:
+            self.focused_pane = "command"
+            self._apply_focus_classes()
+            self.command_pane.focus_prompt()
+        else:
+            if self.zoomed_pane == "command":
+                self.zoomed_pane = None
+            if self.focused_pane == "command":
+                self.focused_pane = "logs"
+            self._apply_focus_classes()
+            self._focus_active_pane_widget()
+
+    async def action_cancel_command(self) -> None:
+        if self.command_pane.status == "running" and self.command_pane.active_run_id:
+            await self.provider.cancel_command(self.command_pane.active_run_id)
+
+    async def action_smart_ctrl_c(self) -> None:
+        if self.command_pane.status == "running" and self.command_pane.active_run_id:
+            await self.provider.cancel_command(self.command_pane.active_run_id)
+            return
+        self.exit(self.exit_code_result)
+
+    def action_clear_command_output(self) -> None:
+        if self.focused_pane == "command" or self.focused in (self.command_pane._input, self.command_pane._output):
+            self.command_pane.clear_output()
 
     def action_switch_source(self, index: int) -> None:
         if self._typing_in_input():
@@ -344,6 +457,8 @@ class EtymosTuiApp(App[int]):
             return
         if self.focused_pane == "checks":
             self.checks_pane.move_selection(-1)
+        elif self.focused_pane == "command":
+            self.command_pane.scroll_transcript(-1)
         else:
             self.logs_pane.scroll_step(-1)
 
@@ -352,6 +467,8 @@ class EtymosTuiApp(App[int]):
             return
         if self.focused_pane == "checks":
             self.checks_pane.move_selection(1)
+        elif self.focused_pane == "command":
+            self.command_pane.scroll_transcript(1)
         else:
             self.logs_pane.scroll_step(1)
 
@@ -360,6 +477,8 @@ class EtymosTuiApp(App[int]):
             return
         if self.focused_pane == "checks":
             self.checks_pane.move_selection(-5)
+        elif self.focused_pane == "command":
+            self.command_pane.scroll_transcript(-10)
         else:
             self.logs_pane.scroll_step(-15)
 
@@ -368,6 +487,8 @@ class EtymosTuiApp(App[int]):
             return
         if self.focused_pane == "checks":
             self.checks_pane.move_selection(5)
+        elif self.focused_pane == "command":
+            self.command_pane.scroll_transcript(10)
         else:
             self.logs_pane.scroll_step(15)
 

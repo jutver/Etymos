@@ -21,6 +21,7 @@ from tui.models import (
     ManagedServiceInfo,
     ServerSnapshot,
     compute_breakpoint,
+    compute_line_overlap_append,
     merge_local_and_api_snapshot,
     parse_search_query,
 )
@@ -298,3 +299,125 @@ def test_discover_supabase_config_reads_root_and_backend_public_keys_only(tmp_pa
     url2, key2 = discover_supabase_config(repo_root=tmp_path)
     assert url2 == "https://back.supabase.co"
     assert key2 is None
+
+
+def test_compute_line_overlap_append_handles_unchanged_sliding_and_rotation():
+    # Empty initial load -> full reset
+    delta, rot = compute_line_overlap_append([], ["a", "b"])
+    assert delta == ["a", "b"] and rot is True
+
+    # Identical tail -> zero delta, zero reset
+    delta, rot = compute_line_overlap_append(["a", "b", "c"], ["a", "b", "c"])
+    assert delta == [] and rot is False
+
+    # Incremental append
+    delta, rot = compute_line_overlap_append(["a", "b", "c"], ["a", "b", "c", "d", "e"])
+    assert delta == ["d", "e"] and rot is False
+
+    # Sliding fixed-size 400-line window (oldest shifted out)
+    prev = [f"line-{i}" for i in range(1, 401)]
+    nxt = [f"line-{i}" for i in range(6, 406)]
+    delta, rot = compute_line_overlap_append(prev, nxt)
+    assert delta == [f"line-{i}" for i in range(401, 406)] and rot is False
+
+    # Disjoint rotation
+    delta, rot = compute_line_overlap_append(["old-1", "old-2"], ["new-1", "new-2"])
+    assert delta == ["new-1", "new-2"] and rot is True
+
+
+def test_remote_provider_file_poll_watermark_diff_and_rotation(monkeypatch):
+    from tui.models import RemoteSessionCache
+    from tui.providers.base import LogRowsEvent, LogSnapshotEvent, NoticeEvent
+
+    sess = RemoteSessionCache(
+        api_url="https://api.etymos.site",
+        supabase_url="https://sb.example.co",
+        access_token=_make_fake_jwt({"sub": "u-1", "aal": "aal2", "exp": time.time() + 3600}),
+        refresh_token="",
+        expires_at=time.time() + 3600,
+    )
+    provider = RemoteDashboardProvider(api_url="https://api.etymos.site", session=sess)
+    events = []
+    provider._emit = events.append
+
+    payloads = [
+        {"size_bytes": 120, "modified_at": "2026-11-28T10:00:00Z", "lines": ["l1", "l2", "l3"], "more": False},
+        {"size_bytes": 120, "modified_at": "2026-11-28T10:00:00Z", "lines": ["l1", "l2", "l3"], "more": False},
+        {"size_bytes": 180, "modified_at": "2026-11-28T10:00:02Z", "lines": ["l1", "l2", "l3", "l4", "l5"], "more": False},
+        {"size_bytes": 40, "modified_at": "2026-11-28T10:00:05Z", "lines": ["fresh-1"], "more": False},
+    ]
+
+    class _MockAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, *a, **kw):
+            return httpx.Response(200, json=payloads.pop(0))
+
+    monkeypatch.setattr("tui.providers.remote.httpx.AsyncClient", _MockAsyncClient)
+
+    # 1. Initial load -> LogSnapshotEvent
+    asyncio.run(provider._fetch_single_file_tail("api", replace=True))
+    assert len(events) == 1 and isinstance(events[-1], LogSnapshotEvent)
+    assert len(events[-1].rows) == 3
+
+    # 2. Unchanged poll -> emits NOTHING
+    events.clear()
+    asyncio.run(provider._fetch_single_file_tail("api"))
+    assert events == []
+
+    # 3. Appended lines -> incremental LogRowsEvent only (seqs 4 & 5)
+    events.clear()
+    asyncio.run(provider._fetch_single_file_tail("api"))
+    assert len(events) == 1 and isinstance(events[-1], LogRowsEvent)
+    assert [r.seq for r in events[-1].rows] == [4, 5]
+    assert [r.message for r in events[-1].rows] == ["l4", "l5"]
+
+    # 4. File rotated/shrunk -> LogSnapshotEvent + NoticeEvent
+    events.clear()
+    asyncio.run(provider._fetch_single_file_tail("api"))
+    assert any(isinstance(e, LogSnapshotEvent) and [r.message for r in e.rows] == ["fresh-1"] for e in events)
+    assert any(isinstance(e, NoticeEvent) and "rotated" in e.message.lower() for e in events)
+
+
+def test_detect_destructive_command_patterns_and_mode_awareness():
+    from tui.command_safety import detect_destructive_command
+
+    assert detect_destructive_command("rm -rf /workspace/Etymos", mode="local").pattern_name == "rm_rf"
+    assert detect_destructive_command("git reset --hard HEAD~1", mode="remote").pattern_name == "git_destructive"
+    assert detect_destructive_command("git clean -fdx", mode="local").pattern_name == "git_destructive"
+    assert detect_destructive_command("sudo reboot", mode="local").pattern_name == "host_power"
+    assert detect_destructive_command("dd if=/dev/zero of=/dev/sda", mode="local").pattern_name == "disk_wipe"
+    assert detect_destructive_command("psql -c 'DROP TABLE users;'", mode="remote").pattern_name == "sql_destructive"
+
+    # cloudflared stop only triggers warning in remote mode
+    rem_tunnel = detect_destructive_command("$SV stop cloudflared", mode="remote")
+    assert rem_tunnel is not None and rem_tunnel.pattern_name == "remote_tunnel_stop"
+    assert detect_destructive_command("$SV stop cloudflared", mode="local") is None
+
+    # Safe commands pass straight through
+    for safe in ("$SV status", "git status -sb", "nvidia-smi", "df -h", "rm -f /tmp/scratch.txt"):
+        assert detect_destructive_command(safe, mode="remote") is None
+
+
+def test_command_history_bounds_dedup_and_draft_preservation():
+    from tui.models import CommandHistory
+
+    hist = CommandHistory()
+    for i in range(210):
+        hist.push(f"echo {i}")
+    assert len(hist.entries) == 200
+    hist.push("echo 209")  # consecutive duplicate ignored
+    assert hist.entries[-1] == "echo 209" and len(hist.entries) == 200
+
+    assert hist.step_up("draft cmd") == "echo 209"
+    assert hist.step_up("echo 209") == "echo 208"
+    assert hist.step_down() == "echo 209"
+    assert hist.step_down() == "draft cmd"
+    assert hist.cursor is None

@@ -45,6 +45,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 import gpu_queue
+import remote_exec
 from auth import AuthedUser, verify_jwt_token, verify_supabase_jwt
 from job_manager import active_count, job_overview
 from local_ops_auth import authenticate_local_ops_request, authenticate_local_ops_ws
@@ -323,6 +324,7 @@ def server_status() -> dict[str, Any]:
         },
         "services": _supervisor_services(),
         "jobs": job_overview(),
+        "remote_exec": remote_exec.get_remote_exec_capability(BACKEND_DIR),
     }
 
 
@@ -550,7 +552,10 @@ async def _ws_send_error_and_close(websocket: WebSocket, code: int, err_code: st
         pass
 
 
-async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser, float, dict[str, Any]]]:
+async def _ws_handshake_auth(
+    websocket: WebSocket,
+    extra_auth_ok: Optional[dict[str, Any]] = None,
+) -> Optional[tuple[AuthedUser, float, dict[str, Any]]]:
     try:
         await websocket.accept()
     except (WebSocketDisconnect, RuntimeError):
@@ -593,8 +598,11 @@ async def _ws_handshake_auth(websocket: WebSocket) -> Optional[tuple[AuthedUser,
         await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "bad_request", "Expected auth frame.")
         return None
 
+    auth_ok_payload: dict[str, Any] = {"type": "auth_ok", "pid": os.getpid(), "started_at": _iso(PROCESS_STARTED)}
+    if extra_auth_ok:
+        auth_ok_payload.update(extra_auth_ok)
     try:
-        await websocket.send_json({"type": "auth_ok", "pid": os.getpid(), "started_at": _iso(PROCESS_STARTED)})
+        await websocket.send_json(auth_ok_payload)
     except (WebSocketDisconnect, RuntimeError):
         return None
     return user, expires_at, msg
@@ -898,6 +906,193 @@ async def stream_server_status(websocket: WebSocket):
             tg.start_soon(_writer)
     except WebSocketDisconnect:
         pass
+
+
+@router.websocket("/api/admin/server/exec/ws")
+async def stream_server_exec(websocket: WebSocket):
+    cap = remote_exec.get_remote_exec_capability(BACKEND_DIR)
+    auth_info = await _ws_handshake_auth(websocket, extra_auth_ok={"remote_exec": cap})
+    if auth_info is None:
+        return
+    user, expires_at, _ = auth_info
+
+    state: dict[str, Any] = {
+        "expires_at": expires_at,
+        "active_run_id": None,
+        "cancel_event": None,
+        "run_task": None,
+    }
+    send_lock = asyncio.Lock()
+
+    async def _send(payload: dict[str, Any]) -> None:
+        async with send_lock:
+            await websocket.send_json(payload)
+
+    async def _execute_run(run_id: str, command: str, timeout_s: int, cancel_ev: asyncio.Event) -> None:
+        max_bytes = remote_exec.get_max_output_bytes()
+        result: Optional[remote_exec.CommandExecResult] = None
+        try:
+            await _send({"type": "started", "run_id": run_id, "cwd": str(remote_exec.BACKEND_DIR.parent)})
+
+            async def _on_output(stream_name: str, chunk: str) -> None:
+                await _send({"type": "output", "run_id": run_id, "stream": stream_name, "data": chunk})
+
+            result = await remote_exec.run_shell_command_stream(
+                command=command,
+                timeout_seconds=timeout_s,
+                max_output_bytes=max_bytes,
+                on_output=_on_output,
+                cancel_event=cancel_ev,
+                backend_dir=BACKEND_DIR,
+                log_dir=LOG_DIR,
+            )
+            await run_in_threadpool(
+                lambda: remote_exec.record_command_audit(
+                    user.user_id,
+                    action="server.exec",
+                    run_id=run_id,
+                    command=command,
+                    status=result.status,
+                    exit_code=result.exit_code,
+                    duration_ms=result.duration_ms,
+                    truncated=result.truncated,
+                    output_bytes=result.output_bytes,
+                    record_fn=record_admin_action,
+                )
+            )
+            await _send(
+                {
+                    "type": "done",
+                    "run_id": run_id,
+                    "status": result.status,
+                    "exit_code": result.exit_code,
+                    "duration_ms": result.duration_ms,
+                    "truncated": result.truncated,
+                    "error": result.error,
+                }
+            )
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            if state.get("active_run_id") == run_id:
+                state["active_run_id"] = None
+                state["cancel_event"] = None
+                state["run_task"] = None
+
+    try:
+        while True:
+            msg = await websocket.receive_json()
+            if not isinstance(msg, dict):
+                continue
+            mtype = msg.get("type")
+            if mtype == "ping":
+                await _send({"type": "pong"})
+                continue
+            if mtype == "pong":
+                continue
+            if mtype == "refresh_auth":
+                token = msg.get("token")
+                if not isinstance(token, str):
+                    await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Invalid token.")
+                    return
+                try:
+                    _, next_exp = await run_in_threadpool(_authenticate_ws_token, token)
+                    state["expires_at"] = next_exp
+                except HTTPException as exc:
+                    code = WS_CLOSE_FORBIDDEN if exc.status_code == 403 else WS_CLOSE_UNAUTHORIZED
+                    err_code = "forbidden" if exc.status_code == 403 else "unauthorized"
+                    await _ws_send_error_and_close(websocket, code, err_code, str(exc.detail))
+                    return
+                continue
+
+            if mtype == "cancel":
+                target_id = msg.get("run_id")
+                ev = state.get("cancel_event")
+                if ev is not None and (target_id is None or target_id == state.get("active_run_id")):
+                    ev.set()
+                continue
+
+            if mtype == "run":
+                if state["expires_at"] <= time.time():
+                    async with send_lock:
+                        await _ws_send_error_and_close(websocket, WS_CLOSE_UNAUTHORIZED, "unauthorized", "Token has expired.")
+                    return
+
+                run_id = str(msg.get("run_id") or "").strip()[:64] or f"cmd_{int(time.time() * 1000)}"
+                raw_cmd = msg.get("command")
+                if not isinstance(raw_cmd, str) or not raw_cmd.strip() or len(raw_cmd) > 2000:
+                    await _send(
+                        {
+                            "type": "done",
+                            "run_id": run_id,
+                            "status": "failed",
+                            "exit_code": None,
+                            "duration_ms": 0,
+                            "truncated": False,
+                            "error": "Command must be between 1 and 2000 characters.",
+                        }
+                    )
+                    continue
+
+                if state.get("run_task") is not None and not state["run_task"].done():
+                    await _send(
+                        {
+                            "type": "done",
+                            "run_id": run_id,
+                            "status": "failed",
+                            "exit_code": None,
+                            "duration_ms": 0,
+                            "truncated": False,
+                            "error": "Another command is already running on this connection.",
+                        }
+                    )
+                    continue
+
+                if not remote_exec.is_remote_exec_enabled():
+                    await run_in_threadpool(
+                        lambda: remote_exec.record_command_audit(
+                            user.user_id,
+                            action="server.exec_denied",
+                            run_id=run_id,
+                            command=raw_cmd,
+                            status="disabled",
+                            exit_code=None,
+                            duration_ms=0,
+                            truncated=False,
+                            output_bytes=0,
+                            record_fn=record_admin_action,
+                        )
+                    )
+                    await _send(
+                        {
+                            "type": "done",
+                            "run_id": run_id,
+                            "status": "disabled",
+                            "exit_code": None,
+                            "duration_ms": 0,
+                            "truncated": False,
+                            "error": (
+                                "Remote command execution is disabled on this server "
+                                "(set ADMIN_REMOTE_EXEC_ENABLED=true in backend/.env and restart API to enable)."
+                            ),
+                        }
+                    )
+                    continue
+
+                timeout_s = remote_exec.clamp_timeout(msg.get("timeout"))
+                cancel_ev = asyncio.Event()
+                state["active_run_id"] = run_id
+                state["cancel_event"] = cancel_ev
+                state["run_task"] = asyncio.create_task(_execute_run(run_id, raw_cmd.rstrip("\r\n"), timeout_s, cancel_ev))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        ev = state.get("cancel_event")
+        task = state.get("run_task")
+        if ev is not None:
+            ev.set()
+        if task is not None and not task.done():
+            await asyncio.gather(task, return_exceptions=True)
 
 
 def _iso(ts: float) -> str:

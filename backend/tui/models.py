@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
@@ -30,7 +31,20 @@ LogSourceId = Literal[
     "autostart",
 ]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
-PaneId = Literal["stats", "checks", "logs"]
+PaneId = Literal["stats", "checks", "logs", "command"]
+CommandStatus = Literal[
+    "idle",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+    "disabled",
+    "denied",
+    "disconnected",
+]
+CommandStreamKind = Literal["stdout", "stderr", "system"]
+AuditActionName = Literal["server.exec", "server.exec_denied"]
 ViewportBreakpoint = Literal["too_small", "narrow", "medium", "wide"]
 ManagedServiceName = Literal["etymos-api", "cloudflared", "etymos-deploy"]
 
@@ -277,6 +291,126 @@ class VerificationCheck:
 
 
 @dataclass
+class RemoteExecCapability:
+    enabled: bool = False
+    default_timeout_seconds: int = 60
+    max_timeout_seconds: int = 300
+    max_output_bytes: int = 524288
+    cwd: str = ""
+    sv_available: bool = False
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.default_timeout_seconds = max(1, min(300, int(self.default_timeout_seconds)))
+        self.max_timeout_seconds = max(
+            self.default_timeout_seconds,
+            min(600, max(1, int(self.max_timeout_seconds))),
+        )
+        self.max_output_bytes = max(4096, int(self.max_output_bytes))
+        self.cwd = sanitize_log_text(self.cwd, preserve_newlines=False)
+        self.sv_available = bool(self.sv_available)
+
+
+@dataclass
+class LogScrollState:
+    source: LogSourceId = "live"
+    paused: bool = False
+    scroll_y: float = 0.0
+    highlighted_key: Optional[str] = None
+    unread_while_paused: int = 0
+    programmatic_guard: bool = False
+
+    def __post_init__(self) -> None:
+        self.paused = bool(self.paused)
+        self.scroll_y = max(0.0, float(self.scroll_y))
+        self.unread_while_paused = max(0, int(self.unread_while_paused))
+        self.programmatic_guard = bool(self.programmatic_guard)
+
+
+@dataclass
+class FilePollWatermark:
+    source: LogSourceId
+    size_bytes: int = 0
+    modified_at: Optional[str] = None
+    tail_lines: list[str] = field(default_factory=list)
+    next_seq: int = 1
+
+    def __post_init__(self) -> None:
+        self.size_bytes = max(0, int(self.size_bytes))
+        self.next_seq = max(1, int(self.next_seq))
+
+
+def make_run_id() -> str:
+    return f"cmd_{uuid.uuid4().hex[:12]}"
+
+
+@dataclass
+class CommandRequest:
+    run_id: str
+    command: str
+    timeout_seconds: int = 60
+
+    def __post_init__(self) -> None:
+        cleaned = self.command.strip()
+        if not cleaned or len(cleaned) > 2000:
+            raise ValueError("Command must be between 1 and 2000 non-whitespace characters.")
+        self.command = self.command.rstrip("\r\n")
+        self.run_id = sanitize_log_text(self.run_id, preserve_newlines=False).strip() or make_run_id()
+        self.timeout_seconds = max(1, min(600, int(self.timeout_seconds)))
+
+
+@dataclass
+class CommandHistory:
+    entries: deque[str] = field(default_factory=lambda: deque(maxlen=200))
+    cursor: Optional[int] = None
+    draft: str = ""
+
+    def push(self, command: str) -> None:
+        cleaned = command.strip()
+        if not cleaned:
+            return
+        if not self.entries or self.entries[-1] != cleaned:
+            self.entries.append(cleaned)
+        self.cursor = None
+        self.draft = ""
+
+    def step_up(self, current_input: str) -> Optional[str]:
+        if not self.entries:
+            return None
+        if self.cursor is None:
+            self.draft = current_input
+            self.cursor = len(self.entries) - 1
+        elif self.cursor > 0:
+            self.cursor -= 1
+        return self.entries[self.cursor]
+
+    def step_down(self) -> Optional[str]:
+        if self.cursor is None:
+            return None
+        if self.cursor < len(self.entries) - 1:
+            self.cursor += 1
+            return self.entries[self.cursor]
+        self.cursor = None
+        return self.draft
+
+
+def compute_line_overlap_append(prev_lines: list[str], new_lines: list[str]) -> tuple[list[str], bool]:
+    """Compute incremental tail appends from two tail snapshots per data-model.md §3.
+
+    Returns `(appended_lines, rotated_or_reset)`.
+    """
+    if not prev_lines:
+        return list(new_lines), True
+    if new_lines == prev_lines:
+        return [], False
+    max_overlap = min(len(prev_lines), len(new_lines))
+    for k in range(max_overlap, 0, -1):
+        if prev_lines[-k:] == new_lines[:k]:
+            return list(new_lines[k:]), False
+    return list(new_lines), True
+
+
+@dataclass
 class ServerSnapshot:
     checked_at: str = ""
     received_at_mono: float = field(default_factory=time.monotonic)
@@ -289,6 +423,7 @@ class ServerSnapshot:
     active_checks: list[VerificationCheck] = field(default_factory=list)
     recent_checks: list[VerificationCheck] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
+    remote_exec: Optional[RemoteExecCapability] = None
 
 
 @dataclass
@@ -605,6 +740,18 @@ def snapshot_from_api_payload(
     checks_since_start = counts.get("total", completed + failed + len(active_list))
 
     log_buf = proc.get("log_buffer") or {}
+    services = _parse_services(payload.get("services"))
+    exec_raw = payload.get("remote_exec")
+    remote_exec: Optional[RemoteExecCapability] = None
+    if isinstance(exec_raw, dict):
+        remote_exec = RemoteExecCapability(
+            enabled=bool(exec_raw.get("enabled", False)),
+            default_timeout_seconds=_as_int(exec_raw.get("default_timeout_seconds"), 60) or 60,
+            max_timeout_seconds=_as_int(exec_raw.get("max_timeout_seconds"), 300) or 300,
+            max_output_bytes=_as_int(exec_raw.get("max_output_bytes"), 524288) or 524288,
+            cwd=str(exec_raw.get("cwd") or ""),
+            sv_available=bool(exec_raw.get("sv_available", False)),
+        )
     return ServerSnapshot(
         checked_at=str(payload.get("checked_at") or ""),
         received_at_mono=time.monotonic() if received_at_mono is None else received_at_mono,
@@ -653,10 +800,11 @@ def snapshot_from_api_payload(
             failed_since_start=failed,
             auto_restart="Supervisor" if supervised else "Manual",
         ),
-        services=_parse_services(payload.get("services")),
+        services=services,
         active_checks=active_list,
         recent_checks=recent_list,
         counts=counts,
+        remote_exec=remote_exec,
     )
 
 
@@ -699,6 +847,7 @@ def merge_local_and_api_snapshot(
             active_checks=[],
             recent_checks=local_snap.recent_checks,
             counts={},
+            remote_exec=local_snap.remote_exec,
         )
 
     api_snap = snapshot_from_api_payload(api_payload, mode="local", received_at_mono=now_mono)
@@ -755,4 +904,5 @@ def merge_local_and_api_snapshot(
         active_checks=api_snap.active_checks,
         recent_checks=api_snap.recent_checks,
         counts=api_snap.counts,
+        remote_exec=api_snap.remote_exec or local_snap.remote_exec,
     )

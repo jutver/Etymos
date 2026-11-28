@@ -21,6 +21,7 @@ from ..log_tailer import LocalLogFileTailer
 from ..models import (
     ActionOutcome,
     ActionRequest,
+    CommandRequest,
     ConnectionState,
     DiskMetrics,
     GpuMetrics,
@@ -28,12 +29,16 @@ from ..models import (
     LogFilterState,
     LogSourceId,
     MachineMetrics,
+    RemoteExecCapability,
     ServerSnapshot,
     merge_local_and_api_snapshot,
 )
 from ..sanitize import format_log_time, sanitize_log_text
 from ..supervisor_ctl import LocalSupervisorController, default_backend_dir
 from .base import (
+    CommandDoneEvent,
+    CommandOutputEvent,
+    CommandStartedEvent,
     ConnectionEvent,
     EventEmitFn,
     LogFilesEvent,
@@ -42,6 +47,11 @@ from .base import (
     NoticeEvent,
     SnapshotEvent,
 )
+
+try:
+    import remote_exec as _remote_exec
+except ImportError:  # pragma: no cover - package import fallback
+    from api import remote_exec as _remote_exec
 
 logger = logging.getLogger("tui.provider.local")
 
@@ -124,6 +134,7 @@ def collect_local_host_snapshot_sync(
 
     gpu = _probe_nvidia_smi_sync()
     services = supervisor.list_services()
+    cap_raw = _remote_exec.get_remote_exec_capability(backend_dir, force_enabled=True)
     return ServerSnapshot(
         checked_at="",
         received_at_mono=time.monotonic(),
@@ -139,6 +150,7 @@ def collect_local_host_snapshot_sync(
         ),
         gpu=gpu,
         services=services,
+        remote_exec=RemoteExecCapability(**cap_raw),
     )
 
 
@@ -202,6 +214,7 @@ class LocalDashboardProvider:
         self._status_ws: Any = None
         self._logs_ws: Any = None
         self._last_pid: Optional[int] = None
+        self._exec_cancel_events: dict[str, asyncio.Event] = {}
 
     def _read_local_token(self) -> Optional[str]:
         path = self.log_dir / LOCAL_TOKEN_FILENAME
@@ -243,6 +256,8 @@ class LocalDashboardProvider:
     async def stop(self) -> None:
         self._stop_event.set()
         self._refresh_signal.set()
+        for ev in list(self._exec_cancel_events.values()):
+            ev.set()
         for ws in (self._status_ws, self._logs_ws):
             if ws is not None:
                 try:
@@ -389,6 +404,75 @@ class LocalDashboardProvider:
             summary="API is offline; only supervisor service actions (start/restart/stop) are available offline.",
             ms=round((time.perf_counter() - started) * 1000),
         )
+
+    async def cancel_command(self, run_id: str) -> None:
+        ev = self._exec_cancel_events.get(run_id)
+        if ev is not None:
+            ev.set()
+
+    async def run_command(self, req: CommandRequest) -> None:
+        if self._exec_cancel_events:
+            self._emit_safe(
+                CommandDoneEvent(
+                    run_id=req.run_id,
+                    status="failed",
+                    error="Another command is already running.",
+                )
+            )
+            return
+
+        cancel_ev = asyncio.Event()
+        self._exec_cancel_events[req.run_id] = cancel_ev
+        cwd = str(self.backend_dir.parent)
+        self._emit_safe(CommandStartedEvent(run_id=req.run_id, cwd=cwd))
+
+        async def _on_output(stream_name: str, chunk: str) -> None:
+            self._emit_safe(
+                CommandOutputEvent(
+                    run_id=req.run_id,
+                    stream=stream_name,  # type: ignore[arg-type]
+                    data=chunk,
+                )
+            )
+
+        try:
+            res = await _remote_exec.run_shell_command_stream(
+                command=req.command,
+                timeout_seconds=_remote_exec.clamp_timeout(req.timeout_seconds),
+                max_output_bytes=_remote_exec.get_max_output_bytes(),
+                on_output=_on_output,
+                cancel_event=cancel_ev,
+                backend_dir=self.backend_dir,
+                log_dir=self.log_dir,
+            )
+            try:
+                await asyncio.to_thread(
+                    lambda: _remote_exec.record_command_audit(
+                        "local-tui",
+                        action="server.exec",
+                        run_id=req.run_id,
+                        command=req.command,
+                        status=res.status,
+                        exit_code=res.exit_code,
+                        duration_ms=res.duration_ms,
+                        truncated=res.truncated,
+                        output_bytes=res.output_bytes,
+                    )
+                )
+            except Exception:
+                pass
+            self._emit_safe(
+                CommandDoneEvent(
+                    run_id=req.run_id,
+                    status=res.status,  # type: ignore[arg-type]
+                    exit_code=res.exit_code,
+                    duration_ms=res.duration_ms,
+                    truncated=res.truncated,
+                    error=res.error,
+                )
+            )
+        finally:
+            self._exec_cancel_events.pop(req.run_id, None)
 
     @staticmethod
     def _summarize_api_outcome(req: ActionRequest, data: dict[str, Any]) -> str:
@@ -554,6 +638,7 @@ class LocalDashboardProvider:
                     if reset_needed:
                         last_seq = rows[-1].seq if rows else 0
                         self._emit_safe(LogSnapshotEvent(src, rows, truncated=False, last_seq=last_seq))
+                        self._emit_safe(NoticeEvent(f"Log file {src} rotated/reloaded", severity="information"))
                     elif rows:
                         last_seq = rows[-1].seq
                         self._emit_safe(LogRowsEvent(src, rows, truncated=False, last_seq=last_seq))
