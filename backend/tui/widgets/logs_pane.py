@@ -1,8 +1,9 @@
 """Reactive LogsPane: source tabs (1-8), filters, 20Hz coalesced flush, pause, and tracebacks."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import logging
-from typing import Optional
+from typing import Iterator, Optional
 
 from rich.text import Text
 from textual.containers import Vertical
@@ -17,6 +18,7 @@ from ..models import (
     LogEntry,
     LogFilterState,
     LogLevel,
+    LogScrollState,
     LogSourceId,
     LogStore,
     parse_search_query,
@@ -52,6 +54,31 @@ class LogPauseChanged(Message):
         self.after_seq = after_seq
 
 
+class _ScrollAwareLogList(OptionList):
+    """OptionList subclass that auto-pauses LogsPane on any upward user scroll."""
+
+    def __init__(self, pane: "LogsPane", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._pane = pane
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        parent_watch = getattr(super(), "watch_scroll_y", None)
+        if callable(parent_watch):
+            parent_watch(old_value, new_value)
+        state = self._pane.scroll_state
+        state.scroll_y = max(0.0, float(new_value))
+        if state.programmatic_guard:
+            return
+        max_y = float(self.max_scroll_y)
+        if max_y <= 0.5:
+            return
+        if new_value < old_value - 0.1 and new_value < max_y - 1.0:
+            if not self._pane.paused:
+                self._pane.toggle_paused(force=True)
+        elif self._pane.paused and new_value > old_value + 0.1 and new_value >= max_y - 0.5:
+            self._pane.toggle_paused(force=False)
+
+
 class LogsPane(Vertical):
     """Multi-source log viewer with bounded ring buffer, filters, pause, and traceback expand."""
 
@@ -61,6 +88,7 @@ class LogsPane(Vertical):
         self.selected_source: LogSourceId = initial_source if initial_source in LOG_SOURCE_ORDER else "live"
         self.filters = LogFilterState()
         self.store = LogStore(capacity=3000)
+        self.scroll_state = LogScrollState(source=self.selected_source)
         self.paused = False
         self.unread_while_paused = 0
         self.truncated_notice = False
@@ -69,6 +97,7 @@ class LogsPane(Vertical):
         self._displayed: list[LogEntry] = []
         self._pending_reset = False
         self._pending_rows: list[LogEntry] = []
+        self._last_highlighted_idx: Optional[int] = None
 
         self._tabs_bar = Static(id="logs-tabs")
         self._status_bar = Static(id="logs-filter-bar")
@@ -76,7 +105,7 @@ class LogsPane(Vertical):
             placeholder="Filter logs (text or job:<id> req:<id> user:<id>, Enter apply, Esc close)",
             id="log-search-input",
         )
-        self._list = OptionList(id="logs-list")
+        self._list = _ScrollAwareLogList(self, id="logs-list")
         self._empty_hint = Static("Waiting for log entries…", id="logs-empty")
 
     def compose(self):
@@ -93,18 +122,61 @@ class LogsPane(Vertical):
         self.set_interval(0.05, self._flush_pending)
         self._refresh_chrome()
 
+    @contextmanager
+    def _programmatic_scroll(self) -> Iterator[None]:
+        prev = self.scroll_state.programmatic_guard
+        self.scroll_state.programmatic_guard = True
+        try:
+            yield
+        finally:
+            self.scroll_state.programmatic_guard = prev
+            self.scroll_state.scroll_y = max(0.0, float(self._list.scroll_y))
+
+    def _sync_scroll_state_flags(self) -> None:
+        self.scroll_state.source = self.selected_source
+        self.scroll_state.paused = self.paused
+        self.scroll_state.unread_while_paused = self.unread_while_paused
+        self.scroll_state.scroll_y = max(0.0, float(self._list.scroll_y))
+
+    def _scroll_to_tail_programmatic(self) -> None:
+        if not self._displayed:
+            return
+        with self._programmatic_scroll():
+            self._list.highlighted = len(self._displayed) - 1
+            self._list.scroll_end(animate=False)
+            self._last_highlighted_idx = self._list.highlighted
+            self.scroll_state.highlighted_key = self._displayed[-1].key
+
+        def _after_refresh_tail() -> None:
+            if self.paused or not self._displayed:
+                return
+            with self._programmatic_scroll():
+                self._list.scroll_end(animate=False)
+
+        self.call_after_refresh(_after_refresh_tail)
+
     # --- Source, Filter, & Pause Controls -------------------------------------------------
 
     def set_source(self, source: LogSourceId) -> None:
         if source not in LOG_SOURCE_ORDER or source == self.selected_source:
             return
+        was_paused = self.paused
         self.selected_source = source
+        self.paused = False
+        self.unread_while_paused = 0
+        self.truncated_notice = False
+        self.scroll_state.source = source
+        self.scroll_state.paused = False
+        self.scroll_state.unread_while_paused = 0
+        self.scroll_state.scroll_y = 0.0
+        self.scroll_state.highlighted_key = None
+        self._last_highlighted_idx = None
         self.store.clear()
         self._pending_rows.clear()
         self._pending_reset = True
-        self.unread_while_paused = 0
-        self.truncated_notice = False
         self._flush_pending()
+        if was_paused:
+            self.post_message(LogPauseChanged(False, 0))
         self.post_message(LogSourceChanged(source))
 
     def cycle_source(self, step: int) -> None:
@@ -236,8 +308,8 @@ class LogsPane(Vertical):
         if not self.paused:
             self.unread_while_paused = 0
             if self._displayed:
-                self._list.highlighted = len(self._displayed) - 1
-                self._list.scroll_end(animate=False)
+                self._scroll_to_tail_programmatic()
+        self._sync_scroll_state_flags()
         self._refresh_chrome()
         self.post_message(LogPauseChanged(self.paused, self.store.last_seq))
         return self.paused
@@ -247,14 +319,16 @@ class LogsPane(Vertical):
             return
         if not self.paused:
             self.toggle_paused(force=True)
-        self._list.highlighted = 0
-        self._list.scroll_home(animate=False)
+        with self._programmatic_scroll():
+            self._list.highlighted = 0
+            self._list.scroll_home(animate=False)
+            self._last_highlighted_idx = 0
+            self.scroll_state.highlighted_key = self._displayed[0].key
 
     def jump_bottom(self) -> None:
         self.toggle_paused(force=False)
         if self._displayed:
-            self._list.highlighted = len(self._displayed) - 1
-            self._list.scroll_end(animate=False)
+            self._scroll_to_tail_programmatic()
 
     def scroll_step(self, delta: int) -> None:
         if not self._displayed:
@@ -265,8 +339,30 @@ class LogsPane(Vertical):
         nxt = max(0, min(len(self._displayed) - 1, cur + delta))
         if delta < 0 and nxt < len(self._displayed) - 1 and not self.paused:
             self.toggle_paused(force=True)
-        self._list.highlighted = nxt
-        self._list.scroll_to_highlight()
+        with self._programmatic_scroll():
+            self._list.highlighted = nxt
+            self._list.scroll_to_highlight()
+            self._last_highlighted_idx = nxt
+            self.scroll_state.highlighted_key = self._displayed[nxt].key
+
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        if event.option_list is not self._list:
+            return
+        idx = event.option_index
+        if 0 <= idx < len(self._displayed):
+            self.scroll_state.highlighted_key = self._displayed[idx].key
+        if not self.scroll_state.programmatic_guard and self._displayed:
+            moved_up = self._last_highlighted_idx is not None and idx < self._last_highlighted_idx
+            moved_down = self._last_highlighted_idx is not None and idx > self._last_highlighted_idx
+            max_y = float(self._list.max_scroll_y)
+            cur_y = float(self._list.scroll_y)
+            if idx < len(self._displayed) - 1 and not self.paused:
+                away_from_bottom = max_y > 0.5 and cur_y < max_y - 1.0
+                if moved_up or away_from_bottom:
+                    self.toggle_paused(force=True)
+            elif self.paused and moved_down and idx == len(self._displayed) - 1 and (max_y <= 0.5 or cur_y >= max_y - 0.5):
+                self.toggle_paused(force=False)
+        self._last_highlighted_idx = idx
 
     def toggle_selected_traceback(self) -> bool:
         idx = self._list.highlighted
@@ -295,9 +391,14 @@ class LogsPane(Vertical):
         rows: list[LogEntry],
         *,
         truncated: bool = False,
+        reset_pause: bool = False,
     ) -> None:
         if source != self.selected_source:
             return
+        if reset_pause and self.paused:
+            self.paused = False
+            self.unread_while_paused = 0
+            self._sync_scroll_state_flags()
         self.truncated_notice = truncated
         self._pending_rows.clear()
         self._pending_reset = True
@@ -343,6 +444,7 @@ class LogsPane(Vertical):
         matched = [entry for entry in added if self.store.matches(entry, self.filters)]
         if self.paused and matched:
             self.unread_while_paused += len(matched)
+            self._sync_scroll_state_flags()
 
         # If oldest rows were evicted past 3000 capacity, rebuild displayed list cleanly.
         if self.store.dropped_count != before_dropped:
@@ -356,34 +458,77 @@ class LogsPane(Vertical):
 
         self._append_visible_entries(matched)
         if not self.paused and self._displayed:
-            self._list.highlighted = len(self._displayed) - 1
-            self._list.scroll_end(animate=False)
+            self._scroll_to_tail_programmatic()
         self._refresh_chrome()
 
     def _rebuild_visible_list(self, *, scroll_to_end: bool) -> None:
+        saved_y = max(0.0, float(self._list.scroll_y))
+        saved_key: Optional[str] = None
+        cur_idx = self._list.highlighted
+        if cur_idx is not None and 0 <= cur_idx < len(self._displayed):
+            saved_key = self._displayed[cur_idx].key
+
         matched = self.store.filtered(self.filters)
         self._displayed = matched
-        self._list.clear_options()
-        if matched:
-            self._empty_hint.display = False
-            self._list.add_options([Option(self._render_entry(e), id=e.key) for e in matched])
-            if scroll_to_end:
-                self._list.highlighted = len(matched) - 1
-                self._list.scroll_end(animate=False)
-        else:
-            self._empty_hint.update(
-                "No log lines match active filters."
-                if self.filters.has_active_filters()
-                else f"Waiting for {self.selected_source} log lines…"
-            )
-            self._empty_hint.display = True
+        with self._programmatic_scroll():
+            self._list.clear_options()
+            if matched:
+                self._empty_hint.display = False
+                self._list.add_options([Option(self._render_entry(e), id=e.key) for e in matched])
+            else:
+                self._empty_hint.update(
+                    "No log lines match active filters."
+                    if self.filters.has_active_filters()
+                    else f"Waiting for {self.selected_source} log lines…"
+                )
+                self._empty_hint.display = True
+
+        if not matched:
+            self._last_highlighted_idx = None
+            return
+
+        if scroll_to_end:
+            self._scroll_to_tail_programmatic()
+            return
+
+        # Restore reading position cleanly without snapping to the bottom.
+        key_index = {e.key: i for i, e in enumerate(matched)}
+        target_y = 0.0
+        target_idx: Optional[int] = None
+        if saved_key and saved_key in key_index:
+            target_idx = key_index[saved_key]
+            target_y = min(saved_y, float(self._list.max_scroll_y))
+        elif saved_key:
+            # Rotation/reset replaced prior entries: reload cleanly near top without jumping to tail.
+            target_idx = 0
+            target_y = 0.0
+
+        with self._programmatic_scroll():
+            if target_idx is not None:
+                self._list.highlighted = target_idx
+                self._last_highlighted_idx = target_idx
+                self.scroll_state.highlighted_key = matched[target_idx].key
+            self._list.scroll_to(y=target_y, animate=False, immediate=True)
+
+        def _after_refresh_restore() -> None:
+            if not self.paused or not self._displayed:
+                return
+            with self._programmatic_scroll():
+                bounded_y = min(target_y, float(self._list.max_scroll_y))
+                self._list.scroll_to(y=bounded_y, animate=False, immediate=True)
+
+        self.call_after_refresh(_after_refresh_restore)
 
     def _append_visible_entries(self, entries: list[LogEntry]) -> None:
         if not entries:
             return
+        prev_y = max(0.0, float(self._list.scroll_y))
         self._displayed.extend(entries)
         self._empty_hint.display = False
-        self._list.add_options([Option(self._render_entry(e), id=e.key) for e in entries])
+        with self._programmatic_scroll():
+            self._list.add_options([Option(self._render_entry(e), id=e.key) for e in entries])
+            if self.paused:
+                self._list.scroll_to(y=min(prev_y, float(self._list.max_scroll_y)), animate=False, immediate=True)
 
     # --- Chrome & Entry Rendering ---------------------------------------------------------
 

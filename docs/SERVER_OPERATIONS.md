@@ -38,7 +38,7 @@ cd /workspace/Etymos
 bash backend/scripts/tui.sh
 ```
 
-See [SERVER_TUI_DASHBOARD.md](SERVER_TUI_DASHBOARD.md) for Remote Streaming Mode (`--remote https://api.etymos.site --login`), keybindings, pane zoom, and guarded actions.
+See [SERVER_TUI_DASHBOARD.md](SERVER_TUI_DASHBOARD.md) for Remote Streaming Mode (`--remote https://api.etymos.site --login`), keybindings (including log scroll-lock across tabs `2`–`8`), pane zoom, guarded actions, and opt-in direct command execution (`ADMIN_REMOTE_EXEC_ENABLED=true`, pre-configuring `$SV` in the bottom `:`/`x` command pane).
 
 ## The one shortcut to set first
 

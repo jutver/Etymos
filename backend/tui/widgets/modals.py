@@ -10,7 +10,9 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ..command_safety import DestructiveMatch
 from ..models import ActionRequest, OperatingMode
+from ..sanitize import sanitize_log_text
 
 _MENU_OPTIONS: list[tuple[str, ActionRequest]] = [
     ("Runtime: Set API Log Level -> DEBUG", ActionRequest(action="log-level", level="DEBUG")),
@@ -149,6 +151,56 @@ class ConfirmActionModal(ModalScreen[tuple[bool, bool]]):
             self.dismiss((False, False))
 
 
+class ConfirmCommandModal(ModalScreen[bool]):
+    """Destructive command confirmation dialog returning `True` only when explicitly confirmed."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("n", "cancel", "Cancel"),
+    ]
+
+    def __init__(
+        self,
+        command: str,
+        match: DestructiveMatch,
+        *,
+        mode: OperatingMode = "local",
+    ) -> None:
+        super().__init__()
+        self.command = sanitize_log_text(command, preserve_newlines=False)
+        self.match = match
+        self.mode = mode
+
+    def compose(self):
+        with Vertical(id="modal-dialog", classes="modal-box confirm-box"):
+            yield Static(
+                f"Confirm Potentially Destructive Command [{self.match.pattern_name}]",
+                classes="modal-title",
+            )
+            body = Text()
+            tone = "bold red" if self.match.severity == "critical" else "bold yellow"
+            body.append(f"{self.match.severity.upper()}: {self.match.reason}\n\n", style=tone)
+            body.append("Command:\n", style="dim")
+            body.append(f"  {self.command}\n", style="bold")
+            yield Static(body, id="confirm-cmd-body")
+            with Horizontal(classes="modal-buttons"):
+                yield Button(
+                    "Execute Anyway",
+                    variant="error" if self.match.severity == "critical" else "warning",
+                    id="btn-confirm-cmd",
+                )
+                yield Button("Cancel [Esc]", variant="primary", id="btn-cancel-cmd")
+
+    def on_mount(self) -> None:
+        self.query_one("#btn-cancel-cmd", Button).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "btn-confirm-cmd")
+
+
 class HelpModal(ModalScreen[None]):
     """Keyboard shortcuts & log source legend overlay."""
 
@@ -172,8 +224,12 @@ class HelpModal(ModalScreen[None]):
             )
             help_text = Text()
             shortcuts = [
-                ("Tab / Shift+Tab", "Cycle focus across Stats -> Checks -> Logs"),
-                ("z / Esc", "Toggle full-screen zoom on focused pane / Close overlay"),
+                ("Tab / Shift+Tab", "Cycle focus across Stats -> Checks -> Logs (-> Command when open)"),
+                ("z / Esc", "Toggle full-screen zoom on focused pane / Close overlay / Blur prompt"),
+                (": / x", "Toggle bottom Command Pane ($SV and server diagnostics) & focus prompt"),
+                ("↑ / ↓ (in Cmd)", "Recall previous session commands (preserving current draft)"),
+                ("Ctrl+X / Ctrl+C", "Cancel actively running command (Ctrl+C exits cleanly when idle)"),
+                ("Ctrl+L (in Cmd)", "Clear command transcript output"),
                 ("1..8 or [ / ]", "Switch log source (1=Live, 2=api, 3=api-out, 4=deploy, 5=tests, 6=tunnel, 7=supervisor, 8=autostart)"),
                 ("/", "Focus search filter (supports plain text + job:<id> req:<id> user:<id>)"),
                 ("l", "Cycle minimum log severity (DEBUG -> INFO -> WARNING -> ERROR)"),
@@ -187,7 +243,7 @@ class HelpModal(ModalScreen[None]):
                 ("a / Ctrl+P", "Open allowlisted Operational Actions Menu"),
                 ("r", "Force immediate telemetry refresh / reconnect"),
                 ("? / F1", "Toggle this help screen"),
-                ("q / Ctrl+C", "Exit cleanly and restore terminal state"),
+                ("q", "Exit cleanly and restore terminal state"),
             ]
             for key, desc in shortcuts:
                 help_text.append(f"  {key:<24}", style="bold cyan")

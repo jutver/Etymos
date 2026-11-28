@@ -118,31 +118,80 @@ Screen.-narrow #cards-row {
     height: 1fr;
 }
 
+#command-pane {
+    display: none;
+    height: 14;
+    min-height: 8;
+    border: round $primary-darken-2;
+    padding: 0 1;
+}
+
+Screen.-cmd-open #command-pane {
+    display: block;
+}
+
+Screen.-narrow.-cmd-open #command-pane {
+    height: 10;
+}
+
+#cmd-header {
+    height: 1;
+}
+
+#cmd-output {
+    height: 1fr;
+}
+
+#cmd-input-row {
+    height: 3;
+}
+
+#cmd-prompt-label {
+    width: 3;
+    content-align: left middle;
+}
+
+#cmd-input {
+    width: 1fr;
+}
+
 /* Focus highlights */
 Screen.-focus-stats #stats-pane,
 Screen.-focus-checks #checks-pane,
-Screen.-focus-logs #logs-pane {
+Screen.-focus-logs #logs-pane,
+Screen.-focus-command #command-pane {
     border: heavy $accent;
 }
 
 /* Full-screen Pane Zoom */
 Screen.-zoom-stats #checks-pane,
 Screen.-zoom-stats #logs-pane,
+Screen.-zoom-stats #command-pane,
 Screen.-zoom-checks #stats-pane,
 Screen.-zoom-checks #logs-pane,
+Screen.-zoom-checks #command-pane,
 Screen.-zoom-logs #stats-pane,
-Screen.-zoom-logs #checks-pane {
+Screen.-zoom-logs #checks-pane,
+Screen.-zoom-logs #command-pane,
+Screen.-zoom-command #stats-pane,
+Screen.-zoom-command #checks-pane,
+Screen.-zoom-command #logs-pane {
     display: none;
 }
 
 Screen.-zoom-stats #stats-pane,
-Screen.-zoom-checks #checks-pane {
+Screen.-zoom-checks #checks-pane,
+Screen.-zoom-command #command-pane {
     height: 1fr;
     max-height: 100%;
 }
 
+Screen.-zoom-command #command-pane {
+    display: block;
+}
+
 /* Modals */
-ActionsModal, ConfirmActionModal, HelpModal {
+ActionsModal, ConfirmActionModal, ConfirmCommandModal, HelpModal {
     align: center middle;
     background: $background 65%;
 }

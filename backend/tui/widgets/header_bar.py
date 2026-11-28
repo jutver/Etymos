@@ -100,5 +100,5 @@ class HeaderBar(Static):
         if self.restart_notice:
             text.append(f"  ★ {self.restart_notice}", style="bold" if self._no_color else "bold magenta")
 
-        text.append("   [?]Help [a]Actions [z]Zoom [q]Quit", style="" if self._no_color else "dim cyan")
+        text.append("   [:]Cmd [?]Help [a]Actions [z]Zoom [q]Quit", style="" if self._no_color else "dim cyan")
         return text

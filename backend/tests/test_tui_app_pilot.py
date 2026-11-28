@@ -155,6 +155,12 @@ class FakeDashboardProvider:
             return self.action_responses.pop(0)
         return ActionOutcome(ok=True, status_code=200, action=req.action, summary=f"{req.action} ok", ms=12)
 
+    async def run_command(self, req) -> None:
+        pass
+
+    async def cancel_command(self, run_id: str) -> None:
+        pass
+
 
 def test_responsive_breakpoints_zoom_no_color_and_clean_exit():
     async def _run():
@@ -368,5 +374,289 @@ def test_offline_downtime_pid_restart_help_and_guarded_action_modals():
             app.screen.query_one("#btn-force-confirm").press()
             await pilot.pause(0.1)
             assert any(r.action == "restart-service" and r.force is True for r in provider.executed_actions)
+
+    asyncio.run(_run())
+
+
+def test_log_file_tab_scroll_lock_wheel_keys_append_rotation_and_resume():
+    async def _run():
+        api_lines = [
+            LogEntry(
+                key=f"api:{i}",
+                seq=i,
+                ts_text="10:00:00.000",
+                level="RAW",
+                levelno=logging.INFO,
+                logger="api",
+                message=f"Server log line #{i}",
+            )
+            for i in range(1, 81)
+        ]
+
+        class _MultiLineFileProvider(FakeDashboardProvider):
+            async def set_log_source(self, source: LogSourceId) -> None:
+                self.selected_sources.append(source)
+                if not self._emit:
+                    return
+                if source == "api":
+                    self._emit(LogSnapshotEvent("api", list(api_lines), last_seq=80))
+                elif source == "live":
+                    self._emit(LogSnapshotEvent("live", list(self.initial_logs), last_seq=len(self.initial_logs)))
+                else:
+                    self._emit(
+                        LogSnapshotEvent(
+                            source,
+                            [
+                                LogEntry(
+                                    key=f"{source}:{i}",
+                                    seq=i,
+                                    ts_text="10:05:00",
+                                    level="RAW",
+                                    levelno=logging.INFO,
+                                    logger=source,
+                                    message=f"{source} row #{i}",
+                                )
+                                for i in range(1, 41)
+                            ],
+                            last_seq=40,
+                        )
+                    )
+
+        provider = _MultiLineFileProvider(mode="remote")
+        app = EtymosTuiApp(provider)
+        async with app.run_test(size=(140, 42)) as pilot:
+            await pilot.pause(0.1)
+
+            # Switch to tab 2 (`api`) which has 80 lines (> viewport height)
+            await pilot.press("2")
+            await pilot.pause(0.12)
+            assert app.logs_pane.selected_source == "api"
+            assert app.logs_pane.paused is False
+            log_list = app.logs_pane._list
+            assert log_list.max_scroll_y > 10
+            bottom_y = float(log_list.max_scroll_y)
+            assert float(log_list.scroll_y) >= bottom_y - 1.5
+
+            # 1. Simulate mouse wheel / trackpad upward scroll -> auto-pauses and stays pinned
+            log_list.scroll_to(y=5.0, animate=False, immediate=True)
+            await pilot.pause(0.1)
+            assert app.logs_pane.paused is True
+            assert app.logs_pane.scroll_state.paused is True
+            pinned_y = float(log_list.scroll_y)
+            assert pinned_y < bottom_y - 5.0
+
+            # 2. Incremental append arrives while paused -> unread badge grows, viewport does NOT jump
+            app.handle_provider_event(
+                LogRowsEvent(
+                    "api",
+                    [
+                        LogEntry(key=f"api:{n}", seq=n, level="RAW", levelno=logging.INFO, logger="api", message=f"Appended #{n}")
+                        for n in (81, 82, 83)
+                    ],
+                    last_seq=83,
+                )
+            )
+            app.logs_pane.flush_now()
+            await pilot.pause(0.08)
+            assert app.logs_pane.paused is True
+            assert app.logs_pane.unread_while_paused == 3
+            assert abs(float(log_list.scroll_y) - pinned_y) < 0.6
+
+            # 3. Same-source rotation while paused -> stays paused without jumping to bottom
+            rotated_rows = [
+                LogEntry(key=f"api:{n}", seq=n, level="RAW", levelno=logging.INFO, logger="api", message=f"Rotated #{n}")
+                for n in range(1, 51)
+            ]
+            app.handle_provider_event(LogSnapshotEvent("api", rotated_rows, last_seq=50))
+            await pilot.pause(0.08)
+            assert app.logs_pane.paused is True
+            assert float(log_list.scroll_y) < float(log_list.max_scroll_y) - 1.0
+
+            # 4. Press G -> resumes auto-follow & jumps to tail
+            await pilot.press("G")
+            await pilot.pause(0.08)
+            assert app.logs_pane.paused is False
+            assert app.logs_pane.unread_while_paused == 0
+            assert float(log_list.scroll_y) >= float(log_list.max_scroll_y) - 1.0
+
+            # 5. Keyboard PgUp -> pauses auto-follow & scrolls upward away from bottom
+            await pilot.press("pageup", "pageup")
+            await pilot.pause(0.08)
+            assert app.logs_pane.paused is True
+            assert float(log_list.scroll_y) < float(log_list.max_scroll_y) - 1.0
+
+            # 6. Manually scrolling back to bottom edge -> resumes auto-follow cleanly
+            log_list.scroll_to(y=float(log_list.max_scroll_y), animate=False, immediate=True)
+            await pilot.pause(0.1)
+            assert app.logs_pane.paused is False
+            assert app.logs_pane.unread_while_paused == 0
+
+            # 7. Pause on tab 2, then switch to tab 4 (`deploy`) -> fresh unpaused tail
+            await pilot.press("p")
+            assert app.logs_pane.paused is True
+            await pilot.press("4")
+            await pilot.pause(0.1)
+            assert app.logs_pane.selected_source == "deploy"
+            assert app.logs_pane.paused is False
+            assert app.logs_pane.unread_while_paused == 0
+
+    asyncio.run(_run())
+
+
+def test_command_pane_toggle_focus_zoom_history_clear_cancel_and_destructive_guard():
+    from tui.models import CommandRequest, RemoteExecCapability
+    from tui.providers.base import CommandDoneEvent, CommandOutputEvent, CommandStartedEvent
+    from tui.widgets.modals import ConfirmCommandModal
+
+    async def _run():
+        class _CommandCapableProvider(FakeDashboardProvider):
+            def __init__(self) -> None:
+                super().__init__(mode="remote")
+                self.snapshot.remote_exec = RemoteExecCapability(enabled=True, sv_available=True, cwd="/workspace/Etymos")
+                self.ran_commands: list[CommandRequest] = []
+                self.cancelled_runs: list[str] = []
+                self._cancel_ev: Optional[asyncio.Event] = None
+                self.disabled_mode = False
+
+            async def run_command(self, req: CommandRequest) -> None:
+                self.ran_commands.append(req)
+                if not self._emit:
+                    return
+                if self.disabled_mode:
+                    self._emit(
+                        CommandDoneEvent(
+                            run_id=req.run_id,
+                            status="disabled",
+                            exit_code=None,
+                            duration_ms=0,
+                            error="Remote command execution is disabled on this server (set ADMIN_REMOTE_EXEC_ENABLED=true).",
+                        )
+                    )
+                    return
+                self._emit(CommandStartedEvent(run_id=req.run_id, cwd="/workspace/Etymos"))
+                if req.command.startswith("sleep"):
+                    self._cancel_ev = asyncio.Event()
+                    try:
+                        await asyncio.wait_for(self._cancel_ev.wait(), timeout=5.0)
+                        self._emit(CommandDoneEvent(run_id=req.run_id, status="cancelled", exit_code=None, duration_ms=15, error="Cancelled"))
+                    except asyncio.TimeoutError:
+                        self._emit(CommandDoneEvent(run_id=req.run_id, status="completed", exit_code=0, duration_ms=5000))
+                    return
+                self._emit(CommandOutputEvent(run_id=req.run_id, stream="stdout", data="\x1b[32metymos-api RUNNING\x1b[0m\n"))
+                self._emit(CommandDoneEvent(run_id=req.run_id, status="completed", exit_code=0, duration_ms=42))
+
+            async def cancel_command(self, run_id: str) -> None:
+                self.cancelled_runs.append(run_id)
+                if self._cancel_ev is not None:
+                    self._cancel_ev.set()
+
+        provider = _CommandCapableProvider()
+        app = EtymosTuiApp(provider)
+        async with app.run_test(size=(150, 42)) as pilot:
+            await pilot.pause(0.1)
+
+            # Closed by default; Tab does NOT visit "command"
+            assert app.command_pane.is_open is False
+            await pilot.press("tab")
+            assert app.focused_pane == "stats"
+            await pilot.press("shift+tab")
+            assert app.focused_pane == "logs"
+
+            # Open CommandPane with `:` -> focuses prompt Input & includes "command" in Tab cycle
+            await pilot.press("colon")
+            await pilot.pause(0.08)
+            assert app.command_pane.is_open is True
+            assert "-cmd-open" in app.screen.classes
+            assert app.focused_pane == "command"
+            assert app.focused is app.command_pane._input
+
+            # Submit command -> ANSI stripped, status updated, history recorded
+            app.command_pane._input.value = "$SV status"
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert [c.command for c in provider.ran_commands] == ["$SV status"]
+            transcript = "\n".join(app.command_pane.transcript_lines)
+            assert "etymos-api RUNNING" in transcript
+            assert "\x1b" not in transcript
+            assert app.command_pane.status == "completed"
+
+            # History Up/Down recall preserves typed draft
+            app.command_pane._input.value = "draft-text"
+            await pilot.press("up")
+            assert app.command_pane._input.value == "$SV status"
+            await pilot.press("down")
+            assert app.command_pane._input.value == "draft-text"
+            app.command_pane._input.value = ""
+
+            # Ctrl+L clears transcript
+            await pilot.press("ctrl+l")
+            await pilot.pause(0.05)
+            assert len(app.command_pane.transcript_lines) == 0
+
+            # Esc blurs input -> z zooms command pane -> Esc unzooms
+            await pilot.press("escape")
+            await pilot.pause(0.05)
+            await pilot.press("z")
+            await pilot.pause(0.05)
+            assert app.zoomed_pane == "command" and "-zoom-command" in app.screen.classes
+            await pilot.press("escape")
+            await pilot.pause(0.05)
+            assert app.zoomed_pane is None
+
+            # Slow running command cancelled by smart Ctrl+C WITHOUT exiting app!
+            app.command_pane.focus_prompt()
+            app.command_pane._input.value = "sleep 20"
+            await pilot.press("enter")
+            await pilot.pause(0.05)
+            assert app.command_pane.status == "running"
+            await pilot.press("ctrl+c")
+            await pilot.pause(0.1)
+            assert app.is_running
+            assert app.command_pane.status == "cancelled"
+            assert len(provider.cancelled_runs) == 1
+
+            # Second slow command cancelled by Ctrl+X
+            app.command_pane._input.value = "sleep 30"
+            await pilot.press("enter")
+            await pilot.pause(0.05)
+            await pilot.press("ctrl+x")
+            await pilot.pause(0.1)
+            assert app.command_pane.status == "cancelled"
+            assert len(provider.cancelled_runs) == 2
+
+            # Destructive command opens ConfirmCommandModal; Esc aborts without sending
+            before_count = len(provider.ran_commands)
+            app.command_pane._input.value = "git reset --hard HEAD"
+            await pilot.press("enter")
+            await pilot.pause(0.08)
+            assert isinstance(app.screen, ConfirmCommandModal)
+            await pilot.press("escape")
+            await pilot.pause(0.08)
+            assert len(provider.ran_commands) == before_count
+
+            # Confirm dispatches
+            app.command_pane._input.value = "git reset --hard HEAD"
+            await pilot.press("enter")
+            await pilot.pause(0.08)
+            assert isinstance(app.screen, ConfirmCommandModal)
+            app.screen.query_one("#btn-confirm-cmd").press()
+            await pilot.pause(0.08)
+            assert len(provider.ran_commands) == before_count + 1
+
+            # Disabled-by-config notice renders cleanly
+            provider.disabled_mode = True
+            app.command_pane.focus_prompt()
+            app.command_pane._input.value = "echo hi"
+            await pilot.press("enter")
+            await pilot.pause(0.08)
+            assert app.command_pane.status == "disabled"
+            assert "ADMIN_REMOTE_EXEC_ENABLED=true" in "\n".join(app.command_pane.transcript_lines)
+
+            # Toggle closed with x outside input
+            await pilot.press("escape")
+            await pilot.press("x")
+            await pilot.pause(0.05)
+            assert app.command_pane.is_open is False
+            assert "-cmd-open" not in app.screen.classes
 
     asyncio.run(_run())

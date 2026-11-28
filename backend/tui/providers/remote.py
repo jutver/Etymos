@@ -15,16 +15,22 @@ from ..log_tailer import parse_log_file_line
 from ..models import (
     ActionOutcome,
     ActionRequest,
+    CommandRequest,
     ConnectionState,
+    FilePollWatermark,
     LogFileDescriptor,
     LogFilterState,
     LogSourceId,
     RemoteSessionCache,
+    compute_line_overlap_append,
     snapshot_from_api_payload,
 )
 from ..sanitize import sanitize_log_text
 from .base import (
     AuthErrorEvent,
+    CommandDoneEvent,
+    CommandOutputEvent,
+    CommandStartedEvent,
     ConnectionEvent,
     EventEmitFn,
     LogFilesEvent,
@@ -72,7 +78,10 @@ class RemoteDashboardProvider:
         self._last_pid: Optional[int] = None
         self._status_ws: Any = None
         self._logs_ws: Any = None
+        self._exec_ws: Any = None
+        self._active_run_id: Optional[str] = None
         self._file_poll_wake = asyncio.Event()
+        self._watermarks: dict[LogSourceId, FilePollWatermark] = {}
 
     def _emit_safe(self, event: Any) -> None:
         if self._emit is not None:
@@ -97,7 +106,9 @@ class RemoteDashboardProvider:
     async def stop(self) -> None:
         self._stop_event.set()
         self._file_poll_wake.set()
-        for ws in (self._status_ws, self._logs_ws):
+        if self._active_run_id:
+            await self.cancel_command(self._active_run_id)
+        for ws in (self._status_ws, self._logs_ws, self._exec_ws):
             if ws is not None:
                 try:
                     await ws.close()
@@ -121,6 +132,7 @@ class RemoteDashboardProvider:
     async def set_log_source(self, source: LogSourceId) -> None:
         self._selected_source = source
         if source != "live":
+            self._watermarks.pop(source, None)
             await self._fetch_single_file_tail(source, replace=True)
             self._file_poll_wake.set()
         else:
@@ -153,6 +165,7 @@ class RemoteDashboardProvider:
             except Exception:
                 pass
         elif self._selected_source != "live":
+            self._watermarks.pop(self._selected_source, None)
             await self._fetch_single_file_tail(self._selected_source, replace=True)
 
     async def set_log_paused(self, paused: bool, after_seq: int = 0) -> None:
@@ -234,6 +247,118 @@ class RemoteDashboardProvider:
                 ms=round((time.perf_counter() - started) * 1000),
             )
 
+    async def cancel_command(self, run_id: str) -> None:
+        ws = self._exec_ws
+        if ws is None:
+            return
+        try:
+            await ws.send(json.dumps({"type": "cancel", "run_id": run_id}))
+        except Exception:
+            pass
+
+    async def run_command(self, req: CommandRequest) -> None:
+        url = _ws_url(self.api_url, "/api/admin/server/exec/ws")
+        self._active_run_id = req.run_id
+        done_emitted = False
+        try:
+            async with websockets.connect(url, open_timeout=8.0, close_timeout=2.0) as ws:
+                self._exec_ws = ws
+                await ws.send(json.dumps({"type": "auth", "token": self._session.access_token}))
+                first_raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
+                first_msg = json.loads(first_raw)
+                if first_msg.get("type") == "error":
+                    detail = str(first_msg.get("detail") or "Authentication failed.")
+                    code = str(first_msg.get("code") or "")
+                    if code in ("unauthorized", "forbidden"):
+                        self._set_connection("auth_required", detail)
+                        self._emit_safe(AuthErrorEvent(detail))
+                    self._emit_safe(CommandDoneEvent(run_id=req.run_id, status="denied", error=detail))
+                    done_emitted = True
+                    return
+                if first_msg.get("type") != "auth_ok":
+                    self._emit_safe(CommandDoneEvent(run_id=req.run_id, status="failed", error="Unexpected auth frame."))
+                    done_emitted = True
+                    return
+
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "run",
+                            "run_id": req.run_id,
+                            "command": req.command,
+                            "timeout": req.timeout_seconds,
+                        }
+                    )
+                )
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    mtype = msg.get("type")
+                    if mtype == "ping":
+                        await ws.send(json.dumps({"type": "pong"}))
+                    elif mtype == "error":
+                        detail = str(msg.get("detail") or "Command authorization error.")
+                        code = str(msg.get("code") or "")
+                        if code in ("unauthorized", "forbidden"):
+                            self._set_connection("auth_required", detail)
+                            self._emit_safe(AuthErrorEvent(detail))
+                            self._emit_safe(CommandDoneEvent(run_id=req.run_id, status="denied", error=detail))
+                            done_emitted = True
+                        return
+                    elif mtype == "started":
+                        self._emit_safe(CommandStartedEvent(run_id=req.run_id, cwd=str(msg.get("cwd") or "")))
+                    elif mtype == "output":
+                        stream = str(msg.get("stream") or "stdout")
+                        if stream not in ("stdout", "stderr", "system"):
+                            stream = "stdout"
+                        self._emit_safe(
+                            CommandOutputEvent(
+                                run_id=req.run_id,
+                                stream=stream,  # type: ignore[arg-type]
+                                data=str(msg.get("data") or ""),
+                            )
+                        )
+                    elif mtype == "done":
+                        self._emit_safe(
+                            CommandDoneEvent(
+                                run_id=req.run_id,
+                                status=str(msg.get("status") or "failed"),  # type: ignore[arg-type]
+                                exit_code=msg.get("exit_code") if isinstance(msg.get("exit_code"), int) else None,
+                                duration_ms=int(msg.get("duration_ms") or 0),
+                                truncated=bool(msg.get("truncated", False)),
+                                error=msg.get("error"),
+                            )
+                        )
+                        done_emitted = True
+                        return
+        except websockets.exceptions.ConnectionClosed as exc:
+            if not done_emitted:
+                if exc.code in (4401, 4403):
+                    detail = "Session expired (4401)." if exc.code == 4401 else "Admin MFA required (4403)."
+                    self._set_connection("auth_required", detail)
+                    self._emit_safe(AuthErrorEvent(detail))
+                    self._emit_safe(CommandDoneEvent(run_id=req.run_id, status="denied", error=detail))
+                else:
+                    self._emit_safe(
+                        CommandDoneEvent(
+                            run_id=req.run_id,
+                            status="disconnected",
+                            error=f"Connection closed mid-command ({exc.code}).",
+                        )
+                    )
+        except Exception as exc:
+            if not done_emitted:
+                self._emit_safe(
+                    CommandDoneEvent(
+                        run_id=req.run_id,
+                        status="disconnected",
+                        error=sanitize_log_text(str(exc), preserve_newlines=False),
+                    )
+                )
+        finally:
+            self._exec_ws = None
+            if self._active_run_id == req.run_id:
+                self._active_run_id = None
+
     async def _fetch_log_files_list(self) -> None:
         try:
             async with httpx.AsyncClient(base_url=self.api_url, timeout=8.0) as client:
@@ -273,14 +398,70 @@ class RemoteDashboardProvider:
             if resp.status_code != 200:
                 return
             data = resp.json()
-            lines = data.get("lines") or []
-            entries = [parse_log_file_line(ln, source=source, line_no=idx + 1) for idx, ln in enumerate(lines)]
+            lines = [str(ln) for ln in (data.get("lines") or [])]
+            size_bytes = max(0, int(data.get("size_bytes") or 0))
+            modified_at = data.get("modified_at")
             truncated = bool(data.get("more", False))
-            last_seq = entries[-1].seq if entries else 0
-            if replace:
+
+            prev = None if replace else self._watermarks.get(source)
+            if (
+                prev is not None
+                and size_bytes == prev.size_bytes
+                and modified_at == prev.modified_at
+                and lines == prev.tail_lines
+            ):
+                return
+
+            if prev is None:
+                entries = [parse_log_file_line(ln, source=source, line_no=idx + 1) for idx, ln in enumerate(lines)]
+                next_seq = len(entries) + 1
+                self._watermarks[source] = FilePollWatermark(
+                    source=source,
+                    size_bytes=size_bytes,
+                    modified_at=modified_at,
+                    tail_lines=list(lines),
+                    next_seq=next_seq,
+                )
+                last_seq = entries[-1].seq if entries else 0
                 self._emit_safe(LogSnapshotEvent(source, entries, truncated=truncated, last_seq=last_seq))
+                return
+
+            if size_bytes < prev.size_bytes:
+                delta, rotated = list(lines), True
             else:
-                self._emit_safe(LogSnapshotEvent(source, entries, truncated=truncated, last_seq=last_seq))
+                delta, rotated = compute_line_overlap_append(prev.tail_lines, lines)
+
+            if not rotated and not delta:
+                prev.size_bytes = size_bytes
+                prev.modified_at = modified_at
+                prev.tail_lines = list(lines)
+                return
+
+            if not rotated and delta:
+                start_seq = prev.next_seq
+                entries = [
+                    parse_log_file_line(ln, source=source, line_no=start_seq + idx)
+                    for idx, ln in enumerate(delta)
+                ]
+                prev.size_bytes = size_bytes
+                prev.modified_at = modified_at
+                prev.tail_lines = list(lines)
+                prev.next_seq = start_seq + len(entries)
+                self._emit_safe(LogRowsEvent(source, entries, truncated=False, last_seq=entries[-1].seq))
+                return
+
+            # Disjoint tail or file truncation/rotation: reset safely from sequence 1.
+            entries = [parse_log_file_line(ln, source=source, line_no=idx + 1) for idx, ln in enumerate(lines)]
+            self._watermarks[source] = FilePollWatermark(
+                source=source,
+                size_bytes=size_bytes,
+                modified_at=modified_at,
+                tail_lines=list(lines),
+                next_seq=len(entries) + 1,
+            )
+            last_seq = entries[-1].seq if entries else 0
+            self._emit_safe(LogSnapshotEvent(source, entries, truncated=truncated, last_seq=last_seq))
+            self._emit_safe(NoticeEvent(f"Log file {source} rotated/reloaded", severity="information"))
         except Exception:
             pass
 
@@ -446,7 +627,7 @@ class RemoteDashboardProvider:
     async def _file_poll_loop(self) -> None:
         while not self._stop_event.is_set():
             self._file_poll_wake.clear()
-            if self._selected_source != "live" and not self._paused:
+            if self._selected_source != "live":
                 await self._fetch_single_file_tail(self._selected_source)
             try:
                 await asyncio.wait_for(self._file_poll_wake.wait(), timeout=2.0)
