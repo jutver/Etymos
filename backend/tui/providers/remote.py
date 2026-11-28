@@ -39,7 +39,7 @@ from .base import (
     NoticeEvent,
     SnapshotEvent,
 )
-from .local import _ws_url, entry_from_ws_row
+from .local import _ws_url, apply_live_ws_frame, entry_from_ws_row
 
 BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0, 10.0)
 
@@ -76,6 +76,9 @@ class RemoteDashboardProvider:
         self._paused = False
         self._after_seq = 0
         self._last_pid: Optional[int] = None
+        self._logs_pid: Optional[int] = None
+        self._expect_live_reset: bool = True
+        self._pending_live_resubscribe: bool = False
         self._status_ws: Any = None
         self._logs_ws: Any = None
         self._exec_ws: Any = None
@@ -136,6 +139,9 @@ class RemoteDashboardProvider:
             await self._fetch_single_file_tail(source, replace=True)
             self._file_poll_wake.set()
         else:
+            self._after_seq = 0
+            self._expect_live_reset = True
+            self._pending_live_resubscribe = False
             ws = self._logs_ws
             if ws is not None and not self._paused:
                 try:
@@ -152,18 +158,25 @@ class RemoteDashboardProvider:
 
     async def set_log_filters(self, filters: LogFilterState) -> None:
         self._filters = filters
-        if self._selected_source == "live" and self._logs_ws is not None and not self._paused:
-            try:
-                await self._logs_ws.send(
-                    json.dumps({
-                        "type": "subscribe",
-                        "after": 0,
-                        "limit": 500,
-                        "filters": filters.to_wire_dict(),
-                    })
-                )
-            except Exception:
-                pass
+        if self._selected_source == "live":
+            if self._paused:
+                self._pending_live_resubscribe = True
+                return
+            self._after_seq = 0
+            self._expect_live_reset = True
+            self._pending_live_resubscribe = False
+            if self._logs_ws is not None:
+                try:
+                    await self._logs_ws.send(
+                        json.dumps({
+                            "type": "subscribe",
+                            "after": 0,
+                            "limit": 500,
+                            "filters": filters.to_wire_dict(),
+                        })
+                    )
+                except Exception:
+                    pass
         elif self._selected_source != "live":
             self._watermarks.pop(self._selected_source, None)
             await self._fetch_single_file_tail(self._selected_source, replace=True)
@@ -176,10 +189,27 @@ class RemoteDashboardProvider:
             try:
                 if paused:
                     await ws.send(json.dumps({"type": "pause"}))
+                elif self._pending_live_resubscribe:
+                    self._pending_live_resubscribe = False
+                    self._after_seq = 0
+                    self._expect_live_reset = True
+                    await ws.send(
+                        json.dumps({
+                            "type": "subscribe",
+                            "after": 0,
+                            "limit": 500,
+                            "filters": self._filters.to_wire_dict(),
+                        })
+                    )
                 else:
-                    await ws.send(json.dumps({"type": "resume", "after": after_seq or self._after_seq}))
+                    effective_after = max(self._after_seq, after_seq)
+                    self._expect_live_reset = effective_after == 0
+                    await ws.send(json.dumps({"type": "resume", "after": effective_after}))
             except Exception:
                 pass
+
+    def _handle_live_ws_frame(self, msg: dict[str, Any]) -> None:
+        apply_live_ws_frame(self, msg)
 
     async def execute_action(self, req: ActionRequest) -> ActionOutcome:
         started = time.perf_counter()
@@ -574,11 +604,14 @@ class RemoteDashboardProvider:
             try:
                 async with websockets.connect(url, open_timeout=8.0, close_timeout=2.0) as ws:
                     self._logs_ws = ws
+                    sent_after = self._after_seq
+                    if sent_after == 0:
+                        self._expect_live_reset = True
                     await ws.send(
                         json.dumps({
                             "type": "auth",
                             "token": self._session.access_token,
-                            "after": self._after_seq,
+                            "after": sent_after,
                             "limit": 500,
                             "filters": self._filters.to_wire_dict(),
                         })
@@ -588,6 +621,29 @@ class RemoteDashboardProvider:
                     if first_msg.get("type") != "auth_ok":
                         return
                     attempt = 0
+                    auth_pid = first_msg.get("pid")
+                    skip_stale_auth_snapshot = False
+                    if (
+                        isinstance(auth_pid, int)
+                        and self._logs_pid is not None
+                        and auth_pid != self._logs_pid
+                        and sent_after > 0
+                    ):
+                        self._logs_pid = auth_pid
+                        self._after_seq = 0
+                        self._expect_live_reset = True
+                        skip_stale_auth_snapshot = True
+                        await ws.send(
+                            json.dumps({
+                                "type": "subscribe",
+                                "after": 0,
+                                "limit": 500,
+                                "filters": self._filters.to_wire_dict(),
+                            })
+                        )
+                    elif isinstance(auth_pid, int):
+                        self._logs_pid = auth_pid
+
                     if self._paused:
                         await ws.send(json.dumps({"type": "pause"}))
 
@@ -601,15 +657,10 @@ class RemoteDashboardProvider:
                             continue
                         if mtype not in ("snapshot", "rows"):
                             continue
-                        rows = [entry_from_ws_row(r) for r in (msg.get("rows") or []) if isinstance(r, dict)]
-                        last_seq = int(msg.get("last_seq") or self._after_seq)
-                        self._after_seq = last_seq
-                        truncated = bool(msg.get("truncated", False))
-                        pid = msg.get("pid") if isinstance(msg.get("pid"), int) else None
-                        if mtype == "snapshot":
-                            self._emit_safe(LogSnapshotEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
-                        else:
-                            self._emit_safe(LogRowsEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
+                        if mtype == "snapshot" and skip_stale_auth_snapshot:
+                            skip_stale_auth_snapshot = False
+                            continue
+                        self._handle_live_ws_frame(msg)
             except asyncio.CancelledError:
                 raise
             except websockets.exceptions.ConnectionClosed as exc:

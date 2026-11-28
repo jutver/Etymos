@@ -421,3 +421,91 @@ def test_command_history_bounds_dedup_and_draft_preservation():
     assert hist.step_down() == "echo 209"
     assert hist.step_down() == "draft cmd"
     assert hist.cursor is None
+
+
+@pytest.mark.parametrize("mode", ["remote", "local"])
+def test_live_log_ws_frame_handling_preserves_rows_across_pause_resume_reconnect_and_filter(tmp_path, mode):
+    from tui.models import RemoteSessionCache
+    from tui.providers.base import LogRowsEvent, LogSnapshotEvent
+
+    class _FakeWs:
+        def __init__(self) -> None:
+            self.sent: list[dict] = []
+
+        async def send(self, payload: str) -> None:
+            self.sent.append(json.loads(payload))
+
+    async def _run() -> None:
+        if mode == "remote":
+            sess = RemoteSessionCache(
+                api_url="https://api.etymos.site",
+                supabase_url="https://sb.example.co",
+                access_token=_make_fake_jwt({"sub": "u-1", "aal": "aal2", "exp": time.time() + 3600}),
+                refresh_token="",
+                expires_at=time.time() + 3600,
+            )
+            provider = RemoteDashboardProvider(api_url="https://api.etymos.site", session=sess)
+        else:
+            provider = LocalDashboardProvider(backend_dir=tmp_path, log_dir=tmp_path)
+
+        events: list = []
+        provider._emit = events.append
+        ws = _FakeWs()
+        provider._logs_ws = ws
+
+        def _row(seq: int, msg: str) -> dict:
+            return {"seq": seq, "ts": 1700000000.0 + seq, "level": "INFO", "levelno": 20, "logger": "api", "message": msg}
+
+        # 1. Initial snapshot (after=0) emits LogSnapshotEvent
+        provider._handle_live_ws_frame(
+            {"type": "snapshot", "rows": [_row(1, "init-1"), _row(10, "init-10")], "last_seq": 10, "pid": 500}
+        )
+        assert len(events) == 1 and isinstance(events[0], LogSnapshotEvent)
+        assert provider._after_seq == 10 and provider._logs_pid == 500
+
+        # 2. Pause -> Resume with empty snapshot emits NOTHING (does not wipe rows)
+        events.clear()
+        await provider.set_log_paused(True, after_seq=10)
+        await provider.set_log_paused(False, after_seq=10)
+        assert ws.sent[-2:] == [{"type": "pause"}, {"type": "resume", "after": 10}]
+        provider._handle_live_ws_frame({"type": "snapshot", "rows": [], "last_seq": 10, "pid": 500})
+        assert events == []
+        assert provider._after_seq == 10
+
+        # 3. Resume with new rows emits LogRowsEvent (append, not snapshot reset)
+        await provider.set_log_paused(True, after_seq=10)
+        await provider.set_log_paused(False, after_seq=10)
+        provider._handle_live_ws_frame(
+            {"type": "snapshot", "rows": [_row(11, "new-11"), _row(12, "new-12")], "last_seq": 12, "pid": 500}
+        )
+        assert len(events) == 1 and isinstance(events[0], LogRowsEvent)
+        assert [r.seq for r in events[0].rows] == [11, 12]
+        assert provider._after_seq == 12
+
+        # 4. Same-PID reconnect snapshot with after > 0 appends via LogRowsEvent or emits nothing when empty
+        events.clear()
+        provider._handle_live_ws_frame({"type": "snapshot", "rows": [], "last_seq": 12, "pid": 500})
+        assert events == []
+        provider._handle_live_ws_frame({"type": "snapshot", "rows": [_row(13, "reconn-13")], "last_seq": 13, "pid": 500})
+        assert len(events) == 1 and isinstance(events[0], LogRowsEvent)
+        assert [r.seq for r in events[0].rows] == [13]
+
+        # 5. PID change triggers full LogSnapshotEvent reset
+        events.clear()
+        provider._handle_live_ws_frame({"type": "snapshot", "rows": [_row(1, "restarted-1")], "last_seq": 1, "pid": 600})
+        assert len(events) == 1 and isinstance(events[0], LogSnapshotEvent)
+        assert provider._logs_pid == 600 and provider._after_seq == 1
+
+        # 6. Filter change while paused defers subscribe(after=0) until resume and emits LogSnapshotEvent
+        events.clear()
+        ws.sent.clear()
+        await provider.set_log_paused(True, after_seq=1)
+        await provider.set_log_filters(LogFilterState(min_level="ERROR"))
+        assert provider._pending_live_resubscribe is True
+        await provider.set_log_paused(False, after_seq=1)
+        assert provider._pending_live_resubscribe is False
+        assert ws.sent[-1]["type"] == "subscribe" and ws.sent[-1]["after"] == 0
+        provider._handle_live_ws_frame({"type": "snapshot", "rows": [_row(1, "err-only")], "last_seq": 2, "pid": 600})
+        assert len(events) == 1 and isinstance(events[0], LogSnapshotEvent)
+
+    asyncio.run(_run())
