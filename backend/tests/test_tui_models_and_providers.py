@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from tui.__main__ import build_parser, main as tui_main, resolve_mode_and_url
-from tui.auth import AuthError, RemoteAuthManager
+from tui.auth import AuthError, RemoteAuthManager, discover_supabase_config
 from tui.log_tailer import LocalLogFileTailer, parse_log_file_line
 from tui.models import (
     ActionRequest,
@@ -182,8 +182,11 @@ def test_remote_auth_mfa_session_cache_and_cli(tmp_path, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/auth/v1/token"):
             return httpx.Response(200, json={"access_token": aal1_jwt, "refresh_token": "ref-1"})
-        if request.url.path.endswith("/auth/v1/factors"):
-            return httpx.Response(200, json=[{"id": "fac-1", "factor_type": "totp", "status": "verified"}])
+        if request.url.path.endswith("/auth/v1/user"):
+            return httpx.Response(
+                200,
+                json={"id": "u-1", "factors": [{"id": "fac-1", "factor_type": "totp", "status": "verified"}]},
+            )
         if request.url.path.endswith("/challenge"):
             return httpx.Response(200, json={"id": "chal-1"})
         if request.url.path.endswith("/verify"):
@@ -262,3 +265,36 @@ def test_remote_provider_rejects_4401_and_returns_409_conflict(monkeypatch):
     provider._emit_safe(AuthErrorEvent("Session expired (4401)."))
     assert any(isinstance(e, ConnectionEvent) and e.state == "auth_required" for e in events)
     assert any(isinstance(e, AuthErrorEvent) for e in events)
+
+
+def test_discover_supabase_config_reads_root_and_backend_public_keys_only(tmp_path, monkeypatch):
+    for var in (
+        "SUPABASE_URL",
+        "VITE_SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_PUBLISHABLE_KEY",
+        "VITE_SUPABASE_ANON_KEY",
+        "VITE_SUPABASE_PUBLISHABLE_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    # 1. Root `.env.local` discovery (monorepo frontend Vite layout)
+    (tmp_path / ".env.local").write_text(
+        "VITE_SUPABASE_URL='https://proj.supabase.co/'\nVITE_SUPABASE_PUBLISHABLE_KEY='sb_publishable_abc'\n",
+        encoding="utf-8",
+    )
+    url, key = discover_supabase_config(repo_root=tmp_path)
+    assert url == "https://proj.supabase.co"
+    assert key == "sb_publishable_abc"
+
+    # 2. Fallback to `backend/.env` with `export ` while strictly ignoring service role keys
+    (tmp_path / ".env.local").unlink()
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / ".env").write_text(
+        "export SUPABASE_URL='https://back.supabase.co'\n"
+        "SUPABASE_SERVICE_ROLE_KEY='must-never-be-returned'\n",
+        encoding="utf-8",
+    )
+    url2, key2 = discover_supabase_config(repo_root=tmp_path)
+    assert url2 == "https://back.supabase.co"
+    assert key2 is None
