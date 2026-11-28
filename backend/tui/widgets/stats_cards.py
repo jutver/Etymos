@@ -52,19 +52,22 @@ class _BaseCard(Static):
     CARD_TITLE = ""
 
     def __init__(self, *, no_color: bool = False, **kwargs) -> None:
-        super().__init__(**kwargs)
         self._no_color = no_color
         self._snapshot: Optional[ServerSnapshot] = None
+        super().__init__(self._build_content(), **kwargs)
+
+    def _build_content(self) -> Text:
+        return Text()
 
     def set_snapshot(self, snapshot: ServerSnapshot) -> None:
         self._snapshot = snapshot
-        self.refresh()
+        self.update(self._build_content())
 
 
 class ApiProcessCard(_BaseCard):
     CARD_TITLE = "API process"
 
-    def render(self) -> Text:
+    def _build_content(self) -> Text:
         snap = self._snapshot
         out = Text()
         out.append(f"{self.CARD_TITLE}\n", style="bold" if self._no_color else "bold cyan")
@@ -98,7 +101,7 @@ class ApiProcessCard(_BaseCard):
 class MachineCard(_BaseCard):
     CARD_TITLE = "Machine"
 
-    def render(self) -> Text:
+    def _build_content(self) -> Text:
         snap = self._snapshot
         out = Text()
         out.append(f"{self.CARD_TITLE}\n", style="bold" if self._no_color else "bold cyan")
@@ -156,7 +159,7 @@ class MachineCard(_BaseCard):
 class GpuCard(_BaseCard):
     CARD_TITLE = "GPU"
 
-    def render(self) -> Text:
+    def _build_content(self) -> Text:
         snap = self._snapshot
         out = Text()
         out.append(f"{self.CARD_TITLE}\n", style="bold" if self._no_color else "bold cyan")
@@ -213,7 +216,7 @@ class GpuCard(_BaseCard):
 class BackgroundWorkCard(_BaseCard):
     CARD_TITLE = "Background work"
 
-    def render(self) -> Text:
+    def _build_content(self) -> Text:
         snap = self._snapshot
         out = Text()
         out.append(f"{self.CARD_TITLE}\n", style="bold" if self._no_color else "bold cyan")
@@ -291,6 +294,11 @@ class StatsGrid(Container):
         self.gpu_card = GpuCard(no_color=no_color, id="card-gpu", classes="stat-card")
         self.bg_card = BackgroundWorkCard(no_color=no_color, id="card-bg", classes="stat-card")
         self.services_strip = ServicesStrip(no_color=no_color, id="services-strip")
+        self._last_synced_card_height: Optional[int] = None
+
+    @property
+    def _cards(self) -> tuple[_BaseCard, ...]:
+        return (self.api_card, self.machine_card, self.gpu_card, self.bg_card)
 
     def compose(self):
         with Container(id="cards-row"):
@@ -300,9 +308,33 @@ class StatsGrid(Container):
             yield self.bg_card
         yield self.services_strip
 
+    def on_mount(self) -> None:
+        self.call_after_refresh(self.sync_card_heights)
+
+    def on_resize(self, _event) -> None:
+        self.call_after_refresh(self.sync_card_heights)
+
+    def sync_card_heights(self) -> None:
+        """Keep all four stat cards matching the tallest rendered card height."""
+        if not self.is_mounted or not self.display:
+            return
+        heights: list[int] = []
+        for card in self._cards:
+            width = card.content_size.width
+            if width <= 0:
+                return
+            content_h = card.get_content_height(self.size, self.app.size, width)
+            heights.append(content_h + card.styles.gutter.height)
+        target = max(heights) if heights else 0
+        if target > 0 and target != self._last_synced_card_height:
+            self._last_synced_card_height = target
+            for card in self._cards:
+                card.styles.min_height = target
+
     def update_snapshot(self, snapshot: ServerSnapshot) -> None:
         self.api_card.set_snapshot(snapshot)
         self.machine_card.set_snapshot(snapshot)
         self.gpu_card.set_snapshot(snapshot)
         self.bg_card.set_snapshot(snapshot)
         self.services_strip.set_services(snapshot.services)
+        self.call_after_refresh(self.sync_card_heights)

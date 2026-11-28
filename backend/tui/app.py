@@ -177,6 +177,8 @@ class EtymosTuiApp(App[int]):
                 f"Terminal window too small ({width}x{height}).\n"
                 "Please resize to at least 56x14 (80x24+ recommended)."
             )
+        elif self.stats_pane.is_mounted:
+            self.stats_pane.call_after_refresh(self.stats_pane.sync_card_heights)
 
     def _active_pane_order(self) -> tuple[PaneId, ...]:
         if self.command_pane.is_open:
@@ -194,6 +196,8 @@ class EtymosTuiApp(App[int]):
         self.screen.add_class(f"-focus-{self.focused_pane}")
         if self.zoomed_pane is not None:
             self.screen.add_class(f"-zoom-{self.zoomed_pane}")
+        if self.zoomed_pane in (None, "stats") and self.stats_pane.is_mounted:
+            self.stats_pane.call_after_refresh(self.stats_pane.sync_card_heights)
 
     def _check_staleness_tick(self) -> None:
         import time

@@ -57,7 +57,7 @@ Screen.-narrow #cards-row {
 }
 
 .stat-card {
-    height: auto;
+    height: 100%;
     padding: 0 1;
     border: solid $panel-lighten-1;
 }

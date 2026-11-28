@@ -660,3 +660,185 @@ def test_command_pane_toggle_focus_zoom_history_clear_cancel_and_destructive_gua
             assert "-cmd-open" not in app.screen.classes
 
     asyncio.run(_run())
+
+
+def test_stats_cards_render_full_details_without_zoom_and_equal_heights():
+    async def _run():
+        class _DelayedSnapshotProvider(FakeDashboardProvider):
+            async def start(self, emit: EventEmitFn) -> None:
+                self._emit = emit
+
+        provider = _DelayedSnapshotProvider(mode="remote")
+        app = EtymosTuiApp(provider)
+        async with app.run_test(size=(180, 50)) as pilot:
+            await pilot.pause(0.08)
+
+            # Deliver snapshot AFTER initial mount (like real remote WS stream) WITHOUT pressing z
+            app.handle_provider_event(SnapshotEvent(make_sample_snapshot(mode="remote")))
+            await pilot.pause(0.1)
+
+            cards = (
+                app.stats_pane.api_card,
+                app.stats_pane.machine_card,
+                app.stats_pane.gpu_card,
+                app.stats_pane.bg_card,
+            )
+
+            def assert_cards_ok(context: str) -> None:
+                heights = [c.outer_size.height for c in cards]
+                assert len(set(heights)) == 1, f"{context}: unequal card heights {heights}"
+                for c in cards:
+                    w = max(1, c.content_size.width)
+                    needed = c.get_content_height(app.stats_pane.size, app.size, w)
+                    assert needed <= c.content_size.height, (
+                        f"{context}: {c.id} clipped ({needed} > {c.content_size.height})"
+                    )
+
+            assert app.stats_pane.machine_card.content_size.height >= 8
+            assert_cards_ok("wide-180x50-initial-delayed-snapshot")
+
+            # Verify across wide/medium/narrow breakpoints
+            for label, size in [
+                ("wide-150x42", (150, 42)),
+                ("medium-120x40", (120, 40)),
+                ("narrow-80x24", (80, 24)),
+                ("wide-180x50-restored", (180, 50)),
+            ]:
+                await pilot.resize_terminal(*size)
+                await pilot.pause(0.1)
+                assert_cards_ok(label)
+
+            # Verify CPU-only snapshot (shorter GPU content still expands to tallest Machine card)
+            app.handle_provider_event(SnapshotEvent(make_sample_snapshot(mode="remote", gpu_available=False)))
+            await pilot.pause(0.1)
+            assert_cards_ok("cpu-only")
+
+            # Verify zoom enter/exit on stats keeps full equal-height cards
+            app.handle_provider_event(SnapshotEvent(make_sample_snapshot(mode="remote", gpu_available=True)))
+            await pilot.pause(0.1)
+            app.focused_pane = "stats"
+            await pilot.press("z")
+            await pilot.pause(0.1)
+            assert_cards_ok("zoom-stats")
+            await pilot.press("z")
+            await pilot.pause(0.1)
+            assert_cards_ok("unzoom-stats")
+
+            # Verify too_small breakpoint does not hang and recovers equal heights cleanly
+            await pilot.resize_terminal(50, 12)
+            await pilot.pause(0.08)
+            assert app.breakpoint == "too_small"
+            await pilot.resize_terminal(180, 50)
+            await pilot.pause(0.1)
+            assert_cards_ok("recovered-from-too-small")
+
+    asyncio.run(_run())
+
+
+def test_live_log_scroll_pause_resume_preserves_rows():
+    import time as _time
+    from tui.models import RemoteSessionCache
+    from tui.providers.remote import RemoteDashboardProvider
+
+    async def _run():
+        class _FakeWs:
+            def __init__(self, remote_delegate: RemoteDashboardProvider, *, pid: int = 3900) -> None:
+                self.remote = remote_delegate
+                self.pid = pid
+                self.pending_resume_rows: list[dict] = []
+
+            async def send(self, payload: str) -> None:
+                import json as _json
+                frame = _json.loads(payload)
+                if frame.get("type") == "resume":
+                    after = int(frame.get("after") or 0)
+                    new_rows = [r for r in self.pending_resume_rows if r["seq"] > after]
+                    self.pending_resume_rows.clear()
+                    last_seq = new_rows[-1]["seq"] if new_rows else after
+                    self.remote._handle_live_ws_frame(
+                        {"type": "snapshot", "rows": new_rows, "last_seq": last_seq, "truncated": False, "pid": self.pid}
+                    )
+
+        sess = RemoteSessionCache(
+            api_url="https://api.etymos.site",
+            supabase_url="https://sb.example.co",
+            access_token="header.payload.sig",
+            refresh_token="",
+            expires_at=_time.time() + 3600,
+        )
+        remote_delegate = RemoteDashboardProvider(api_url="https://api.etymos.site", session=sess)
+        fake_ws = _FakeWs(remote_delegate, pid=3900)
+        remote_delegate._logs_ws = fake_ws
+
+        class _LiveWsSimProvider(FakeDashboardProvider):
+            async def start(self, emit: EventEmitFn) -> None:
+                self._emit = emit
+                remote_delegate._emit = emit
+                emit(ConnectionEvent("connected"))
+                emit(SnapshotEvent(self.snapshot))
+                remote_delegate._handle_live_ws_frame(
+                    {
+                        "type": "snapshot",
+                        "rows": [
+                            {
+                                "seq": i,
+                                "ts": 1700000000.0 + i,
+                                "level": "INFO",
+                                "levelno": logging.INFO,
+                                "logger": "api",
+                                "message": f"Live log line #{i}",
+                            }
+                            for i in range(1, 81)
+                        ],
+                        "last_seq": 80,
+                        "truncated": False,
+                        "pid": 3900,
+                    }
+                )
+
+            async def set_log_paused(self, paused: bool, after_seq: int = 0) -> None:
+                await remote_delegate.set_log_paused(paused, after_seq)
+
+        provider = _LiveWsSimProvider(mode="remote")
+        app = EtymosTuiApp(provider)
+        async with app.run_test(size=(150, 42)) as pilot:
+            await pilot.pause(0.12)
+            assert app.logs_pane.selected_source == "live"
+            assert len(app.logs_pane.store) == 80
+            log_list = app.logs_pane._list
+            assert log_list.max_scroll_y > 10
+
+            # Scroll up -> auto-pauses
+            log_list.scroll_to(y=5.0, animate=False, immediate=True)
+            await pilot.pause(0.1)
+            assert app.logs_pane.paused is True
+
+            # Scroll back to bottom -> auto-resumes with empty WS resume snapshot -> all 80 rows preserved!
+            log_list.scroll_to(y=float(log_list.max_scroll_y), animate=False, immediate=True)
+            await pilot.pause(0.12)
+            assert app.logs_pane.paused is False
+            assert len(app.logs_pane.store) == 80
+
+            # Second pause -> scroll to bottom with 2 new lines arriving while paused -> appends to 82 rows!
+            log_list.scroll_to(y=5.0, animate=False, immediate=True)
+            await pilot.pause(0.1)
+            assert app.logs_pane.paused is True
+            fake_ws.pending_resume_rows = [
+                {
+                    "seq": n,
+                    "ts": 1700000000.0 + n,
+                    "level": "INFO",
+                    "levelno": logging.INFO,
+                    "logger": "api",
+                    "message": f"Resumed line #{n}",
+                }
+                for n in (81, 82)
+            ]
+            log_list.scroll_to(y=float(log_list.max_scroll_y), animate=False, immediate=True)
+            await pilot.pause(0.15)
+            app.logs_pane.flush_now()
+            await pilot.pause(0.05)
+            assert app.logs_pane.paused is False
+            assert len(app.logs_pane.store) == 82
+
+    asyncio.run(_run())

@@ -174,6 +174,38 @@ def entry_from_ws_row(raw: dict[str, Any]) -> LogEntry:
     )
 
 
+def apply_live_ws_frame(provider: Any, msg: dict[str, Any]) -> None:
+    """Process a parsed `/api/admin/logs/ws` frame without wiping rows on resume/reconnect."""
+    mtype = msg.get("type")
+    if mtype not in ("snapshot", "rows"):
+        return
+    rows = [entry_from_ws_row(r) for r in (msg.get("rows") or []) if isinstance(r, dict)]
+    truncated = bool(msg.get("truncated", False))
+    pid = msg.get("pid") if isinstance(msg.get("pid"), int) else None
+
+    if mtype == "snapshot":
+        pid_changed = pid is not None and provider._logs_pid is not None and pid != provider._logs_pid
+        if pid is not None:
+            provider._logs_pid = pid
+        is_full_reset = provider._expect_live_reset or pid_changed
+        provider._expect_live_reset = False
+        last_seq = int(msg.get("last_seq") or (0 if is_full_reset else provider._after_seq))
+        provider._after_seq = last_seq if is_full_reset else max(provider._after_seq, last_seq)
+        if is_full_reset:
+            provider._emit_safe(LogSnapshotEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
+        elif rows or truncated:
+            provider._emit_safe(
+                LogRowsEvent("live", rows, truncated=truncated, last_seq=provider._after_seq, pid=pid)
+            )
+        return
+
+    if pid is not None:
+        provider._logs_pid = pid
+    last_seq = int(msg.get("last_seq") or provider._after_seq)
+    provider._after_seq = max(provider._after_seq, last_seq)
+    provider._emit_safe(LogRowsEvent("live", rows, truncated=truncated, last_seq=provider._after_seq, pid=pid))
+
+
 class LocalDashboardProvider:
     """Always-on local server telemetry + loopback API WS stream + file tailer."""
 
@@ -214,6 +246,9 @@ class LocalDashboardProvider:
         self._status_ws: Any = None
         self._logs_ws: Any = None
         self._last_pid: Optional[int] = None
+        self._logs_pid: Optional[int] = None
+        self._expect_live_reset: bool = True
+        self._pending_live_resubscribe: bool = False
         self._exec_cancel_events: dict[str, asyncio.Event] = {}
 
     def _read_local_token(self) -> Optional[str]:
@@ -287,6 +322,9 @@ class LocalDashboardProvider:
             last_seq = entries[-1].seq if entries else 0
             self._emit_safe(LogSnapshotEvent(source=source, rows=entries, truncated=truncated, last_seq=last_seq))
         else:
+            self._after_seq = 0
+            self._expect_live_reset = True
+            self._pending_live_resubscribe = False
             ws = self._logs_ws
             if ws is not None and not self._paused:
                 try:
@@ -303,18 +341,25 @@ class LocalDashboardProvider:
 
     async def set_log_filters(self, filters: LogFilterState) -> None:
         self._filters = filters
-        if self._selected_source == "live" and self._logs_ws is not None and not self._paused:
-            try:
-                await self._logs_ws.send(
-                    json.dumps({
-                        "type": "subscribe",
-                        "after": 0,
-                        "limit": 500,
-                        "filters": filters.to_wire_dict(),
-                    })
-                )
-            except Exception:
-                pass
+        if self._selected_source == "live":
+            if self._paused:
+                self._pending_live_resubscribe = True
+                return
+            self._after_seq = 0
+            self._expect_live_reset = True
+            self._pending_live_resubscribe = False
+            if self._logs_ws is not None:
+                try:
+                    await self._logs_ws.send(
+                        json.dumps({
+                            "type": "subscribe",
+                            "after": 0,
+                            "limit": 500,
+                            "filters": filters.to_wire_dict(),
+                        })
+                    )
+                except Exception:
+                    pass
 
     async def set_log_paused(self, paused: bool, after_seq: int = 0) -> None:
         self._paused = paused
@@ -324,10 +369,27 @@ class LocalDashboardProvider:
             try:
                 if paused:
                     await ws.send(json.dumps({"type": "pause"}))
+                elif self._pending_live_resubscribe:
+                    self._pending_live_resubscribe = False
+                    self._after_seq = 0
+                    self._expect_live_reset = True
+                    await ws.send(
+                        json.dumps({
+                            "type": "subscribe",
+                            "after": 0,
+                            "limit": 500,
+                            "filters": self._filters.to_wire_dict(),
+                        })
+                    )
                 else:
-                    await ws.send(json.dumps({"type": "resume", "after": after_seq or self._after_seq}))
+                    effective_after = max(self._after_seq, after_seq)
+                    self._expect_live_reset = effective_after == 0
+                    await ws.send(json.dumps({"type": "resume", "after": effective_after}))
             except Exception:
                 pass
+
+    def _handle_live_ws_frame(self, msg: dict[str, Any]) -> None:
+        apply_live_ws_frame(self, msg)
 
     async def execute_action(self, req: ActionRequest) -> ActionOutcome:
         started = time.perf_counter()
@@ -582,11 +644,14 @@ class LocalDashboardProvider:
             try:
                 async with websockets.connect(url, open_timeout=3.0, close_timeout=2.0) as ws:
                     self._logs_ws = ws
+                    sent_after = self._after_seq
+                    if sent_after == 0:
+                        self._expect_live_reset = True
                     await ws.send(
                         json.dumps({
                             "type": "auth",
                             "local_token": token,
-                            "after": self._after_seq,
+                            "after": sent_after,
                             "limit": 500,
                             "filters": self._filters.to_wire_dict(),
                         })
@@ -596,6 +661,29 @@ class LocalDashboardProvider:
                     if auth_msg.get("type") != "auth_ok":
                         raise RuntimeError(auth_msg.get("detail") or "Logs WS auth rejected")
                     attempt = 0
+                    auth_pid = auth_msg.get("pid")
+                    skip_stale_auth_snapshot = False
+                    if (
+                        isinstance(auth_pid, int)
+                        and self._logs_pid is not None
+                        and auth_pid != self._logs_pid
+                        and sent_after > 0
+                    ):
+                        self._logs_pid = auth_pid
+                        self._after_seq = 0
+                        self._expect_live_reset = True
+                        skip_stale_auth_snapshot = True
+                        await ws.send(
+                            json.dumps({
+                                "type": "subscribe",
+                                "after": 0,
+                                "limit": 500,
+                                "filters": self._filters.to_wire_dict(),
+                            })
+                        )
+                    elif isinstance(auth_pid, int):
+                        self._logs_pid = auth_pid
+
                     if self._paused:
                         await ws.send(json.dumps({"type": "pause"}))
 
@@ -609,15 +697,10 @@ class LocalDashboardProvider:
                             continue
                         if mtype not in ("snapshot", "rows"):
                             continue
-                        rows = [entry_from_ws_row(r) for r in (msg.get("rows") or []) if isinstance(r, dict)]
-                        last_seq = int(msg.get("last_seq") or self._after_seq)
-                        self._after_seq = last_seq
-                        truncated = bool(msg.get("truncated", False))
-                        pid = msg.get("pid") if isinstance(msg.get("pid"), int) else None
-                        if mtype == "snapshot":
-                            self._emit_safe(LogSnapshotEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
-                        else:
-                            self._emit_safe(LogRowsEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
+                        if mtype == "snapshot" and skip_stale_auth_snapshot:
+                            skip_stale_auth_snapshot = False
+                            continue
+                        self._handle_live_ws_frame(msg)
             except asyncio.CancelledError:
                 raise
             except Exception:
