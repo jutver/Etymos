@@ -1,0 +1,179 @@
+Screen {
+    layout: vertical;
+    background: $surface;
+    color: $text;
+}
+
+#header-bar {
+    dock: top;
+    height: 1;
+    background: $panel;
+    padding: 0 1;
+}
+
+#resize-notice {
+    display: none;
+    height: 1fr;
+    align: center middle;
+    content-align: center middle;
+    padding: 2;
+    border: round $warning;
+    text-align: center;
+}
+
+#workspace {
+    layout: vertical;
+    height: 1fr;
+}
+
+Screen.-too-small #workspace {
+    display: none;
+}
+
+Screen.-too-small #resize-notice {
+    display: block;
+}
+
+#stats-pane {
+    height: auto;
+    border: round $primary-darken-2;
+    padding: 0 1;
+    margin: 0;
+}
+
+#cards-row {
+    layout: grid;
+    grid-size: 4;
+    grid-gutter: 0 1;
+    height: auto;
+}
+
+Screen.-medium #cards-row {
+    grid-size: 2;
+}
+
+Screen.-narrow #cards-row {
+    grid-size: 1;
+}
+
+.stat-card {
+    height: auto;
+    padding: 0 1;
+    border: solid $panel-lighten-1;
+}
+
+#services-strip {
+    height: 1;
+    padding: 0 1;
+    background: $panel-darken-1;
+}
+
+#checks-pane {
+    height: auto;
+    max-height: 11;
+    border: round $primary-darken-2;
+    padding: 0 1;
+}
+
+#checks-header {
+    height: 1;
+}
+
+#checks-empty-active, #checks-empty-recent {
+    height: 1;
+    color: $text-muted;
+}
+
+#checks-table {
+    height: auto;
+    max-height: 8;
+}
+
+#logs-pane {
+    height: 1fr;
+    min-height: 8;
+    border: round $primary-darken-2;
+    padding: 0 1;
+}
+
+#logs-tabs {
+    height: 1;
+}
+
+#logs-filter-bar {
+    height: 1;
+}
+
+#log-search-input {
+    height: 3;
+    margin: 0;
+}
+
+#logs-empty {
+    height: auto;
+    color: $text-muted;
+}
+
+#logs-list {
+    height: 1fr;
+}
+
+/* Focus highlights */
+Screen.-focus-stats #stats-pane,
+Screen.-focus-checks #checks-pane,
+Screen.-focus-logs #logs-pane {
+    border: heavy $accent;
+}
+
+/* Full-screen Pane Zoom */
+Screen.-zoom-stats #checks-pane,
+Screen.-zoom-stats #logs-pane,
+Screen.-zoom-checks #stats-pane,
+Screen.-zoom-checks #logs-pane,
+Screen.-zoom-logs #stats-pane,
+Screen.-zoom-logs #checks-pane {
+    display: none;
+}
+
+Screen.-zoom-stats #stats-pane,
+Screen.-zoom-checks #checks-pane {
+    height: 1fr;
+    max-height: 100%;
+}
+
+/* Modals */
+ActionsModal, ConfirmActionModal, HelpModal {
+    align: center middle;
+    background: $background 65%;
+}
+
+.modal-box {
+    width: 82;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    border: heavy $accent;
+    background: $panel;
+    padding: 1 2;
+}
+
+.modal-title {
+    height: auto;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#actions-list {
+    height: 16;
+    margin-bottom: 1;
+}
+
+.modal-buttons {
+    height: auto;
+    align-horizontal: right;
+    padding-top: 1;
+}
+
+.modal-buttons Button {
+    margin-left: 1;
+}

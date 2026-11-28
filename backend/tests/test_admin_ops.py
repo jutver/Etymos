@@ -544,3 +544,156 @@ def test_ws_handshake_ignores_disconnect_during_accept_or_auth_ok(monkeypatch):
             raise WebSocketDisconnect(code=1006)
 
     assert asyncio.run(admin_ops._ws_handshake_auth(DisconnectOnAuthOk())) is None
+
+
+# --- TUI local ops auth, managed services, WS interval & audit extensions ---
+
+def test_local_ops_token_accepts_loopback_and_rejects_proxy_or_bad_token(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import local_ops_auth
+
+    app = FastAPI()
+    app.include_router(admin_ops.router)
+    client = TestClient(app)
+
+    tok = local_ops_auth.init_local_ops_token(tmp_path)
+    try:
+        token_file = tmp_path / ".local_ops_token"
+        assert token_file.exists()
+        assert (token_file.stat().st_mode & 0o777) == 0o600
+        assert local_ops_auth.read_local_ops_token(tmp_path) == tok
+
+        # Unauthenticated fails (401); valid loopback X-Local-Ops-Token succeeds (200)
+        assert client.get("/api/admin/server").status_code == 401
+        ok = client.get("/api/admin/server", headers={"X-Local-Ops-Token": tok})
+        assert ok.status_code == 200
+        assert ok.json()["process"]["pid"] > 0
+
+        # Bad token fails (401)
+        assert client.get("/api/admin/server", headers={"X-Local-Ops-Token": "wrong"}).status_code == 401
+
+        # Any proxy forwarding header MUST be rejected (403) even with the valid token
+        for hdr in ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP", "Forwarded"):
+            spoofed = client.get(
+                "/api/admin/server",
+                headers={"X-Local-Ops-Token": tok, hdr: "203.0.113.10"},
+            )
+            assert spoofed.status_code == 403, f"expected 403 for {hdr}"
+
+        # Non-loopback host rejected directly by verify_local_ops_token
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            local_ops_auth.verify_local_ops_token(tok, client_host="203.0.113.5", headers={})
+        assert exc_info.value.status_code == 403
+    finally:
+        local_ops_auth.cleanup_local_ops_token(tmp_path)
+    assert not (tmp_path / ".local_ops_token").exists()
+
+
+def test_local_ops_token_ws_server_interval_and_logs_stream(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+    import local_ops_auth
+
+    assert admin_ops._parse_server_ws_interval({"interval": 0.1}) == 1.0
+    assert admin_ops._parse_server_ws_interval({"interval": 99.0}) == 30.0
+    assert admin_ops._parse_server_ws_interval({"interval": 1.5}) == 1.5
+    assert admin_ops._parse_server_ws_interval({"interval": "bad"}) == admin_ops.SERVER_WS_INTERVAL_SECONDS
+    assert admin_ops._parse_server_ws_interval({}) == admin_ops.SERVER_WS_INTERVAL_SECONDS
+
+    app = FastAPI()
+    app.include_router(admin_ops.router)
+    client = TestClient(app)
+
+    tok = local_ops_auth.init_local_ops_token(tmp_path)
+    try:
+        with client.websocket_connect("/api/admin/server/ws") as ws:
+            ws.send_json({"type": "auth", "local_token": tok, "interval": 1.5})
+            assert ws.receive_json()["type"] == "auth_ok"
+            status_msg = ws.receive_json()
+            assert status_msg["type"] == "status"
+            assert "services" in status_msg["data"]
+
+        with client.websocket_connect("/api/admin/logs/ws") as ws:
+            ws.send_json({"type": "auth", "local_token": tok, "after": 0, "limit": 10})
+            assert ws.receive_json()["type"] == "auth_ok"
+            assert ws.receive_json()["type"] == "snapshot"
+
+        # Proxy header on WS handshake is rejected cleanly with 4403
+        with client.websocket_connect("/api/admin/server/ws", headers={"CF-Connecting-IP": "1.2.3.4"}) as ws:
+            ws.send_json({"type": "auth", "local_token": tok})
+            err = ws.receive_json()
+            assert err["type"] == "error" and err["code"] == "forbidden"
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                ws.receive_json()
+            assert exc_info.value.code == admin_ops.WS_CLOSE_FORBIDDEN
+    finally:
+        local_ops_auth.cleanup_local_ops_token(tmp_path)
+
+
+def test_server_status_includes_parsed_services(api, monkeypatch):
+    client, _ = api
+
+    class _FakeProc:
+        stdout = (
+            "etymos-api      RUNNING   pid 3900, uptime 15:56:12\n"
+            "cloudflared     RUNNING   pid 3901, uptime 15:56:12\n"
+            "etymos-deploy   STOPPED   Not started\n"
+        )
+        stderr = ""
+
+    monkeypatch.setattr(admin_ops, "_supervised", lambda: True)
+    monkeypatch.setattr(admin_ops.subprocess, "run", lambda *a, **kw: _FakeProc())
+    body = client.get("/api/admin/server").json()
+    assert len(body["services"]) == 3
+    assert body["services"][0]["name"] == "etymos-api"
+    assert body["services"][0]["state"] == "RUNNING"
+    assert body["services"][0]["pid"] == 3900
+    assert body["services"][2]["state"] == "STOPPED"
+
+
+def test_service_actions_allowlist_active_check_guard_and_cloudflared_defer(api, monkeypatch):
+    client, _ = api
+    monkeypatch.setattr(admin_ops, "_supervised", lambda: True)
+    deferred: list[tuple[str, str]] = []
+    direct: list[tuple[str, str]] = []
+    monkeypatch.setattr(admin_ops, "_deferred_service_action", lambda v, s: deferred.append((v, s)) or None)
+    monkeypatch.setattr(admin_ops, "_run_service_action", lambda v, s: direct.append((v, s)) or f"{s}: {v} ok")
+    monkeypatch.setattr(admin_ops, "record_admin_action", lambda *a, **kw: None)
+
+    # Validation errors
+    assert client.post("/api/admin/server/actions/restart-service", json={}).status_code == 422
+    assert client.post("/api/admin/server/actions/restart-service", json={"service": "bash"}).status_code == 422
+
+    # Active-check 409 guard on etymos-api
+    monkeypatch.setattr(admin_ops, "active_count", lambda: 3)
+    refused = client.post("/api/admin/server/actions/stop-service", json={"service": "etymos-api"})
+    assert refused.status_code == 409 and "3 check(s)" in refused.json()["detail"]
+    assert deferred == []
+
+    forced = client.post("/api/admin/server/actions/stop-service", json={"service": "etymos-api", "force": True})
+    assert forced.status_code == 200 and forced.json()["lost_checks"] == 3
+    assert ("stop", "etymos-api") in deferred
+
+    # cloudflared restart/stop is deferred so tunnel flushes HTTP response first
+    tunnel_res = client.post("/api/admin/server/actions/restart-service", json={"service": "cloudflared"})
+    assert tunnel_res.status_code == 200 and tunnel_res.json()["deferred"] is True
+    assert ("restart", "cloudflared") in deferred
+
+    # etymos-deploy runs synchronously via _run_service_action
+    dep_res = client.post("/api/admin/server/actions/restart-service", json={"service": "etymos-deploy"})
+    assert dep_res.status_code == 200
+    assert ("restart", "etymos-deploy") in direct
+
+
+def test_record_admin_action_handles_local_tui_sentinel(monkeypatch):
+    fake = _FakeRpcClient()
+    monkeypatch.setattr(admin_log, "get_client", lambda: fake)
+    admin_log.record_admin_action("local-tui", "server.restart_api", target_table="server", metadata={"force": False})
+    [(rpc_name, params)] = fake.calls
+    assert rpc_name == "log_admin_action"
+    assert params["p_actor_id"] is None
+    assert params["p_summary"] == "local-tui"
+    assert params["p_metadata"]["channel"] == "local-tui"

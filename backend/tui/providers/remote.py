@@ -1,0 +1,454 @@
+"""Remote Streaming Mode provider connecting over HTTPS/WSS with MFA admin session."""
+from __future__ import annotations
+
+import asyncio
+import json
+import re
+import time
+from typing import Any, Optional
+from urllib.parse import urlparse
+
+import httpx
+import websockets
+
+from ..log_tailer import parse_log_file_line
+from ..models import (
+    ActionOutcome,
+    ActionRequest,
+    ConnectionState,
+    LogFileDescriptor,
+    LogFilterState,
+    LogSourceId,
+    RemoteSessionCache,
+    snapshot_from_api_payload,
+)
+from ..sanitize import sanitize_log_text
+from .base import (
+    AuthErrorEvent,
+    ConnectionEvent,
+    EventEmitFn,
+    LogFilesEvent,
+    LogRowsEvent,
+    LogSnapshotEvent,
+    NoticeEvent,
+    SnapshotEvent,
+)
+from .local import _ws_url, entry_from_ws_row
+
+BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0, 10.0)
+
+
+class RemoteDashboardProvider:
+    """Streams live telemetry, live logs, log files, and actions from a remote Etymos API."""
+
+    mode = "remote"
+
+    def __init__(
+        self,
+        *,
+        api_url: str,
+        session: RemoteSessionCache,
+        auth_manager: Optional[Any] = None,
+        refresh_interval: float = 1.5,
+        supabase_anon_key: Optional[str] = None,
+    ) -> None:
+        self.api_url = api_url.rstrip("/")
+        parsed = urlparse(self.api_url)
+        self.target_label = parsed.netloc or self.api_url
+        self._session = session
+        self._auth_manager = auth_manager
+        self._supabase_anon_key = supabase_anon_key
+        self.refresh_interval = max(1.0, min(30.0, float(refresh_interval)))
+
+        self._emit: Optional[EventEmitFn] = None
+        self._stop_event = asyncio.Event()
+        self._tasks: list[asyncio.Task[Any]] = []
+        self._conn_state: ConnectionState = "connecting"
+
+        self._selected_source: LogSourceId = "live"
+        self._filters = LogFilterState()
+        self._paused = False
+        self._after_seq = 0
+        self._last_pid: Optional[int] = None
+        self._status_ws: Any = None
+        self._logs_ws: Any = None
+        self._file_poll_wake = asyncio.Event()
+
+    def _emit_safe(self, event: Any) -> None:
+        if self._emit is not None:
+            self._emit(event)
+
+    def _set_connection(self, state: ConnectionState, detail: str = "") -> None:
+        if state != self._conn_state or detail:
+            self._conn_state = state
+            self._emit_safe(ConnectionEvent(state=state, detail=detail))
+
+    async def start(self, emit: EventEmitFn) -> None:
+        self._emit = emit
+        self._stop_event.clear()
+        self._tasks = [
+            asyncio.create_task(self._status_ws_loop(), name="tui-remote-status"),
+            asyncio.create_task(self._logs_ws_loop(), name="tui-remote-logs"),
+            asyncio.create_task(self._file_poll_loop(), name="tui-remote-files"),
+            asyncio.create_task(self._token_refresh_loop(), name="tui-remote-refresh"),
+        ]
+        asyncio.create_task(self._fetch_log_files_list())
+
+    async def stop(self) -> None:
+        self._stop_event.set()
+        self._file_poll_wake.set()
+        for ws in (self._status_ws, self._logs_ws):
+            if ws is not None:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+        for task in self._tasks:
+            task.cancel()
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
+
+    async def request_refresh(self) -> None:
+        if self._status_ws is not None:
+            try:
+                await self._status_ws.send(json.dumps({"type": "refresh"}))
+            except Exception:
+                pass
+        if self._selected_source != "live":
+            self._file_poll_wake.set()
+
+    async def set_log_source(self, source: LogSourceId) -> None:
+        self._selected_source = source
+        if source != "live":
+            await self._fetch_single_file_tail(source, replace=True)
+            self._file_poll_wake.set()
+        else:
+            ws = self._logs_ws
+            if ws is not None and not self._paused:
+                try:
+                    await ws.send(
+                        json.dumps({
+                            "type": "subscribe",
+                            "after": 0,
+                            "limit": 500,
+                            "filters": self._filters.to_wire_dict(),
+                        })
+                    )
+                except Exception:
+                    pass
+
+    async def set_log_filters(self, filters: LogFilterState) -> None:
+        self._filters = filters
+        if self._selected_source == "live" and self._logs_ws is not None and not self._paused:
+            try:
+                await self._logs_ws.send(
+                    json.dumps({
+                        "type": "subscribe",
+                        "after": 0,
+                        "limit": 500,
+                        "filters": filters.to_wire_dict(),
+                    })
+                )
+            except Exception:
+                pass
+        elif self._selected_source != "live":
+            await self._fetch_single_file_tail(self._selected_source, replace=True)
+
+    async def set_log_paused(self, paused: bool, after_seq: int = 0) -> None:
+        self._paused = paused
+        self._after_seq = max(self._after_seq, after_seq)
+        ws = self._logs_ws
+        if self._selected_source == "live" and ws is not None:
+            try:
+                if paused:
+                    await ws.send(json.dumps({"type": "pause"}))
+                else:
+                    await ws.send(json.dumps({"type": "resume", "after": after_seq or self._after_seq}))
+            except Exception:
+                pass
+
+    async def execute_action(self, req: ActionRequest) -> ActionOutcome:
+        started = time.perf_counter()
+        payload: dict[str, Any] = {"force": req.force}
+        if req.level is not None:
+            payload["level"] = req.level
+        if req.service is not None:
+            payload["service"] = req.service
+        try:
+            async with httpx.AsyncClient(base_url=self.api_url, timeout=15.0) as client:
+                resp = await client.post(
+                    f"/api/admin/server/actions/{req.action}",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self._session.access_token}"},
+                )
+            ms = round((time.perf_counter() - started) * 1000)
+            data = {}
+            try:
+                data = resp.json()
+            except Exception:
+                pass
+            if resp.status_code == 200:
+                await self.request_refresh()
+                summary = data.get("output") or f"{req.action} completed"
+                if req.action == "log-level":
+                    summary = f"Log level set to {data.get('level')} (was {data.get('previous')})."
+                elif req.action == "dump-threads":
+                    summary = f"Wrote {data.get('threads', 0)} thread stack(s) to log."
+                elif req.action == "free-gpu":
+                    freed = data.get("freed") or []
+                    summary = f"Unloaded GPU models: {', '.join(freed)}" if freed else "No idle GPU models to unload."
+                elif req.action in ("restart-api", "shutdown-api"):
+                    verb = "Restarting" if req.action == "restart-api" else "Shutting down"
+                    summary = f"{verb} API (lost_checks={data.get('lost_checks', 0)})."
+                return ActionOutcome(
+                    ok=True,
+                    status_code=200,
+                    action=req.action,
+                    summary=summary,
+                    lost_checks=int(data.get("lost_checks") or 0),
+                    ms=int(data.get("ms") or ms),
+                )
+            detail = sanitize_log_text(data.get("detail") or resp.text or f"HTTP {resp.status_code}", preserve_newlines=False)
+            lost = 0
+            if resp.status_code == 409:
+                m = re.search(r"(\d+)\s+check", detail)
+                if m:
+                    lost = int(m.group(1))
+            if resp.status_code in (401, 403):
+                self._set_connection("auth_required", detail)
+            return ActionOutcome(
+                ok=False,
+                status_code=resp.status_code,
+                action=req.action,
+                summary=detail,
+                lost_checks=lost,
+                ms=ms,
+            )
+        except Exception as exc:
+            return ActionOutcome(
+                ok=False,
+                status_code=503,
+                action=req.action,
+                summary=sanitize_log_text(str(exc), preserve_newlines=False),
+                ms=round((time.perf_counter() - started) * 1000),
+            )
+
+    async def _fetch_log_files_list(self) -> None:
+        try:
+            async with httpx.AsyncClient(base_url=self.api_url, timeout=8.0) as client:
+                resp = await client.get(
+                    "/api/admin/logs/files",
+                    headers={"Authorization": f"Bearer {self._session.access_token}"},
+                )
+            if resp.status_code == 200:
+                files = [
+                    LogFileDescriptor(
+                        name=f["name"],
+                        file=f["file"],
+                        description=f.get("description", ""),
+                        exists=bool(f.get("exists")),
+                        size_bytes=int(f.get("size_bytes") or 0),
+                        modified_at=f.get("modified_at"),
+                    )
+                    for f in (resp.json().get("files") or [])
+                ]
+                self._emit_safe(LogFilesEvent(files))
+        except Exception:
+            pass
+
+    async def _fetch_single_file_tail(self, source: LogSourceId, *, replace: bool = False) -> None:
+        if source == "live":
+            return
+        params: dict[str, Any] = {"lines": 400}
+        if self._filters.q:
+            params["q"] = self._filters.q
+        try:
+            async with httpx.AsyncClient(base_url=self.api_url, timeout=10.0) as client:
+                resp = await client.get(
+                    f"/api/admin/logs/files/{source}",
+                    params=params,
+                    headers={"Authorization": f"Bearer {self._session.access_token}"},
+                )
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            lines = data.get("lines") or []
+            entries = [parse_log_file_line(ln, source=source, line_no=idx + 1) for idx, ln in enumerate(lines)]
+            truncated = bool(data.get("more", False))
+            last_seq = entries[-1].seq if entries else 0
+            if replace:
+                self._emit_safe(LogSnapshotEvent(source, entries, truncated=truncated, last_seq=last_seq))
+            else:
+                self._emit_safe(LogSnapshotEvent(source, entries, truncated=truncated, last_seq=last_seq))
+        except Exception:
+            pass
+
+    async def _token_refresh_loop(self) -> None:
+        while not self._stop_event.is_set():
+            await asyncio.sleep(30.0)
+            if not self._auth_manager or not self._session.refresh_token:
+                continue
+            if time.time() >= self._session.expires_at - 120.0:
+                try:
+                    updated = await asyncio.to_thread(
+                        self._auth_manager.refresh_session,
+                        self._session,
+                        supabase_anon_key=self._supabase_anon_key,
+                    )
+                    self._session = updated
+                    frame = json.dumps({"type": "refresh_auth", "token": updated.access_token})
+                    for ws in (self._status_ws, self._logs_ws):
+                        if ws is not None:
+                            try:
+                                await ws.send(frame)
+                            except Exception:
+                                pass
+                except Exception as exc:
+                    self._emit_safe(NoticeEvent(f"Token refresh warning: {exc}", severity="warning"))
+
+    async def _status_ws_loop(self) -> None:
+        attempt = 0
+        url = _ws_url(self.api_url, "/api/admin/server/ws")
+        while not self._stop_event.is_set():
+            fatal_auth = False
+            try:
+                async with websockets.connect(url, open_timeout=8.0, close_timeout=2.0) as ws:
+                    self._status_ws = ws
+                    await ws.send(
+                        json.dumps({
+                            "type": "auth",
+                            "token": self._session.access_token,
+                            "interval": self.refresh_interval,
+                        })
+                    )
+                    first_raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
+                    first_msg = json.loads(first_raw)
+                    if first_msg.get("type") == "error":
+                        code = str(first_msg.get("code") or "")
+                        detail = str(first_msg.get("detail") or "Authentication failed.")
+                        if code in ("unauthorized", "forbidden"):
+                            fatal_auth = True
+                            self._set_connection("auth_required", detail)
+                            self._emit_safe(AuthErrorEvent(detail))
+                            return
+                        raise RuntimeError(detail)
+                    if first_msg.get("type") != "auth_ok":
+                        raise RuntimeError("Unexpected handshake frame")
+                    attempt = 0
+                    self._set_connection("connected")
+                    if isinstance(first_msg.get("pid"), int):
+                        new_pid = first_msg["pid"]
+                        if self._last_pid is not None and new_pid != self._last_pid:
+                            self._emit_safe(NoticeEvent(f"API restarted (PID {self._last_pid} -> {new_pid})"))
+                        self._last_pid = new_pid
+
+                    async for raw in ws:
+                        if self._stop_event.is_set():
+                            break
+                        msg = json.loads(raw)
+                        mtype = msg.get("type")
+                        if mtype == "ping":
+                            await ws.send(json.dumps({"type": "pong"}))
+                        elif mtype == "error":
+                            code = str(msg.get("code") or "")
+                            detail = str(msg.get("detail") or "Auth error")
+                            if code in ("unauthorized", "forbidden"):
+                                fatal_auth = True
+                                self._set_connection("auth_required", detail)
+                                self._emit_safe(AuthErrorEvent(detail))
+                                return
+                        elif mtype == "status" and isinstance(msg.get("data"), dict):
+                            snap = snapshot_from_api_payload(msg["data"], mode="remote")
+                            if snap.api.pid is not None:
+                                if self._last_pid is not None and snap.api.pid != self._last_pid:
+                                    self._emit_safe(NoticeEvent(f"API restarted (PID {self._last_pid} -> {snap.api.pid})"))
+                                self._last_pid = snap.api.pid
+                            self._emit_safe(SnapshotEvent(snap))
+            except asyncio.CancelledError:
+                raise
+            except websockets.exceptions.ConnectionClosed as exc:
+                if exc.code in (4401, 4403):
+                    fatal_auth = True
+                    detail = "Session expired (4401)." if exc.code == 4401 else "Admin MFA required (4403)."
+                    self._set_connection("auth_required", detail)
+                    self._emit_safe(AuthErrorEvent(detail))
+                    return
+                self._set_connection("reconnecting")
+            except Exception:
+                self._set_connection("reconnecting")
+            finally:
+                self._status_ws = None
+
+            if fatal_auth or self._stop_event.is_set():
+                return
+            delay = BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)]
+            attempt += 1
+            await asyncio.sleep(delay)
+
+    async def _logs_ws_loop(self) -> None:
+        attempt = 0
+        url = _ws_url(self.api_url, "/api/admin/logs/ws")
+        while not self._stop_event.is_set():
+            try:
+                async with websockets.connect(url, open_timeout=8.0, close_timeout=2.0) as ws:
+                    self._logs_ws = ws
+                    await ws.send(
+                        json.dumps({
+                            "type": "auth",
+                            "token": self._session.access_token,
+                            "after": self._after_seq,
+                            "limit": 500,
+                            "filters": self._filters.to_wire_dict(),
+                        })
+                    )
+                    first_raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
+                    first_msg = json.loads(first_raw)
+                    if first_msg.get("type") != "auth_ok":
+                        return
+                    attempt = 0
+                    if self._paused:
+                        await ws.send(json.dumps({"type": "pause"}))
+
+                    async for raw in ws:
+                        if self._stop_event.is_set():
+                            break
+                        msg = json.loads(raw)
+                        mtype = msg.get("type")
+                        if mtype == "ping":
+                            await ws.send(json.dumps({"type": "pong"}))
+                            continue
+                        if mtype not in ("snapshot", "rows"):
+                            continue
+                        rows = [entry_from_ws_row(r) for r in (msg.get("rows") or []) if isinstance(r, dict)]
+                        last_seq = int(msg.get("last_seq") or self._after_seq)
+                        self._after_seq = last_seq
+                        truncated = bool(msg.get("truncated", False))
+                        pid = msg.get("pid") if isinstance(msg.get("pid"), int) else None
+                        if mtype == "snapshot":
+                            self._emit_safe(LogSnapshotEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
+                        else:
+                            self._emit_safe(LogRowsEvent("live", rows, truncated=truncated, last_seq=last_seq, pid=pid))
+            except asyncio.CancelledError:
+                raise
+            except websockets.exceptions.ConnectionClosed as exc:
+                if exc.code in (4401, 4403):
+                    return
+            except Exception:
+                pass
+            finally:
+                self._logs_ws = None
+
+            delay = BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)]
+            attempt += 1
+            await asyncio.sleep(delay)
+
+    async def _file_poll_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self._file_poll_wake.clear()
+            if self._selected_source != "live" and not self._paused:
+                await self._fetch_single_file_tail(self._selected_source)
+            try:
+                await asyncio.wait_for(self._file_poll_wake.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
